@@ -8,9 +8,11 @@ from typer.testing import CliRunner
 
 from thomas.cli.commands.plugins.p103_plugin_uninstall_cleanup import app as cli_app
 from thomas.plugins.p103_plugin_uninstall_cleanup import (
+    ManagedPluginUninstallRequest,
     PluginUninstallCleanupError,
     PluginUninstallCleanupRequest,
     run_plugin_uninstall_cleanup,
+    uninstall_plugin_from_install_root,
 )
 
 
@@ -107,3 +109,60 @@ def test_cli_json_success_and_failure(tmp_path: Path) -> None:
     payload2 = json.loads(fail.stdout.strip())
     assert payload2["ok"] is False
     assert payload2["error"]["code"] == "missing_config"
+
+
+def test_managed_uninstall_removes_payload_and_runtime_state_atomically(tmp_path: Path) -> None:
+    install_root = tmp_path / "plugins"
+    plugin_dir = install_root / "launch_guide"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "knowledge.md").write_text("BLUE-CEDAR-936", encoding="utf-8")
+    manifest_path = install_root / "installed_plugins.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "plugins": {
+                    "launch_guide": {
+                        "installed_path": str(plugin_dir.resolve()),
+                        "source_path": str((tmp_path / "source").resolve()),
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = uninstall_plugin_from_install_root(
+        ManagedPluginUninstallRequest(plugin_id="launch_guide", install_root=install_root)
+    )
+
+    assert result.status == "removed"
+    assert result.manifest_updated is True
+    assert not plugin_dir.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["plugins"] == {}
+    again = uninstall_plugin_from_install_root(
+        ManagedPluginUninstallRequest(plugin_id="launch_guide", install_root=install_root)
+    )
+    assert again.status == "not_found"
+
+
+def test_managed_uninstall_rejects_manifest_path_mismatch_without_deleting(tmp_path: Path) -> None:
+    install_root = tmp_path / "plugins"
+    plugin_dir = install_root / "launch_guide"
+    plugin_dir.mkdir(parents=True)
+    (install_root / "installed_plugins.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "plugins": {"launch_guide": {"installed_path": str((tmp_path / "outside").resolve())}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(PluginUninstallCleanupError) as exc:
+        uninstall_plugin_from_install_root(
+            ManagedPluginUninstallRequest(plugin_id="launch_guide", install_root=install_root)
+        )
+    assert exc.value.code == "bad_manifest"
+    assert plugin_dir.exists()

@@ -19,8 +19,6 @@ const _allIconClasses = [
     'ph-plus','ph-paperclip',
     'ph-microphone','ph-waveform','ph-speaker-high'
 ];
-const THOMAS_THEME_STORAGE_KEY = 'thomas_theme';
-
 function normalizeThemePreference(theme) {
     const normalized = safeString(theme).toLowerCase();
     if (normalized === 'system') return 'auto';
@@ -28,29 +26,15 @@ function normalizeThemePreference(theme) {
     return 'auto';
 }
 
-function storeThemePreference(theme) {
-    try {
-        window.localStorage?.setItem(THOMAS_THEME_STORAGE_KEY, normalizeThemePreference(theme));
-    } catch (_) {}
-}
-
 function syncSpaceThemeState(theme) {
     const normalized = normalizeThemePreference(theme);
     const spaceApi = window.__teSpace;
     if (normalized === 'light' || normalized === 'dark') {
-        if (typeof spaceApi?.remove === 'function') {
-            spaceApi.remove();
-        } else {
-            document.body.classList.remove('te-space-active');
-        }
+        if (typeof spaceApi?.remove === 'function') spaceApi.remove();
         if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
         return;
     }
-    if (typeof spaceApi?.inject === 'function') {
-        spaceApi.inject();
-    } else {
-        document.body.classList.add('te-space-active');
-    }
+    if (typeof spaceApi?.inject === 'function') spaceApi.inject();
     if (window.spaceCanvas) window.spaceCanvas.style.display = '';
 }
 
@@ -66,206 +50,215 @@ function _swapComposerIcons(iconMap) {
     });
 }
 
-function applyTheme(theme) {
-    const normalizedTheme = normalizeThemePreference(theme);
-    const body = document.body;
-    body.classList.remove('te-theme-light', 'te-theme-dark');
-    body.removeAttribute('data-theme');
-    storeThemePreference(normalizedTheme);
-    if (normalizedTheme === 'light') {
-        body.classList.add('te-theme-light');
-        body.setAttribute('data-theme', 'light');
-        syncSpaceThemeState(normalizedTheme);
-        _swapComposerIcons(_lightIcons);
-        _injectLightThemeIntoIframes();
-    } else if (normalizedTheme === 'dark') {
-        body.classList.add('te-theme-dark');
-        body.setAttribute('data-theme', 'dark');
-        syncSpaceThemeState(normalizedTheme);
-        _swapComposerIcons(_defaultIcons);
-        _removeLightThemeFromIframes();
-    } else {
-        // 'auto' = Nebula Core — restore space
-        syncSpaceThemeState(normalizedTheme);
-        _swapComposerIcons(_defaultIcons);
-        _removeLightThemeFromIframes();
-    }
+function applyTheme(_legacyServerPreference) {
+    /* The palette belongs to the unified engine (tokens.css themes applied by
+       ThomasWorkspaceShell onto <html>). This keeps only the classic shell's
+       side effects - the space backdrop and the composer icon set - derived
+       from the CURRENT unified theme, so the legacy 3-value server preference
+       can never stomp the theme the user actually chose. The parameter is
+       accepted (call sites pass the server preference) and ignored. */
+    const unified = safeString(document.documentElement.dataset.thomasTheme
+        || document.documentElement.dataset.theme || 'nebula').toLowerCase();
+    const lightish = unified === 'light' || unified === 'sandstone';
+    syncSpaceThemeState(unified === 'nebula' ? 'auto' : (lightish ? 'light' : 'dark'));
+    _swapComposerIcons(lightish ? _lightIcons : _defaultIcons);
 }
 
-/* ── Iframe theme injection ─────────────────────────────────────
-   Plugin workspaces (Life Manager, My Stuff, etc.) render inside
-   same-origin iframes. Our main-document CSS can't reach them,
-   so we inject a <style> block that adopts the journal palette. */
-const _LIGHT_IFRAME_CSS = `
-/* Injected by Thomas — light journal theme for plugin iframes */
-:root, body, html {
-    background: #ebe5d9 !important;
-    color: #2c2420 !important;
-    font-family: 'Georgia','Palatino Linotype','Palatino','Book Antiqua',serif !important;
-}
-*:not(.ph):not([class*="ph-"]) {
-    font-family: 'Georgia','Palatino Linotype','Palatino','Book Antiqua',serif !important;
-}
-/* Kill ALL dark rgba backgrounds */
-[style*="gradient"], [style*="rgba(8"], [style*="rgba(1"], [style*="rgba(3"],
-[style*="rgba(6"], [style*="rgba(5"], [style*="rgb(5,"], [style*="rgb(8,"],
-[style*="rgb(10,"], [style*="rgb(1"], [style*="rgb(2"], [style*="rgb(3"] {
-    background: #ebe5d9 !important;
-    background-image: none !important;
-}
-/* Broad overrides for common dark patterns */
-section, div, main, article, header, footer, aside, nav {
-    background-color: transparent !important;
-    background-image: none !important;
-}
-/* Cards, tiles, panels */
-[class*="-card"], [class*="-tile"], [class*="-panel"],
-[class*="-section"], [class*="-block"], [class*="-widget"],
-[class*="-hero"], [class*="-header"], [class*="-toolbar"],
-[class*="-board"], [class*="-frame"], [class*="-view"],
-[class*="stuff-"], [class*="lm-"], [class*="plugin-"] {
-    background: #f4efe6 !important;
-    background-image: none !important;
-    color: #2c2420 !important;
-    border-color: #c8bfab !important;
-}
-/* Body and wrapper backgrounds */
-body, .app, .wrapper, .container, .content, .main,
-[class*="-wrap"], [class*="-container"], [class*="-content"],
-[class*="-page"], [class*="-screen"], [class*="-workspace"],
-[class*="-dashboard"], [class*="-statusbar"] {
-    background: #ebe5d9 !important;
-    background-image: none !important;
-    color: #2c2420 !important;
-}
-/* Text: always dark */
-h1, h2, h3, h4, h5, h6, p, span, a, label, strong, em, li, td, th, dt, dd {
-    color: #2c2420 !important;
-    text-shadow: none !important;
-}
-/* Muted text */
-small, .muted, .meta, .subtitle, [class*="-meta"], [class*="-sub"],
-[class*="-muted"], [class*="-hint"], [class*="-note"] {
-    color: #8a7a65 !important;
-}
-/* Buttons */
-button, .btn, [class*="-btn"] {
-    background: #e0d8ca !important;
-    background-image: none !important;
-    color: #3d3028 !important;
-    border: 1px solid #c8bca8 !important;
-    border-radius: 2px !important;
-    text-shadow: none !important;
-}
-button:hover, .btn:hover { background: #d6cebf !important; }
-/* Primary button — accent */
-[class*="primary"], [class*="accent"] {
-    background: #8a7250 !important;
-    background-image: none !important;
-    color: #f5f0e8 !important;
-    border-color: #7a6240 !important;
-}
-/* Inputs */
-input, select, textarea {
-    background: #f0ebe2 !important;
-    color: #2c2420 !important;
-    border: 1px solid #c8bca8 !important;
-    border-radius: 1px !important;
-}
-input::placeholder, textarea::placeholder { color: #a0907a !important; font-style: italic !important; }
-/* Tables */
-table, th, td { background: #f4efe6 !important; color: #2c2420 !important; border-color: #c8bfab !important; }
-th { background: #e6dfd2 !important; font-weight: 700 !important; }
-/* Badges */
-[class*="-badge"], [class*="-pill"], [class*="-tag"], [class*="-status"] {
-    background: #e0d8ca !important;
-    color: #3d3028 !important;
-    border: 1px solid #c8bca8 !important;
-    text-shadow: none !important;
-}
-/* Scrollbar */
-::-webkit-scrollbar-thumb { background: #c0ad90 !important; }
-::-webkit-scrollbar-track { background: #e2dbd0 !important; }
-/* Empty states */
-[class*="-empty"], [class*="empty-"] {
-    background: #f4efe6 !important;
-    color: #8a7a65 !important;
-}
-`.trim();
+/* Follow every unified theme change (switcher, cross-tab, embed messages). */
+window.addEventListener('thomas:themechange', () => { try { applyTheme(); } catch (_) { /* side effects only */ } });
 
-function _injectLightThemeIntoIframes() {
-    try {
-        document.querySelectorAll('iframe').forEach(frame => {
-            try {
-                const doc = frame.contentDocument || frame.contentWindow?.document;
-                if (!doc) return;
-                /* Remove old injection if any */
-                const old = doc.getElementById('thomas-light-theme-inject');
-                if (old) old.remove();
-                const style = doc.createElement('style');
-                style.id = 'thomas-light-theme-inject';
-                style.textContent = _LIGHT_IFRAME_CSS;
-                (doc.head || doc.documentElement).appendChild(style);
-            } catch(_) { /* cross-origin — skip */ }
-        });
-    } catch(_) {}
-    /* Also re-run after a short delay for lazy-loaded iframes */
-    clearTimeout(window._lightIframeTimer);
-    window._lightIframeTimer = setTimeout(() => _injectLightThemeIntoIframes_once(), 1500);
-}
-
-function _injectLightThemeIntoIframes_once() {
-    if (!document.body.classList.contains('te-theme-light')) return;
-    try {
-        document.querySelectorAll('iframe').forEach(frame => {
-            try {
-                const doc = frame.contentDocument || frame.contentWindow?.document;
-                if (!doc || doc.getElementById('thomas-light-theme-inject')) return;
-                const style = doc.createElement('style');
-                style.id = 'thomas-light-theme-inject';
-                style.textContent = _LIGHT_IFRAME_CSS;
-                (doc.head || doc.documentElement).appendChild(style);
-            } catch(_) {}
-        });
-    } catch(_) {}
-}
-
-/* Watch for new iframes being added to the DOM and inject light theme */
-(function _watchForNewIframes() {
-    const obs = new MutationObserver(muts => {
-        if (!document.body.classList.contains('te-theme-light')) return;
-        for (const m of muts) {
-            for (const n of m.addedNodes) {
-                if (n.tagName === 'IFRAME') {
-                    n.addEventListener('load', () => _injectLightThemeIntoIframes_once());
-                } else if (n.querySelectorAll) {
-                    n.querySelectorAll('iframe').forEach(f => {
-                        f.addEventListener('load', () => _injectLightThemeIntoIframes_once());
-                    });
-                }
-            }
-        }
+/* The classic settings dropdown (auto/light/dark) drives the unified engine
+   directly - auto maps to the Nebula default. */
+(function _bindLegacyThemeControl() {
+    const el = document.getElementById('settingTheme');
+    if (!el || el._thomasUnifiedBound) return;
+    el._thomasUnifiedBound = true;
+    el.addEventListener('change', () => {
+        const v = safeString(el.value).toLowerCase();
+        const known = new Set(['nebula', 'light', 'dark', 'aurora', 'sandstone']);
+        const unified = known.has(v) ? v : 'nebula';
+        if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) {
+            window.ThomasWorkspaceShell.applyTheme(unified);
+        } else { applyTheme(); }
     });
-    obs.observe(document.body, { childList: true, subtree: true });
 })();
-
-function _removeLightThemeFromIframes() {
-    clearTimeout(window._lightIframeTimer);
-    try {
-        document.querySelectorAll('iframe').forEach(frame => {
-            try {
-                const doc = frame.contentDocument || frame.contentWindow?.document;
-                if (!doc) return;
-                const el = doc.getElementById('thomas-light-theme-inject');
-                if (el) el.remove();
-            } catch(_) {}
-        });
-    } catch(_) {}
-}
 
 function applyFontSize(px) {
     document.documentElement.style.setProperty('--user-font-size', px + 'px');
     document.body.style.fontSize = px + 'px';
+}
+
+const MODEL_SPECIALTY_ROLES = [
+    { id: 'research', label: 'Research' },
+    { id: 'coding', label: 'Coding' },
+    { id: 'planning', label: 'Planning' },
+    { id: 'memory', label: 'Memory' },
+    { id: 'tools', label: 'Tool use' },
+    { id: 'creative', label: 'Creative' },
+];
+const COMPOSER_MODE_MODEL_ROLES = {
+    research: 'research',
+    create_image: 'creative',
+    create_video: 'creative',
+    create_song: 'creative',
+};
+let setupSpecialtyDraftProfiles = {};
+let setupSpecialtyDraftModelIds = {};
+let setupSpecialtySyncing = false;
+
+function normalizeModelSpecialtyRole(roleRaw = '') {
+    return safeString(roleRaw).toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function modelSpecialtyLabel(roleRaw = '') {
+    const role = normalizeModelSpecialtyRole(roleRaw);
+    const found = MODEL_SPECIALTY_ROLES.find((entry) => entry.id === role);
+    return found?.label || role || 'Specialty';
+}
+
+function currentModelPreferenceMaps() {
+    const modelPrefs = currentPreferences?.advanced?.model || {};
+    return {
+        roleProfiles: { ...(modelPrefs.role_profiles || {}) },
+        roleModelIds: { ...(modelPrefs.role_model_ids || {}) },
+    };
+}
+
+function resetSpecialtyDraftsFromPreferences() {
+    const { roleProfiles, roleModelIds } = currentModelPreferenceMaps();
+    setupSpecialtyDraftProfiles = { ...roleProfiles };
+    setupSpecialtyDraftModelIds = { ...roleModelIds };
+}
+
+function buildSpecialtyPreferencePatch() {
+    const { roleProfiles, roleModelIds } = currentModelPreferenceMaps();
+    const nextProfiles = { ...setupSpecialtyDraftProfiles };
+    const nextModelIds = { ...setupSpecialtyDraftModelIds };
+    for (const role of Object.keys(roleProfiles)) {
+        if (!safeString(nextProfiles[role])) nextProfiles[role] = null;
+    }
+    for (const role of Object.keys(roleModelIds)) {
+        if (!safeString(nextModelIds[role])) nextModelIds[role] = null;
+    }
+    return {
+        role_profiles: nextProfiles,
+        role_model_ids: nextModelIds,
+    };
+}
+
+function resolveComposerModelRole() {
+    const modeId = normalizeModelSpecialtyRole(composerModeSelection?.id);
+    return COMPOSER_MODE_MODEL_ROLES[modeId] || '';
+}
+
+function resolveSpecialtyModelSelection(roleRaw = '', fallbackProfileRaw = '') {
+    const role = normalizeModelSpecialtyRole(roleRaw);
+    const modelPrefs = currentPreferences?.advanced?.model || {};
+    const roleProfiles = modelPrefs.role_profiles || {};
+    const roleModelIds = modelPrefs.role_model_ids || {};
+    const fallbackProfile = safeString(fallbackProfileRaw)
+        || safeString(modelSelector?.value)
+        || safeString(setupProviderSelector?.value)
+        || safeString(modelPrefs.active_profile);
+    const profile = safeString(roleProfiles[role]) || fallbackProfile;
+    const modelId = safeString(roleModelIds[role]) || resolveActiveModelIdForProfile(profile);
+    return { role, profile, modelId };
+}
+
+function populateSelectOptions(selectEl, modelIds, preferredValue = '') {
+    if (!selectEl) return;
+    const preferred = safeString(preferredValue);
+    selectEl.innerHTML = '';
+    const seen = new Set();
+    for (const id of modelIds) {
+        const clean = safeString(id);
+        if (!clean || seen.has(clean)) continue;
+        seen.add(clean);
+        const opt = document.createElement('option');
+        opt.value = clean;
+        opt.textContent = clean;
+        selectEl.appendChild(opt);
+    }
+    if (preferred && !seen.has(preferred)) {
+        const opt = document.createElement('option');
+        opt.value = preferred;
+        opt.textContent = preferred;
+        selectEl.insertBefore(opt, selectEl.firstChild);
+        seen.add(preferred);
+    }
+    if (preferred && seen.has(preferred)) {
+        selectEl.value = preferred;
+    } else if (selectEl.options.length > 0) {
+        selectEl.value = selectEl.options[0].value;
+    }
+}
+
+function renderSpecialtyProviderOptions() {
+    if (!setupSpecialtyProviderSelector) return;
+    const currentValue = safeString(setupSpecialtyProviderSelector.value);
+    setupSpecialtyProviderSelector.innerHTML = '';
+    const inherit = document.createElement('option');
+    inherit.value = '';
+    inherit.textContent = 'Inherit base model';
+    setupSpecialtyProviderSelector.appendChild(inherit);
+    for (const profile of availableModelProfiles || []) {
+        const name = safeString(profile?.name);
+        if (!name) continue;
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        setupSpecialtyProviderSelector.appendChild(opt);
+    }
+    if (currentValue && Array.from(setupSpecialtyProviderSelector.options).some((opt) => opt.value === currentValue)) {
+        setupSpecialtyProviderSelector.value = currentValue;
+    }
+}
+
+function syncSpecialtyModelControls() {
+    if (!setupSpecialtyRoleSelector || !setupSpecialtyProviderSelector || !setupSpecialtyModelSelector) return;
+    setupSpecialtySyncing = true;
+    try {
+        const role = normalizeModelSpecialtyRole(setupSpecialtyRoleSelector.value) || 'research';
+        renderSpecialtyProviderOptions();
+        const explicitProfile = safeString(setupSpecialtyDraftProfiles[role]);
+        setupSpecialtyProviderSelector.value = explicitProfile;
+        const baseProfile = safeString(setupProviderSelector?.value)
+            || safeString(modelSelector?.value)
+            || safeString(currentPreferences?.advanced?.model?.active_profile);
+        const effectiveProfile = explicitProfile || baseProfile;
+        const profileInfo = (availableModelProfiles || []).find((entry) => safeString(entry?.name) === effectiveProfile) || {};
+        const defaultModel = defaultModelIdForProfile(effectiveProfile);
+        const preferredModel = explicitProfile
+            ? (safeString(setupSpecialtyDraftModelIds[role]) || resolveStoredModelSelection(effectiveProfile, { allowLocalBackup: true }))
+            : (resolveActiveModelIdForProfile(baseProfile) || defaultModel);
+        const suggestions = KNOWN_MODEL_SUGGESTIONS[safeString(profileInfo?.provider)] || [];
+        populateSelectOptions(setupSpecialtyModelSelector, [preferredModel, defaultModel, ...suggestions], preferredModel);
+        setupSpecialtyModelSelector.disabled = !explicitProfile;
+        if (setupSpecialtyStatus) {
+            setupSpecialtyStatus.textContent = explicitProfile
+                ? `${modelSpecialtyLabel(role)} uses ${explicitProfile} / ${safeString(setupSpecialtyModelSelector.value) || preferredModel}.`
+                : `${modelSpecialtyLabel(role)} inherits the base model.`;
+        }
+    } finally {
+        setupSpecialtySyncing = false;
+    }
+}
+
+function updateSpecialtyDraftFromControls() {
+    if (setupSpecialtySyncing || !setupSpecialtyRoleSelector) return;
+    const role = normalizeModelSpecialtyRole(setupSpecialtyRoleSelector.value) || 'research';
+    const profile = safeString(setupSpecialtyProviderSelector?.value);
+    if (!profile) {
+        delete setupSpecialtyDraftProfiles[role];
+        delete setupSpecialtyDraftModelIds[role];
+        syncSpecialtyModelControls();
+        return;
+    }
+    setupSpecialtyDraftProfiles[role] = profile;
+    const modelId = safeString(setupSpecialtyModelSelector?.value)
+        || resolveStoredModelSelection(profile, { allowLocalBackup: true });
+    if (modelId) setupSpecialtyDraftModelIds[role] = modelId;
+    syncSpecialtyModelControls();
 }
 
 function initModelSetup() {
@@ -284,6 +277,7 @@ function initModelSetup() {
             || safeString(currentPreferences?.advanced?.model?.active_profile);
         setupProviderSelector.value = savedProfile;
         renderSetupProviderPickerMenu(savedProfile, { preserveExpanded: false });
+        resetSpecialtyDraftsFromPreferences();
 
         // Restore segmented controls from preferences
         const savedAutonomy = safeString(currentPreferences?.autonomy?.default_level).replace('L', '');
@@ -299,12 +293,15 @@ function initModelSetup() {
         }
 
         if (typeof _syncProviderUI === 'function') _syncProviderUI(savedProfile);
+        syncSpecialtyModelControls();
         if (setupProviderPickerBtn) {
             setupProviderPickerBtn.focus();
         } else if (setupProviderSelector) {
             setupProviderSelector.focus();
         }
     };
+
+    syncModelSetupCurrentLabel();
 
     // Open Trigger
     modelSetupBtn.addEventListener('click', () => {
@@ -363,6 +360,145 @@ function initModelSetup() {
         activeReasoningEffort = normalizeReasoningEffort(val);
         renderChatComposerSubbar();
     });
+
+    /* ── Guardrails: top-level preset + the 7 detailed per-group toggles ──────
+       Mirrors the composer's quick Guardrails dial; this is the DETAILED surface.
+       The 7 groups match thomas/server/guardrails_state.py. Per-group switching
+       will be PIN-gated in a later phase; v1 persists to localStorage + payload. */
+    const GR_GROUPS = [
+        ['sprawl_guard', 'Sprawl Guard', 'File size & growth caps'],
+        ['clean_hands', 'Clean Hands', 'Commit & worktree hygiene'],
+        ['inspector', 'Inspector', 'Lint, boot & type checks'],
+        ['load_bearing', 'Load-Bearing', 'Architecture & import rules'],
+        ['safety_net', 'Safety Net', 'Tests & exception handling'],
+        ['reach', 'Reach', 'Tools, skills & web access'],
+        ['gatekeeper', 'Gatekeeper', 'Tool-approval thresholds'],
+    ];
+    const GR_MODES = [['strict', 'Strict'], ['standard', 'Standard'], ['permissive', 'Relaxed']];
+    const GR_PRESET_MODE = { open: 'permissive', guarded: 'standard', fortress: 'strict' };
+
+    function grLoadModes() {
+        let stored = {};
+        try { stored = JSON.parse(localStorage.getItem('thomasGuardrailModes') || '{}') || {}; } catch (e) {}
+        let preset = 'guarded';
+        try { preset = localStorage.getItem('thomasGuardrails') || 'guarded'; } catch (e) {}
+        const fallback = GR_PRESET_MODE[preset] || 'standard';
+        const out = {};
+        GR_GROUPS.forEach(([id]) => {
+            out[id] = GR_MODES.some(m => m[0] === stored[id]) ? stored[id] : fallback;
+        });
+        return out;
+    }
+    function grSaveModes(modes) {
+        try { localStorage.setItem('thomasGuardrailModes', JSON.stringify(modes)); } catch (e) {}
+        // Persist server-side so it's the default for runs that don't override per-request.
+        try {
+            fetch('/api/guardrails/policy', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modes: modes }),
+            }).catch(() => {});
+        } catch (e) {}
+    }
+
+    function grInjectCss() {
+        if (document.getElementById('grDetailCss')) return;
+        const s = document.createElement('style');
+        s.id = 'grDetailCss';
+        s.textContent = '.setup-hint{margin:6px 2px 0;font-size:11.5px;line-height:1.5;color:var(--text-muted,#929bb0)}'
+            + '.setup-hint b{color:var(--text-secondary,#adb3c2);font-weight:600}'
+            + '#setupGuardrailsDetailBtn{margin-top:8px}'
+            + '.guardrail-detail{margin-top:10px;display:flex;flex-direction:column;gap:9px;padding:11px;border:1px solid var(--border-light,rgba(255,255,255,0.12));border-radius:8px;background:rgba(140,160,180,0.045)}'
+            + '.guardrail-detail.hidden{display:none}'
+            + '.gr-row{display:flex;align-items:center;gap:10px;justify-content:space-between}'
+            + '.gr-meta{display:flex;flex-direction:column;min-width:0}'
+            + '.gr-name{font-size:12.5px;font-weight:600;color:var(--text-primary,#ececf1)}'
+            + '.gr-desc{font-size:11px;color:var(--text-muted,#929bb0)}'
+            + '.gr-modes{display:inline-flex;border:1px solid var(--border-light,rgba(255,255,255,0.14));border-radius:7px;overflow:hidden;flex:0 0 auto}'
+            + '.gr-mode{border:0;background:transparent;color:var(--text-muted,#929bb0);font:600 10.5px/1 var(--font-mono,ui-monospace,monospace);padding:5px 9px;cursor:pointer;border-right:1px solid var(--border-light,rgba(255,255,255,0.1))}'
+            + '.gr-mode:last-child{border-right:0}'
+            + '.gr-mode:hover{color:var(--text-secondary,#adb3c2)}'
+            + '.gr-mode.active{background:rgba(140,160,180,0.22);color:var(--text-primary,#ececf1)}'
+            + '.gr-note{margin:3px 0 0;font-size:10.5px;color:var(--text-muted,#929bb0);opacity:.85}';
+        document.head.appendChild(s);
+    }
+
+    function grRenderDetail() {
+        const wrap = document.getElementById('setupGuardrailDetail');
+        if (!wrap) return;
+        const modes = grLoadModes();
+        wrap.innerHTML = GR_GROUPS.map(([id, name, desc]) =>
+            '<div class="gr-row" data-group="' + id + '">'
+            + '<div class="gr-meta"><span class="gr-name">' + name + '</span><span class="gr-desc">' + desc + '</span></div>'
+            + '<div class="gr-modes">' + GR_MODES.map(([mv, ml]) =>
+                '<button type="button" class="gr-mode' + (modes[id] === mv ? ' active' : '') + '" data-mode="' + mv + '">' + ml + '</button>'
+            ).join('') + '</div></div>'
+        ).join('') + '<p class="gr-note">Per-group switching will require your PIN to confirm (coming soon). Safety-critical Vault checks are always on.</p>';
+        wrap.querySelectorAll('.gr-row').forEach((row) => {
+            const gid = row.dataset.group;
+            row.querySelectorAll('.gr-mode').forEach((b) => b.addEventListener('click', () => {
+                const cur = grLoadModes();
+                cur[gid] = b.dataset.mode;
+                grSaveModes(cur);
+                row.querySelectorAll('.gr-mode').forEach((x) => x.classList.remove('active'));
+                b.classList.add('active');
+            }));
+        });
+    }
+
+    function applyGuardrailPreset(preset) {
+        const mode = GR_PRESET_MODE[preset] || 'standard';
+        const modes = {};
+        GR_GROUPS.forEach(([id]) => { modes[id] = mode; });
+        grSaveModes(modes);
+        grRenderDetail();
+    }
+
+    function initGuardrailDetail() {
+        grInjectCss();
+        const btn = document.getElementById('setupGuardrailsDetailBtn');
+        const panel = document.getElementById('setupGuardrailDetail');
+        if (btn && panel && !btn._grWired) {
+            btn._grWired = true;
+            btn.addEventListener('click', () => {
+                const open = !panel.classList.toggle('hidden');
+                btn.setAttribute('aria-expanded', String(open));
+            });
+        }
+        try {
+            const p = localStorage.getItem('thomasGuardrails') || 'guarded';
+            activeGuardrails = p;
+            setSegmentedControlSelection('setupGuardrailsGroup', p);
+        } catch (e) {}
+        grRenderDetail();
+        // Reconcile with the server-persisted policy (source of truth on load).
+        try {
+            fetch('/api/guardrails/policy').then(r => r.ok ? r.json() : null).then((data) => {
+                const modes = data && data.policy && data.policy.modes;
+                if (!modes) return;
+                try { localStorage.setItem('thomasGuardrailModes', JSON.stringify(modes)); } catch (e) {}
+                // If every group shares one mode, reflect the matching preset on the dial.
+                const vals = GR_GROUPS.map(([id]) => modes[id]);
+                const uniform = vals.every(v => v === vals[0]) ? vals[0] : null;
+                const presetForMode = { permissive: 'open', standard: 'guarded', strict: 'fortress' };
+                if (uniform && presetForMode[uniform]) {
+                    activeGuardrails = presetForMode[uniform];
+                    try { localStorage.setItem('thomasGuardrails', activeGuardrails); } catch (e) {}
+                    setSegmentedControlSelection('setupGuardrailsGroup', activeGuardrails);
+                }
+                grRenderDetail();
+                if (typeof renderChatComposerSubbar === 'function') renderChatComposerSubbar();
+            }).catch(() => {});
+        } catch (e) {}
+    }
+
+    bindSegmentedControl('setupGuardrailsGroup', val => {
+        activeGuardrails = val;
+        try { localStorage.setItem('thomasGuardrails', val); } catch (e) {}
+        applyGuardrailPreset(val);
+        renderChatComposerSubbar();
+    });
+    initGuardrailDetail();
 
     if (setupProviderPickerBtn) {
         setupProviderPickerBtn.addEventListener('click', (event) => {
@@ -440,6 +576,7 @@ function initModelSetup() {
 
         // --- Reasoning effort ---
         syncSetupReasoningVisibility(profileName);
+        syncSpecialtyModelControls();
         renderChatComposerSubbar();
     };
 
@@ -502,6 +639,26 @@ function initModelSetup() {
     if (setupModelSelector) {
         setupModelSelector.addEventListener('change', (e) => {
             activeModelOverride = safeString(e.target.value);
+            syncSpecialtyModelControls();
+        });
+    }
+
+    if (setupSpecialtyRoleSelector) {
+        setupSpecialtyRoleSelector.addEventListener('change', () => syncSpecialtyModelControls());
+    }
+    if (setupSpecialtyProviderSelector) {
+        setupSpecialtyProviderSelector.addEventListener('change', () => updateSpecialtyDraftFromControls());
+    }
+    if (setupSpecialtyModelSelector) {
+        setupSpecialtyModelSelector.addEventListener('change', () => updateSpecialtyDraftFromControls());
+    }
+    if (setupSpecialtyClearBtn) {
+        setupSpecialtyClearBtn.addEventListener('click', () => {
+            if (!setupSpecialtyRoleSelector) return;
+            const role = normalizeModelSpecialtyRole(setupSpecialtyRoleSelector.value) || 'research';
+            delete setupSpecialtyDraftProfiles[role];
+            delete setupSpecialtyDraftModelIds[role];
+            syncSpecialtyModelControls();
         });
     }
 
@@ -514,12 +671,13 @@ function initModelSetup() {
         modelSelector.value = selectedProfile;
 
         // 2. Update header label + localStorage backup
-        modelSetupCurrentLabel.textContent = _profileHeaderLabel(selectedProfile);
+        syncModelSetupCurrentLabel({ force: true, profile: selectedProfile });
         try { window.localStorage.setItem('thomas_active_profile', selectedProfile); } catch (_) {}
         try { window.localStorage.setItem('thomas_active_model_id', selectedModel); } catch (_) {}
 
         // 3. Build preferences patch (map UI values to preferences schema)
         const economyMap = { cheap: 'cheap', balanced: 'optimal', max: 'max' };
+        const specialtyPatch = buildSpecialtyPreferencePatch();
         const patch = {
             memory: { enabled_global: Boolean(setupMemoryToggle && setupMemoryToggle.checked) },
             autonomy: { default_level: 'L' + activeAutonomyLevel },
@@ -527,6 +685,8 @@ function initModelSetup() {
                 model: {
                     active_profile: selectedProfile,
                     model_id: selectedModel,
+                    role_profiles: specialtyPatch.role_profiles,
+                    role_model_ids: specialtyPatch.role_model_ids,
                     reasoning_effort: normalizeReasoningEffort(activeReasoningEffort) || 'medium',
                 },
                 runtime: {
@@ -778,10 +938,11 @@ function normalizeChatMode(modeRaw) {
 
 function _profileHeaderLabel(profileName) {
     const p = availableModelProfiles.find(m => m.name === profileName);
-    if (!p) return profileName;
+    if (!p) return formatProviderDisplay(profileName) || profileName;
     const activeProfile = activeProfileNameForPersistence();
     const model = (activeProfile === safeString(profileName) ? safeString(activeModelOverride) : '')
         || safeString(p.model).split('/').pop()
+        || formatProviderDisplay(profileName)
         || profileName;
     const activeEffort = activeProfile === safeString(profileName)
         ? normalizeReasoningEffort(activeReasoningEffort)
@@ -790,6 +951,34 @@ function _profileHeaderLabel(profileName) {
         || getPersistedReasoningEffort(profileName)
         || normalizeReasoningEffort(p.reasoning_effort);
     return effort ? `${model} (${effort})` : model;
+}
+
+function syncModelSetupCurrentLabel({ force = false, profile = '' } = {}) {
+    if (!modelSetupCurrentLabel) return '';
+    const current = safeString(modelSetupCurrentLabel.textContent);
+    const placeholderLabels = new Set(['', 'loading...', 'checking your model…', 'model setup', 'connection & defaults']);
+    if (!force && current && !placeholderLabels.has(current.toLowerCase())) {
+        return current;
+    }
+
+    const storedProfile = (() => {
+        try { return safeString(window.localStorage.getItem('thomas_active_profile')); } catch (_) { return ''; }
+    })();
+    const targetProfile = safeString(profile)
+        || safeString(modelSelector?.value)
+        || safeString(setupProviderSelector?.value)
+        || safeString(currentPreferences?.advanced?.model?.active_profile)
+        || storedProfile
+        || safeString((availableModelProfiles || []).find((entry) => entry?.has_api_key || entry?.active)?.name)
+        || safeString((availableModelProfiles || [])[0]?.name);
+    const preferredModel = safeString(currentPreferences?.advanced?.model?.model_id)
+        || safeString(activeModelOverride);
+    let label = targetProfile ? _profileHeaderLabel(targetProfile) : '';
+    if (!label || placeholderLabels.has(label.toLowerCase())) {
+        label = preferredModel || (targetProfile ? formatProviderDisplay(targetProfile) : '') || 'Connection & Defaults';
+    }
+    modelSetupCurrentLabel.textContent = label;
+    return label;
 }
 
 function applyProfileSelection(profileRaw, { allowLocalBackup = false } = {}) {
@@ -818,7 +1007,7 @@ function applyProfileSelection(profileRaw, { allowLocalBackup = false } = {}) {
     } else {
         try { window.localStorage.removeItem('thomas_active_model_id'); } catch (_) {}
     }
-    if (modelSetupCurrentLabel) modelSetupCurrentLabel.textContent = _profileHeaderLabel(profile);
+    syncModelSetupCurrentLabel({ force: true, profile });
     renderChatComposerSubbar();
 }
 
@@ -861,7 +1050,7 @@ function applyUiStatePatchEvent(evt) {
     const themeRaw = safeString(settings.theme).toLowerCase();
     if (themeRaw) {
         const themeValue = themeRaw === 'system' ? 'auto' : themeRaw;
-        if (settingTheme && new Set(['auto', 'light', 'dark']).has(themeValue)) {
+        if (settingTheme && new Set(['auto', 'nebula', 'light', 'dark', 'aurora', 'sandstone']).has(themeValue)) {
             settingTheme.value = themeValue;
         }
     }
@@ -881,9 +1070,9 @@ function refreshSettingsAvatarPreview() {
 
 async function refreshIdentityState() {
     try {
-        const [prefsRes, codexRes] = await Promise.all([
+        const [prefsRes, codexStatus] = await Promise.all([
             fetch('/api/preferences'),
-            fetchJsonSafe('/api/codex/status'),
+            fetchPreferredCodexIdentityStatus(),
         ]);
         if (prefsRes.ok) {
             currentPreferences = await prefsRes.json();
@@ -898,11 +1087,7 @@ async function refreshIdentityState() {
             if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
         }
         }
-        if (codexRes.ok) {
-            currentCodexStatus = codexRes.data || null;
-        } else if (!codexRes.ok && codexRes.status) {
-            currentCodexStatus = null;
-        }
+        currentCodexStatus = codexStatus || null;
     } catch (e) {
         console.error('Failed to load identity state', e);
     } finally {
@@ -911,6 +1096,16 @@ async function refreshIdentityState() {
         setDebugDockOpen(false, { recordEvent: false });
         updateDebugDockSnapshot();
     }
+}
+
+async function fetchPreferredCodexIdentityStatus() {
+    const nativeCodexRes = await fetchJsonSafe('/api/openai-codex/status?profile=chatgpt');
+    if (nativeCodexRes.ok) return nativeCodexRes.data || null;
+    if (nativeCodexRes.status === 404 || nativeCodexRes.status === 405) {
+        const legacyCodexRes = await fetchJsonSafe('/api/codex/status');
+        return legacyCodexRes.ok ? (legacyCodexRes.data || null) : null;
+    }
+    return null;
 }
 
 function ensureAdvancedChatPhysicsSettingUi() {
@@ -963,16 +1158,16 @@ function syncAdvancedChatPhysicsSettingUi() {
 
 async function loadSettings() {
     try {
-        const [prefsRes, codexRes] = await Promise.all([
+        const [prefsRes, codexStatus] = await Promise.all([
             fetchJsonSafe('/api/preferences'),
-            fetchJsonSafe('/api/codex/status'),
+            fetchPreferredCodexIdentityStatus(),
         ]);
         if (!prefsRes.ok) {
             throw new Error(`Failed to load preferences (${prefsRes.status})`);
         }
 
         currentPreferences = prefsRes.data || {};
-        currentCodexStatus = codexRes.ok ? (codexRes.data || null) : null;
+        currentCodexStatus = codexStatus || null;
         applyTheme(safeString(currentPreferences?.appearance?.theme) || 'auto');
         applyFontSize(toInt(currentPreferences?.appearance?.font_size, 16, 12, 28));
         applyInterfaceMotionPreference();
@@ -1004,7 +1199,17 @@ async function loadSettings() {
         if (settingsSections) settingsSections.scrollTop = 0;
         updateSettingsSectionNavVisibility();
 
-        if (settingTheme) settingTheme.value = safeString(appearance.theme) || 'auto';
+        if (settingTheme) {
+            /* Reflect the LIVE unified theme, not the possibly stale 3-value
+               server preference - a user who picked Aurora in the chat shell
+               should see Aurora here. */
+            const liveTheme = safeString(document.documentElement.dataset.thomasTheme
+                || document.documentElement.dataset.theme).toLowerCase();
+            const known = new Set(['nebula', 'light', 'dark', 'aurora', 'sandstone']);
+            settingTheme.value = known.has(liveTheme)
+                ? (liveTheme === 'nebula' ? 'auto' : liveTheme)
+                : (safeString(appearance.theme) || 'auto');
+        }
         applyTheme(safeString(appearance.theme) || 'auto');
         const autonomyDefaultLevel = safeString(autonomy.default_level) || 'L1';
         if (settingAutonomy) settingAutonomy.value = autonomyDefaultLevel;
@@ -1092,6 +1297,36 @@ async function loadSettings() {
         if (settingAdvToolTimeoutS) settingAdvToolTimeoutS.value = String(toInt(advTools.tool_timeout_s, 120, 5, 1800));
         if (settingAdvMaxParallelTools) settingAdvMaxParallelTools.value = String(toInt(advTools.max_parallel_tools, 6, 1, 32));
         if (settingAdvRequireCommandApproval) settingAdvRequireCommandApproval.checked = Boolean(advTools.require_command_approval);
+        const advSecurity = advanced.security || {};
+        if (settingAdvBreakglassWindowEnabled) settingAdvBreakglassWindowEnabled.checked = Boolean(advSecurity.breakglass_window_enabled);
+        if (settingAdvBreakglassWindowHours) settingAdvBreakglassWindowHours.value = String(toFloat(advSecurity.breakglass_window_hours, 3, 0.25, 12));
+        // The approval window is a security pref, so it saves through its own
+        // step-up-authed route (a tap), NOT the general settings PATCH. Bind once.
+        if (settingAdvBreakglassWindowEnabled && !settingAdvBreakglassWindowEnabled.dataset.bgwBound) {
+            settingAdvBreakglassWindowEnabled.dataset.bgwBound = '1';
+            const saveBreakglassWindow = async () => {
+                try {
+                    const res = await fetch('/api/security/breakglass-window', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            enabled: Boolean(settingAdvBreakglassWindowEnabled.checked),
+                            hours: toFloat(settingAdvBreakglassWindowHours?.value, 3, 0.25, 12),
+                        }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.ok) {
+                        notifyUser('Approval window updated.', { tone: 'success', durationMs: 1800, debugKind: 'settings' });
+                    } else {
+                        notifyUser('Approval window unchanged: ' + (data.reason || ('HTTP ' + res.status)), { tone: 'warning', durationMs: 3200, debugKind: 'settings' });
+                    }
+                } catch (e) {
+                    notifyUser('Could not reach the approval-window endpoint.', { tone: 'error', durationMs: 3000, debugKind: 'error' });
+                }
+            };
+            settingAdvBreakglassWindowEnabled.addEventListener('change', saveBreakglassWindow);
+            if (settingAdvBreakglassWindowHours) settingAdvBreakglassWindowHours.addEventListener('change', saveBreakglassWindow);
+        }
         if (settingAdvAllowShell) settingAdvAllowShell.checked = Boolean(advTools.allow_shell);
         if (settingAdvAllowFileWrite) settingAdvAllowFileWrite.checked = Boolean(advTools.allow_file_write);
         if (settingAdvAllowNetwork) settingAdvAllowNetwork.checked = Boolean(advTools.allow_network);

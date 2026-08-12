@@ -7,15 +7,29 @@ exact string and replaces it, similar to Claude Code's Edit tool.
 from __future__ import annotations
 
 import difflib
+import re
 from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.diff_transaction import (
+    PatchFormatError,
+    apply_patch_transactional,
+    preflight_patch,
+)
 from thomas.tools.filesystem import _is_protected_runtime_path, _safe_path
 
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+
+
+_READ_FILE_LINE_PREFIX_RE = re.compile(r"^[ \t]*\d{1,7}\t")
+
+
+def _strip_read_file_line_numbers(text: str) -> str:
+    """Remove prefixes added by fs.read_file numbered output."""
+    return "".join(_READ_FILE_LINE_PREFIX_RE.sub("", line) for line in str(text or "").splitlines(keepends=True))
 
 
 class CreateDiffTool(Tool):
@@ -24,7 +38,8 @@ class CreateDiffTool(Tool):
     description = (
         "Make a targeted edit to a file by replacing exact text. "
         "Provide the exact string to find (old_str) and its replacement (new_str). "
-        "The old_str must match exactly one location, including whitespace and indentation."
+        "The old_str must match exactly one location, including whitespace and indentation. "
+        "Snippets copied from fs.read_file numbered output are accepted."
     )
     parameters = {
         "type": "object",
@@ -74,6 +89,12 @@ class CreateDiffTool(Tool):
             return ToolResult(ok=False, error=f"Cannot read file: {e}")
 
         if old_str not in content:
+            normalized_old = _strip_read_file_line_numbers(old_str)
+            if normalized_old != old_str and normalized_old in content:
+                old_str = normalized_old
+                new_str = _strip_read_file_line_numbers(new_str)
+
+        if old_str not in content:
             return ToolResult(
                 ok=False,
                 error=(f"old_str not found in {rel}. Make sure the text matches exactly including whitespace."),
@@ -99,9 +120,66 @@ class ApplyPatchTool(Tool):
     name = "diff.apply_patch"
     category = "diff"
     description = (
-        "Apply a unified diff patch to files. The patch should be in standard "
-        "unified diff format (from git diff or diff -u). For complex patches, "
-        "consider using shell.exec with 'git apply' instead."
+        "Apply a unified diff patch to files, atomically. Every hunk is "
+        "preflighted against current file content first — if any hunk "
+        "conflicts, NOTHING is applied and the conflicting hunks are named. "
+        "Affected files are snapshotted before writing and all of them are "
+        "restored if a write fails mid-apply. Pass 'hunks' (ids from "
+        "diff.preview_patch, e.g. 'src/app.py#2', or 1-based indices) to "
+        "apply only an accepted subset; omit it to apply every hunk."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "patch": {
+                "type": "string",
+                "description": "Unified diff patch content",
+            },
+            "hunks": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional accepted-hunk selection: stable hunk ids from "
+                    "diff.preview_patch (e.g. 'src/app.py#2') or 1-based "
+                    "global hunk indices. Omit to apply all hunks."
+                ),
+            },
+        },
+        "required": ["patch"],
+    }
+
+    def __init__(self, sandbox_root: Path):
+        self._root = sandbox_root.resolve()
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        patch_text = args["patch"]
+        selection = args.get("hunks")
+
+        try:
+            report = apply_patch_transactional(patch_text, self._root, selection=selection)
+        except PatchFormatError as e:
+            return ToolResult(ok=False, error=f"Patch failed: {e}")
+
+        if not report.ok:
+            lines = [f"  conflict: {c.hunk_id or c.file} — {c.reason}" for c in report.conflicts]
+            return ToolResult(ok=False, data="\n".join(lines) or None, error=report.error)
+
+        lines = [f"  patched: {filepath}" for filepath in report.files_written]
+        lines.append(f"  applied hunks: {', '.join(report.applied_hunks)}")
+        if report.skipped_hunks:
+            lines.append(f"  skipped hunks: {', '.join(report.skipped_hunks)}")
+        return ToolResult(ok=True, data="\n".join(lines))
+
+
+class PreviewPatchTool(Tool):
+    name = "diff.preview_patch"
+    category = "diff"
+    description = (
+        "Preview a unified diff patch without applying it. Runs the same "
+        "preflight as diff.apply_patch and lists every hunk with a stable id "
+        "(e.g. 'src/app.py#2') and whether it applies cleanly against current "
+        "file content. Accept a subset by passing the clean ids to "
+        "diff.apply_patch via its 'hunks' parameter."
     )
     parameters = {
         "type": "object",
@@ -121,26 +199,23 @@ class ApplyPatchTool(Tool):
         patch_text = args["patch"]
 
         try:
-            results = _apply_unified_diff(patch_text, self._root)
-        except Exception as e:
+            report = preflight_patch(patch_text, self._root)
+        except PatchFormatError as e:
             return ToolResult(ok=False, error=f"Patch failed: {e}")
 
-        if not results:
+        if not report.hunks:
             return ToolResult(ok=False, error="No valid hunks found in patch")
 
-        summary_lines: list[str] = []
-        for filepath, applied, error in results:
-            if applied:
-                summary_lines.append(f"  patched: {filepath}")
+        lines: list[str] = []
+        for hunk in report.hunks:
+            conflict = report.conflict_for(hunk.hunk_id)
+            if conflict is None:
+                lines.append(f"  {hunk.hunk_id} [clean] {hunk.header}")
             else:
-                summary_lines.append(f"  failed:  {filepath} — {error}")
-
-        all_ok = all(applied for _, applied, _ in results)
-        return ToolResult(
-            ok=all_ok,
-            data="\n".join(summary_lines),
-            error=None if all_ok else "Some hunks failed to apply",
-        )
+                lines.append(f"  {hunk.hunk_id} [conflict] {hunk.header} — {conflict.reason}")
+        clean = sum(1 for h in report.hunks if report.conflict_for(h.hunk_id) is None)
+        lines.append(f"  {clean}/{len(report.hunks)} hunks apply cleanly")
+        return ToolResult(ok=True, data="\n".join(lines))
 
 
 class PreviewDiffTool(Tool):
@@ -210,143 +285,6 @@ class PreviewDiffTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# Patch application helpers
-# ---------------------------------------------------------------------------
-
-
-def _apply_unified_diff(patch_text: str, root: Path) -> list[tuple[str, bool, str]]:
-    """Parse and apply a unified diff patch.
-
-    Returns list of (filepath, success, error_message).
-    This is a simplified implementation — for complex patches with
-    fuzzy matching, use `git apply` via shell.exec instead.
-    """
-    results: list[tuple[str, bool, str]] = []
-    chunks = _split_file_diffs(patch_text)
-
-    for filename, hunks_text in chunks:
-        try:
-            fpath = _safe_path(root, filename)
-        except ValueError as e:
-            results.append((filename, False, str(e)))
-            continue
-
-        # ── Runtime protection: block patches to Thomas's own code ──
-        blocked = _is_protected_runtime_path(root, fpath)
-        if blocked:
-            results.append((filename, False, blocked))
-            continue
-
-        try:
-            if fpath.exists():
-                content = fpath.read_text(encoding="utf-8", errors="replace")
-            else:
-                content = ""
-                fpath.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            results.append((filename, False, str(e)))
-            continue
-
-        try:
-            new_content = _apply_hunks(content, hunks_text)
-            fpath.write_text(new_content, encoding="utf-8")
-            results.append((filename, True, ""))
-        except Exception as e:
-            results.append((filename, False, str(e)))
-
-    return results
-
-
-def _split_file_diffs(patch_text: str) -> list[tuple[str, str]]:
-    """Split a multi-file patch into (filename, hunks_text) pairs."""
-    chunks: list[tuple[str, str]] = []
-    lines = patch_text.splitlines(keepends=True)
-    i = 0
-
-    while i < len(lines):
-        # Find --- / +++ pair
-        if lines[i].startswith("--- ") and i + 1 < len(lines) and lines[i + 1].startswith("+++ "):
-            plus_line = lines[i + 1].rstrip()
-            fname = plus_line[4:].split("\t")[0].strip()
-            if fname.startswith("b/"):
-                fname = fname[2:]
-            i += 2
-
-            # Collect all hunk lines until next file or end
-            hunk_start = i
-            while i < len(lines) and not (lines[i].startswith("--- ") or lines[i].startswith("diff --git")):
-                i += 1
-            hunks_text = "".join(lines[hunk_start:i])
-            chunks.append((fname, hunks_text))
-        else:
-            i += 1
-
-    return chunks
-
-
-def _apply_hunks(content: str, hunks_text: str) -> str:
-    """Apply hunks from a single file's diff to its content."""
-    original_lines = content.splitlines(keepends=True)
-    result_lines = list(original_lines)
-    offset = 0  # Track line offset from previous hunk applications
-
-    for hunk_header, hunk_lines in _parse_hunks(hunks_text):
-        # Parse @@ -old_start,old_count +new_start,new_count @@
-        parts = hunk_header.split()
-        old_spec = parts[1]  # -start,count
-        old_start = int(old_spec.split(",")[0].lstrip("-")) - 1  # 0-indexed
-
-        # Apply offset from previous hunks
-        pos = old_start + offset
-
-        # Process hunk lines
-        new_lines: list[str] = []
-        remove_count = 0
-        for line in hunk_lines:
-            if not line:
-                continue
-            op = line[0]
-            text = line[1:] if len(line) > 1 else ""
-            # Ensure trailing newline
-            if text and not text.endswith("\n"):
-                text += "\n"
-            if op == " ":
-                new_lines.append(text)
-                remove_count += 1
-            elif op == "-":
-                remove_count += 1
-            elif op == "+":
-                new_lines.append(text)
-
-        # Replace old lines with new lines
-        result_lines[pos : pos + remove_count] = new_lines
-        offset += len(new_lines) - remove_count
-
-    return "".join(result_lines)
-
-
-def _parse_hunks(hunks_text: str) -> list[tuple[str, list[str]]]:
-    """Parse hunk headers and their lines from a chunk of diff text."""
-    hunks: list[tuple[str, list[str]]] = []
-    lines = hunks_text.splitlines()
-    i = 0
-
-    while i < len(lines):
-        if lines[i].startswith("@@"):
-            header = lines[i]
-            hunk_lines: list[str] = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith("@@"):
-                hunk_lines.append(lines[i])
-                i += 1
-            hunks.append((header, hunk_lines))
-        else:
-            i += 1
-
-    return hunks
-
-
-# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -355,4 +293,5 @@ def register_diff_tools(registry: Any, sandbox_root: Path) -> None:
     """Register all diff tools with the registry."""
     registry.register(CreateDiffTool(sandbox_root))
     registry.register(ApplyPatchTool(sandbox_root))
+    registry.register(PreviewPatchTool(sandbox_root))
     registry.register(PreviewDiffTool(sandbox_root))

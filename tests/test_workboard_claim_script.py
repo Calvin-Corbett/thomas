@@ -79,6 +79,35 @@ def test_claim_adds_entry_and_removes_none_placeholder(tmp_path: Path, capsys) -
     assert gate.evaluate(workboard) == []
 
 
+def test_claim_preserves_semicolons_in_scope_and_task(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--claim",
+            "--agent",
+            "Codex 8",
+            "--scope",
+            "narrow parser fix; avoid dirty files",
+            "--task",
+            "claim parser; quoted fields",
+        ]
+    )
+    out = capsys.readouterr().out
+    text = workboard.read_text(encoding="utf-8")
+    violations, claims, active_tasks, _grab, _issues = gate.evaluate_board(workboard)
+
+    assert rc == 0
+    assert "Workboard claim tool: PASS" in out
+    assert 'scope="narrow parser fix; avoid dirty files"' in text
+    assert 'task="claim parser; quoted fields"' in text
+    assert violations == []
+    assert claims[0].scopes == ("narrow parser fix; avoid dirty files",)
+    assert claims[0].task == "claim parser; quoted fields"
+    assert active_tasks[0].summary == "claim parser; quoted fields"
+
+
 def test_claim_updates_existing_agent_entry(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,

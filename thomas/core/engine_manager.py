@@ -286,6 +286,18 @@ class EngineManager:
         except Exception:
             pass
 
+    def begin_interactive_work(self, label: str) -> str:
+        """Acquire the workspace mutation lease used by interactive Code runs."""
+        from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+
+        self.record_user_message()
+        return get_workspace_sync_engine().acquire_activity_lease(label)
+
+    def end_interactive_work(self, token: str) -> None:
+        from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+
+        get_workspace_sync_engine().release_activity_lease(token)
+
     # ------------------------------------------------------------------
     # Engine startup helpers
     # ------------------------------------------------------------------

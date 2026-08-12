@@ -1,7 +1,6 @@
 """Background curator pipeline for durable memory promotion.
 
 Curator responsibilities:
-- Promote high-confidence profile hints/facts from new chat episodes.
 - Promote durable research/library entries into global semantic facts.
 - Keep incremental checkpoints so each run is idempotent and bounded.
 """
@@ -22,32 +21,13 @@ from urllib.parse import urlparse
 
 from thomas.library import ResearchLibrary
 from thomas.memory.v2.fabric import MemoryFabricV2
-from thomas.memory.v2.profile_hints import extract_profile_hints
 
 log = logging.getLogger(__name__)
 
 _WS_RE = re.compile(r"\s+")
 _SAFE_KEY_RE = re.compile(r"[^a-z0-9_]+")
 
-_RE_MY_FACT = re.compile(
-    r"\bmy (?P<pred>[a-z][a-z0-9 _-]{1,40}) is (?P<obj>[^.!?\n]{2,160})",
-    re.IGNORECASE,
-)
-_RE_BUILDING = re.compile(
-    r"\bi (?:am building|build(?:ing)?|work(?:ing)? on)\s+(?P<obj>[^.!?\n]{2,180})",
-    re.IGNORECASE,
-)
-_RE_USES = re.compile(
-    r"\bi use (?P<obj>[^.!?\n]{2,120})",
-    re.IGNORECASE,
-)
-_RE_TECH_STACK = re.compile(
-    r"\bour (?:stack|tech stack) is (?P<obj>[^.!?\n]{2,180})",
-    re.IGNORECASE,
-)
-
 _STATE_LAST_RUN_MS = "curator.last_run_ms"
-_STATE_LAST_EPISODE_ID = "curator.last_episode_id"
 _STATE_LAST_LIBRARY_TS = "curator.last_library_ts_utc"
 
 _SOURCE_TRUST_BONUS = {
@@ -93,54 +73,12 @@ def _fingerprint(*parts: str) -> str:
     return h.hexdigest()
 
 
-def extract_episode_facts(text: str) -> list[tuple[str, str, str, float]]:
-    src = str(text or "")
-    out: list[tuple[str, str, str, float]] = []
-
-    for m in _RE_MY_FACT.finditer(src):
-        raw_pred = _norm_text(m.group("pred"), max_len=48)
-        raw_obj = _norm_text(m.group("obj"), max_len=180)
-        if len(raw_pred) < 2 or len(raw_obj) < 2:
-            continue
-        out.append(("user", _safe_key(raw_pred, fallback="attribute"), raw_obj, 0.74))
-
-    for m in _RE_BUILDING.finditer(src):
-        raw_obj = _norm_text(m.group("obj"), max_len=180)
-        if len(raw_obj) < 3:
-            continue
-        out.append(("user", "current_project", raw_obj, 0.66))
-
-    for m in _RE_USES.finditer(src):
-        raw_obj = _norm_text(m.group("obj"), max_len=140)
-        if len(raw_obj) < 2:
-            continue
-        out.append(("user", "uses", raw_obj, 0.64))
-
-    for m in _RE_TECH_STACK.finditer(src):
-        raw_obj = _norm_text(m.group("obj"), max_len=180)
-        if len(raw_obj) < 2:
-            continue
-        out.append(("project", "tech_stack", raw_obj, 0.67))
-
-    deduped: list[tuple[str, str, str, float]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for subject, predicate, obj, conf in out:
-        key = (subject.lower(), predicate.lower(), obj.lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append((subject, predicate, obj, conf))
-    return deduped
-
-
 @dataclass
 class CuratorConfig:
     enabled: bool = True
     min_interval_seconds: int = 180
-    max_episode_scan: int = 120
     max_library_scan: int = 40
     max_promotions_per_run: int = 120
-    min_profile_confidence: float = 0.72
     min_fact_confidence: float = 0.62
     approval_enabled: bool = True
     approval_auto_apply_confidence: float = 0.70
@@ -649,9 +587,6 @@ class MemoryCurator:
             "applied": bool(applied),
         }
 
-    def _extract_episode_facts(self, text: str) -> list[tuple[str, str, str, float]]:
-        return extract_episode_facts(text)
-
     def _library_confidence(
         self,
         *,
@@ -684,162 +619,6 @@ class MemoryCurator:
         except (OSError, UnicodeDecodeError):
             return ""
         return _norm_text(text, max_len=max_chars)
-
-    def _curate_episode_row(
-        self,
-        row: dict[str, Any],
-        *,
-        remaining_promotions: int,
-    ) -> tuple[int, int, int, int, int]:
-        if remaining_promotions <= 0:
-            return 0, 0, 0, 0, 0
-
-        role = str(row.get("role", "")).strip().lower()
-        if role != "user":
-            return 0, 0, 0, 0, 0
-
-        episode_id = int(row.get("id") or 0)
-        thread_id = str(row.get("thread_id", "")).strip() or None
-        ts_ms = int(row.get("ts_ms") or _now_ms())
-        content = str(row.get("content") or "")
-
-        scanned = 1
-        hints_promoted = 0
-        facts_promoted = 0
-        queued = 0
-        duplicates = 0
-
-        hints = [
-            h
-            for h in extract_profile_hints(content)
-            if float(h.confidence) >= float(self._config.min_profile_confidence)
-        ]
-        for hint in hints:
-            if remaining_promotions <= 0:
-                break
-            h_key = _safe_key(hint.key, fallback="hint")
-            h_val = _norm_text(hint.value, max_len=120)
-            if not h_val:
-                continue
-            fp = _fingerprint("hint", h_key, h_val)
-            payload = {
-                "kind": "hint",
-                "thread_id": thread_id,
-                "key": h_key,
-                "value": h_val,
-                "confidence": float(hint.confidence),
-                "source_episode_id": episode_id,
-                "ts_ms": ts_ms,
-            }
-            if self._is_payload_duplicate(payload):
-                duplicates += 1
-                continue
-            risk_level = self._promotion_risk_level(
-                confidence=float(hint.confidence),
-                source_kind="episode",
-                promotion_kind="hint",
-            )
-            if self._requires_approval(
-                source_kind="episode",
-                confidence=float(hint.confidence),
-                risk_level=risk_level,
-            ):
-                if self._queue_promotion(
-                    source_kind="episode",
-                    source_ref=str(episode_id),
-                    promotion_kind="hint",
-                    fingerprint=fp,
-                    thread_id=thread_id,
-                    confidence=float(hint.confidence),
-                    risk_level=risk_level,
-                    payload=payload,
-                ):
-                    queued += 1
-                    remaining_promotions -= 1
-                else:
-                    duplicates += 1
-                continue
-            if not self._reserve_promotion(
-                source_kind="episode",
-                source_ref=str(episode_id),
-                promotion_kind="hint",
-                fingerprint=fp,
-            ):
-                duplicates += 1
-                continue
-            if self._apply_queued_payload(payload):
-                hints_promoted += 1
-                remaining_promotions -= 1
-            else:
-                duplicates += 1
-
-        for subject, predicate, obj, conf in self._extract_episode_facts(content):
-            if remaining_promotions <= 0:
-                break
-            confidence = float(max(0.0, min(1.0, conf)))
-            if confidence < float(self._config.min_fact_confidence):
-                continue
-            s = _norm_text(subject, max_len=80)
-            p = _safe_key(predicate, fallback="fact")
-            o = _norm_text(obj, max_len=220)
-            if not s or not p or not o:
-                continue
-            payload_thread_id = None if str(subject).strip().lower() in {"user", "project"} else thread_id
-            fp = _fingerprint("fact", payload_thread_id or "global", s, p, o)
-            payload = {
-                "kind": "fact",
-                "thread_id": payload_thread_id,
-                "subject": s,
-                "predicate": p,
-                "obj": o,
-                "confidence": confidence,
-                "source_episode_id": episode_id,
-                "ts_ms": ts_ms,
-                "base_salience": 1.05,
-            }
-            if self._is_payload_duplicate(payload):
-                duplicates += 1
-                continue
-            risk_level = self._promotion_risk_level(
-                confidence=confidence,
-                source_kind="episode",
-                promotion_kind="fact",
-            )
-            if self._requires_approval(
-                source_kind="episode",
-                confidence=confidence,
-                risk_level=risk_level,
-            ):
-                if self._queue_promotion(
-                    source_kind="episode",
-                    source_ref=str(episode_id),
-                    promotion_kind="fact",
-                    fingerprint=fp,
-                    thread_id=thread_id,
-                    confidence=confidence,
-                    risk_level=risk_level,
-                    payload=payload,
-                ):
-                    queued += 1
-                    remaining_promotions -= 1
-                else:
-                    duplicates += 1
-                continue
-            if not self._reserve_promotion(
-                source_kind="episode",
-                source_ref=str(episode_id),
-                promotion_kind="fact",
-                fingerprint=fp,
-            ):
-                duplicates += 1
-                continue
-            if self._apply_queued_payload(payload):
-                facts_promoted += 1
-                remaining_promotions -= 1
-            else:
-                duplicates += 1
-
-        return scanned, hints_promoted, facts_promoted, queued, duplicates
 
     def _curate_library_row(
         self,
@@ -1025,41 +804,6 @@ class MemoryCurator:
             result = CuratorRunResult(ran=True, reason="ok")
             remaining = max(1, int(self._config.max_promotions_per_run))
 
-            last_episode_id = self._state_int(_STATE_LAST_EPISODE_ID, 0)
-            episode_rows = self._fabric.db.execute(
-                """
-                SELECT id, thread_id, ts_ms, role, content
-                FROM episodes
-                WHERE id > ?
-                ORDER BY id ASC
-                LIMIT ?
-                """,
-                (int(last_episode_id), int(max(1, self._config.max_episode_scan))),
-            ).fetchall()
-            max_seen_episode = int(last_episode_id)
-            for row in episode_rows:
-                rec = dict(row)
-                max_seen_episode = max(max_seen_episode, int(rec.get("id") or 0))
-                scanned, hints, facts, queued, dup = self._curate_episode_row(
-                    rec,
-                    remaining_promotions=remaining,
-                )
-                result.episodes_scanned += scanned
-                result.hints_promoted += hints
-                result.facts_promoted += facts
-                result.queued_for_approval += queued
-                result.duplicates_skipped += dup
-                remaining -= hints + facts + queued
-                if remaining <= 0:
-                    result.reason = "promotion_budget_reached"
-                    break
-
-            if max_seen_episode > last_episode_id:
-                self._set_state_int(_STATE_LAST_EPISODE_ID, max_seen_episode)
-                result.last_episode_id = max_seen_episode
-            else:
-                result.last_episode_id = last_episode_id
-
             last_library_ts = self._state_int(_STATE_LAST_LIBRARY_TS, 0)
             max_seen_library_ts = int(last_library_ts)
             if remaining > 0 and self._library is not None:
@@ -1094,7 +838,7 @@ class MemoryCurator:
             self._set_state_int(_STATE_LAST_RUN_MS, now)
 
             # Keep global pack fresh after curator promotions (best effort).
-            if result.facts_promoted > 0 or result.hints_promoted > 0:
+            if result.facts_promoted > 0:
                 try:
                     self._fabric.compact(thread_id=None)
                 except (RuntimeError, OSError) as e:
@@ -1118,14 +862,13 @@ class MemoryCurator:
         return {
             "enabled": bool(self._config.enabled),
             "min_interval_seconds": int(self._config.min_interval_seconds),
-            "max_episode_scan": int(self._config.max_episode_scan),
             "max_library_scan": int(self._config.max_library_scan),
             "max_promotions_per_run": int(self._config.max_promotions_per_run),
             "approval_enabled": bool(self._config.approval_enabled),
             "approval_auto_apply_confidence": float(self._config.approval_auto_apply_confidence),
             "approval_require_for_library": bool(self._config.approval_require_for_library),
             "last_run_ms": int(self._state_int(_STATE_LAST_RUN_MS, 0)),
-            "last_episode_id": int(self._state_int(_STATE_LAST_EPISODE_ID, 0)),
+            "last_episode_id": 0,
             "last_library_ts_utc": int(self._state_int(_STATE_LAST_LIBRARY_TS, 0)),
             "promotions_total": promotions,
             "approval_queue": {

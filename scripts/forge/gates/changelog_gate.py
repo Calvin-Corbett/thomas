@@ -4,7 +4,7 @@
 Triggers when 3+ files under thomas/ are staged but CHANGELOG.md is not.
 This catches real feature work while letting tiny fixes pass through.
 
-See: GUARDRAILS.md Rule 6 — "Changelog Is Mandatory"
+See: GUARDRAILS.md Rule 6 - "Changelog Is Mandatory"
 Audit reference: Adversarial Audit Finding 2 (2026-03-19)
 """
 
@@ -155,7 +155,7 @@ def run(argv: list[str] | None = None) -> int:
             else:
                 print("  No code files under thomas/ staged.")
         else:
-            print("❌ SAFETY GATE FAILED: CHANGELOG.md Not Updated")
+            print("SAFETY GATE FAILED: CHANGELOG.md Not Updated")
             print("=" * 70)
             print(f"You staged {len(code_files)} code file(s) under thomas/:")
             for f in code_files[:10]:

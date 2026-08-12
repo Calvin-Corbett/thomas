@@ -28,7 +28,7 @@ export function attachCompanionRuntime(runtime) {
   } = runtime;
 
   async function streamChatReply(text, assistantId) {
-    const response = await fetch("/api/chat", {
+    const response = await fetch("/api/v2/chat", {
       method: "POST",
       headers: buildAuthHeaders({
         "Accept": "application/x-ndjson, application/json",

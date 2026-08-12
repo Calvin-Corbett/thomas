@@ -476,6 +476,60 @@ def _sanitize_field(label: str, value: str) -> str:
     return value
 
 
+def _format_field(key: str, value: str) -> str:
+    raw = str(value or "").strip()
+    if any(ch in raw for ch in (";", "`", '"', "'")):
+        return f"{key}={json.dumps(raw)}"
+    return f"{key}={raw}"
+
+
+def _split_field_segments(line: str) -> list[str]:
+    segments: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for char in str(line or ""):
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\" and quote == '"':
+            current.append(char)
+            escaped = True
+            continue
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = None
+            continue
+        if char in {'"', "'", "`"}:
+            quote = char
+            current.append(char)
+            continue
+        if char == ";":
+            segment = "".join(current).strip()
+            if segment:
+                segments.append(segment)
+            current = []
+            continue
+        current.append(char)
+    segment = "".join(current).strip()
+    if segment:
+        segments.append(segment)
+    return segments
+
+
+def _parse_field_value(raw: str) -> str:
+    value = str(raw or "").strip()
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return value.strip("`").strip("'").strip('"')
+        return str(decoded).strip()
+    return value.strip("`").strip("'").strip('"')
+
+
 def _resolve_display_name(name: str | None, agent: str) -> str:
     if name:
         return str(name).strip()
@@ -606,13 +660,13 @@ def _format_claim(
     claim_parent = _sanitize_field("parent", parent or "") or "none"
 
     fields: list[str] = [
-        f"agent={agent}",
-        f"name={claim_name}",
-        f"role={claim_role}",
-        f"parent={claim_parent}",
+        _format_field("agent", agent),
+        _format_field("name", claim_name),
+        _format_field("role", claim_role),
+        _format_field("parent", claim_parent),
     ]
-    fields.append(f"scope={scope}")
-    fields.append(f"task={task}")
+    fields.append(_format_field("scope", scope))
+    fields.append(_format_field("task", task))
     return "- " + "; ".join(fields)
 
 
@@ -627,11 +681,11 @@ def _format_active_task(
     summary_value = _sanitize_field("summary", summary) or str(task_id or "").strip()
     status_value = _sanitize_field("status", status) or "active"
     fields: list[str] = [
-        f"task_id={task_id}",
-        f"agent={agent}",
-        f"scope={scope}",
-        f"summary={summary_value}",
-        f"status={status_value}",
+        _format_field("task_id", task_id),
+        _format_field("agent", agent),
+        _format_field("scope", scope),
+        _format_field("summary", summary_value),
+        _format_field("status", status_value),
     ]
     return "- " + "; ".join(fields)
 
@@ -713,13 +767,13 @@ def _parse_claim_line(line_no: int, line: str) -> tuple[str | None, dict[str, st
     if line == NONE_ENTRY.split("-", 1)[1].strip():
         return None, {}, ""
     fields = {}
-    for segment in line.split(";"):
+    for segment in _split_field_segments(line):
         segment = segment.strip()
         if "=" not in segment:
             continue
         key, value = segment.split("=", 1)
         key = key.strip()
-        value = value.strip().strip("`").strip("'").strip('"')
+        value = _parse_field_value(value)
         fields[key] = value
     agent = fields.get("agent", "")
     if not agent:
@@ -735,13 +789,13 @@ def _parse_active_task_line(line_no: int, line: str) -> tuple[str | None, dict[s
     if line == NONE_ENTRY.split("-", 1)[1].strip():
         return None, {}, ""
     fields = {}
-    for segment in line.split(";"):
+    for segment in _split_field_segments(line):
         segment = segment.strip()
         if "=" not in segment:
             continue
         key, value = segment.split("=", 1)
         key = key.strip()
-        value = value.strip().strip("`").strip("'").strip('"')
+        value = _parse_field_value(value)
         fields[key] = value
     task_id = fields.get("task_id", "") or fields.get("task", "")
     if not task_id:
@@ -757,13 +811,13 @@ def _parse_issue_line(line_no: int, line: str) -> tuple[str | None, dict[str, st
     if line == NONE_ENTRY.split("-", 1)[1].strip():
         return None, {}, ""
     fields = {}
-    for segment in line.split(";"):
+    for segment in _split_field_segments(line):
         segment = segment.strip()
         if "=" not in segment:
             continue
         key, value = segment.split("=", 1)
         key = key.strip()
-        value = value.strip().strip("`").strip("'").strip('"')
+        value = _parse_field_value(value)
         fields[key] = value
     task_id = fields.get("task", "")
     if not task_id:

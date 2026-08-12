@@ -1,24 +1,14 @@
 /**
- * token_economy.js — Token Economy workspace panel v3
+ * Token Economy workspace.
  *
- * Design: Bloomberg Terminal × spacecraft instruments.
- * No circular gauges, no uniform card grids, no AI slop.
- * Typography IS the design. Numbers dominate. Data is dense.
+ * Thomas Chat is the immutable visual master. This module consumes the same
+ * five-theme tokens, density, controls, eyes mark, and UI Edit Mode contract.
  *
  * Hooks into the module system via window.__tokenEconomy.
  * Consumes /api/spend/* endpoints + SSE for live updates.
  *
- * Space rendering engine lives in token_economy_space.js (loaded on demand).
+ * token_economy_space.js is now a static, active-only compatibility adapter.
  */
-
-// Space engine is now loaded globally via index.html <script> tag.
-// This guard is kept only for edge cases (e.g. standalone preview pages).
-if (!window.__teSpace) {
-    const _teS = document.createElement('script');
-    _teS.src = '/static/js/token_economy_space.js';
-    _teS.async = false;
-    document.head.appendChild(_teS);
-}
 
 (function tokenEconomyModule() {
     'use strict';
@@ -31,6 +21,7 @@ if (!window.__teSpace) {
         history: null,
         pricing: null,
         profile: null,
+        matrix: null,
         period: 7,
         economy: '',
         autonomy: 3,
@@ -38,32 +29,39 @@ if (!window.__teSpace) {
         el: null,
         lastRefresh: 0,
         feedEvents: [],
-        tickFrame: null,
-        tickAngle: 0,
+        clockTimer: null,
+        sseRetry: null,
+        feedSequence: 0,
     };
 
     const STALE = 15_000;
 
+    // What the dial still changes -- and only that. This table used to carry a pass
+    // multiplier (0.3× / 1.0× / 2.5×, rendered as the topbar badge) and a pass ration
+    // (1–3 / 3–15 / 8–32). Commit cd0203a7 set every multiplier to 1.0 and replaced
+    // the rations with one 400-pass runaway guard, so the badge advertised a 2.5× that
+    // does not exist and the matrix printed one identical number beside three buttons
+    // offering three different budgets. Passes, context, tool caps, overhead and
+    // skills are the same at every level now: what is identical is read live and shown
+    // once, never repeated per level as if the dial moved it.
+    // retries -- token_economy.py apply_token_economy_policy(): cheap forces
+    //   max_auto_retries to 0, max clamps it into 2–3, optimal keeps the configured
+    //   value (AppConfig ships 1). brief -- deliverable.py quality_tier_clause().
     const MODE_SPECS = {
         cheap: {
-            mul: '0.3×', name: 'Cheap', tag: 'ECON',
-            passes: '1–3', budget: '250K', retries: '0',
-            overhead: 'Minimal', skills: 'Off',
-            desc: 'Single-shot. No retries, no overhead.',
+            name: 'Cheap', tag: 'ECON', retries: '0', brief: 'quick',
+            desc: 'Cheaper steps, not fewer. No auto-repair attempt after a failed check.',
         },
         optimal: {
-            mul: '1.0×', name: 'Optimal', tag: 'STD',
-            passes: '3–15', budget: '650K', retries: '1',
-            overhead: 'Balanced', skills: 'Explicit',
-            desc: 'Default runtime. Balanced effort.',
+            name: 'Optimal', tag: 'STD', retries: '1', brief: 'standard',
+            desc: 'Default runtime. Auto-repair follows the configured retry count.',
         },
         max: {
-            mul: '2.5×', name: 'Max', tag: 'MAX',
-            passes: '8–32', budget: '∞', retries: '2–3',
-            overhead: 'Full', skills: 'Auto',
-            desc: 'Full suite. Maximum capability.',
+            name: 'Max', tag: 'MAX', retries: '2–3', brief: 'thorough',
+            desc: 'Most persistent. At least two auto-repair attempts before handing work back.',
         },
     };
+    const RETRY_NOTE = 'Auto-repair: cheap forces 0, max forces 2–3, optimal follows configured quality.max_auto_retries.';
 
     const MODEL_COLORS = [
         '#58a6ff', '#47d7ac', '#ffbf47', '#ff6b6b', '#c084fc',
@@ -94,6 +92,15 @@ if (!window.__teSpace) {
         if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
         return String(v);
     }
+    function modelTokens(detail) {
+        const d = detail || {};
+        const nested = d.tokens || {};
+        return {
+            prompt: +(nested.prompt ?? d.prompt_tokens) || 0,
+            completion: +(nested.completion ?? d.completion_tokens) || 0,
+            total: +(nested.total ?? d.total_tokens) || 0,
+        };
+    }
     function pct(n, d) { return d ? Math.min(100, Math.max(0, (n / d) * 100)) : 0; }
     function shortDate(iso) {
         if (!iso) return '--';
@@ -112,6 +119,25 @@ if (!window.__teSpace) {
         const d = new Date();
         return [d.getHours(), d.getMinutes(), d.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
     }
+    function uiKey(value) {
+        return String(value || 'unknown').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
+    }
+    function workspaceActive() {
+        if (!_s.mounted || !_s.el || !_s.el.isConnected || document.hidden) return false;
+        return !_s.el.closest('.hidden, [hidden], [aria-hidden="true"]');
+    }
+    function ensureComponentStyles() {
+        if (document.querySelector('link[href*="token_economy_components.css"]')) return;
+        const source = document.querySelector('link[href*="token_economy_widget.css"]');
+        let version = '';
+        try { version = source ? new URL(source.href, window.location.href).search : ''; }
+        catch { version = ''; }
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = '/static/css/token_economy_components.css' + version;
+        link.dataset.tokenEconomyComponents = 'true';
+        document.head.appendChild(link);
+    }
 
     async function api(url) {
         try {
@@ -123,27 +149,33 @@ if (!window.__teSpace) {
 
     // ── data ─────────────────────────────────────────────────────
     async function refresh({ force = false } = {}) {
+        if (!workspaceActive()) return;
         if (!force && _s.lastRefresh && Date.now() - _s.lastRefresh < STALE) return;
         _s.loading = true;
         showLoading();
 
-        const [t, s, h, p, prof] = await Promise.all([
+        const [t, s, h, p, prof, matrix] = await Promise.all([
             api('/api/spend/today'),
             api('/api/spend/session'),
             api('/api/spend/history?days=' + _s.period),
             _s.pricing ? { ok: true, data: _s.pricing } : api('/api/spend/pricing'),
             api('/api/runtime/profile'),
+            api('/api/runtime/matrix'),
         ]);
 
         if (t.ok) _s.today = t.data;
         if (s.ok) _s.session = s.data;
         if (h.ok) _s.history = Array.isArray(h.data) ? h.data : [];
-        if (p.ok && p.data) _s.pricing = p.data?.pricing || p.data;
+        if (p.ok && p.data) {
+            _s.pricing = p.data?.pricing || p.data;
+            if (Array.isArray(p.data?.runtime_matrix)) _s.matrix = { profiles: p.data.runtime_matrix };
+        }
         if (prof.ok && prof.data) {
             _s.profile = prof.data;
             _s.economy = prof.data.economy_level || 'optimal';
             _s.autonomy = prof.data.autonomy_level || 3;
         }
+        if (matrix.ok && matrix.data) _s.matrix = matrix.data;
 
         if (!_s.economy) {
             try {
@@ -163,7 +195,8 @@ if (!window.__teSpace) {
 
     // ── SSE ──────────────────────────────────────────────────────
     function sseOn() {
-        if (_s.sse) return;
+        if (_s.sse || !workspaceActive()) return;
+        if (_s.sseRetry) { clearTimeout(_s.sseRetry); _s.sseRetry = null; }
         try {
             const es = new EventSource('/api/spend/stream');
             _s.sse = es;
@@ -174,14 +207,17 @@ if (!window.__teSpace) {
                         if (typeof d.today_usd === 'number') _s.today.total_usd = d.today_usd;
                         if (d.today_tokens) _s.today.tokens = d.today_tokens;
                         if (typeof d.today_calls === 'number') _s.today.call_count = d.today_calls;
-                        if (d.model && typeof d.usd_total === 'number') {
+                        if (d.model) {
                             if (!_s.today.by_model_detail) _s.today.by_model_detail = {};
                             const x = _s.today.by_model_detail[d.model] || { usd: 0, calls: 0, tokens: { prompt: 0, completion: 0, total: 0 } };
-                            x.usd = (x.usd || 0) + d.usd_total;
+                            x.usd = (x.usd || 0) + (+d.usd_total || 0);
                             x.calls = (x.calls || 0) + 1;
                             x.tokens.prompt = (x.tokens?.prompt || 0) + (d.prompt_tokens || 0);
                             x.tokens.completion = (x.tokens?.completion || 0) + (d.completion_tokens || 0);
                             x.tokens.total = x.tokens.prompt + x.tokens.completion;
+                            x.prompt_tokens = x.tokens.prompt;
+                            x.completion_tokens = x.tokens.completion;
+                            x.total_tokens = x.tokens.total;
                             _s.today.by_model_detail[d.model] = x;
                         }
                     }
@@ -191,518 +227,172 @@ if (!window.__teSpace) {
                     pushFeed(d);
                 } catch { /* ignore */ }
             });
-            es.onerror = () => { es.close(); _s.sse = null; setTimeout(sseOn, 8000); };
+            es.onerror = () => {
+                es.close();
+                _s.sse = null;
+                if (workspaceActive()) _s.sseRetry = setTimeout(sseOn, 8000);
+            };
         } catch { /* unsupported */ }
     }
-    function sseOff() { if (_s.sse) { _s.sse.close(); _s.sse = null; } }
+    function sseOff() {
+        if (_s.sse) { _s.sse.close(); _s.sse = null; }
+        if (_s.sseRetry) { clearTimeout(_s.sseRetry); _s.sseRetry = null; }
+    }
 
 
-    // ── Space rendering engine (extracted to token_economy_space.js) ──
-    // Space is now globally injected at page load (index.html).
-    // injectSpaceBg is kept for API compat but is effectively a no-op
-    // since the global init already called inject(). removeSpaceBg is a
-    // no-op so the module system doesn't tear down the global background.
-    function injectSpaceBg() { if (window.__teSpace) window.__teSpace.inject(); }
-    function removeSpaceBg() { /* no-op — space bg is global now */ }
+    // Workspace background compatibility. The adapter is static and active-only.
+    function injectSpaceBg() {
+        if (window.__teSpace && workspaceActive()) window.__teSpace.inject();
+    }
+    function removeSpaceBg() {
+        if (window.__teSpace) window.__teSpace.remove();
+    }
 
-    // ── Plugin iframe theme injection ──────────────────────────
-    // Plugins run in iframes with their own stylesheets.
-    // We inject a <style> override to make them transparent against space.
-    const _IFRAME_SPACE_CSS = `
-        html, body {
-            background: transparent !important;
-            color: #ececf1 !important;
+    // Live work exists only while Token Economy is the visible workspace.
+    function syncClock() {
+        const clock = $('[data-te-clock]', _s.el);
+        if (clock) clock.textContent = nowHHMMSS();
+    }
+    function clockStart() {
+        clockStop();
+        if (!workspaceActive()) return;
+        syncClock();
+        _s.clockTimer = setInterval(syncClock, 1000);
+    }
+    function clockStop() {
+        if (_s.clockTimer) clearInterval(_s.clockTimer);
+        _s.clockTimer = null;
+    }
+    function onVisibilityChange() {
+        if (!_s.mounted) return;
+        if (document.hidden) {
+            sseOff();
+            clockStop();
+            removeSpaceBg();
+            return;
         }
-        .panel, .card, section, .app-shell > section {
-            background: rgba(8, 12, 20, 0.55) !important;
-            border-color: rgba(88, 166, 255, 0.14) !important;
-            color: #ececf1 !important;
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-        }
-        .panel:hover, .card:hover {
-            border-color: rgba(88, 166, 255, 0.30) !important;
-        }
-        .hero {
-            background: linear-gradient(135deg, rgba(10, 16, 28, 0.90), rgba(8, 24, 52, 0.85)) !important;
-        }
-        input, select, textarea {
-            background: rgba(255, 255, 255, 0.06) !important;
-            border-color: rgba(88, 166, 255, 0.18) !important;
-            color: #ececf1 !important;
-        }
-        input::placeholder { color: rgba(236, 236, 241, 0.35) !important; }
-        h1, h2, h3, strong { color: #f0f4ff !important; }
-        p, span, label, .panel-kicker, .eyebrow { color: rgba(236, 236, 241, 0.75) !important; }
-        .panel-meta, .item-meta { color: rgba(236, 236, 241, 0.50) !important; }
-        button[type="submit"], .btn-primary {
-            background: rgba(88, 166, 255, 0.20) !important;
-            border-color: rgba(88, 166, 255, 0.35) !important;
-            color: #8cc8ff !important;
-        }
-        .hero-stat {
-            background: rgba(255, 255, 255, 0.06) !important;
-            border-color: rgba(255, 255, 255, 0.08) !important;
-        }
-        .item-row, .item-card { border-color: rgba(88, 166, 255, 0.10) !important; }
-    `;
-
-    function _injectIframeThemes() {
-        const iframes = document.querySelectorAll('#moduleWorkspace iframe');
-        iframes.forEach(iframe => {
-            // Inject now if loaded
-            _injectIntoIframe(iframe);
-            // Also inject on load (iframe may still be loading)
-            if (!iframe._teSpaceLoadHandler) {
-                iframe._teSpaceLoadHandler = () => {
-                    if (document.body.classList.contains('te-space-active')) {
-                        _injectIntoIframe(iframe);
-                    }
-                };
-                iframe.addEventListener('load', iframe._teSpaceLoadHandler);
-            }
-        });
+        injectSpaceBg();
+        clockStart();
+        sseOn();
+        refresh();
     }
-    function _injectIntoIframe(iframe) {
-        try {
-            const doc = iframe.contentDocument;
-            if (!doc || !doc.head) return;
-            if (doc.getElementById('te-space-iframe-theme')) return;
-            const style = doc.createElement('style');
-            style.id = 'te-space-iframe-theme';
-            style.textContent = _IFRAME_SPACE_CSS;
-            doc.head.appendChild(style);
-        } catch (e) { /* cross-origin */ }
-    }
-
-    function _removeIframeThemes() {
-        const iframes = document.querySelectorAll('#moduleWorkspace iframe');
-        iframes.forEach(iframe => {
-            try {
-                const doc = iframe.contentDocument;
-                if (!doc) return;
-                const style = doc.getElementById('te-space-iframe-theme');
-                if (style) style.remove();
-            } catch (e) { /* cross-origin */ }
-        });
-    }
-
-    // MutationObserver to catch iframes that load after the space bg is mounted
-    let _iframeObserver = null;
-    function _watchForIframes() {
-        if (_iframeObserver) return;
-        const ws = document.getElementById('moduleWorkspace');
-        if (!ws) return;
-        _iframeObserver = new MutationObserver(() => {
-            if (document.body.classList.contains('te-space-active')) {
-                _injectIframeThemes();
-            }
-        });
-        _iframeObserver.observe(ws, { childList: true, subtree: true });
-    }
-    function _unwatchIframes() {
-        if (_iframeObserver) { _iframeObserver.disconnect(); _iframeObserver = null; }
-    }
-
-    // ── Wire up space engine callbacks ─────────────────────────
-    if (window.__teSpace) {
-        window.__teSpace.init({
-            onEnter: function() { _injectIframeThemes(); _watchForIframes(); floaterStart(); },
-            onLeave: function() { floaterStop(); _removeIframeThemes(); _unwatchIframes(); },
-        });
-    }
-
-    // ── Floating robots — random office bots drift across space ──
-    let _floaterTimer = null;
-    let _screensaverTimer = null;
-    let _screensaverActive = false;
-    const SCREENSAVER_IDLE_MS = 90000; // 90 seconds of inactivity
-
-    // ── IDLE THOMAS — sits by the composer, breathes, blinks, talks randomly ──
-    let _idleThomasEl = null;
-    let _idleSpeechTimer = null;
-
-    const THOMAS_IDLE_LINES = [
-        'Systems nominal.',
-        'Standing by...',
-        'Ready for input.',
-        'All quiet out here.',
-        'Space is beautiful.',
-        'Monitoring channels.',
-        'Core temp stable.',
-        'Signal strong.',
-        'Orbit steady.',
-        'Awaiting orders.',
-        'Processing...',
-        'Tokens flowing.',
-        'Scanning horizon.',
-        'Hull integrity 100%.',
-        'Fuel cells charged.',
-        'Navigation locked.',
-        'Comms online.',
-        'Enjoying the view.',
-        'Nebula looks nice today.',
-        'Sensors green.',
-    ];
-
-    function _positionIdleThomas() {
-        if (!_idleThomasEl) return;
-        /* Park Thomas just left of the composer textarea */
-        var textarea = document.getElementById('composerTextarea');
-        if (textarea) {
-            var rect = textarea.getBoundingClientRect();
-            _idleThomasEl.style.left = Math.max(8, Math.round(rect.left - 88)) + 'px';
-        } else {
-            var sidebar = document.querySelector('.sidebar');
-            var leftOffset = 28;
-            if (sidebar && !sidebar.classList.contains('collapsed')) {
-                leftOffset = sidebar.offsetWidth + 28;
-            }
-            _idleThomasEl.style.left = leftOffset + 'px';
-        }
-    }
-
-    let _sidebarObserver = null;
-
-    function _createIdleThomas() {
-        if (_idleThomasEl) return;
-        const el = document.createElement('div');
-        el.id = 'te-idle-thomas';
-        el.innerHTML =
-            '<div class="te-floater-bot" style="--bot-primary:#9ad8ff;--bot-secondary:#5aaeff">' +
-                '<div class="te-floater-visual">' +
-                    '<div class="te-floater-head"><div class="te-floater-eye left"></div><div class="te-floater-eye right"></div></div>' +
-                    '<div class="te-floater-body"></div>' +
-                    '<div class="te-floater-leg left"></div><div class="te-floater-leg right"></div>' +
-                '</div>' +
-                '<span class="te-floater-name">Thomas</span>' +
-            '</div>' +
-            '<div class="te-idle-speech"></div>';
-        document.body.appendChild(el);
-        _idleThomasEl = el;
-        _positionIdleThomas();
-        // Watch sidebar for collapse/expand to reposition
-        var sidebar = document.querySelector('.sidebar');
-        if (sidebar) {
-            _sidebarObserver = new MutationObserver(_positionIdleThomas);
-            _sidebarObserver.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
-        }
-        _startIdleSpeech();
-    }
-
-    function _removeIdleThomas() {
-        if (_idleSpeechTimer) { clearTimeout(_idleSpeechTimer); _idleSpeechTimer = null; }
-        if (_sidebarObserver) { _sidebarObserver.disconnect(); _sidebarObserver = null; }
-        if (_idleThomasEl) { _idleThomasEl.remove(); _idleThomasEl = null; }
-    }
-
-    function _startIdleSpeech() {
-        // Say something random every 15-40 seconds
-        function speak() {
-            if (!_idleThomasEl) return;
-            const bubble = _idleThomasEl.querySelector('.te-idle-speech');
-            if (!bubble) return;
-            const line = THOMAS_IDLE_LINES[Math.floor(Math.random() * THOMAS_IDLE_LINES.length)];
-            bubble.textContent = line;
-            bubble.classList.add('visible');
-            // Hide after 4-6 seconds
-            setTimeout(() => {
-                if (bubble) bubble.classList.remove('visible');
-            }, 4000 + Math.random() * 2000);
-            _idleSpeechTimer = setTimeout(speak, (15 + Math.random() * 25) * 1000);
-        }
-        // First line after 5-10 seconds
-        _idleSpeechTimer = setTimeout(speak, (5 + Math.random() * 5) * 1000);
-    }
-
-    // ── Ambient floating bots — small robots that drift across the space ──
-    const AMBIENT_BOT_NAMES = [
-        'Scout', 'Pixel', 'Drift', 'Echo', 'Spark', 'Nova', 'Byte', 'Glow',
-        'Orbit', 'Pulse', 'Comet', 'Flick', 'Haze', 'Ripple', 'Blink',
-    ];
-    const AMBIENT_BOT_COLORS = [
-        { primary: '#a0d4a0', secondary: '#6bae6b' },   // green
-        { primary: '#e8b8e8', secondary: '#c080c0' },   // pink
-        { primary: '#f0d080', secondary: '#d0a848' },   // gold
-        { primary: '#b0c8e8', secondary: '#7898c0' },   // steel blue
-        { primary: '#e0a890', secondary: '#c07860' },   // copper
-        { primary: '#c8e0b8', secondary: '#90b870' },   // lime
-        { primary: '#d0b8e8', secondary: '#a080c8' },   // lavender
-    ];
-    let _ambientBots = [];
-    let _ambientSpawnTimer = null;
-    const MAX_AMBIENT_BOTS = 3;
-
-    function _spawnAmbientBot() {
-        if (_ambientBots.length >= MAX_AMBIENT_BOTS) return;
-        const palette = AMBIENT_BOT_COLORS[Math.floor(Math.random() * AMBIENT_BOT_COLORS.length)];
-        const name = AMBIENT_BOT_NAMES[Math.floor(Math.random() * AMBIENT_BOT_NAMES.length)];
-
-        const el = document.createElement('div');
-        el.className = 'te-ambient-bot';
-        el.innerHTML =
-            '<div class="te-floater-bot" style="--bot-primary:' + palette.primary + ';--bot-secondary:' + palette.secondary + '">' +
-                '<div class="te-floater-visual">' +
-                    '<div class="te-floater-head"><div class="te-floater-eye left"></div><div class="te-floater-eye right"></div></div>' +
-                    '<div class="te-floater-body"></div>' +
-                    '<div class="te-floater-leg left"></div><div class="te-floater-leg right"></div>' +
-                '</div>' +
-                '<span class="te-floater-name">' + name + '</span>' +
-            '</div>';
-
-        // Random flight path: pick a start edge and end edge
-        var vh = window.innerHeight;
-        var vw = window.innerWidth;
-        var goRight = Math.random() > 0.5;
-        var startX = goRight ? -80 : vw + 80;
-        var endX   = goRight ? vw + 80 : -80;
-        var startY = 60 + Math.random() * (vh * 0.5);
-        var endY   = 60 + Math.random() * (vh * 0.5);
-        var duration = 25 + Math.random() * 35; // 25-60 seconds to cross
-
-        el.style.left = startX + 'px';
-        el.style.top = startY + 'px';
-        el.style.transition = 'left ' + duration + 's linear, top ' + duration + 's ease-in-out, opacity 1s ease';
-
-        // Flip direction if going left
-        var visual = el.querySelector('.te-floater-visual');
-        if (!goRight && visual) visual.style.transform = 'scaleX(-1)';
-
-        document.body.appendChild(el);
-        _ambientBots.push(el);
-
-        // Force reflow so browser commits the start position before we animate
-        void el.offsetWidth;
-        el.classList.add('visible');
-        // Use another reflow + rAF to ensure the transition starts from the committed position
-        void el.offsetWidth;
-        requestAnimationFrame(function() {
-            el.style.left = endX + 'px';
-            el.style.top = endY + 'px';
-        });
-
-        // Remove after flight completes
-        setTimeout(function() {
-            el.classList.remove('visible');
-            setTimeout(function() {
-                el.remove();
-                var idx = _ambientBots.indexOf(el);
-                if (idx !== -1) _ambientBots.splice(idx, 1);
-            }, 1200);
-        }, duration * 1000);
-    }
-
-    function _startAmbientBots() {
-        // Spawn first after a delay, then periodically
-        function scheduleNext() {
-            _ambientSpawnTimer = setTimeout(function() {
-                _spawnAmbientBot();
-                scheduleNext();
-            }, (12 + Math.random() * 25) * 1000); // every 12-37 seconds
-        }
-        // First bot after 8-15 seconds
-        _ambientSpawnTimer = setTimeout(function() {
-            _spawnAmbientBot();
-            scheduleNext();
-        }, (8 + Math.random() * 7) * 1000);
-    }
-
-    function _stopAmbientBots() {
-        if (_ambientSpawnTimer) { clearTimeout(_ambientSpawnTimer); _ambientSpawnTimer = null; }
-        _ambientBots.forEach(function(el) { el.remove(); });
-        _ambientBots = [];
-    }
-
-    function floaterStart() {
-        _createIdleThomas();
-        _startScreensaverWatch();
-        _startAmbientBots();
-    }
-
-    function floaterStop() {
-        if (_floaterTimer) { clearTimeout(_floaterTimer); _floaterTimer = null; }
-        _stopScreensaverWatch();
-        _removeIdleThomas();
-        _stopAmbientBots();
-        const existing = document.querySelectorAll('.te-floater');
-        existing.forEach(el => el.remove());
-    }
-
-    // ── Screensaver / idle mode ──────────────────────────────────
-    let _idleTimeout = null;
-    const _idleEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
-
-    function _startScreensaverWatch() {
-        _resetIdleTimer();
-        _idleEvents.forEach(e => document.addEventListener(e, _onUserActivity, { passive: true }));
-    }
-
-    function _stopScreensaverWatch() {
-        _idleEvents.forEach(e => document.removeEventListener(e, _onUserActivity));
-        if (_idleTimeout) { clearTimeout(_idleTimeout); _idleTimeout = null; }
-        _exitScreensaver();
-    }
-
-    function _onUserActivity() {
-        if (_screensaverActive) _exitScreensaver();
-        _resetIdleTimer();
-    }
-
-    function _resetIdleTimer() {
-        if (_idleTimeout) clearTimeout(_idleTimeout);
-        _idleTimeout = setTimeout(_enterScreensaver, SCREENSAVER_IDLE_MS);
-    }
-
-    function _enterScreensaver() {
-        if (_screensaverActive) return;
-        _screensaverActive = true;
-        document.body.classList.remove('te-screensaver-exit');
-        document.body.classList.add('te-screensaver-active');
-    }
-
-    function _exitScreensaver() {
-        if (!_screensaverActive) return;
-        _screensaverActive = false;
-        document.body.classList.remove('te-screensaver-active');
-        document.body.classList.add('te-screensaver-exit');
-        setTimeout(() => document.body.classList.remove('te-screensaver-exit'), 1000);
-    }
-
-    // ── mount ────────────────────────────────────────────────────
-    // Note: The space background is managed by the module background system
-    // (window.__moduleBackgrounds['token_economy']) which calls injectSpaceBg/
-    // removeSpaceBg on enter/leave. This keeps the bg lifecycle decoupled
-    // from the widget mount/unmount.
     function mount(container) {
+        if (!container) return;
+        if (_s.mounted) unmount();
+        ensureComponentStyles();
         _s.el = container;
         container.innerHTML = shell();
-        bind();
         _s.mounted = true;
+        bind();
+        injectSpaceBg();
+        clockStart();
+        document.addEventListener('visibilitychange', onVisibilityChange);
         refresh({ force: true });
         sseOn();
-        tickStart();
+        if (window.ThomasUiLayout) window.ThomasUiLayout.applyAll(container);
     }
     function unmount() {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
         sseOff();
-        tickStop();
+        clockStop();
+        removeSpaceBg();
         _s.mounted = false;
         _s.el = null;
     }
 
-    // ── tick (running clock + subtle animation) ──────────────────
-    function tickStart() {
-        function tick() {
-            const clock = $('[data-te-clock]', _s.el);
-            if (clock) clock.textContent = nowHHMMSS();
-            _s.tickFrame = requestAnimationFrame(tick);
-        }
-        tick();
-    }
-    function tickStop() {
-        if (_s.tickFrame) cancelAnimationFrame(_s.tickFrame);
-        _s.tickFrame = null;
-    }
-
     function shell() {
         return `
-<div class="te-v3">
-    <!-- Space bg is injected on document.body as #te-space-root -->
-
-    <!-- ▸ TOP BAR: status line -->
-    <div class="te-topbar">
-        <span class="te-topbar-left">
-            <span class="te-sigil"></span>
-            <span class="te-topbar-title">TOKEN ECONOMY</span>
-            <span class="te-topbar-dim" data-te-topmode></span>
-        </span>
-        <span class="te-topbar-right">
-            <select class="te-range-sel" data-te-period aria-label="History window">
-                <option value="7">7 DAY</option>
-                <option value="14">14 DAY</option>
-                <option value="30">30 DAY</option>
-                <option value="90">90 DAY</option>
-            </select>
-            <button class="te-topbar-btn" data-te-refresh title="Refresh">↻</button>
-            <button class="te-topbar-btn" data-te-export title="Export CSV">⤓</button>
+<div class="te-v3" data-ui-id="token-economy.workspace" data-ui-label="Token Economy workspace" data-ui-policy="protected">
+    <header class="te-topbar" data-ui-id="token-economy.header" data-ui-label="Token Economy header" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=320 minHeight=44 maxHeight=112">
+        <div class="te-topbar-left">
+            <span class="thomas-eyes-mark" aria-hidden="true"><i></i><i></i></span>
+            <span class="te-heading">
+                <strong class="te-topbar-title">Token Economy</strong>
+            </span>
+            <span class="te-mode-pill" data-te-topmode></span>
+        </div>
+        <div class="te-topbar-right" aria-label="Token Economy tools">
+            <label class="te-range-control" data-ui-id="token-economy.history-window" data-ui-label="History window" data-ui-policy="control no-resize contain-parent">
+                <span>Window</span>
+                <select class="te-range-sel" data-te-period aria-label="History window">
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                </select>
+            </label>
+            <button class="te-topbar-btn" type="button" data-te-refresh data-ui-id="token-economy.refresh" data-ui-label="Refresh Token Economy" data-ui-policy="control no-resize contain-parent" title="Refresh"><i class="ph ph-arrow-clockwise" aria-hidden="true"></i><span>Refresh</span></button>
+            <button class="te-topbar-btn" type="button" data-te-export data-ui-id="token-economy.export" data-ui-label="Export token ledger" data-ui-policy="control no-resize contain-parent" title="Export CSV"><i class="ph ph-download-simple" aria-hidden="true"></i><span>Export</span></button>
             <span class="te-topbar-clock" data-te-clock>${nowHHMMSS()}</span>
-            <span class="te-topbar-live"><span class="te-dot"></span>LIVE</span>
-        </span>
+            <span class="te-topbar-live"><span class="te-dot"></span>Live</span>
+        </div>
+    </header>
+
+    <div class="te-overview-rail">
+        <section class="te-hero" data-te-hero data-ui-id="token-economy.overview" data-ui-label="Today's token overview" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=220 minHeight=76 maxHeight=180">
+            <span class="te-eyebrow">Today</span>
+            <div class="te-hero-cost">
+                <span class="te-hero-dollar" data-te-hdollar>TOK</span><span class="te-hero-whole" data-te-hwhole>0</span><span class="te-hero-frac" data-te-hfrac> used</span>
+            </div>
+            <div class="te-hero-sub"><span data-te-hcalls>0</span> calls <span class="te-hero-pipe">/</span> <span data-te-htokens>0</span> tokens</div>
+            <div class="te-burnstrip" data-te-burnstrip aria-label="Today's tokens against the busiest day in the window">
+                <div class="te-burnstrip-fill" data-te-burnfill></div>
+                <div class="te-burnstrip-marker" data-te-burnmark></div>
+            </div>
+        </section>
+        <section class="te-datastrip" data-te-datastrip data-ui-id="token-economy.summary" data-ui-label="Token summary metrics" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=76 maxHeight=180" aria-live="polite"></section>
     </div>
 
-    <!-- ▸ HERO: the big number IS the design -->
-    <div class="te-hero" data-te-hero>
-        <div class="te-hero-cost">
-            <span class="te-hero-dollar" data-te-hdollar>$</span><span class="te-hero-whole" data-te-hwhole>0</span><span class="te-hero-frac" data-te-hfrac>.00</span>
-        </div>
-        <div class="te-hero-sub">
-            <span data-te-hcalls>0</span> calls
-            <span class="te-hero-pipe">│</span>
-            <span data-te-htokens>0</span> tokens
-            <span class="te-hero-pipe">│</span>
-            today
-        </div>
-        <div class="te-burnstrip" data-te-burnstrip>
-            <div class="te-burnstrip-fill" data-te-burnfill></div>
-            <div class="te-burnstrip-marker" data-te-burnmark></div>
-        </div>
-    </div>
-
-    <!-- ▸ DATA STRIP: asymmetric stats -->
-    <div class="te-datastrip" data-te-datastrip></div>
-
-    <!-- ▸ MAIN AREA -->
-    <div class="te-main">
-        <!-- LEFT: History spectrum + Terminal feed -->
+    <main class="te-main">
         <div class="te-col-left">
-            <div class="te-panel te-panel-grow">
+            <section class="te-panel te-panel-grow" data-ui-id="token-economy.history" data-ui-label="Token history" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=190">
                 <div class="te-panel-head">
-                    <span>SPEND HISTORY</span>
+                    <span>Token history</span>
                     <span class="te-panel-sub" data-te-htotal></span>
                 </div>
                 <div class="te-spectrum" data-te-spectrum></div>
-            </div>
-            <div class="te-panel">
+            </section>
+            <section class="te-panel" data-ui-id="token-economy.ledger" data-ui-label="Live token ledger" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=130">
                 <div class="te-panel-head">
-                    <span><span class="te-dot"></span> TERMINAL</span>
-                    <span class="te-panel-sub" data-te-fcount>awaiting</span>
+                    <span><span class="te-dot"></span> Live ledger</span>
+                    <span class="te-panel-sub" data-te-fcount>Awaiting events</span>
                 </div>
-                <div class="te-terminal" data-te-terminal>
-                    <div class="te-term-line te-term-sys">system ready. streaming spend events...</div>
+                <div class="te-terminal" data-te-terminal aria-live="polite">
+                    <div class="te-term-line te-term-sys">Ready. New token events will appear here.</div>
                 </div>
-            </div>
+            </section>
         </div>
 
-        <!-- RIGHT: Mode switch + Models + Rates -->
         <div class="te-col-right">
-            <div class="te-panel">
+            <section class="te-panel te-policy-panel" data-ui-id="token-economy.policy" data-ui-label="Economy policy controls" data-ui-policy="protected" data-ui-constraints="minWidth=280 minHeight=220">
                 <div class="te-panel-head">
-                    <span>ECONOMY MODE</span>
+                    <span>Economy policy</span>
                     <span class="te-panel-sub" data-te-modelabel></span>
                 </div>
                 <div class="te-switch-track" data-te-modes></div>
                 <div class="te-mode-readout" data-te-modereadout></div>
                 <div class="te-context-meter" data-te-ctxmeter>
                     <div class="te-ctx-label">
-                        <span>CONTEXT BUDGET</span>
+                        <span>Context budget</span>
                         <span data-te-ctxval></span>
                     </div>
                     <div class="te-ctx-track"><div class="te-ctx-fill" data-te-ctxfill></div></div>
                 </div>
-            </div>
-            <div class="te-panel">
+            </section>
+            <section class="te-panel" data-ui-id="token-economy.models" data-ui-label="Model token mix" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=160">
                 <div class="te-panel-head">
-                    <span>MODEL MIX</span>
-                    <span class="te-panel-sub" data-te-mtitle>today</span>
+                    <span>Model mix</span>
+                    <span class="te-panel-sub" data-te-mtitle>Today</span>
                 </div>
-                <div data-te-modelviz></div>
-                <div data-te-modeltable></div>
-            </div>
-            <div class="te-panel">
-                <div class="te-panel-head"><span>RATE CARD</span></div>
+                <div data-te-modelviz data-ui-group-policy="managed-collection"></div>
+                <div data-te-modeltable data-ui-group-policy="managed-collection"></div>
+            </section>
+            <section class="te-panel" data-ui-id="token-economy.profile-matrix" data-ui-label="Runtime profile matrix" data-ui-policy="layout resize contain-parent collision-avoid" data-ui-constraints="minWidth=280 minHeight=140">
+                <div class="te-panel-head"><span>Runtime profiles</span></div>
                 <div data-te-pricing></div>
-            </div>
+            </section>
         </div>
-    </div>
+    </main>
 </div>`;
     }
 
@@ -722,16 +412,18 @@ if (!window.__teSpace) {
         paintSpectrum();
         paintPricing();
         paintTopMode();
+        if (window.ThomasUiLayout) window.ThomasUiLayout.applyAll(_s.el);
     }
 
     function paintTopMode() {
         const el = $('[data-te-topmode]', _s.el);
         if (!el) return;
         const active = MODE_SPECS[_s.economy] || MODE_SPECS.optimal;
-        el.textContent = active.mul + ' ' + active.name.toUpperCase();
+        el.textContent = active.name.toUpperCase();
     }
 
     function paintHero() {
+        const label = $('[data-te-hdollar]', _s.el);
         const whole = $('[data-te-hwhole]', _s.el);
         const frac = $('[data-te-hfrac]', _s.el);
         const calls = $('[data-te-hcalls]', _s.el);
@@ -742,31 +434,29 @@ if (!window.__teSpace) {
         if (!whole) return;
 
         const t = _s.today || {};
-        const total = +t.total_usd || 0;
         const numCalls = +t.call_count || 0;
         const toks = t.tokens || {};
-        const p = usdParts(total);
+        const totalTokens = +toks.total || 0;
 
-        whole.textContent = p.whole.replace('$', '');
-        frac.textContent = p.frac;
+        if (label) label.textContent = 'TOK';
+        whole.textContent = tok(totalTokens);
+        frac.textContent = ' used';
         if (calls) calls.textContent = numCalls;
-        if (tokens) tokens.textContent = tok(+toks.total || 0);
+        if (tokens) tokens.textContent = tok(totalTokens);
 
-        // Tone class
         if (hero) {
-            const tone = total > 20 ? 'te-tone-hot' : total > 5 ? 'te-tone-warm' : total > 0 ? 'te-tone-active' : 'te-tone-idle';
+            const tone = totalTokens > 250000 ? 'te-tone-hot' : totalTokens > 75000 ? 'te-tone-warm' : totalTokens > 0 ? 'te-tone-active' : 'te-tone-idle';
             hero.className = 'te-hero ' + tone;
         }
 
-        // Burn strip: how far through a daily budget estimate
         if (burnfill) {
-            const dailyEst = { cheap: 5, optimal: 20, max: 50 };
-            const est = dailyEst[_s.economy] || 20;
-            const w = Math.min(100, (total / est) * 100);
-            burnfill.style.width = w + '%';
+            // Same invented ladder as the context meter, keyed by economy level. There
+            // is no daily token budget in Thomas to put in its place, so the bar reads
+            // against the busiest day already loaded -- live data, and what it says.
+            const peak = Math.max(0, ...(_s.history || []).map(r => +((r?.tokens || {}).total ?? r?.total_tokens) || 0));
+            burnfill.style.width = (peak > 0 ? pct(totalTokens, peak) : 0) + '%';
         }
 
-        // Hour-of-day marker (how far through the day we are)
         if (burnmark) {
             const hour = new Date().getHours();
             burnmark.style.left = ((hour / 24) * 100) + '%';
@@ -779,37 +469,39 @@ if (!window.__teSpace) {
         const t = _s.today || {};
         const s = _s.session || {};
         const toks = t.tokens || {};
+        const sessionToks = s.tokens || {};
         const numCalls = +t.call_count || 0;
-        const avgCost = numCalls > 0 ? (+t.total_usd || 0) / numCalls : 0;
+        const totalTokens = +toks.total || 0;
+        const avgTokens = numCalls > 0 ? Math.round(totalTokens / numCalls) : 0;
 
         const hist = _s.history || [];
-        const yesterday = hist.length >= 2 ? +hist[hist.length - 2]?.usd || 0 : 0;
-        const todayUsd = +t.total_usd || 0;
+        const histTokenTotal = (row) => +((row?.tokens || {}).total ?? row?.total_tokens) || 0;
+        const yesterday = hist.length >= 2 ? histTokenTotal(hist[hist.length - 2]) : 0;
         let deltaHtml = '';
-        if (yesterday > 0 && todayUsd > 0) {
-            const pctChange = ((todayUsd - yesterday) / yesterday) * 100;
+        if (yesterday > 0 && totalTokens > 0) {
+            const pctChange = ((totalTokens - yesterday) / yesterday) * 100;
             const cls = pctChange > 5 ? 'te-delta-up' : pctChange < -5 ? 'te-delta-down' : 'te-delta-flat';
             const sign = pctChange > 0 ? '+' : '';
             deltaHtml = `<span class="te-ds-delta ${cls}">${sign}${Math.round(pctChange)}%</span>`;
         }
 
         el.innerHTML = `
-            <div class="te-ds-cell te-ds-wide">
-                <span class="te-ds-num">${esc(usd(+s.total_usd || 0))}</span>
-                <span class="te-ds-label">SESSION</span>
+            <div class="te-ds-cell te-ds-wide" data-ui-id="token-economy.metric" data-ui-instance-key="session" data-ui-group="token-economy.summary" data-ui-group-policy="managed-collection" data-ui-label="Session tokens" data-ui-policy="protected">
+                <span class="te-ds-num">${esc(tok(+sessionToks.total || 0))}</span>
+                <span class="te-ds-label">SESSION TOKENS</span>
                 <span class="te-ds-note">${+s.call_count || 0} calls</span>
             </div>
-            <div class="te-ds-cell">
+            <div class="te-ds-cell" data-ui-id="token-economy.metric" data-ui-instance-key="prompt" data-ui-group="token-economy.summary" data-ui-group-policy="managed-collection" data-ui-label="Prompt tokens" data-ui-policy="protected">
                 <span class="te-ds-num">${esc(tok(+toks.prompt || 0))}</span>
                 <span class="te-ds-label">TOKENS IN</span>
             </div>
-            <div class="te-ds-cell">
+            <div class="te-ds-cell" data-ui-id="token-economy.metric" data-ui-instance-key="completion" data-ui-group="token-economy.summary" data-ui-group-policy="managed-collection" data-ui-label="Completion tokens" data-ui-policy="protected">
                 <span class="te-ds-num">${esc(tok(+toks.completion || 0))}</span>
                 <span class="te-ds-label">TOKENS OUT</span>
             </div>
-            <div class="te-ds-cell">
-                <span class="te-ds-num">${esc(usd(avgCost))}</span>
-                <span class="te-ds-label">AVG/CALL</span>
+            <div class="te-ds-cell" data-ui-id="token-economy.metric" data-ui-instance-key="average" data-ui-group="token-economy.summary" data-ui-group-policy="managed-collection" data-ui-label="Average tokens per call" data-ui-policy="protected">
+                <span class="te-ds-num">${esc(tok(avgTokens))}</span>
+                <span class="te-ds-label">AVG TOK/CALL</span>
                 ${deltaHtml}
             </div>`;
     }
@@ -829,8 +521,8 @@ if (!window.__teSpace) {
             modes.map((id, i) => {
                 const m = MODE_SPECS[id];
                 const active = _s.economy === id;
-                return `<button class="te-switch-opt${active ? ' active' : ''}" data-mode="${id}">` +
-                    `<span class="te-sw-mul">${m.mul}</span>` +
+                return `<button class="te-switch-opt${active ? ' active' : ''}" data-mode="${id}" data-ui-id="token-economy.economy-mode" data-ui-instance-key="${id}" data-ui-group="token-economy.policy" data-ui-group-policy="protected-controls" data-ui-label="${m.name} economy policy" data-ui-policy="protected">` +
+                    `<span class="te-sw-mul">${m.name}</span>` +
                     `<span class="te-sw-name">${m.tag}</span></button>`;
             }).join('') +
             `</div>`;
@@ -839,35 +531,39 @@ if (!window.__teSpace) {
         if (mLabel) mLabel.textContent = active.name.toLowerCase();
 
         if (readout) {
+            // Only the first grid moves with the switch. The second is live profile
+            // data under a heading that says so: a fixed row in a policy panel reads
+            // as a promise the dial cannot keep.
             const p = _s.profile;
-            const passes = p?.pass_range ? p.pass_range[0] + '–' + p.pass_range[1] : active.passes;
-            const budget = p ? (p.hard_budget ? tok(p.hard_budget) : '∞') : active.budget;
-            const skills = p?.skills_mode || active.skills;
-
+            const row = (k, v) => (v ? `<span>${esc(k)}</span><span>${esc(v)}</span>` : '');
             readout.innerHTML =
                 `<span class="te-ro-desc">${esc(active.desc)}</span>` +
+                `<div class="te-ro-grid">${row('auto-repair', active.retries)}${row('build brief', active.brief)}</div>` +
+                `<span class="te-ro-desc">${esc(RETRY_NOTE)}</span><span class="te-ro-desc">Identical at every level:</span>` +
                 `<div class="te-ro-grid">` +
-                `<span>passes</span><span>${esc(passes)}</span>` +
-                `<span>budget</span><span>${esc(budget)}</span>` +
-                `<span>retries</span><span>${esc(active.retries)}</span>` +
-                `<span>overhead</span><span>${esc(active.overhead)}</span>` +
-                `<span>skills</span><span>${esc(skills)}</span>` +
+                row('runaway guard', p?.pass_range ? p.pass_range[1] + ' passes' : '') +
+                row('context', p?.context_budget ? tok(p.context_budget) : '') +
+                row('skills', p?.skills_mode || '') +
                 `</div>`;
         }
     }
 
     function paintBudget() {
+        const meter = $('[data-te-ctxmeter]', _s.el);
         const fill = $('[data-te-ctxfill]', _s.el);
         const val = $('[data-te-ctxval]', _s.el);
         if (!fill) return;
-        const s = _s.session || {};
-        const used = +(s.tokens?.total) || 0;
-        const budgets = { cheap: 250000, optimal: 650000, max: 2000000 };
-        const budget = _s.economy === 'max' ? 2000000 : (budgets[_s.economy] || 650000);
+        // A 250K/650K/2M ladder was hardcoded here per level, plus an "∞" only Max was
+        // shown. None of it is real: hard_budget is unset at every level and context
+        // follows the run mode. Live figure, or no meter at all.
+        const budget = +(_s.profile?.hard_budget || _s.profile?.context_budget || 0);
+        if (meter) meter.style.display = budget > 0 ? '' : 'none';
+        if (!budget) return;
+        const used = +((_s.session || {}).tokens?.total) || 0;
         const p = pct(used, budget);
         fill.style.width = p + '%';
         fill.className = 'te-ctx-fill' + (p > 85 ? ' te-ctx-danger' : p > 60 ? ' te-ctx-warn' : '');
-        if (val) val.textContent = tok(used) + ' / ' + (_s.economy === 'max' ? '∞' : tok(budget));
+        if (val) val.textContent = tok(used) + ' / ' + tok(budget);
     }
 
     function paintModels() {
@@ -877,8 +573,11 @@ if (!window.__teSpace) {
 
         const detail = _s.today?.by_model_detail || {};
         const rows = Object.entries(detail)
-            .map(([n, d]) => ({ n, usd: +d.usd || 0, calls: +d.calls || 0, total: +(d.tokens?.total) || 0 }))
-            .sort((a, b) => b.usd - a.usd);
+            .map(([n, d]) => {
+                const mt = modelTokens(d);
+                return { n, usd: +d.usd || 0, calls: +d.calls || 0, prompt: mt.prompt, completion: mt.completion, total: mt.total };
+            })
+            .sort((a, b) => (b.total - a.total) || (b.usd - a.usd));
 
         if (!rows.length) {
             if (vizEl) vizEl.innerHTML = '<div class="te-idle-viz"><span class="te-idle-pulse"></span></div>';
@@ -886,24 +585,28 @@ if (!window.__teSpace) {
             return;
         }
 
-        const sum = rows.reduce((a, r) => ({ usd: a.usd + r.usd, calls: a.calls + r.calls, total: a.total + r.total }), { usd: 0, calls: 0, total: 0 });
+        const sum = rows.reduce((a, r) => ({
+            usd: a.usd + r.usd,
+            calls: a.calls + r.calls,
+            prompt: a.prompt + r.prompt,
+            completion: a.completion + r.completion,
+            total: a.total + r.total,
+        }), { usd: 0, calls: 0, prompt: 0, completion: 0, total: 0 });
 
-        // Proportion bars instead of treemap
         if (vizEl) {
             vizEl.innerHTML = rows.map((r, i) => {
-                const w = sum.usd > 0 ? Math.max(4, (r.usd / sum.usd) * 100) : 100 / rows.length;
+                const w = sum.total > 0 ? Math.max(4, (r.total / sum.total) * 100) : 100 / rows.length;
                 const color = MODEL_COLORS[i % MODEL_COLORS.length];
-                return `<div class="te-mprop"><div class="te-mprop-bar" style="width:${w}%;background:${color}"></div><span class="te-mprop-name">${esc(shortModel(r.n))}</span><span class="te-mprop-val">${esc(usd(r.usd))}</span></div>`;
+                return `<div class="te-mprop" data-ui-id="token-economy.model-share" data-ui-instance-key="${esc(uiKey(r.n))}" data-ui-group="token-economy.models" data-ui-group-policy="managed-collection" data-ui-label="${esc(shortModel(r.n))} token share" data-ui-policy="protected"><div class="te-mprop-bar" style="width:${w}%;background:${color}"></div><span class="te-mprop-name">${esc(shortModel(r.n))}</span><span class="te-mprop-val">${esc(tok(r.total))}</span></div>`;
             }).join('');
         }
 
-        // Compact table
         tableEl.innerHTML = `<table class="te-mtbl"><tbody>` +
             rows.map((r, i) => {
                 const color = MODEL_COLORS[i % MODEL_COLORS.length];
-                return `<tr><td><span class="te-mdot" style="background:${color}"></span>${esc(shortModel(r.n))}</td><td>${esc(usd(r.usd))}</td><td>${r.calls}</td><td>${esc(tok(r.total))}</td></tr>`;
+                return `<tr data-ui-id="token-economy.model-ledger-row" data-ui-instance-key="${esc(uiKey(r.n))}" data-ui-group="token-economy.models" data-ui-group-policy="managed-collection" data-ui-label="${esc(shortModel(r.n))} model ledger row" data-ui-policy="protected"><td><span class="te-mdot" style="background:${color}"></span>${esc(shortModel(r.n))}</td><td>${esc(tok(r.total))}</td><td>${r.calls}</td><td>${esc(tok(r.prompt))}/${esc(tok(r.completion))}</td></tr>`;
             }).join('') +
-            `<tr class="te-mtbl-total"><td>TOTAL</td><td>${esc(usd(sum.usd))}</td><td>${sum.calls}</td><td>${esc(tok(sum.total))}</td></tr></tbody></table>`;
+            `<tr class="te-mtbl-total"><td>TOTAL</td><td>${esc(tok(sum.total))}</td><td>${sum.calls}</td><td>${esc(tok(sum.prompt))}/${esc(tok(sum.completion))}</td></tr></tbody></table>`;
     }
 
     function paintSpectrum() {
@@ -926,45 +629,85 @@ if (!window.__teSpace) {
             return;
         }
 
-        const max = Math.max(...rows.map(r => +r.usd || 0), 0.01);
-        const sum = rows.reduce((a, r) => a + (+r.usd || 0), 0);
+        const rowTokenTotal = (row) => +((row?.tokens || {}).total ?? row?.total_tokens) || 0;
+        const max = Math.max(...rows.map(rowTokenTotal), 1);
+        const sum = rows.reduce((a, r) => a + rowTokenTotal(r), 0);
         const todayDate = new Date().toISOString().split('T')[0];
-        if (tot) tot.textContent = usd(sum) + ' / ' + rows.length + 'd';
+        if (tot) tot.textContent = tok(sum) + ' tokens / ' + rows.length + 'd';
 
         // Vertical spectrum bars (bottom-up like an equalizer)
         el.innerHTML = `<div class="te-spec-grid">${rows.map(r => {
-            const v = +r.usd || 0;
+            const v = rowTokenTotal(r);
             const h = Math.max(2, Math.round(pct(v, max)));
             const isToday = r.date === todayDate;
-            const tone = v > 20 ? ' te-spec-hot' : v > 5 ? ' te-spec-warm' : '';
-            return `<div class="te-spec-col${isToday ? ' te-spec-today' : ''}">` +
+            const tone = v > 250000 ? ' te-spec-hot' : v > 75000 ? ' te-spec-warm' : '';
+            return `<div class="te-spec-col${isToday ? ' te-spec-today' : ''}" data-ui-id="token-economy.history-day" data-ui-instance-key="${esc(uiKey(r.date))}" data-ui-group="token-economy.history" data-ui-group-policy="managed-collection" data-ui-label="Token use ${esc(r.date || 'unknown date')}" data-ui-policy="protected">` +
                 `<div class="te-spec-bar${tone}" style="height:${h}%"></div>` +
                 `<span class="te-spec-date">${shortDate(r.date).split('/')[1] || ''}</span>` +
-                `<span class="te-spec-amt">${v >= 1 ? '$' + v.toFixed(0) : v > 0 ? usd(v) : ''}</span>` +
+                `<span class="te-spec-amt">${v > 0 ? esc(tok(v)) : ''}</span>` +
                 `</div>`;
         }).join('')}</div>`;
     }
 
     function paintPricing() {
         const el = $('[data-te-pricing]', _s.el);
-        if (!el || !_s.pricing) { if (el) el.innerHTML = ''; return; }
-        const entries = Object.entries(_s.pricing);
-        if (!entries.length) { el.innerHTML = ''; return; }
-        el.innerHTML = `<div class="te-rate-grid">` +
-            `<span class="te-rh">model</span><span class="te-rh">in $/1M</span><span class="te-rh">out $/1M</span>` +
-            entries.slice(0, 10).map(([name, p]) => {
-                const inP = +(p?.prompt_per_1m || p?.input_per_1m || 0);
-                const outP = +(p?.completion_per_1m || p?.output_per_1m || 0);
-                return `<span class="te-rn">${esc(shortModel(name))}</span><span class="te-rv">${inP ? '$' + inP.toFixed(2) : '—'}</span><span class="te-rv">${outP ? '$' + outP.toFixed(2) : '—'}</span>`;
+        if (!el) return;
+
+        const profile = _s.profile || {};
+        const profiles = Array.isArray(_s.matrix?.profiles) ? _s.matrix.profiles : [];
+        const activeAutonomy = +(_s.autonomy || profile.autonomy_level || 3);
+        const activeEconomy = profile.economy_level || _s.economy || 'optimal';
+        const order = { cheap: 0, optimal: 1, max: 2 };
+        const rows = profiles
+            .filter((r) => !activeAutonomy || +r.autonomy_level === activeAutonomy)
+            .sort((a, b) => (order[a.economy_level] ?? 9) - (order[b.economy_level] ?? 9));
+        const visibleRows = rows.length ? rows : profiles.slice(0, 3);
+
+        if (!visibleRows.length && !profile.summary) {
+            el.innerHTML = '<div class="te-empty-state">runtime profile unavailable</div>';
+            return;
+        }
+
+        const summary = profile.summary || `${profile.autonomy_name || 'runtime'} / ${activeEconomy}`;
+        const budget = profile.hard_budget ? tok(profile.hard_budget) : (profile.context_budget ? tok(profile.context_budget) : 'open');
+        const activeLine =
+            `<div class="te-mode-readout">` +
+            `<span class="te-ro-desc">${esc(summary)}</span>` +
+            `<div class="te-ro-grid">` +
+            `<span>autonomy</span><span>${esc(String(profile.autonomy_name || activeAutonomy))}</span>` +
+            `<span>economy</span><span>${esc(activeEconomy)}</span>` +
+            `<span>token budget</span><span>${esc(budget)}</span>` +
+            `</div></div>`;
+
+        // The third column was "passes" straight off pass_range. Every row returns the
+        // same guard, so it printed one identical number against three profiles that
+        // look like three budgets. Auto-repair is what really differs; the guard is
+        // stated once below, from live data.
+        const grid = visibleRows.length ? `<div class="te-rate-grid te-profile-grid">` +
+            `<span class="te-rh">profile</span><span class="te-rh">context</span><span class="te-rh">auto-repair</span>` +
+            visibleRows.slice(0, 6).map((r) => {
+                const econ = r.economy_level || 'optimal';
+                const active = econ === activeEconomy && +r.autonomy_level === activeAutonomy;
+                const b = r.hard_budget ? tok(r.hard_budget) : (r.context_budget ? tok(r.context_budget) : 'open');
+                const retries = (MODE_SPECS[econ] || {}).retries || '—';
+                return `<span class="te-rn${active ? ' active' : ''}" data-ui-id="token-economy.profile" data-ui-instance-key="${esc(uiKey(String(r.autonomy_level) + '-' + econ))}" data-ui-group="token-economy.profile-matrix" data-ui-group-policy="managed-collection" data-ui-label="${esc(econ)} runtime profile" data-ui-policy="protected">${esc(econ.toUpperCase())}</span><span class="te-rv">${esc(b)}</span><span class="te-rv">${esc(retries)}</span>`;
             }).join('') +
-            '</div>';
+            '</div>' : '';
+        const guard = visibleRows.find((r) => Array.isArray(r.pass_range));
+        const guardLine = guard ? `<span class="te-ro-desc">Runaway guard: ${esc(String(guard.pass_range[1]))} passes at every profile. A run ends when the model stops, not on a counter.</span>` : '';
+        el.innerHTML = activeLine + grid + guardLine;
     }
 
     function pushFeed(d) {
+        const prompt = +d.prompt_tokens || 0;
+        const completion = +d.completion_tokens || 0;
         const ev = {
+            id: `${Date.now()}-${_s.feedSequence++}`,
             ts: d.ts || new Date().toISOString(),
             model: d.model || '?',
-            tokens: (+d.prompt_tokens || 0) + (+d.completion_tokens || 0),
+            prompt,
+            completion,
+            tokens: prompt + completion,
             usd: +d.usd_total || 0,
         };
         _s.feedEvents.unshift(ev);
@@ -977,12 +720,11 @@ if (!window.__teSpace) {
 
         el.innerHTML = _s.feedEvents.slice(0, 40).map((ev, i) => {
             const t = ev.ts ? ev.ts.split('T')[1]?.substring(0, 8) || '' : '';
-            const costClass = ev.usd > 0.10 ? ' te-term-red' : ev.usd > 0.02 ? ' te-term-amber' : '';
-            return `<div class="te-term-line${i === 0 ? ' te-term-new' : ''}">` +
+            return `<div class="te-term-line${i === 0 ? ' te-term-new' : ''}" data-ui-id="token-economy.ledger-event" data-ui-instance-key="${esc(ev.id)}" data-ui-group="token-economy.ledger" data-ui-group-policy="managed-collection" data-ui-label="${esc(shortModel(ev.model))} token event" data-ui-policy="protected">` +
                 `<span class="te-term-ts">${esc(t)}</span> ` +
                 `<span class="te-term-model">${esc(shortModel(ev.model))}</span> ` +
                 `<span class="te-term-tok">${esc(tok(ev.tokens))}tok</span> ` +
-                `<span class="te-term-cost${costClass}">${esc(usd(ev.usd))}</span>` +
+                `<span class="te-term-cost">in ${esc(tok(ev.prompt))} / out ${esc(tok(ev.completion))}</span>` +
                 `</div>`;
         }).join('');
     }
@@ -1031,9 +773,8 @@ if (!window.__teSpace) {
         } catch { /* best effort */ }
     }
 
-    // Register page background through the module background system.
-    // Space bg is now global (injected at page load), so mount is kept
-    // for compat but removeSpaceBg is a no-op to prevent teardown.
+    // The compatibility treatment mounts with the visible workspace and tears
+    // down on hide or unmount without installing a global background.
     window.__moduleBackgrounds = window.__moduleBackgrounds || {};
     window.__moduleBackgrounds['token_economy'] = {
         mount: injectSpaceBg,

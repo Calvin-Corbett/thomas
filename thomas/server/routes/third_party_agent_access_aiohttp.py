@@ -267,5 +267,89 @@ def register_third_party_agent_access_routes(
             }
         )
 
+    async def api_breakglass_window(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        if "enabled" not in payload or not isinstance(payload.get("enabled"), bool):
+            raise web.HTTPBadRequest(text="enabled must be a boolean")
+        enabled = bool(payload.get("enabled"))
+        try:
+            hours = float(payload.get("hours", 3))
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text="hours must be a number")
+        hours = max(0.25, min(12.0, hours))
+
+        store = _get_store()
+        user_id = _get_user_id(request)
+        current = store.get(user_id=user_id)
+        provider = request.app.get(APP_LOCAL_STEP_UP_AUTH_PROVIDER)
+        audit = request.app.get(APP_ACTION_AUDIT)
+
+        # Changing the approval window is security-relevant: a longer window
+        # turns one tap into N hours of no re-prompt, so it requires the same
+        # local step-up (Windows Hello) as toggling breakglass itself. This stops
+        # an agent from silently enabling a window and riding the next human tap.
+        if provider is None:
+            return web.json_response(
+                {
+                    "ok": False,
+                    "auth_verified": False,
+                    "reason": "local_step_up_auth_unavailable",
+                    "security": _security_payload(current.advanced.security),
+                },
+                status=503,
+            )
+
+        auth_result = provider.authorize(
+            action="configure_breakglass_window",
+            reason=(
+                "Thomas will change the breakglass approval window -- how long a single "
+                "approval lasts before you're asked again."
+            ),
+        )
+        if not auth_result.authorized:
+            return web.json_response(
+                {
+                    "ok": False,
+                    "auth_verified": False,
+                    "reason": auth_result.error_code or "auth_denied",
+                    "security": _security_payload(current.advanced.security),
+                },
+                status=403,
+            )
+
+        updated = store.set_breakglass_window(
+            enabled=enabled,
+            hours=hours,
+            user_id=user_id,
+            changed_by=current_local_actor(),
+        )
+        if audit is not None:
+            with suppress(AttributeError, RuntimeError, TypeError, ValueError):
+                await audit.log_async(
+                    kind="breakglass_window_configure",
+                    session_id=user_id,
+                    decision="ALLOWED",
+                    reason="configured",
+                    payload={
+                        "enabled": enabled,
+                        "hours": hours,
+                        "auth_method": auth_result.method,
+                        "auth_platform": auth_result.platform,
+                    },
+                )
+        return web.json_response(
+            {
+                "ok": True,
+                "auth_verified": True,
+                "reason": None,
+                "security": _security_payload(updated.advanced.security),
+            }
+        )
+
     app.router.add_post("/api/security/third-party-agent-access", api_toggle)
     app.router.add_post("/api/security/breakglass-opt-in", api_breakglass_opt_in)
+    app.router.add_post("/api/security/breakglass-window", api_breakglass_window)

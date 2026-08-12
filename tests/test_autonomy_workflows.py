@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from thomas.marketplace.autonomy.workflows import WorkflowRunner
+from thomas.marketplace.autonomy.workflows import WorkflowExecutionError, WorkflowRunner
 
 
 class _ChainParallelAdapter:
@@ -86,6 +86,43 @@ class _ProfileFallbackAdapter:
         if "workflow chain worker" in system_prompt and profile == "primary-profile":
             raise RuntimeError("primary profile temporary failure")
         return {"output": f"ok:{profile or 'default'}", "summary": "ok"}
+
+
+class _InventedProfileAdapter:
+    def __init__(self, *, fail_workers: bool = False):
+        self.calls = []
+        self.fail_workers = fail_workers
+
+    async def generate_json(  # noqa: D401
+        self,
+        *,
+        system_prompt,
+        user_prompt,
+        session_id=None,
+        schema_hint=None,
+        profile=None,
+        model_id=None,
+    ):
+        _ = user_prompt, session_id, schema_hint, model_id
+        self.calls.append({"system_prompt": system_prompt, "profile": profile})
+        if "You are an orchestrator. Decompose the goal" in system_prompt:
+            return {
+                "workers": [
+                    {
+                        "name": "qa",
+                        "prompt": "check local QA",
+                        "capability": "local QA inspection",
+                        "profile": "Independent QA reviewer",
+                    }
+                ]
+            }
+        if "parallel workflow worker" in system_prompt:
+            if self.fail_workers:
+                raise RuntimeError("worker backend failed")
+            return {"output": "verified local QA", "summary": "verified"}
+        if "orchestrator that merges worker outputs" in system_prompt:
+            return {"final_output": "verified local QA"}
+        return {"output": "ok", "summary": "ok"}
 
 
 class _RouteFallbackAdapter:
@@ -264,6 +301,50 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(out.get("workers", [])), 2)
         self.assertEqual(out.get("final_output"), "synthesized")
 
+    async def test_orchestrator_without_count_uses_one_worker(self):
+        runner = WorkflowRunner(
+            chat_adapter=_ChainParallelAdapter(),
+            session_id="s1",
+            default_profile="chat-profile",
+            capabilities_by_profile={"chat-profile": {"chat": True, "video_gen": True}},
+        )
+        out = await runner.run(
+            {
+                "workflow": "orchestrator_worker",
+                "goal": "build a short campaign plan",
+            }
+        )
+        self.assertEqual(len(out.get("workers", [])), 1)
+
+    async def test_orchestrator_ignores_untrusted_model_profile_without_registry(self):
+        adapter = _InventedProfileAdapter()
+        runner = WorkflowRunner(chat_adapter=adapter, session_id="s1")
+
+        out = await runner.run(
+            {
+                "workflow": "orchestrator_worker",
+                "goal": "return a local QA brief",
+                "worker_count": 1,
+            }
+        )
+
+        self.assertEqual(out.get("final_output"), "verified local QA")
+        worker_calls = [call for call in adapter.calls if "parallel workflow worker" in str(call.get("system_prompt"))]
+        self.assertEqual([call.get("profile") for call in worker_calls], [None])
+
+    async def test_orchestrator_fails_closed_when_every_worker_fails(self):
+        adapter = _InventedProfileAdapter(fail_workers=True)
+        runner = WorkflowRunner(chat_adapter=adapter, session_id="s1")
+
+        with self.assertRaisesRegex(WorkflowExecutionError, "failed closed"):
+            await runner.run(
+                {
+                    "workflow": "orchestrator_worker",
+                    "goal": "return a local QA brief",
+                    "worker_count": 1,
+                }
+            )
+
     async def test_evaluator_optimizer_improves_until_pass(self):
         runner = WorkflowRunner(chat_adapter=_EvalOptAdapter(), session_id="s1")
         out = await runner.run(
@@ -415,3 +496,55 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out.get("pattern"), "chain")
         self.assertEqual(len(out.get("steps", [])), 1)
         self.assertEqual(len(broker.calls), 0)
+
+
+class _SilentWorkerAdapter:
+    """Decomposes into one worker that comes back with nothing at all."""
+
+    async def generate_json(  # noqa: D401
+        self,
+        *,
+        system_prompt,
+        user_prompt,
+        session_id=None,
+        schema_hint=None,
+        profile=None,
+        model_id=None,
+    ):
+        if "You are an orchestrator. Decompose the goal" in system_prompt:
+            return {
+                "workers": [
+                    {
+                        "name": "checklist-builder",
+                        "prompt": "build the checklist",
+                        "capability": "artifact_creation",
+                    }
+                ]
+            }
+        if "synthes" in system_prompt.lower():
+            return {"output": "synthesized", "summary": "ok"}
+        return {"output": "", "summary": ""}
+
+
+class WorkerOutcomeHonestyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_worker_that_produced_nothing_is_not_ok(self):
+        """ok was hardcoded True for anything that did not raise, so a worker
+        returning nothing still counted as success and the mission reported
+        succeeded. Live case: an artifact_creation worker came back with prose
+        and no artifact, ok=true, and Work recorded the job as succeeded.
+
+        This layer has no artifact channel, so it cannot judge whether the
+        output is the RIGHT thing -- only whether there is one."""
+        runner = WorkflowRunner(chat_adapter=_SilentWorkerAdapter(), session_id="s1")
+
+        # Marking the empty worker as failed feeds the existing fail-closed
+        # rule, so the whole run stops rather than synthesising a confident
+        # final answer out of nothing -- which is what reached Work as
+        # "succeeded" before.
+        with self.assertRaises(WorkflowExecutionError) as caught:
+            await runner.run(
+                {"workflow": "orchestrator_worker", "goal": "make a checklist", "worker_count": 1}
+            )
+
+        self.assertIn("no output", str(caught.exception))
+        self.assertIn("checklist-builder", str(caught.exception))

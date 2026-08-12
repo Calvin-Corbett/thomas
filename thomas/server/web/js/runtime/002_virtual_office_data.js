@@ -211,28 +211,28 @@ const OFFICE_PERSONA_LIBRARY = {
 //  Chat Robot Status Sayings 
 const CHAT_ROBOT_SAYINGS = {
     thinking: [
-        'Booting response core...',
-        'Checking the queue...',
-        'Routing context...',
-        'Lining up the reply...',
-        'Calibrating output...',
-        'Preparing a clean answer...',
-        'Syncing the workspace...',
-        'Warming up the channel...',
-        'Staging the response...',
-        'Checking what matters...',
+        'Reading the request...',
+        'Gathering context...',
+        'Checking the active workspace...',
+        'Planning the next step...',
+        'Preparing the answer...',
+        'Reviewing constraints...',
+        'Selecting the right tools...',
+        'Checking prior results...',
+        'Structuring the response...',
+        'Validating the route...',
     ],
     working: [
-        'Dispatching workers...',
-        'Moving tasks into queue...',
-        'Checking files and tools...',
-        'Coordinating the task lane...',
-        'Keeping the reply tight...',
-        'Working through the steps...',
-        'Wrapping the handoff...',
-        'Locking in the result...',
-        'Finishing the response...',
-        'Keeping things moving...',
+        'Running the task...',
+        'Using tools...',
+        'Checking outputs...',
+        'Verifying files...',
+        'Tracking progress...',
+        'Preparing the result...',
+        'Reviewing failures...',
+        'Reconciling artifacts...',
+        'Updating the task record...',
+        'Finishing verification...',
     ],
 };
 
@@ -295,13 +295,6 @@ function describeToolName(toolName) {
 }
 
 const CHAT_THINKING_UI_STORAGE_KEY = 'thomas.ui.show_thinking.v1';
-function isThinkingUiEnabled() {
-    try {
-        return window.localStorage.getItem(CHAT_THINKING_UI_STORAGE_KEY) === '1';
-    } catch (_) {
-        return false;
-    }
-}
 const CHAT_THINKING_UI_ENABLED = false;
 
 /**
@@ -383,72 +376,17 @@ const CHAT_ROBOT_EXIT_FALL_MAX = 1400;
 let _lastRobotAnim = '';
 let _lastComposerOffset = 0;
 let _composerOffsetRaf = 0;
-function _pickRobotAnimation() {
-    let pick;
-    do {
-        pick = CHAT_ROBOT_ANIMATIONS[Math.floor(Math.random() * CHAT_ROBOT_ANIMATIONS.length)];
-    } while (pick === _lastRobotAnim && CHAT_ROBOT_ANIMATIONS.length > 1);
-    _lastRobotAnim = pick;
-    return pick;
-}
-
-function _applyRobotIdleAnimation(target) {
-    if (!(target instanceof HTMLElement)) return '';
-    CHAT_ROBOT_ANIMATIONS.forEach((anim) => target.classList.remove('chat-robot-anim-' + anim));
-    const idleAnim = _pickRobotAnimation();
-    target.dataset.idleAnim = idleAnim;
-    target.classList.add('chat-robot-anim-' + idleAnim);
-    return idleAnim;
-}
-
-function _createLandedRobotElement() {
-    const landed = document.createElement('div');
-    landed.className = 'chat-robot-landed pixel-agent pixel-agent-blue';
-    landed.innerHTML = `
-        <span class="agent-head office-agent-head">
-            <span class="agent-eye office-agent-eye office-agent-eye-left agent-eye-left"></span>
-            <span class="agent-eye office-agent-eye office-agent-eye-right agent-eye-right"></span>
-        </span>
-        <span class="agent-body office-agent-body"></span>
-        <span class="agent-leg office-agent-leg office-agent-leg-left agent-leg-left"></span>
-        <span class="agent-leg office-agent-leg office-agent-leg-right agent-leg-right"></span>
-    `;
-    return landed;
-}
-
-function _ensureRobotDock() {
-    return chatWorldEnsureDock();
-}
-
 function _positionRobotDock() {
-    return chatWorldPositionDock();
-}
-
-function _asLandedRobotElement(sourceNode = null) {
-    const landed = sourceNode instanceof HTMLElement ? sourceNode : _createLandedRobotElement();
-    landed.classList.remove('chat-robot-agent', 'chat-robot-enter', 'robot-exit-run');
-    CHAT_ROBOT_ANIMATIONS.forEach((anim) => landed.classList.remove('chat-robot-anim-' + anim));
-    landed.classList.add('chat-robot-landed');
-    landed.removeAttribute('data-idle-anim');
-    landed.style.position = '';
-    landed.style.top = '';
-    landed.style.left = '';
-    landed.style.zIndex = '';
-    landed.style.filter = '';
-    landed.style.animation = '';
-    landed.style.transform = '';
-    landed.style.opacity = '';
-    landed.style.pointerEvents = '';
-    _applyRobotIdleAnimation(landed);
-    return landed;
+    return null;
 }
 
 function _landRobotAtComposerDock(sourceNode = null) {
-    return chatWorldLandAtDock(sourceNode);
+    void sourceNode;
+    return null;
 }
 
 function _portalOutLandedRobot() {
-    return chatWorldPortalOutLanded();
+    return Promise.resolve();
 }
 
 window.addEventListener('resize', () => _positionRobotDock());
@@ -460,11 +398,11 @@ if (window.visualViewport) {
 
 function _createRobotStatus(category) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'chat-robot-status chat-robot-status-inline assistant-inline-thinking-status';
+    wrapper.className = 'assistant-inline-thinking-status assistant-work-status';
     wrapper.innerHTML = `
         <span class="assistant-inline-thinking-copy">
-            <span class="chat-robot-saying">${pickChatSaying(category)}</span>
-            <span class="chat-robot-timer">0.0s</span>
+            <span class="assistant-work-status-text">${pickChatSaying(category)}</span>
+            <span class="assistant-work-status-timer">0.0s</span>
         </span>
     `;
     return wrapper;
@@ -477,18 +415,6 @@ function _createRobotStatus(category) {
 function _updateThinkingDisplay(container, text) {
     void container;
     void text;
-}
-
-/**
- * Create a post-stream "Thought for X.Xs" collapsed summary that replaces the robot status.
- * Shows accumulated thinking/reasoning text like Claude and ChatGPT.
- * Returns the summary element or null if no thinking data was available.
- */
-function _createThinkingSummary(elapsedMs, capturedThinkingText, capturedToolCards) {
-    void elapsedMs;
-    void capturedThinkingText;
-    void capturedToolCards;
-    return null;
 }
 
 function chatMessageTimestampText(valueRaw) {
@@ -508,10 +434,10 @@ function chatMessageTimestampText(valueRaw) {
 
 function robotAmbientStatusText(channel = 'thinking') {
     const normalized = safeString(channel).toLowerCase();
-    if (normalized.includes('memory')) return 'Refreshing memory...';
-    if (normalized.includes('tool')) return 'Checking tools...';
-    if (normalized.includes('delegation') || normalized.includes('background')) return 'Dispatching background work...';
-    if (normalized.includes('route')) return 'Routing the task...';
+    if (normalized.includes('memory')) return 'Reading relevant memory...';
+    if (normalized.includes('tool')) return 'Using tools...';
+    if (normalized.includes('delegation') || normalized.includes('background')) return 'Running background work...';
+    if (normalized.includes('route')) return 'Routing the request...';
     if (normalized.includes('working')) return pickChatSaying('working');
     return pickChatSaying('thinking');
 }
@@ -537,16 +463,23 @@ function createDelegationBadge(specialistId, task) {
     return badge;
 }
 
+// One glyph table for the two call sites below. A stopped run is finished, so it
+// gets its own mark instead of spinning forever behind the default branch.
+function agentActivityStatusIcon(status) {
+    if (status === 'completed') return '<i class="ph ph-check-circle" style="color:#3fb950"></i>';
+    if (status === 'failed') return '<i class="ph ph-x-circle" style="color:#f85149"></i>';
+    if (status === 'cancelled' || status === 'canceled' || status === 'stopped') {
+        return '<i class="ph ph-stop" style="color:#d8b874"></i>';
+    }
+    return '<span class="tool-call-spinner"></span>';
+}
+
 function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {
     const row = document.createElement('div');
     row.className = 'agent-activity-row';
     row.dataset.agentId = agentId;
     row.dataset.status = status || 'running';
-    const statusIcon = status === 'completed'
-        ? '<i class="ph ph-check-circle" style="color:#3fb950"></i>'
-        : status === 'failed'
-            ? '<i class="ph ph-x-circle" style="color:#f85149"></i>'
-            : '<span class="tool-call-spinner"></span>';
+    const statusIcon = agentActivityStatusIcon(status);
     const elapsed = elapsedMs > 0 ? ` (${(elapsedMs / 1000).toFixed(1)}s)` : '';
     row.innerHTML = `
         <span class="agent-activity-status">${statusIcon}</span>
@@ -569,11 +502,7 @@ function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs)
         const statusEl = existing.querySelector('.agent-activity-status');
         const taskEl = existing.querySelector('.agent-activity-task');
         if (statusEl) {
-            statusEl.innerHTML = status === 'completed'
-                ? '<i class="ph ph-check-circle" style="color:#3fb950"></i>'
-                : status === 'failed'
-                    ? '<i class="ph ph-x-circle" style="color:#f85149"></i>'
-                    : '<span class="tool-call-spinner"></span>';
+            statusEl.innerHTML = agentActivityStatusIcon(status);
         }
         if (taskEl) {
             const elapsed = elapsedMs > 0 ? ` (${(elapsedMs / 1000).toFixed(1)}s)` : '';
@@ -1052,17 +981,6 @@ function highlightMissionRuntimeHero() {
             panel.classList.remove('is-focused');
         }, 1800);
     });
-}
-
-function openMissionControlFromChatPresence(sessionIdOverride = '') {
-    const resolvedSessionId = safeString(sessionIdOverride || missionPreferredSessionId());
-    if (resolvedSessionId) {
-        taskContinuityLatestSessionId = resolvedSessionId;
-    }
-    ensureSettingsUiClosed();
-    setSidebarNavMode('mission');
-    highlightMissionRuntimeHero();
-    void missionRefresh({ force: true, silent: true });
 }
 
 function ensureTaskContinuityRuntimeUi() {

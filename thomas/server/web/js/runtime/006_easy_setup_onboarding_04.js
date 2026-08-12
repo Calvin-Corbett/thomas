@@ -136,6 +136,27 @@ async function fetchTaskContinuitySessionActivity(sessionToken) {
         console.warn('Task continuity delegation fetch failed', error);
     }
 
+    const cachedActivity = taskContinuityLatestActivity && typeof taskContinuityLatestActivity === 'object'
+        ? taskContinuityLatestActivity
+        : null;
+    const cachedActive = Boolean(
+        cachedActivity
+        && (
+            Number(cachedActivity.activeCount || 0) > 0
+            || (Array.isArray(cachedActivity.liveAgents) && cachedActivity.liveAgents.length > 0)
+        )
+    );
+    const now = Date.now();
+    if (
+        cachedActivity
+        && !cachedActive
+        && taskContinuityActivityFallbackLastFetchAt
+        && (now - taskContinuityActivityFallbackLastFetchAt) < TASK_CONTINUITY_IDLE_ACTIVITY_REFRESH_INTERVAL_MS
+    ) {
+        return cachedActivity;
+    }
+    taskContinuityActivityFallbackLastFetchAt = now;
+
     const [missionResp, jobsResp] = await Promise.all([
         fetchJsonSafe('/api/mission/control'),
         fetchJsonSafe(`/api/mission/jobs?session_id=${encodeURIComponent(sid)}&limit=36`),
@@ -151,6 +172,49 @@ async function fetchTaskContinuitySessionActivity(sessionToken) {
     const activity = missionBuildRuntimeState(missionPayload, jobsPayload, { sessionId: sid });
     taskContinuityLatestActivity = activity;
     return activity;
+}
+
+function appendTerminalDelegationActivityResults(activity) {
+    if (!activity || !Array.isArray(activity.agents)) return;
+    if (typeof appendDelegationResultMessage !== 'function') return;
+    const scopedSessionId = safeString(activity.sessionId || activity.requestedSessionId || taskContinuityLatestSessionId);
+    activity.agents.forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        const state = safeString(row?.state || row?.status).toLowerCase();
+        // `blocked` is NOT an ending, and this path used to treat it as one.
+        //
+        // One decision -- "is this run over, and did it fail" -- is spelled out in
+        // two places. The live SSE path, `_delegationIsTerminalState` in
+        // 013_actions_interactions_02.js, correctly excludes `blocked`. This
+        // fallback gated on `chatTaskIsTerminal` (003_easy_setup_onboarding_01.js),
+        // which INCLUDES it, and then called it failed on the next line. So a task
+        // merely waiting on an approval gate got a permanent "Task failed" card
+        // written into the transcript, while the stream and the supervisor both
+        // still considered it running.
+        //
+        // `task_bot_runtime.ALLOWED_TRANSITIONS` lets `blocked` go back to
+        // queued/claimed/executing, and it is absent from `TERMINAL_STATES`, so
+        // this is settled by the state machine rather than by taste.
+        if (!chatTaskIsTerminal(state) || state === 'blocked') return;
+        const executionId = safeString(row?.execution_id);
+        if (!executionId) return;
+        // `cancelled` gets its own ending, matching task_bot_runtime -- "'cancelled'
+        // is its own ending. Stopping a run on purpose is not a failure" -- and the
+        // Mission Control board. Calling a run you stopped "failed" is wrong and
+        // "completed" is wrong too, so there is a third type: delegation_cancelled,
+        // drawn by chatTaskWasStopped in 003_easy_setup_onboarding_01.js.
+        const stopped = state === 'cancelled' || state === 'canceled';
+        const failed = state === 'failed' || state === 'dead';
+        const summary = safeString(row?.last_progress || row?.summary || row?.task || row?.current_task);
+        appendDelegationResultMessage({
+            ...row,
+            type: stopped ? 'delegation_cancelled' : (failed ? 'delegation_failed' : 'delegation_completed'),
+            session_id: safeString(row?.session_id) || scopedSessionId,
+        }, {
+            status: stopped ? 'cancelled' : (failed ? 'failed' : 'completed'),
+            summary,
+        });
+    });
 }
 
 // RECOVERED (2026-03-18): Was in dead app_parts/part-002b.js, never made it to live runtime.
@@ -504,6 +568,26 @@ async function refreshEvolveChatReplies({ sessionOverride = '', force = false } 
     const sid = safeString(sessionOverride || sessionId || activeChatId || taskContinuityLatestSessionId);
     if (!sid) return;
     if (evolveChatRepliesInFlight && !force) return;
+    const activity = taskContinuityLatestActivity && typeof taskContinuityLatestActivity === 'object'
+        ? taskContinuityLatestActivity
+        : null;
+    const hasActiveActivity = Boolean(
+        activity
+        && (
+            Number(activity.activeCount || 0) > 0
+            || (Array.isArray(activity.liveAgents) && activity.liveAgents.length > 0)
+        )
+    );
+    const now = Date.now();
+    if (
+        !force
+        && !hasActiveActivity
+        && evolveChatRepliesLastRefreshAt
+        && (now - evolveChatRepliesLastRefreshAt) < EVOLVE_CHAT_REPLY_IDLE_REFRESH_INTERVAL_MS
+    ) {
+        return;
+    }
+    evolveChatRepliesLastRefreshAt = now;
     evolveChatRepliesInFlight = true;
     try {
         const res = await fetchJsonSafe(`/api/mission/jobs?kind=evolve_session&session_id=${encodeURIComponent(sid)}&limit=24`);
@@ -579,6 +663,7 @@ async function refreshTaskContinuity({ sessionOverride = '', force = false } = {
             taskEvaluation,
             taskDefinitionStatus,
         });
+        appendTerminalDelegationActivityResults(activity);
     } catch (error) {
         const fallbackState = taskContinuityLatestState;
         const fallbackEvents = taskContinuityLatestEvents;
@@ -914,59 +999,6 @@ function setAssistantSuggestions({ title = 'Suggestions', options = [], context 
     });
 }
 
-function withSuggestionContext(prompt, { userText = '', assistantText = '' } = {}) {
-    const base = safeString(prompt);
-    const user = safeString(userText).slice(0, 260);
-    const assistant = safeString(assistantText).slice(0, 260);
-    const contextParts = [];
-    if (user) contextParts.push(`User context: ${user}`);
-    if (assistant) contextParts.push(`Latest response: ${assistant}`);
-    if (contextParts.length === 0) return base;
-    return `${base}\n\nContext:\n- ${contextParts.join('\n- ')}`;
-}
-
-function classifySuggestionIntent({ userText = '', assistantText = '' } = {}) {
-    const user = safeString(userText).toLowerCase();
-    const assistant = safeString(assistantText).toLowerCase();
-    const combined = `${user} ${assistant}`.trim();
-    const hasAny = (tokens = []) => tokens.some((token) => combined.includes(token));
-
-    if (hasAny(['error', 'failed', 'exception', 'stack trace', 'traceback', 'not working', "can't", 'cannot', 'bug'])) {
-        return 'troubleshooting';
-    }
-    if (hasAny(['meeting', 'agenda', 'minutes', 'follow-up', 'follow up', 'standup', 'retro'])) {
-        return 'meeting';
-    }
-    if (hasAny(['email', 'message', 'post', 'resume', 'cover letter', 'proposal', 'announcement', 'copy', 'blog'])) {
-        return 'writing';
-    }
-    if (hasAny(['plan', 'roadmap', 'milestone', 'timeline', 'project', 'launch', 'rollout', 'trip', 'event', 'strategy'])) {
-        return 'planning';
-    }
-    if (hasAny(['compare', 'comparison', 'pros and cons', 'which', 'best option', 'tradeoff', 'trade-off', 'decide', 'decision', 'choose'])) {
-        return 'decision';
-    }
-    if (hasAny(['budget', 'cost', 'pricing', 'price', 'expense', 'financial', 'roi'])) {
-        return 'finance';
-    }
-    if (hasAny(['research', 'analyze', 'analysis', 'investigate', 'summarize', 'summary', 'source', 'evidence'])) {
-        return 'research';
-    }
-    if (hasAny(['learn', 'teach', 'tutorial', 'explain', 'understand', 'study'])) {
-        return 'learning';
-    }
-    if (hasAny(['schedule', 'calendar', 'todo', 'to-do', 'task list', 'prioritize', 'weekly'])) {
-        return 'productivity';
-    }
-    if (hasAny(['brainstorm', 'ideas', 'creative', 'name', 'tagline', 'concept', 'campaign', 'story'])) {
-        return 'creative';
-    }
-    if (hasAny(['code', 'coding', 'script', 'api', 'function', 'class', 'repo', 'pull request', 'test case'])) {
-        return 'code';
-    }
-    return 'general';
-}
-
 function normalizeSuggestionOptions(options = []) {
     const unique = [];
     const seen = new Set();
@@ -981,145 +1013,45 @@ function normalizeSuggestionOptions(options = []) {
     return unique.slice(0, 9);
 }
 
-function withUniversalSuggestionOptions(baseOptions = [], context = {}) {
-    const universal = [
+function buildUniversalFollowupSuggestionOptions() {
+    return normalizeSuggestionOptions([
+        {
+            label: 'Keep this moving',
+            kind: 'action',
+            tone: 'primary',
+            send_prompt: 'Continue this exact task. Give me the best next step and execute it directly where possible.',
+        },
         {
             label: 'Summarize where we are',
             kind: 'option',
-            send_prompt: withSuggestionContext('Give a quick summary of where we are and what matters most next.', context),
+            send_prompt: 'Give a quick summary of where we are and what matters most next.',
         },
         {
-            label: 'Ask clarifying questions',
+            label: 'Next 3 actions',
             kind: 'option',
-            send_prompt: withSuggestionContext('Ask the minimum clarifying questions needed to improve the result.', context),
+            send_prompt: 'Give the next 3 highest-impact actions from here.',
+        },
+        {
+            label: 'Make it concrete',
+            kind: 'option',
+            send_prompt: 'Make this more concrete with specific examples and outputs.',
+        },
+        {
+            label: 'Check assumptions',
+            kind: 'option',
+            send_prompt: 'List the assumptions behind this result and what to validate first.',
         },
         {
             label: 'Give me 3 alternatives',
             kind: 'option',
-            send_prompt: withSuggestionContext('Offer 3 viable alternatives with tradeoffs.', context),
+            send_prompt: 'Offer 3 viable alternatives with tradeoffs.',
         },
-    ];
-    return normalizeSuggestionOptions([...(Array.isArray(baseOptions) ? baseOptions : []), ...universal]);
-}
-
-function buildIntentSuggestionOptions(intent, context = {}) {
-    const keepMoving = {
-        label: 'Keep this moving',
-        kind: 'action',
-        tone: 'primary',
-        send_prompt: withSuggestionContext(
-            'Continue this exact task. Give me the best next step and execute it directly where possible.',
-            context
-        ),
-    };
-
-    if (intent === 'planning') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Turn into checklist', kind: 'option', send_prompt: withSuggestionContext('Turn this into a concrete checklist with sequence and owners.', context) },
-            { label: 'Estimate timeline', kind: 'option', send_prompt: withSuggestionContext('Estimate a realistic timeline with dependencies and risk notes.', context) },
-            { label: 'Surface blockers', kind: 'option', send_prompt: withSuggestionContext('Identify likely blockers early and propose mitigations.', context) },
-            { label: 'Define success criteria', kind: 'option', send_prompt: withSuggestionContext('Define clear success criteria and measurable outcomes.', context) },
-        ], context);
-    }
-    if (intent === 'writing') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Draft version 1', kind: 'option', send_prompt: withSuggestionContext('Write a strong first draft using the current context.', context) },
-            { label: 'Make it tighter', kind: 'option', send_prompt: withSuggestionContext('Rewrite this to be shorter, clearer, and more persuasive.', context) },
-            { label: 'Adjust tone', kind: 'option', send_prompt: withSuggestionContext('Give 3 tone variants: formal, friendly, and direct.', context) },
-            { label: 'Audience rewrite', kind: 'option', send_prompt: withSuggestionContext('Rewrite this for the target audience and goal.', context) },
-        ], context);
-    }
-    if (intent === 'decision') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Pros/cons table', kind: 'option', send_prompt: withSuggestionContext('Create a pros and cons table for the main options.', context) },
-            { label: 'Recommend one', kind: 'option', send_prompt: withSuggestionContext('Recommend one option decisively and explain why.', context) },
-            { label: 'Missing inputs', kind: 'option', send_prompt: withSuggestionContext('List the missing information needed for a confident decision.', context) },
-            { label: 'Decision matrix', kind: 'option', send_prompt: withSuggestionContext('Build a weighted decision matrix for the leading options.', context) },
-        ], context);
-    }
-    if (intent === 'research') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Plain-language summary', kind: 'option', send_prompt: withSuggestionContext('Summarize the key findings in plain language.', context) },
-            { label: 'Compare options', kind: 'option', send_prompt: withSuggestionContext('Compare top options with tradeoffs and recommendations.', context) },
-            { label: 'Sources + caveats', kind: 'option', send_prompt: withSuggestionContext('Give source-style reasoning and call out uncertainty clearly.', context) },
-            { label: 'What changed recently?', kind: 'option', send_prompt: withSuggestionContext('Highlight recent changes or updates relevant to this topic.', context) },
-        ], context);
-    }
-    if (intent === 'learning') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Teach step-by-step', kind: 'option', send_prompt: withSuggestionContext('Teach this step-by-step with examples and no jargon.', context) },
-            { label: 'Quick practice', kind: 'option', send_prompt: withSuggestionContext('Give a short practice exercise to lock this in.', context) },
-            { label: "Explain like I'm new", kind: 'option', send_prompt: withSuggestionContext('Explain this for a beginner with analogies.', context) },
-            { label: 'Cheat sheet', kind: 'option', send_prompt: withSuggestionContext('Create a concise cheat sheet I can reference later.', context) },
-        ], context);
-    }
-    if (intent === 'meeting') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Draft agenda', kind: 'option', send_prompt: withSuggestionContext('Create a sharp meeting agenda with goals and timing.', context) },
-            { label: 'Action items', kind: 'option', send_prompt: withSuggestionContext('Convert this into action items with owners and deadlines.', context) },
-            { label: 'Follow-up message', kind: 'option', send_prompt: withSuggestionContext('Draft a concise follow-up message for stakeholders.', context) },
-            { label: 'Talking points', kind: 'option', send_prompt: withSuggestionContext('Create concise talking points for the meeting.', context) },
-        ], context);
-    }
-    if (intent === 'productivity') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Prioritize next 3', kind: 'option', send_prompt: withSuggestionContext('Prioritize the next 3 highest-impact tasks.', context) },
-            { label: 'Time-block plan', kind: 'option', send_prompt: withSuggestionContext('Create a realistic time-blocked schedule for today/this week.', context) },
-            { label: 'Simple checklist', kind: 'option', send_prompt: withSuggestionContext('Turn this into an actionable checklist.', context) },
-            { label: 'What can I drop?', kind: 'option', send_prompt: withSuggestionContext('Identify what can be deferred or dropped with low risk.', context) },
-        ], context);
-    }
-    if (intent === 'creative') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Generate ideas', kind: 'option', send_prompt: withSuggestionContext('Generate 12 original ideas and rank the top 3.', context) },
-            { label: 'Pick strongest concept', kind: 'option', send_prompt: withSuggestionContext('Pick the strongest concept and justify the choice.', context) },
-            { label: 'Create variations', kind: 'option', send_prompt: withSuggestionContext('Create multiple variations with different styles and audiences.', context) },
-            { label: 'Name + tagline options', kind: 'option', send_prompt: withSuggestionContext('Generate strong name and tagline options with rationale.', context) },
-        ], context);
-    }
-    if (intent === 'finance') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Build budget', kind: 'option', send_prompt: withSuggestionContext('Build a practical budget with best/target/worst cases.', context) },
-            { label: 'Compare spend options', kind: 'option', send_prompt: withSuggestionContext('Compare spending options and show tradeoffs.', context) },
-            { label: 'Find cost cuts', kind: 'option', send_prompt: withSuggestionContext('Identify safe places to reduce cost without hurting outcomes.', context) },
-            { label: 'ROI snapshot', kind: 'option', send_prompt: withSuggestionContext('Give a simple ROI snapshot for each option.', context) },
-        ], context);
-    }
-    if (intent === 'troubleshooting') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Find root cause', kind: 'option', send_prompt: withSuggestionContext('Diagnose the most likely root cause with evidence.', context) },
-            { label: 'Fastest safe fix', kind: 'option', send_prompt: withSuggestionContext('Give the fastest safe fix and verification steps.', context) },
-            { label: 'Prevent repeat', kind: 'option', send_prompt: withSuggestionContext('Give a prevention checklist to avoid this recurring.', context) },
-            { label: 'Rollback plan', kind: 'option', send_prompt: withSuggestionContext('Provide a rollback/safety plan before risky changes.', context) },
-        ], context);
-    }
-    if (intent === 'code') {
-        return withUniversalSuggestionOptions([
-            keepMoving,
-            { label: 'Implement next step', kind: 'option', send_prompt: withSuggestionContext('Implement the next concrete step and show changes.', context) },
-            { label: 'Add tests', kind: 'option', send_prompt: withSuggestionContext('Add targeted tests covering risky paths and edge cases.', context) },
-            { label: 'Risk review', kind: 'option', send_prompt: withSuggestionContext('Review this implementation for bugs and regressions.', context) },
-            { label: 'Write docs for this', kind: 'option', send_prompt: withSuggestionContext('Document what this does and how to use it.', context) },
-        ], context);
-    }
-
-    return withUniversalSuggestionOptions([
-        keepMoving,
-        { label: 'Next 3 actions', kind: 'option', send_prompt: withSuggestionContext('Give the next 3 highest-impact actions from here.', context) },
-        { label: 'Alternative approach', kind: 'option', send_prompt: withSuggestionContext('Offer an alternative approach with clear tradeoffs.', context) },
-        { label: 'Make it concrete', kind: 'option', send_prompt: withSuggestionContext('Make this more concrete with specific examples and outputs.', context) },
-        { label: 'Clarify assumptions', kind: 'option', send_prompt: withSuggestionContext('List assumptions and what to validate first.', context) },
-    ], context);
+        {
+            label: 'Ask what you need',
+            kind: 'option',
+            send_prompt: 'Ask only the minimum questions needed to improve the result.',
+        },
+    ]);
 }
 
 function buildStarterSuggestionOptions() {

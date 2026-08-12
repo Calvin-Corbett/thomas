@@ -12,12 +12,10 @@ from thomas.agent.execution_plan import (
     coerce_plan_status,
     default_allowed_decisions,
     new_plan_id,
-    parse_steps_from_text,
     plan_to_markdown,
     plan_to_payload,
 )
 from thomas.agent.loop import AgentLoop
-from thomas.cli.repl_slash import list_slash_specs
 from thomas.core.events import EventType
 
 SendEventFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -41,6 +39,11 @@ def normalize_plan_action(raw: Any) -> str:
 
 
 def serialize_web_slash_specs() -> list[dict[str, Any]]:
+    # Imported here, not at module scope: thomas.cli.repl_slash pulls in
+    # prompt_toolkit (~580ms), and the web server was paying that on every boot
+    # for a CLI dependency only this one function needs.
+    from thomas.cli.repl_slash import list_slash_specs
+
     specs: list[dict[str, Any]] = []
     for spec in list_slash_specs():
         command = str(getattr(spec, "command", "") or "").strip().lower()
@@ -174,6 +177,11 @@ async def draft_plan(
     system_prompt: str | None,
     send_event: SendEventFn | None = None,
 ) -> tuple[ExecutionPlan, str]:
+    """Ask the model for a plan preview without turning its prose into actions.
+
+    This compatibility path has no structured plan-submission tool.  Until it
+    does, model text is display-only and the executable plan remains empty.
+    """
     task = str(task_description or "").strip()
     plan = ExecutionPlan(plan_id=new_plan_id(), task_description=task or "Planned task")
     prompt = (
@@ -199,8 +207,7 @@ async def draft_plan(
         forward_text=False,
         forward_tools=False,
     )
-    plan.steps = parse_steps_from_text(response)
-    return plan, plan_to_markdown(plan)
+    return plan, response
 
 
 async def refine_plan(
@@ -216,6 +223,7 @@ async def refine_plan(
     system_prompt: str | None,
     send_event: SendEventFn | None = None,
 ) -> tuple[ExecutionPlan, str]:
+    """Ask for a revised preview while keeping model prose non-executable."""
     note = str(refinement_note or "").strip()
     prompt = (
         f"Revise this plan for the task: {current_plan.task_description}\n\n"
@@ -241,12 +249,15 @@ async def refine_plan(
         forward_text=False,
         forward_tools=False,
     )
-    current_plan.steps = parse_steps_from_text(response)
+    # A prose refinement cannot preserve or create executable steps.  Clearing
+    # them fails inertly instead of leaving an older plan executable after the
+    # model described a different one.
+    current_plan.steps = []
     current_plan.status = "draft"
     current_plan.note = note
     current_plan.last_result = ""
     current_plan.finished_at = 0.0
-    return current_plan, plan_to_markdown(current_plan)
+    return current_plan, response
 
 
 def build_execution_prompt(
@@ -286,6 +297,12 @@ async def execute_plan(
     prior_results: list[str] = []
     executable_steps = [step for step in plan.steps if step.status != "skipped"]
     total_steps = len(executable_steps)
+    if total_steps == 0:
+        plan.status = "draft"
+        plan.last_result = "No structured executable plan steps were provided."
+        if send_event is not None:
+            await send_event({"type": "plan_state", "plan": build_plan_payload(plan)})
+        return plan, f"{plan.last_result} Nothing was run."
     plan.status = "executing"
     if send_event is not None:
         await send_event({"type": "plan_state", "plan": build_plan_payload(plan)})

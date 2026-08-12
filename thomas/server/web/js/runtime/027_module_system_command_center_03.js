@@ -639,9 +639,7 @@ const MODULE_WORKBENCH_OSS = {
     styleLoaded: Object.create(null),
     threePromise: null,
     liteGraphPromise: null,
-    gridStackPromise: null,
     waveSurferPromise: null,
-    monacoPromise: null,
     acePromise: null,
     phaserPromise: null,
 };
@@ -753,21 +751,6 @@ async function moduleWorkbenchLoadLiteGraph() {
     return MODULE_WORKBENCH_OSS.liteGraphPromise;
 }
 
-async function moduleWorkbenchLoadGridStack() {
-    if (window.GridStack) return window.GridStack;
-    if (MODULE_WORKBENCH_OSS.gridStackPromise) return MODULE_WORKBENCH_OSS.gridStackPromise;
-    MODULE_WORKBENCH_OSS.gridStackPromise = (async () => {
-        moduleWorkbenchLoadStyle('https://cdn.jsdelivr.net/npm/gridstack@12.4.2/dist/gridstack.min.css');
-        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/gridstack@12.4.2/dist/gridstack-all.js', { globalName: 'GridStack' });
-        if (!window.GridStack) throw new Error('GridStack did not initialize.');
-        return window.GridStack;
-    })().catch((error) => {
-        MODULE_WORKBENCH_OSS.gridStackPromise = null;
-        throw error;
-    });
-    return MODULE_WORKBENCH_OSS.gridStackPromise;
-}
-
 async function moduleWorkbenchLoadWaveSurfer() {
     if (window.WaveSurfer) return window.WaveSurfer;
     if (MODULE_WORKBENCH_OSS.waveSurferPromise) return MODULE_WORKBENCH_OSS.waveSurferPromise;
@@ -780,34 +763,6 @@ async function moduleWorkbenchLoadWaveSurfer() {
         throw error;
     });
     return MODULE_WORKBENCH_OSS.waveSurferPromise;
-}
-
-async function moduleWorkbenchLoadMonaco() {
-    if (window.monaco?.editor) return window.monaco;
-    if (MODULE_WORKBENCH_OSS.monacoPromise) return MODULE_WORKBENCH_OSS.monacoPromise;
-    MODULE_WORKBENCH_OSS.monacoPromise = (async () => {
-        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js', {
-            globalCheck: () => typeof window.require === 'function',
-        });
-        await new Promise((resolve, reject) => {
-            if (typeof window.require !== 'function') {
-                reject(new Error('Monaco loader missing window.require.'));
-                return;
-            }
-            window.require.config({
-                paths: {
-                    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs',
-                },
-            });
-            window.require(['vs/editor/editor.main'], () => resolve(true), reject);
-        });
-        if (!window.monaco?.editor) throw new Error('Monaco editor failed to load.');
-        return window.monaco;
-    })().catch((error) => {
-        MODULE_WORKBENCH_OSS.monacoPromise = null;
-        throw error;
-    });
-    return MODULE_WORKBENCH_OSS.monacoPromise;
 }
 
 async function moduleWorkbenchLoadAce() {

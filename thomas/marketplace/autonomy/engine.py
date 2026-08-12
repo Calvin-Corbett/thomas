@@ -342,7 +342,9 @@ class AutonomyEngine:
         # Lower autonomy levels constrain fan-out for orchestrated workflows.
         worker_cap = {1: 1, 2: 2, 3: 3, 4: 4}.get(int(autonomy_level), 3)
         requested_workers = payload.get("worker_count")
-        worker_count = self._to_int(requested_workers, default=worker_cap, minimum=1, maximum=8)
+        # Fan-out is structured input. Missing/invalid worker counts use one
+        # worker; autonomy may cap an explicit request but never invents one.
+        worker_count = self._to_int(requested_workers, default=1, minimum=1, maximum=8)
         worker_count = min(worker_count, worker_cap)
         return {
             "autonomy_level": int(autonomy_level),
@@ -359,7 +361,7 @@ class AutonomyEngine:
         workflow = str(payload.get("workflow") or payload.get("pattern") or "chain").strip().lower()
         policy = self._workflow_policy_for_payload(payload)
 
-        # Apply policy defaults to orchestrator fan-out when not explicitly bounded.
+        # Enforce the autonomy cap on the explicitly selected orchestrator route.
         if workflow in {"orchestrator_worker", "orchestrator-workers", "orchestrate"}:
             payload["worker_count"] = int(policy["worker_count"])
 
@@ -367,6 +369,7 @@ class AutonomyEngine:
             chat_adapter=self.chat_adapter,
             session_id=job.session_id,
             default_profile=str(payload.get("profile") or "").strip() or None,
+            execution_context=payload,
         )
         try:
             result = await runner.run(payload)

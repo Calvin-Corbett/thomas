@@ -481,33 +481,21 @@ function moduleRenderSpecialCards(cardsRaw) {
     moduleSpecialGrid.appendChild(frag);
 }
 
-function moduleRenderMarketplaceCatalogV2(container) {
-    return moduleRenderMarketplaceSurface(container);
-}
-
-function moduleRenderMarketplaceCatalog(container) {
-    return moduleRenderMarketplaceSurface(container);
-}
-
-function moduleRenderMarketplaceCatalogV3(container) {
-    return moduleRenderMarketplaceSurface(container);
-}
-
 const MODULE_SPECIAL_SURFACE_CONFIGS = Object.freeze({
     my_stuff: Object.freeze({
         title: 'Project Board',
-        src: '/static/static/my_stuff.html?v=20260318-project-board-3',
+        src: '/static/my_stuff.html?v=20260624-forge-builds-1',
         surfaceMode: 'immersive',
     }),
 });
 
 const MODULE_STATIC_WORKSPACE_ITEMS = Object.freeze([
-    { workspace_id: 'mission', mode_id: 'mission', label: 'Mission Control', icon: 'ph-crosshair-simple', default_nav_section: 'command_centers', default_nav_order: 120 },
-    { workspace_id: 'app_builder', mode_id: 'app_builder', label: 'UI Editor', icon: 'ph-app-window', default_nav_section: 'command_centers', default_nav_order: 160 },
-    { workspace_id: 'my_stuff', mode_id: 'my_stuff', label: 'My Stuff', icon: 'ph-grid-four', default_nav_section: 'command_centers', default_nav_order: 220 },
-    { workspace_id: 'channels', mode_id: 'channels', label: 'Channels', icon: 'ph-broadcast', default_nav_section: 'command_centers', default_nav_order: 280 },
-    { workspace_id: 'token_economy', mode_id: 'token_economy', label: 'Token Economy', icon: 'ph-coins', default_nav_section: 'command_centers', default_nav_order: 300 },
-    { workspace_id: 'marketplace', mode_id: 'marketplace', label: 'Marketplace', icon: 'ph-storefront', default_nav_section: 'command_centers', default_nav_order: 320 },
+    { workspace_id: 'mission', mode_id: 'mission', label: 'Mission Control', icon: 'ph-crosshair-simple', default_nav_section: 'apps', default_nav_order: 120 },
+    { workspace_id: 'app_builder', mode_id: 'app_builder', label: 'UI Editor', icon: 'ph-app-window', default_nav_section: 'apps', default_nav_order: 160 },
+    { workspace_id: 'my_stuff', mode_id: 'my_stuff', label: 'Library', icon: 'ph-grid-four', default_nav_section: 'apps', default_nav_order: 220 },
+    { workspace_id: 'channels', mode_id: 'channels', label: 'Channels', icon: 'ph-broadcast', default_nav_section: 'apps', default_nav_order: 280 },
+    { workspace_id: 'token_economy', mode_id: 'token_economy', label: 'Token Economy', icon: 'ph-coins', default_nav_section: 'apps', default_nav_order: 300 },
+    { workspace_id: 'marketplace', mode_id: 'marketplace', label: 'Marketplace', icon: 'ph-storefront', default_nav_section: 'apps', default_nav_order: 320 },
 ]);
 
 function moduleInstalledPluginRows() {
@@ -583,7 +571,7 @@ function moduleWorkspaceNavEntries() {
             display_name: item.label,
             subtitle: item.label,
             icon: item.icon,
-            marketplace_type: 'command_center',
+            marketplace_type: 'app',
             left_nav_behavior: 'workspace',
             default_nav_section: item.default_nav_section,
             default_nav_order: item.default_nav_order,
@@ -613,7 +601,7 @@ function moduleWorkspaceNavEntries() {
 
 function moduleWorkspaceNavFallbackOrder(entriesRaw) {
     const entries = Array.isArray(entriesRaw) ? entriesRaw.slice() : [];
-    const sectionWeight = (sectionRaw) => safeString(sectionRaw).toLowerCase() === 'command_centers' ? 0 : 1;
+    const sectionWeight = (sectionRaw) => ['apps', 'command_centers'].includes(safeString(sectionRaw).toLowerCase()) ? 0 : 1;
     return entries.sort((left, right) => {
         const sectionDiff = sectionWeight(left?.default_nav_section) - sectionWeight(right?.default_nav_section);
         if (sectionDiff) return sectionDiff;
@@ -630,7 +618,16 @@ function moduleWorkspaceNavOrder(entriesRaw) {
     const appended = moduleWorkspaceNavFallbackOrder(entries)
         .map((entry) => safeString(entry?.workspace_id).toLowerCase())
         .filter((id) => id && !stored.includes(id));
-    return stored.concat(appended);
+    const ordered = stored.concat(appended);
+    const promoteAfter = (id, anchor) => {
+        const itemIndex = ordered.indexOf(id);
+        const anchorIndex = ordered.indexOf(anchor);
+        if (itemIndex < 0 || anchorIndex < 0 || itemIndex === anchorIndex + 1) return;
+        ordered.splice(itemIndex, 1);
+        ordered.splice(ordered.indexOf(anchor) + 1, 0, id);
+    };
+    promoteAfter('paper_trading', 'mission');
+    return ordered;
 }
 
 function modulePersistWorkspaceNavOrderFromDom() {

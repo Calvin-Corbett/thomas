@@ -22,7 +22,10 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any, Literal
+
+from jsonschema import Draft7Validator, Draft202012Validator, FormatChecker
 
 SchemaDraft = Literal["2020-12", "7"]
 
@@ -215,6 +218,51 @@ def build_plugin_manifest_schema(
         },
     }
 
+    assistant_block: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["instructions", "conversation_starters", "knowledge_files"],
+        "properties": {
+            "instructions": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20000,
+                "description": "Tailored operating instructions for the assistant-backed plugin.",
+            },
+            "conversation_starters": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {"type": "string", "minLength": 1, "maxLength": 500},
+            },
+            "knowledge_files": {
+                "type": "array",
+                "maxItems": 50,
+                "items": {"type": "string", "minLength": 1, "maxLength": 260},
+                "description": "Package-relative knowledge files available to this assistant only.",
+            },
+        },
+    }
+
+    permissions_block: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["tools", "apps", "apis"],
+        "properties": {
+            key: {
+                "type": "array",
+                "maxItems": 100,
+                "uniqueItems": True,
+                "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": r"^[A-Za-z][A-Za-z0-9_.:-]*$",
+                },
+            }
+            for key in ("tools", "apps", "apis")
+        },
+    }
+
     schema: dict[str, Any] = {
         "$schema": meta_schema,
         "$id": f"https://thomas.local/schemas/plugin-manifest/{req.schema_version}.json",
@@ -235,9 +283,16 @@ def build_plugin_manifest_schema(
             },
             "tools": {
                 "type": "array",
-                "minItems": 1,
                 "items": {"$ref": f"#/{defs_key}/tool"},
                 "description": "Tools exposed by the plugin.",
+            },
+            "assistant": {
+                "$ref": f"#/{defs_key}/assistant",
+                "description": "Optional custom-assistant instructions, starters, and isolated knowledge.",
+            },
+            "permissions": {
+                "$ref": f"#/{defs_key}/permissions",
+                "description": "Explicit external tools, apps, and APIs selected for the plugin.",
             },
         },
         defs_key: {
@@ -245,6 +300,8 @@ def build_plugin_manifest_schema(
             "plugin": plugin_block,
             "runtime": runtime_block,
             "tool": tool_block,
+            "assistant": assistant_block,
+            "permissions": permissions_block,
         },
     }
 
@@ -276,6 +333,12 @@ def build_plugin_manifest_schema(
                         },
                     }
                 ],
+                "assistant": {
+                    "instructions": "Answer from the attached product handbook.",
+                    "conversation_starters": ["Summarize the launch checklist."],
+                    "knowledge_files": ["knowledge/handbook.md"],
+                },
+                "permissions": {"tools": ["files.read"], "apps": [], "apis": []},
             }
         ]
 
@@ -284,6 +347,68 @@ def build_plugin_manifest_schema(
         draft=req.draft,
         schema=schema,
     )
+
+
+def _validate_relative_manifest_path(value: str) -> bool:
+    normalized = str(value or "").replace("\\", "/").strip()
+    if not normalized or normalized.startswith("/") or ":" in normalized:
+        return False
+    parts = PurePosixPath(normalized).parts
+    return bool(parts) and all(part not in {"", ".", ".."} for part in parts)
+
+
+def validate_plugin_manifest(
+    manifest: Mapping[str, Any],
+    request: PluginManifestSchemaRequest | None = None,
+) -> dict[str, Any]:
+    """Validate one rich Thomas plugin manifest and return a plain copy.
+
+    JSON Schema handles the structural contract. The semantic pass additionally
+    rejects knowledge paths that could escape a plugin package and wildcard
+    permission requests that would silently broaden authority.
+    """
+
+    if not isinstance(manifest, Mapping):
+        raise PluginManifestSchemaError(
+            code="invalid_manifest",
+            message="Plugin manifest must be a JSON object.",
+            details={"errors": ["manifest: expected object"]},
+        )
+
+    req = request or PluginManifestSchemaRequest()
+    result = build_plugin_manifest_schema(req)
+    validator_cls = Draft7Validator if req.draft == "7" else Draft202012Validator
+    validator = validator_cls(result.schema, format_checker=FormatChecker())
+    errors = [
+        f"{'/'.join(str(part) for part in error.absolute_path) or 'manifest'}: {error.message}"
+        for error in sorted(validator.iter_errors(dict(manifest)), key=lambda item: list(item.absolute_path))
+    ]
+
+    assistant = manifest.get("assistant")
+    if isinstance(assistant, Mapping):
+        knowledge_files = assistant.get("knowledge_files")
+        if isinstance(knowledge_files, list):
+            for index, raw_path in enumerate(knowledge_files):
+                if isinstance(raw_path, str) and not _validate_relative_manifest_path(raw_path):
+                    errors.append(f"assistant/knowledge_files/{index}: unsafe package-relative path")
+
+    permissions = manifest.get("permissions")
+    if isinstance(permissions, Mapping):
+        for kind in ("tools", "apps", "apis"):
+            values = permissions.get(kind)
+            if not isinstance(values, list):
+                continue
+            for index, value in enumerate(values):
+                if isinstance(value, str) and ("*" in value or value.lower() in {"all", "any", "root", "system"}):
+                    errors.append(f"permissions/{kind}/{index}: wildcard or unrestricted authority is not allowed")
+
+    if errors:
+        raise PluginManifestSchemaError(
+            code="invalid_manifest",
+            message="Plugin manifest failed validation.",
+            details={"errors": errors},
+        )
+    return dict(manifest)
 
 
 def tool_plugin_manifest_schema(
@@ -448,6 +573,7 @@ __all__ = [
     "TOOL_SPEC",
     "TOOLS",
     "build_plugin_manifest_schema",
+    "validate_plugin_manifest",
     "tool_plugin_manifest_schema",
     "register",
 ]

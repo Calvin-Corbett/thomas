@@ -1,11 +1,18 @@
 """SQLite-based preferences store with encryption support."""
 
 import json
+import logging
 import os
 import sqlite3
 import threading
 from functools import lru_cache
 from typing import Any
+
+log = logging.getLogger(__name__)
+
+_TOKEN_THROTTLE_OPT_IN_MIGRATION = "token_throttle_opt_in_v019"
+_LEGACY_SESSION_TOKEN_BUDGET = 200_000
+_LEGACY_DAILY_TOKEN_BUDGET = 2_000_000
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
@@ -147,7 +154,72 @@ class PreferencesStore:
             if "key_hash" not in cols:
                 conn.execute("ALTER TABLE preference_keys ADD COLUMN key_hash TEXT;")
 
+            self._migrate_legacy_token_throttle(conn)
+
             conn.commit()
+
+    def _migrate_legacy_token_throttle(self, conn: sqlite3.Connection) -> None:
+        """Make the old default cumulative-token throttle opt-in exactly once."""
+        marker = conn.execute(
+            "SELECT 1 FROM preferences_meta WHERE k = ?",
+            (_TOKEN_THROTTLE_OPT_IN_MIGRATION,),
+        ).fetchone()
+        if marker:
+            return
+
+        migrated = 0
+        unresolved = 0
+        for row in conn.execute("SELECT user_id, data_json FROM preferences").fetchall():
+            try:
+                data = json.loads(row["data_json"])
+            except (json.JSONDecodeError, TypeError) as exc:
+                unresolved += 1
+                log.warning(
+                    "Token-throttle migration deferred for preference user %r: invalid JSON (%s)",
+                    row["user_id"],
+                    exc,
+                )
+                continue
+            if not isinstance(data, dict):
+                unresolved += 1
+                log.warning(
+                    "Token-throttle migration deferred for preference user %r: JSON root is not an object",
+                    row["user_id"],
+                )
+                continue
+            advanced = data.get("advanced") or {}
+            if not isinstance(advanced, dict):
+                continue
+            cost = advanced.get("cost") or {}
+            if not isinstance(cost, dict):
+                continue
+            is_legacy_default = (
+                cost.get("session_token_budget") == _LEGACY_SESSION_TOKEN_BUDGET
+                and cost.get("daily_token_budget") == _LEGACY_DAILY_TOKEN_BUDGET
+                and cost.get("throttle_on_budget") is True
+            )
+            if not is_legacy_default:
+                continue
+            cost["throttle_on_budget"] = False
+            conn.execute(
+                "UPDATE preferences SET data_json = ?, updated_at = ? WHERE user_id = ?",
+                (json.dumps(data), utc_now_iso(), row["user_id"]),
+            )
+            migrated += 1
+
+        if unresolved:
+            log.warning(
+                "Token-throttle migration remains pending for %d malformed preference profile(s)",
+                unresolved,
+            )
+            return
+
+        conn.execute(
+            "INSERT INTO preferences_meta (k, v) VALUES (?, ?)",
+            (_TOKEN_THROTTLE_OPT_IN_MIGRATION, "1"),
+        )
+        if migrated:
+            log.info("Made cumulative token throttling opt-in for %d legacy preference profile(s)", migrated)
 
     def _get_or_create_kdf_salt(self, conn: sqlite3.Connection) -> bytes:
         """Return the persisted per-install KDF salt, creating it on first use.
@@ -361,7 +433,8 @@ class PreferencesStore:
                     "UPDATE preference_keys SET mask_tail=?, key_hash=? WHERE user_id=? AND provider=?",
                     (m, _sha256_hex(plain), user_id, provider),
                 )
-            except Exception:
+            except (InvalidToken, sqlite3.DatabaseError, ValueError, TypeError) as exc:
+                log.warning("Could not decrypt API key for provider %r (user %r): %s", provider, user_id, exc)
                 masked[provider] = "••••••(unreadable)"
         return masked
 
@@ -436,6 +509,34 @@ class PreferencesStore:
             security["human_breakglass_enabled"] = bool(enabled)
             security["human_breakglass_changed_at"] = utc_now_iso()
             security["human_breakglass_changed_by"] = str(changed_by or "system")
+            advanced["security"] = security
+            base["advanced"] = advanced
+            self._save_base_prefs(conn, user_id, base)
+        return self.get(user_id=user_id)
+
+    def set_breakglass_window(
+        self,
+        *,
+        enabled: bool,
+        hours: float,
+        user_id: str = "default",
+        changed_by: str = "system",
+    ) -> PreferencesResponse:
+        """Set the breakglass approval-window preference (a security pref).
+
+        Only the window fields are touched; human_breakglass_enabled is left
+        untouched (it has its own toggle). hours is clamped to the model bounds
+        so a bad value can never poison the stored prefs.
+        """
+        clamped_hours = max(0.25, min(12.0, float(hours)))
+        with self._lock, self._connect() as conn, conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+            advanced = dict(base.get("advanced") or {})
+            security = AdvancedSecurityPrefs(**(advanced.get("security") or {})).model_dump()
+            security["breakglass_window_enabled"] = bool(enabled)
+            security["breakglass_window_hours"] = clamped_hours
+            security["last_changed_at"] = utc_now_iso()
+            security["last_changed_by"] = str(changed_by or "system")
             advanced["security"] = security
             base["advanced"] = advanced
             self._save_base_prefs(conn, user_id, base)
@@ -591,6 +692,24 @@ class PreferencesStore:
                     incoming = patch.advanced.model.model_dump(exclude_unset=True)
                     fields_set = patch.advanced.model.model_fields_set
                     for k in fields_set:
+                        if k in {"role_profiles", "role_model_ids"}:
+                            value = incoming.get(k, None)
+                            if value is None:
+                                current[k] = {}
+                                continue
+                            role_map = dict(current.get(k) or {})
+                            if isinstance(value, dict):
+                                for role, selected in value.items():
+                                    role_key = str(role or "").strip().lower().replace("-", "_").replace(" ", "_")
+                                    if not role_key:
+                                        continue
+                                    selected_text = str(selected or "").strip() if selected is not None else ""
+                                    if selected_text:
+                                        role_map[role_key] = selected_text
+                                    else:
+                                        role_map.pop(role_key, None)
+                            current[k] = role_map
+                            continue
                         if k == "deterministic_seed":
                             current[k] = incoming.get(k, None)
                             continue

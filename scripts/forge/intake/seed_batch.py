@@ -12,7 +12,7 @@ DEFAULT_BLOCKLIST = ["reference_cli", "clawbot"]
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[3]
 
 
 def _intake_root(repo: Path, root_arg: str) -> Path:
@@ -166,7 +166,6 @@ def main() -> int:
 
     repo = _repo_root()
     root = _intake_root(repo, args.root)
-    _ensure_layout(root)
 
     index_path = Path(args.index)
     if not index_path.is_absolute():
@@ -186,6 +185,9 @@ def main() -> int:
         return 2
     if args.limit and args.limit > 0:
         rows = rows[: args.limit]
+
+    if not args.dry_run:
+        _ensure_layout(root)
 
     date_tag = args.date_tag.strip() or dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
     incoming = root / "queue" / "incoming"

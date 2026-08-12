@@ -236,14 +236,13 @@ def test_runtime_skills_loads_explicit_env_roots_for_external_harnesses(tmp_path
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
-    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
     _write_skill(thomas_root, "serializer-matrix", "Use serializer feature matrices.", "- Cross feature axes.")
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text="fix serializer aliases and flattening",
+        prompt_text="please use $serializer-matrix to fix serializer aliases and flattening",
         relevance_text="serializer flatten alias matrix",
         route_path="coding_task",
         cwd=harness_repo,
@@ -265,7 +264,6 @@ def test_runtime_skills_can_ignore_codex_home_roots_for_benchmarks(tmp_path: Pat
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     monkeypatch.setenv("THOMAS_RUNTIME_IGNORE_CODEX_HOME_SKILLS", "1")
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
-    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -273,7 +271,7 @@ def test_runtime_skills_can_ignore_codex_home_roots_for_benchmarks(tmp_path: Pat
     _write_skill(thomas_root, "serializer-matrix", "Use serializer feature matrices.", "- Cross feature axes.")
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text="fix serializer aliases and flattening",
+        prompt_text="please use $serializer-matrix to fix serializer aliases and flattening",
         relevance_text="serializer flatten alias matrix",
         route_path="coding_task",
         cwd=harness_repo,
@@ -285,7 +283,7 @@ def test_runtime_skills_can_ignore_codex_home_roots_for_benchmarks(tmp_path: Pat
     assert "serializer-matrix" in [s.name for s in selection.selected]
 
 
-def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_explicit_partial_structuring_beats_unmentioned_spreadsheet(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     harness_repo = tmp_path / "harness-repo"
@@ -293,7 +291,6 @@ def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Pa
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
-    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -322,7 +319,7 @@ def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Pa
     """
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text=prompt,
+        prompt_text=f"please use $partial-structuring-recovery\n{prompt}",
         relevance_text=prompt,
         route_path="coding_task",
         cwd=harness_repo,
@@ -330,10 +327,10 @@ def test_runtime_skills_routes_partial_structuring_over_spreadsheet(tmp_path: Pa
     )
 
     assert [skill.name for skill in selection.selected] == ["partial-structuring-recovery"]
-    assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
+    assert selection.selected_reasons[selection.selected[0].key] == "explicit"
 
 
-def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_explicit_multipart_parser_beats_unmentioned_spreadsheet(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     harness_repo = tmp_path / "harness-repo"
@@ -341,7 +338,6 @@ def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_p
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
-    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -369,7 +365,7 @@ def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_p
     """
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text=prompt,
+        prompt_text=f"please use $multipart-http-response-parser\n{prompt}",
         relevance_text=prompt,
         route_path="coding_task",
         cwd=harness_repo,
@@ -377,10 +373,10 @@ def test_runtime_skills_routes_multipart_response_parsing_over_spreadsheet(tmp_p
     )
 
     assert [skill.name for skill in selection.selected] == ["multipart-http-response-parser"]
-    assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
+    assert selection.selected_reasons[selection.selected[0].key] == "explicit"
 
 
-def test_runtime_skills_routes_line_suppression_directives(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_honors_explicit_line_suppression_skill(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     harness_repo = tmp_path / "harness-repo"
@@ -388,7 +384,6 @@ def test_runtime_skills_routes_line_suppression_directives(tmp_path: Path, monke
     monkeypatch.setenv("HOME", str(home_root))
     monkeypatch.setenv("USERPROFILE", str(home_root))
     monkeypatch.setenv("THOMAS_RUNTIME_SKILL_ROOTS", str(thomas_root / "skills"))
-    monkeypatch.setenv("THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE", "1")
     harness_repo.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(harness_repo)
 
@@ -411,7 +406,7 @@ def test_runtime_skills_routes_line_suppression_directives(tmp_path: Path, monke
     """
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text=prompt,
+        prompt_text=f"please use $line-suppression-directives\n{prompt}",
         relevance_text=prompt,
         route_path="coding_task",
         cwd=harness_repo,
@@ -419,10 +414,10 @@ def test_runtime_skills_routes_line_suppression_directives(tmp_path: Path, monke
     )
 
     assert [skill.name for skill in selection.selected] == ["line-suppression-directives"]
-    assert selection.selected_reasons[selection.selected[0].key].startswith("relevance:")
+    assert selection.selected_reasons[selection.selected[0].key] == "explicit"
 
 
-def test_runtime_skills_require_explicit_for_risky_pinned_skills(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_require_literal_control_for_risky_pinned_skills(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home_root))
@@ -441,20 +436,28 @@ def test_runtime_skills_require_explicit_for_risky_pinned_skills(tmp_path: Path,
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"pinned": ["deploy-prod"]}), encoding="utf-8")
 
-    blocked = resolve_runtime_skills(
-        cfg,
-        prompt_text="ship the release now",
-        relevance_text="deploy production release",
-        route_path="coding_task",
-        cwd=tmp_path,
-        max_selected=2,
-    )
-    assert len(blocked.selected) == 0
-    assert "risky_skill_requires_explicit_approval" in {str(item.get("code") or "") for item in (blocked.blocked or [])}
+    for ordinary_prose in (
+        "ship the release now",
+        "I approve risky skills for this session",
+        "I authorize deploy-prod for this task",
+        "please use the skill deploy-prod now",
+    ):
+        blocked = resolve_runtime_skills(
+            cfg,
+            prompt_text=ordinary_prose,
+            relevance_text="deploy production release",
+            route_path="coding_task",
+            cwd=tmp_path,
+            max_selected=2,
+        )
+        assert len(blocked.selected) == 0
+        assert "risky_skill_requires_explicit_approval" in {
+            str(item.get("code") or "") for item in (blocked.blocked or [])
+        }
 
     allowed = resolve_runtime_skills(
         cfg,
-        prompt_text="please use $deploy-prod now",
+        prompt_text="please use $deploy-prod now, but I do not approve risky skills",
         relevance_text="deploy production release",
         route_path="coding_task",
         cwd=tmp_path,
@@ -464,7 +467,9 @@ def test_runtime_skills_require_explicit_for_risky_pinned_skills(tmp_path: Path,
     assert "deploy-prod" in (allowed.approved_risky or [])
 
 
-def test_runtime_skills_does_not_fall_back_after_blocked_top_relevance(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_relevance_env_cannot_trigger_selection_or_risk_side_effects(
+    tmp_path: Path, monkeypatch
+) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home_root))
@@ -497,8 +502,7 @@ def test_runtime_skills_does_not_fall_back_after_blocked_top_relevance(tmp_path:
     )
 
     assert [skill.name for skill in selection.selected] == []
-    assert any(item.get("name") == "cache-maintenance" for item in selection.blocked)
-    assert all(item.get("name") != "ui-cache-status" for item in selection.blocked)
+    assert selection.blocked == []
 
 
 def test_runtime_skills_provider_conformance_same_selection_and_prompt(tmp_path: Path, monkeypatch) -> None:
@@ -581,7 +585,7 @@ def test_runtime_skills_default_mode_does_not_auto_select_by_relevance(tmp_path:
     assert selection.selected == []
 
 
-def test_runtime_skills_auto_relevance_can_be_opted_in_and_bounded(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_auto_relevance_env_is_inert(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home_root))
@@ -607,7 +611,7 @@ def test_runtime_skills_auto_relevance_can_be_opted_in_and_bounded(tmp_path: Pat
         cwd=tmp_path,
     )
 
-    assert len(selection.selected) == 4
+    assert selection.selected == []
 
 
 def test_runtime_skills_excerpt_depth_can_be_configured(tmp_path: Path, monkeypatch) -> None:
@@ -640,7 +644,7 @@ def test_runtime_skills_excerpt_depth_can_be_configured(tmp_path: Path, monkeypa
     assert late_marker in selection.selected[0].excerpt
 
 
-def test_runtime_skills_all_mode_and_unbounded_chars_env(tmp_path: Path, monkeypatch) -> None:
+def test_runtime_skills_explicit_invocation_can_select_many_with_unbounded_chars(tmp_path: Path, monkeypatch) -> None:
     cfg = _build_cfg(tmp_path)
     home_root = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home_root))
@@ -655,7 +659,7 @@ def test_runtime_skills_all_mode_and_unbounded_chars_env(tmp_path: Path, monkeyp
 
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text="use all long-skill-1 long-skill-2 long-skill-3 long-skill-4 long-skill-5 long-skill-6",
+        prompt_text=("use $long-skill-1 $long-skill-2 $long-skill-3 $long-skill-4 $long-skill-5 $long-skill-6"),
         relevance_text="long skill",
         route_path="coding_task",
         cwd=tmp_path,

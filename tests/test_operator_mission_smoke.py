@@ -2,53 +2,121 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.web_ui_source import read_app_js_source
-
 ROOT = Path(__file__).resolve().parents[1]
 MISSION_ROUTE_PATH = ROOT / "thomas" / "server" / "routes" / "mission.py"
 MISSION_HTML_PATH = ROOT / "thomas" / "server" / "web" / "mission.html"
+MISSION_CSS_PATH = ROOT / "thomas" / "server" / "web" / "mission.style01.css"
+MISSION_JS_PATH = ROOT / "thomas" / "server" / "web" / "mission.script01.js"
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_mission_page_contains_operator_controls() -> None:
-    # mission.html was rebuilt around the new operator vocabulary: missions,
-    # agents, approvals, and activity. The legacy "Open Office" / "Show Idle"
-    # buttons were retired with the surface refresh — the test now asserts
-    # the still-present labels that gate the same operator workflows.
+def test_mission_page_uses_modern_shell_and_shared_edit_runtime() -> None:
     text = _read(MISSION_HTML_PATH)
-    assert "Mission Control" in text
-    assert "Active Agents" in text
-    assert "Approvals Queue" in text
-    assert "Activity Feed" in text
+    assert "Thomas Mission Control" in text
+    assert "Mission pulse" in text
+    assert "Live work" in text
+    assert "Mission queue" in text
+    assert "Recent signals" in text
+    assert 'class="thomas-eyes-mark"' in text
+    assert "data-thomas-theme-select" in text
+    for theme in ("nebula", "dark", "light", "aurora", "sandstone"):
+        assert f'value="{theme}"' in text
+
+    assets = (
+        "/static/css/workspace_shell.css",
+        "/static/css/ui_edit_mode.css",
+        "/static/js/workspace_shell.js",
+        "/static/js/ui_edit_layout.js",
+        "/static/js/ui_edit_mode.js",
+    )
+    positions = [text.index(asset) for asset in assets]
+    assert positions == sorted(positions)
+
+
+def test_mission_runtime_uses_canonical_apis_and_bounded_refresh() -> None:
+    text = _read(MISSION_JS_PATH)
+    assert "const STREAM_URL = '/api/mission/stream?interval=3'" in text
+    assert "const JOBS_REFRESH_MS = 15000" in text
+    assert "const FALLBACK_REFRESH_MS = 8000" in text
+    assert "`/api/mission/control${fresh ? '?fresh=1' : ''}`" in text
+    assert "'/api/mission/jobs?limit=180'" in text
+    assert "/api/mission/approvals/autonomy/" in text
+    assert "/api/mission/approvals/guardrails/resolve" in text
+    for obsolete in ("'/api/missions'", "'/api/agents'", "'/api/approvals'"):
+        assert obsolete not in text
+
+
+def test_mission_regions_register_editable_and_protected_contracts() -> None:
+    html = _read(MISSION_HTML_PATH)
+    script = _read(MISSION_JS_PATH)
+    for ui_id in (
+        "mission.workspace",
+        "mission.hero",
+        "mission.pulse",
+        "mission.metrics",
+        "mission.create-panel",
+        "mission.live-work",
+        "mission.jobs",
+        "mission.approvals",
+        "mission.activity",
+    ):
+        assert f'data-ui-id="{ui_id}"' in html
+    assert 'data-ui-policy="protected controls"' in html
+    assert "critical=true;preserveHandlers=true;preserveA11y=true" in html
+    assert 'data-ui-instance-key="${escapeHtml(key)}"' in script
+    assert 'data-ui-id="mission.${escapeHtml(type)}.${escapeHtml(key)}"' in script
+    assert "contain=parent;container=${escapeHtml(container)};collision=avoid" in script
+    for dynamic_id in ("agent-card", "job-card", "approval-card", "signal-card"):
+        assert f"instanceAttrs('{dynamic_id}'" in script
+    assert "protectedAttrs('job-actions'" in script
+    assert "protectedAttrs('approval-actions'" in script
+    assert "preserveHandlers=true;preserveA11y=true" in script
+
+
+def test_mission_styles_cover_themes_embed_and_source_caps() -> None:
+    css = _read(MISSION_CSS_PATH)
+    # The five-theme blocks live in tokens.css (the single design-token source);
+    # workspace_shell.css keeps the shared shell components. Both are shared CSS.
+    shared_css = "\n".join(
+        _read(ROOT / "thomas" / "server" / "web" / "css" / name)
+        for name in ("workspace_shell.css", "tokens.css")
+    )
+    for theme in ("dark", "light", "aurora", "sandstone"):
+        assert f'html[data-thomas-theme="{theme}"]' in shared_css
+    assert "--c-bg:" not in css
+    assert ".thomas-eyes-mark" not in css
+    assert "html.is-embedded .mission-chrome" in css
+    assert "html.is-embedded .mission-world { display: none !important; }" in css
+    assert "html.is-embedded body { background: var(--c-bg); }" not in css
+    assert "html.is-embedded .mission-app { background: transparent !important; }" in css
+    # color-scheme: normal ('light only') mismatched the dark shell's iframe
+    # element and made Chromium paint the embed as an opaque white sheet on
+    # light-pref machines. The embedded doc keeps the active theme's scheme now.
+    assert "color-scheme: normal" not in css
+    assert len(css.splitlines()) <= 600
+    assert len(_read(MISSION_JS_PATH).splitlines()) <= 800
+    assert len(_read(MISSION_HTML_PATH).splitlines()) <= 1000
 
 
 def test_mission_routes_register_core_control_and_autopilot_endpoints() -> None:
-    # After the modular refactor (mission.py is now a facade over
-    # mission_tasks/mission_cron/mission_approvals/mission_workflows/
-    # mission_benchmark_routes/mission_control_routes), the route literals are
-    # spread across the sibling files. Concatenate them all so the contract
-    # still asserts every required path is registered *somewhere* in the
-    # mission stack.
     mission_dir = MISSION_ROUTE_PATH.parent
-    text_chunks: list[str] = []
-    for module_name in (
-        "mission.py",
-        "mission_tasks.py",
-        "mission_cron.py",
-        "mission_approvals.py",
-        "mission_workflows.py",
-        "mission_control_routes.py",
-        "mission_benchmark_routes.py",
-    ):
-        candidate = mission_dir / module_name
-        if candidate.is_file():
-            text_chunks.append(candidate.read_text(encoding="utf-8"))
-    text = "\n".join(text_chunks)
-
-    required_paths = (
+    text = "\n".join(
+        (mission_dir / module_name).read_text(encoding="utf-8")
+        for module_name in (
+            "mission.py",
+            "mission_tasks.py",
+            "mission_cron.py",
+            "mission_approvals.py",
+            "mission_workflows.py",
+            "mission_control_routes.py",
+            "mission_benchmark_routes.py",
+        )
+        if (mission_dir / module_name).is_file()
+    )
+    for path in (
         "/mission",
         "/api/mission/control",
         "/api/mission/stream",
@@ -56,18 +124,6 @@ def test_mission_routes_register_core_control_and_autopilot_endpoints() -> None:
         "/api/mission/jobs/{job_id}/cancel",
         "/api/mission/autopilot/objectives",
         "/api/mission/benchmarks/run",
-    )
-    for path in required_paths:
+    ):
         assert f'"{path}"' in text, f"Missing route: {path}"
-
-    # The facade still owns `register_mission_routes` (the public entry).
     assert "register_mission_routes(" in _read(MISSION_ROUTE_PATH)
-
-
-def test_runtime_includes_mission_refresh_and_stream_wiring() -> None:
-    text = read_app_js_source()
-    assert "async function missionRefresh" in text
-    assert "fetch('/api/mission/control')" in text
-    assert "/api/mission/stream?interval=1.8" in text
-    assert "Mission Control refresh failed." in text
-    assert "void missionRefresh({ force: true, silent: true });" in text

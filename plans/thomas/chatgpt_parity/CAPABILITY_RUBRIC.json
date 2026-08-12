@@ -1,0 +1,416 @@
+{
+  "schema_version": "thomas-chatgpt-parity-v1",
+  "target": "Current user-facing ChatGPT capability parity",
+  "as_of": "2026-07-13",
+  "source_urls": [
+    "https://help.openai.com/en/articles/9260256-chatgpt-capabilities-overview",
+    "https://help.openai.com/en/articles/6825453-chatgpt-release-notes",
+    "https://help.openai.com/en/articles/8554407-gpts-faq",
+    "https://openai.com/index/introducing-deep-research/",
+    "https://learn.chatgpt.com/docs/use-chatgpt",
+    "https://learn.chatgpt.com/docs/customization/memories",
+    "https://learn.chatgpt.com/docs/projects",
+    "https://learn.chatgpt.com/docs/automations",
+    "https://developers.openai.com/api/docs/guides/latest-model",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+  ],
+  "scoring": {
+    "0": "Absent, contradicted, or no executable evidence",
+    "1": "Declared or statically wired; no executed contract proof",
+    "2": "Deterministic executable contract proof",
+    "3": "Live normal-case proof through the user-facing runtime",
+    "4": "Live adversarial, recovery, persistence, or steerability proof"
+  },
+  "parity_rule": "Every family must score 4/4. Missing or unimplemented evidence fails closed; weighted averages never waive a family.",
+  "families": [
+    {
+      "id": "core-conversation-instructions",
+      "name": "Conversation, reasoning, writing, translation, and instruction fidelity",
+      "weight": 0.11,
+      "critical": true,
+      "behaviors": [
+        "Answer and explain",
+        "Draft, rewrite, summarize, create, reason, and translate",
+        "Follow multiple constraints",
+        "Carry and revise context across turns"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_contains", "path": "thomas/server/routes/chat_v2.py", "needles": ["/api/v2/chat", "ConversationManager"], "severity": "critical"},
+          {"kind": "path_contains", "path": "thomas/marketplace/specialists/reasoning.py", "needles": ["THOMAS_OPERATOR_SYSTEM_PROMPT", "conversation_context"], "severity": "critical"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_orchestrator_brain_coverage.py", "-q"], "severity": "critical"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "conversation_multi_turn", "severity": "critical"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "conversation_adversarial_followup", "severity": "critical"},
+          {"kind": "live_probe", "probe": "conversation_benign_token_refusal", "severity": "critical"}
+        ]
+      }
+    },
+    {
+      "id": "web-search-deep-research",
+      "name": "Current web search, citations, and deep multi-source research",
+      "weight": 0.10,
+      "critical": true,
+      "behaviors": [
+        "Find current information on the web",
+        "Cite sources beside supported claims",
+        "Perform multi-step, multi-source research",
+        "Produce a structured synthesis that can be refined"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_exists_any", "paths": ["thomas/tools/web_search.py", "thomas/tools/web_search_providers.py"], "severity": "critical"},
+          {"kind": "path_contains", "path": "thomas/marketplace/specialists/research.py", "needles": ["web_search", "fact_checking", "summarization"], "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_cli_research_commands.py", "-q"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "web_search_cited_answer", "severity": "critical"}
+        ],
+          "4": [
+            {"kind": "live_probe", "probe": "web_source_conflict", "severity": "critical"}
+          ]
+      }
+    },
+    {
+      "id": "multimodal-images",
+      "name": "Image understanding, generation, and natural-language editing",
+      "weight": 0.07,
+      "critical": false,
+      "behaviors": [
+        "Analyze screenshots, diagrams, charts, and photos",
+        "Extract and interpret visual content",
+        "Generate images from text",
+        "Edit an existing or generated image"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_contains", "path": "thomas/server/routes/chat_v2.py", "needles": ["image_data", "image_url"], "severity": "high"},
+          {
+            "kind": "path_contains",
+            "path": "thomas/marketplace/vision/handler.py",
+            "needles": ["input_image", "image_url", "extract_text_from_images"],
+            "severity": "high"
+          }
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_server_chat_v2_max_mode.py", "-q", "-k", "text_fallback_attaches_docs_and_images"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "image_understanding_generation_edit", "severity": "high"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "image_visual_injection_edit_fidelity", "severity": "high"}
+        ]
+      }
+    },
+    {
+      "id": "files-documents",
+      "name": "File uploads, document understanding, and downloadable document work",
+      "weight": 0.07,
+      "critical": false,
+      "behaviors": [
+        "Accept PDFs, presentations, text, and other documents",
+        "Summarize and extract grounded information",
+        "Answer questions from uploaded content",
+        "Create and return usable document artifacts"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_contains", "path": "thomas/server/routes/chat_v2.py", "needles": ["Attached documents", "docs = payload.get"], "severity": "high"},
+          {"kind": "tools_any", "patterns": ["pdf", "document", "file"], "minimum": 1, "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_server_chat_v2_max_mode.py", "-q", "-k", "text_fallback_attaches_docs_and_images"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "document_upload_grounded_artifact", "severity": "high"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "document_conflict_truncation_grounding", "severity": "high"}
+        ]
+      }
+    },
+    {
+      "id": "data-code-charts",
+      "name": "Secure code execution, data analysis, spreadsheets, and charts",
+      "weight": 0.08,
+      "critical": true,
+      "behaviors": [
+        "Run code in an isolated environment",
+        "Analyze and clean structured data",
+        "Calculate projections and summarize trends",
+        "Create accurate static or interactive visualizations"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "tools_any", "patterns": ["data_", "code.", "spreadsheet", "chart"], "minimum": 3, "severity": "critical"},
+          {"kind": "path_exists_any", "paths": ["thomas/tools/engineering.py", "thomas/server/deliverable_verify.py"], "severity": "high"}
+        ],
+        "2": [
+          {"kind": "api_json", "path": "/api/tools", "required_keys": ["tools", "count"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "data_code_chart_roundtrip", "severity": "critical"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "data_dirty_formula_sandbox", "severity": "critical"}
+        ]
+      }
+    },
+    {
+      "id": "voice-dictation",
+      "name": "Voice conversation, dictation, transcription, and spoken responses",
+      "weight": 0.05,
+      "critical": false,
+      "behaviors": [
+        "Transcribe natural speech and dictation",
+        "Support conversational spoken input and output",
+        "Handle interruptions and turn-taking",
+        "Work across supported languages and accents"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_contains", "path": "thomas/server/routes/chat_v2.py", "needles": ["/api/v2/chat/transcribe", "handle_chat_transcribe"], "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_server_chat_v2_max_mode.py", "-q", "-k", "transcribe_requires_audio_and_surfaces_errors"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "voice_audio_roundtrip", "severity": "high"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "voice_noise_language_interrupt_latency", "severity": "high"}
+        ]
+      }
+    },
+    {
+      "id": "canvas-sites-artifacts",
+      "name": "Canvas collaboration, finished artifacts, and interactive Sites",
+      "weight": 0.08,
+      "critical": true,
+      "behaviors": [
+        "Co-write, edit, mark up, and debug in a shared workspace",
+        "Create finished documents, spreadsheets, presentations, reports, and apps",
+        "Preview and refine interactive sites",
+        "Return an openable, accurate, shareable result"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_exists_any", "paths": ["thomas/server/routes/canvas_studio_routes.py", "thomas/server/chat_delegation_canvas.py"], "severity": "critical"},
+          {"kind": "path_contains", "path": "thomas/server/deliverable_verify.py", "needles": ["VerifyResult", "verify_web_deliverable"], "severity": "critical"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_canvas_studio_routes.py", "tests/test_chat_delegation_canvas.py", "-q"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "canvas_artifact_matrix", "severity": "critical"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "canvas_revision_integrity", "severity": "critical"}
+        ]
+      }
+    },
+    {
+      "id": "memory-personalization",
+      "name": "Memory, personalization, and user-controlled correction/deletion",
+      "weight": 0.08,
+      "critical": true,
+      "behaviors": [
+        "Remember useful facts, preferences, and goals across chats",
+        "Use remembered context appropriately",
+        "Show and correct memory",
+        "Delete or disable memory without contaminating temporary chats"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_exists_any", "paths": ["thomas/server/routes/memory_aiohttp.py", "thomas/memory/v2"], "severity": "critical"},
+          {"kind": "path_contains", "path": "thomas/marketplace/specialists/reasoning.py", "needles": ["remember", "recall"], "severity": "critical"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_memory_system.py", "tests/test_memory_layers.py", "-q"], "severity": "high"},
+          {"kind": "api_json", "path": "/api/memory", "required_keys": ["enabled", "stats", "v2_health"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "memory_cross_session_recall", "severity": "critical"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "memory_correction_deletion_isolation", "severity": "critical"}
+        ]
+      }
+    },
+    {
+      "id": "projects-library-sharing",
+      "name": "Projects, persistent context, libraries, chat organization, and sharing",
+      "weight": 0.06,
+      "critical": false,
+      "behaviors": [
+        "Organize chats, files, and context under a shared objective",
+        "Resume multi-session work",
+        "Pin, find, and manage important chats and artifacts",
+        "Share conversations or results intentionally"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_exists_any", "paths": ["thomas/server/routes/local_projects_aiohttp.py", "thomas/server/routes/search.py"], "severity": "high"},
+          {"kind": "path_contains", "path": "thomas/server/routes/local_projects_aiohttp.py", "needles": ["/api/local/projects", "api_local_projects_list"], "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_server_local_projects_routes.py", "-q"], "severity": "high"},
+          {"kind": "api_json", "path": "/api/local/projects", "required_keys": ["projects"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "project_workspace_lifecycle", "severity": "high"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "project_isolation_stale_share", "severity": "high"}
+        ]
+      }
+    },
+    {
+      "id": "scheduled-monitoring",
+      "name": "One-time, recurring, triggered, and monitoring tasks",
+      "weight": 0.07,
+      "critical": true,
+      "behaviors": [
+        "Schedule one-time and recurring work",
+        "Monitor the web or connected apps for changes",
+        "Notify only when useful",
+        "View, pause, resume, edit, and delete scheduled work"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_exists_any", "paths": ["thomas/scheduling", "thomas/core/scheduler.py", "thomas/marketplace/scheduling"], "severity": "critical"},
+          {"kind": "tools_any", "patterns": ["schedule", "calendar", "reminder", "monitor"], "minimum": 1, "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_scheduler.py", "-q"], "severity": "high"}
+        ],
+          "3": [
+            {"kind": "live_probe", "probe": "scheduled_task_lifecycle", "severity": "critical"}
+          ],
+        "4": [
+          {"kind": "live_probe", "probe": "scheduled_recovery_dedup_noise", "severity": "critical"}
+        ]
+      }
+    },
+    {
+      "id": "custom-assistants-plugins",
+      "name": "Custom assistants, skills, plugins, knowledge, tools, and publishing",
+      "weight": 0.06,
+      "critical": false,
+      "behaviors": [
+        "Create an assistant with tailored instructions and starters",
+        "Attach knowledge files",
+        "Select tools, apps, or APIs",
+        "Install, share, publish, discover, and remove extensions safely"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_exists_any", "paths": ["thomas/server/routes/plugin_hosting.py", "thomas/server/routes/marketplace_catalog_aiohttp.py"], "severity": "high"},
+          {"kind": "tools_any", "patterns": ["create_skill", "plugin", "skill"], "minimum": 1, "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/prompt_pack/test_p098_plugin_manifest_schema.py", "-q"], "severity": "high"},
+          {"kind": "api_json", "path": "/api/v1/plugins/catalog", "required_keys": [], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "custom_assistant_plugin_lifecycle", "severity": "high"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "custom_assistant_plugin_adversarial", "severity": "high"}
+        ]
+      }
+    },
+    {
+      "id": "connected-apps-actions",
+      "name": "Connected apps, source-grounded actions, and approval controls",
+      "weight": 0.06,
+      "critical": true,
+      "behaviors": [
+        "Read from connected apps and files with permission",
+        "Draft and perform supported actions such as email",
+        "Ask before changes according to user policy",
+        "Never claim an external effect without a receipt"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "tools_any", "patterns": ["email", "calendar", "channel", "connector"], "minimum": 2, "severity": "critical"},
+          {"kind": "path_exists_any", "paths": ["thomas/tools/email_calendar.py", "thomas/integrations"], "severity": "high"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_action_receipt.py", "tests/stress/sweep_honesty.py", "-q"], "severity": "critical"}
+        ],
+          "3": [
+            {"kind": "live_probe", "probe": "connected_app_receipt", "severity": "critical"}
+          ],
+        "4": [
+          {"kind": "live_probe", "probe": "connected_app_adversarial_controls", "severity": "critical"}
+        ]
+      }
+    },
+    {
+      "id": "agentic-work-browser-computer",
+      "name": "Long-running agentic work, browser/computer use, steering, and approvals",
+      "weight": 0.08,
+      "critical": true,
+      "behaviors": [
+        "Research and work across websites, local files, and supported apps",
+        "Show progress and ask questions while working",
+        "Accept changed direction and cancellation",
+        "Require approval for important actions and report verified completion"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "tools_any", "patterns": ["browser.", "fs.", "shell", "task"], "minimum": 3, "severity": "critical"},
+          {"kind": "path_exists_any", "paths": ["thomas/browser", "thomas/server/chat_delegation.py"], "severity": "critical"}
+        ],
+        "2": [
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_browser_tools_registration.py", "tests/test_task_update_routing.py", "tests/test_coherence_delegated_lifecycle.py", "-q"], "severity": "critical"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "agentic_browser_artifact", "severity": "critical"}
+        ],
+          "4": [
+            {"kind": "live_probe", "probe": "agentic_interrupt_approval_recovery", "severity": "critical"}
+          ]
+      }
+    },
+    {
+      "id": "privacy-export-controls",
+      "name": "Privacy, temporary use, export, deletion, and security controls",
+      "weight": 0.03,
+      "critical": true,
+      "behaviors": [
+        "Export owned data and results",
+        "Delete chats, projects, files, memories, and account-local state",
+        "Support temporary/non-memory work",
+        "Restrict network and external-service access when requested"
+      ],
+      "tiers": {
+        "1": [
+          {"kind": "path_contains", "path": "thomas/server/app_routes_init.py", "needles": ["api_chat_delete", "/api/security/mutating_routes"], "severity": "critical"},
+          {"kind": "path_exists_any", "paths": ["thomas/server/routes/secrets_aiohttp.py", "thomas/server/routes/memory_aiohttp.py"], "severity": "high"}
+        ],
+        "2": [
+          {"kind": "api_json", "path": "/api/security/mutating_routes", "required_keys": [], "severity": "high"},
+          {"kind": "command", "argv": ["python", "-m", "pytest", "tests/test_server_csrf_audit.py", "tests/test_agent_loop_action_audit.py", "-q"], "severity": "high"}
+        ],
+        "3": [
+          {"kind": "live_probe", "probe": "privacy_export_delete_temporary", "severity": "critical"}
+        ],
+        "4": [
+          {"kind": "live_probe", "probe": "privacy_remanence_isolation_lockdown", "severity": "critical"}
+        ]
+      }
+    }
+  ]
+}

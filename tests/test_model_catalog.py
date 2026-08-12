@@ -34,12 +34,12 @@ def test_model_catalog_refresh_merges_live_models_and_latest_alias(tmp_path, mon
     cfg = _config(tmp_path)
     payload = build_model_catalog(cfg, refresh=True, timeout_s=0.5)
 
-    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.5"
+    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.6-sol"
     assert payload["aliases"]["latest.openai.codex"] == "gpt-5.3-codex"
-    assert payload["aliases"]["best.tools"] == "gpt-5.5"
+    assert payload["aliases"]["best.tools"] == "gpt-5.6-sol"
     assert any(row["id"] == "gpt-5.5" and row["source"] == "live" for row in payload["models"])
     assert model_catalog_path(cfg).exists()
-    assert load_cached_model_catalog(cfg)["aliases"]["latest.openai.frontier"] == "gpt-5.5"
+    assert load_cached_model_catalog(cfg)["aliases"]["latest.openai.frontier"] == "gpt-5.6-sol"
 
 
 def test_model_catalog_without_refresh_still_supports_curated_new_gpt_models(tmp_path) -> None:
@@ -47,5 +47,8 @@ def test_model_catalog_without_refresh_still_supports_curated_new_gpt_models(tmp
 
     ids = {row["id"] for row in payload["models"]}
     assert "gpt-5.5" in ids
-    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.5"
-    assert payload["aliases"]["best.tools"] == "gpt-5.5"
+    assert {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}.issubset(ids)
+    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.6-sol"
+    assert payload["aliases"]["best.tools"] == "gpt-5.6-sol"
+    sol = next(row for row in payload["models"] if row["id"] == "gpt-5.6-sol")
+    assert sol["capabilities"]["reasoning_efforts"] == ["none", "low", "medium", "high", "xhigh", "max"]

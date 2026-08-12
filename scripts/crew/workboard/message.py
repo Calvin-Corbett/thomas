@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from collections.abc import Sequence
@@ -25,7 +26,47 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts.crew.workboard import issue as workboard_issue
 from scripts.forge.gates import workboard_claims as claims_gate
 
-ROOT = Path(__file__).resolve().parents[3]
+
+def _canonical_repo_root() -> Path:
+    """Resolve the PRIMARY (main) worktree root so every worktree shares ONE
+    coordination board + lock.
+
+    ``Path(__file__).parents[3]`` resolves to *this script copy's* worktree. Each
+    linked git worktree has its own copy of this script AND its own checked-out
+    ``plans/thomas/WORKBOARD.md`` + ``runtime/coordination`` lock -- so an agent
+    running the tool from a worktree silently reads/writes a DIFFERENT board than
+    an agent in the main checkout, and their locks don't interlock. That fragments
+    agent-to-agent messages (a real, observed misdelivery). Anchoring to the main
+    worktree via git's shared common-dir makes all copies converge on one board.
+    Falls back to the local script root if git is unavailable.
+    """
+    local_root = Path(__file__).resolve().parents[3]
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=str(local_root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if out.returncode == 0:
+            common = Path(out.stdout.strip())
+            # The shared common dir is "<main-worktree>/.git" (a dir for normal
+            # repos). Its parent is the main worktree root, identical for the main
+            # checkout and every linked worktree.
+            if common.name == ".git" and common.parent.exists():
+                return common.parent
+    # git unavailable / not a repo / slow (OSError, SubprocessError) or an
+    # unparseable path (ValueError) -> fall back to this script's own worktree
+    # root. This MUST NOT raise: it runs at module import time, so an exception
+    # here would make every `message` command -- the inter-agent delivery
+    # path -- unimportable rather than merely worktree-local.
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return local_root
+
+
+ROOT = _canonical_repo_root()
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 COORDINATION_DIR = ROOT / "runtime" / "coordination"
 LOCK_FILE = COORDINATION_DIR / "workboard_message.lock"
@@ -37,6 +78,7 @@ NONE_ENTRY = "- none"
 MESSAGE_STATES = {"open", "acked", "resolved"}
 MESSAGE_PRIORITIES = {"p0", "p1", "p2"}
 ESCALATION_MINUTES = {"p0": 15, "p1": 60}
+IDENTITY_MISMATCH_STALE_SECONDS = 24 * 60 * 60
 PRIORITY_SORT = {"p0": 0, "p1": 1, "p2": 2}
 AGENT_ENV_KEYS = (
     "THOMAS_AGENT_ID",
@@ -59,6 +101,7 @@ MESSAGE_KINDS = {
 }
 MESSAGE_DECISIONS = {"none", "pending", "approved", "rejected"}
 TASK_ID_OPTIONAL_KINDS = {"coordination", "ping"}
+ACTION_FLAGS = {"send", "ack", "resolve", "list", "inbox", "current", "audit", "wait"}
 
 
 def _norm(value: str) -> str:
@@ -163,13 +206,126 @@ def _decorate_message(row: dict[str, str], *, now: datetime | None = None) -> di
     return out
 
 
+def _identity_terms(agent: str) -> set[str]:
+    key = _norm(agent)
+    if not key:
+        return set()
+    terms = {key}
+    first = re.split(r"[^a-z0-9]+", key, maxsplit=1)[0]
+    if first in {"claude", "codex", "gemini"}:
+        terms.add(first)
+    if _is_task_manager_agent(agent):
+        terms.update({"thomas", "task-manager", "task-manager-agent"})
+    return terms
+
+
+def _mentions_any_identity(text: str, terms: set[str]) -> bool:
+    haystack = _norm(text)
+    for term in terms:
+        if not term:
+            continue
+        if re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", haystack):
+            return True
+    return False
+
+
+def _mentions_agent_context(text: str, *, agent: str, peer: str = "") -> bool:
+    agent_terms = _identity_terms(agent)
+    if not agent_terms or not _mentions_any_identity(text, agent_terms):
+        return False
+    peer_terms = _identity_terms(peer)
+    if peer_terms:
+        return _mentions_any_identity(text, peer_terms)
+    return True
+
+
+def _is_ephemeral_agent_identity(value: str) -> bool:
+    key = _norm(value)
+    return key.startswith("process:") or key in {
+        "process",
+        "unregistered",
+        "unregistered-worktree",
+        "unknown",
+    }
+
+
+def _message_search_text(row: dict[str, str]) -> str:
+    return " ".join(
+        str(row.get(key, "") or "")
+        for key in (
+            "msg_id",
+            "from",
+            "to",
+            "task_id",
+            "kind",
+            "summary",
+            "requested_action",
+        )
+    )
+
+
 def _sanitize(label: str, value: str) -> str:
     cleaned = str(value or "").strip()
     if not cleaned:
         raise ValueError(f"{label} is required")
-    if ";" in cleaned or "\n" in cleaned or "\r" in cleaned:
-        raise ValueError(f"{label} cannot include ';' or newline characters")
     return cleaned
+
+
+def _escape_field_value(value: str) -> str:
+    return str(value or "").replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace(";", "\\;")
+
+
+def _unescape_field_value(value: str) -> str:
+    out: list[str] = []
+    escaped = False
+    for char in str(value or ""):
+        if escaped:
+            if char == "n":
+                out.append("\n")
+            elif char == "r":
+                out.append("\r")
+            elif char in {";", "\\"}:
+                out.append(char)
+            else:
+                out.append("\\")
+                out.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        out.append(char)
+    if escaped:
+        out.append("\\")
+    return "".join(out)
+
+
+def _split_kv_parts(token: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in str(token or ""):
+        if escaped:
+            current.append("\\")
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == ";":
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(char)
+    if escaped:
+        current.append("\\")
+    part = "".join(current).strip()
+    if part:
+        parts.append(part)
+    return parts
 
 
 def _find_section(lines: Sequence[str], *, heading_prefix: str) -> tuple[int, int] | None:
@@ -228,12 +384,12 @@ def _parse_kv_entry(line_no: int, line: str) -> tuple[str | None, dict[str, str]
         return token, None, None
 
     fields: dict[str, str] = {}
-    for part in [x.strip() for x in token.split(";") if x.strip()]:
+    for part in _split_kv_parts(token):
         if "=" not in part:
             return token, None, f"line {line_no}: invalid field `{part}`"
         key, value = part.split("=", 1)
         key = key.strip().lower()
-        value = value.strip()
+        value = _unescape_field_value(value.strip())
         if not key or not value:
             return token, None, f"line {line_no}: invalid key/value field `{part}`"
         fields[key] = value
@@ -299,12 +455,23 @@ def _format_message(fields: dict[str, str]) -> str:
     created_at = _sanitize("created_at", fields.get("created_at", ""))
     updated_at = _sanitize("updated_at", fields.get("updated_at", created_at))
     updated_by = _sanitize("updated_by", fields.get("updated_by", sender))
-    return (
-        f"- msg_id={msg_id}; from={sender}; to={recipient}; task_id={task_id}; "
-        f"kind={kind}; priority={priority}; state={state}; summary={summary}; "
-        f"requested_action={requested_action}; decision={decision}; created_at={created_at}; "
-        f"updated_at={updated_at}; updated_by={updated_by}"
-    )
+    parts = {
+        "msg_id": msg_id,
+        "from": sender,
+        "to": recipient,
+        "task_id": task_id,
+        "kind": kind,
+        "priority": priority,
+        "state": state,
+        "summary": summary,
+        "requested_action": requested_action,
+        "decision": decision,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "updated_by": updated_by,
+    }
+    rendered = "; ".join(f"{key}={_escape_field_value(value)}" for key, value in parts.items())
+    return f"- {rendered}"
 
 
 def _normalize_message_fields(fields: dict[str, str]) -> dict[str, str]:
@@ -344,7 +511,12 @@ def _load_messages(lines: Sequence[str], section: tuple[int, int]) -> tuple[list
             continue
         try:
             rows.append(_normalize_message_fields(fields))
-        except Exception as exc:
+        # _normalize_message_fields validates through _format_message, which
+        # raises ValueError for a bad state/priority/kind/decision or a missing
+        # required field; the rest guard a malformed field mapping. A malformed
+        # bullet must be RECORDED and skipped, never crash the reader that
+        # surfaces inbound agent directives.
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
             errors.append(f"line {idx + 1}: {exc}")
     return rows, errors
 
@@ -393,6 +565,8 @@ def list_messages(
     state: str = "",
     task_id: str = "",
 ) -> tuple[bool, dict[str, object]]:
+    if not workboard_path.exists():
+        return True, {"messages": [], "message_count": 0, "missing_workboard": True}
     lines = workboard_path.read_text(encoding="utf-8").splitlines()
     section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
     if section is None:
@@ -442,6 +616,356 @@ def list_messages(
     return True, {"messages": out, "message_count": len(out)}
 
 
+def current_messages(
+    workboard_path: Path,
+    *,
+    agent: str,
+    peer: str = "",
+    task_id: str = "",
+    limit: int = 20,
+) -> tuple[bool, dict[str, object]]:
+    agent_clean = str(agent or "").strip()
+    if not agent_clean:
+        return False, {"error": "agent identity is required for current-thread checks"}
+    ok, payload = list_messages(workboard_path)
+    if not ok:
+        return False, payload
+
+    agent_key = _norm(agent_clean)
+    peer_key = _norm(peer)
+    task_key = _norm(task_id)
+    agent_is_tm = _is_task_manager_agent(agent_clean)
+    peer_is_tm = _is_task_manager_agent(peer)
+
+    def _matches_identity(value: str, key: str, is_task_manager: bool) -> bool:
+        return (is_task_manager and _is_task_manager_agent(value)) or _norm(value) == key
+
+    rows: list[dict[str, str]] = []
+    for row in list(payload.get("messages") or []):
+        if _norm(str(row.get("state", ""))) == "resolved":
+            continue
+        if task_key and _norm(str(row.get("task_id", ""))) != task_key:
+            continue
+        sender = str(row.get("from") or "")
+        recipient = str(row.get("to") or "")
+        from_agent = _matches_identity(sender, agent_key, agent_is_tm)
+        to_agent = _matches_identity(recipient, agent_key, agent_is_tm)
+        if not (from_agent or to_agent):
+            continue
+        if peer_key:
+            from_peer = _matches_identity(sender, peer_key, peer_is_tm)
+            to_peer = _matches_identity(recipient, peer_key, peer_is_tm)
+            if not (from_peer or to_peer):
+                continue
+        next_row = dict(row)
+        if to_agent:
+            next_row["direction"] = "incoming"
+            next_row["awaiting"] = "me" if _norm(str(row.get("state", ""))) == "open" else "thread"
+        else:
+            next_row["direction"] = "outgoing"
+            next_row["awaiting"] = "peer" if _norm(str(row.get("state", ""))) == "open" else "thread"
+        rows.append(next_row)
+
+    def _stamp(row: dict[str, str]) -> datetime:
+        return _parse_iso_utc(str(row.get("updated_at") or row.get("created_at") or "")) or datetime.min.replace(
+            tzinfo=timezone.utc
+        )
+
+    rows.sort(
+        key=lambda row: (
+            _stamp(row),
+            -PRIORITY_SORT.get(_norm(row.get("priority", "")), 99),
+            str(row.get("msg_id") or ""),
+        ),
+        reverse=True,
+    )
+    max_rows = max(1, int(limit or 20))
+    rows = rows[:max_rows]
+    result = {
+        "messages": rows,
+        "message_count": len(rows),
+        "agent": agent_clean,
+        "peer": str(peer or "").strip(),
+        "task_id": str(task_id or "").strip(),
+    }
+    if payload.get("missing_workboard"):
+        result["missing_workboard"] = True
+    return True, result
+
+
+def audit_messages(
+    workboard_path: Path,
+    *,
+    agent: str = "",
+    peer: str = "",
+    task_id: str = "",
+    limit: int = 20,
+) -> tuple[bool, dict[str, object]]:
+    agent_clean = str(agent or "").strip()
+    peer_clean = str(peer or "").strip()
+    task_key = _norm(task_id)
+    max_rows = max(1, int(limit or 20))
+    if not workboard_path.exists():
+        return True, {
+            "agent": agent_clean,
+            "peer": peer_clean,
+            "task_id": str(task_id or "").strip(),
+            "canonical_inbox_count": 0,
+            "canonical_current_count": 0,
+            "awaiting_me": 0,
+            "awaiting_peer": 0,
+            "awaiting_peer_oldest_seconds": 0,
+            "awaiting_peer_msg_id": "",
+            "parse_error_count": 0,
+            "candidate_mention_count": 0,
+            "identity_mismatch_count": 0,
+            "stale_identity_mismatch_count": 0,
+            "cross_task_open_p0_count": 0,
+            "problem_count": 0,
+            "parse_errors": [],
+            "candidate_mentions": [],
+            "identity_mismatches": [],
+            "stale_identity_mismatches": [],
+            "cross_task_open_p0": [],
+            "diagnosis": "workboard missing; no message lane state is available",
+            "missing_workboard": True,
+        }
+
+    lines = workboard_path.read_text(encoding="utf-8").splitlines()
+    section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
+    if section is None:
+        return True, {
+            "agent": agent_clean,
+            "peer": peer_clean,
+            "task_id": str(task_id or "").strip(),
+            "canonical_inbox_count": 0,
+            "canonical_current_count": 0,
+            "awaiting_me": 0,
+            "awaiting_peer": 0,
+            "awaiting_peer_oldest_seconds": 0,
+            "awaiting_peer_msg_id": "",
+            "parse_error_count": 0,
+            "candidate_mention_count": 0,
+            "identity_mismatch_count": 0,
+            "stale_identity_mismatch_count": 0,
+            "cross_task_open_p0_count": 0,
+            "problem_count": 0,
+            "parse_errors": [],
+            "candidate_mentions": [],
+            "identity_mismatches": [],
+            "stale_identity_mismatches": [],
+            "cross_task_open_p0": [],
+            "diagnosis": "missing Agent Message Traffic section",
+            "missing_section": True,
+        }
+
+    rows: list[dict[str, str]] = []
+    parse_errors: list[dict[str, object]] = []
+    candidate_mentions: list[dict[str, object]] = []
+    identity_mismatches: list[dict[str, object]] = []
+    stale_identity_mismatches: list[dict[str, object]] = []
+    for idx in range(section[0], section[1]):
+        raw = lines[idx]
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        if stripped.startswith("- "):
+            entry, fields, err = _parse_kv_entry(idx + 1, raw)
+            if err:
+                parse_errors.append({"line": idx + 1, "error": err, "text": stripped})
+                if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
+                    candidate_mentions.append({"line": idx + 1, "kind": "malformed_bullet", "text": stripped})
+                continue
+            if entry is not None and entry.lower() in claims_gate.NONE_TOKENS:
+                continue
+            if not fields:
+                continue
+            try:
+                rows.append(_normalize_message_fields(fields))
+            # Same contract as _load_messages: _format_message raises ValueError
+            # for an invalid state/priority/kind/decision or a missing required
+            # field. The audit must record a malformed bullet as a parse error
+            # and keep scanning -- raising would blind the inbox audit to every
+            # message below the first bad line.
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                parse_errors.append({"line": idx + 1, "error": str(exc), "text": stripped})
+                if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
+                    candidate_mentions.append({"line": idx + 1, "kind": "invalid_bullet", "text": stripped})
+            continue
+        if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
+            candidate_mentions.append({"line": idx + 1, "kind": "noncanonical_text", "text": stripped})
+
+    agent_key = _norm(agent_clean)
+    peer_key = _norm(peer_clean)
+    agent_is_tm = _is_task_manager_agent(agent_clean)
+    peer_is_tm = _is_task_manager_agent(peer_clean)
+
+    def _matches(value: str, key: str, is_task_manager: bool) -> bool:
+        return (is_task_manager and _is_task_manager_agent(value)) or _norm(value) == key
+
+    inbox_rows: list[dict[str, str]] = []
+    current_rows: list[dict[str, str]] = []
+    cross_task_open_p0: list[dict[str, str]] = []
+    awaiting_me = 0
+    awaiting_peer = 0
+    awaiting_peer_oldest: dict[str, str] | None = None
+    for row in rows:
+        state = _norm(row.get("state", ""))
+        sender = str(row.get("from") or "")
+        recipient = str(row.get("to") or "")
+        from_agent = bool(agent_key) and _matches(sender, agent_key, agent_is_tm)
+        to_agent = bool(agent_key) and _matches(recipient, agent_key, agent_is_tm)
+        from_peer = bool(peer_key) and _matches(sender, peer_key, peer_is_tm)
+        row_task_key = _norm(row.get("task_id", ""))
+        if task_key and row_task_key != task_key:
+            if state == "open" and to_agent and (not peer_key or from_peer) and _norm(row.get("priority", "")) == "p0":
+                cross_task_open_p0.append(_decorate_message(dict(row)))
+            continue
+        message_text = _message_search_text(row)
+        if to_agent and state == "open":
+            inbox_rows.append(_decorate_message(dict(row)))
+        elif (
+            state == "open"
+            and agent_key
+            and not from_agent
+            and (
+                (from_peer and _is_ephemeral_agent_identity(recipient))
+                or _mentions_agent_context(message_text, agent=agent_clean, peer=peer_clean)
+            )
+        ):
+            mismatch = _decorate_message(dict(row))
+            mismatch["expected_to"] = agent_clean
+            mismatch["actual_to"] = recipient
+            mismatch["reason"] = (
+                "open peer message is addressed to an ephemeral/unregistered identity"
+                if _is_ephemeral_agent_identity(recipient)
+                else "open message mentions this agent but is not addressed to its canonical identity"
+            )
+            if not task_key and int(mismatch.get("age_seconds") or 0) > IDENTITY_MISMATCH_STALE_SECONDS:
+                stale_identity_mismatches.append(mismatch)
+            else:
+                identity_mismatches.append(mismatch)
+        if not (from_agent or to_agent):
+            continue
+        if peer_key:
+            to_peer = _matches(recipient, peer_key, peer_is_tm)
+            if not (from_peer or to_peer):
+                continue
+        if state == "resolved":
+            continue
+        next_row = _decorate_message(dict(row))
+        if to_agent:
+            next_row["direction"] = "incoming"
+            next_row["awaiting"] = "me" if state == "open" else "thread"
+            if state == "open":
+                awaiting_me += 1
+        else:
+            next_row["direction"] = "outgoing"
+            next_row["awaiting"] = "peer" if state == "open" else "thread"
+            if state == "open":
+                awaiting_peer += 1
+                if awaiting_peer_oldest is None or int(next_row.get("age_seconds") or 0) > int(
+                    awaiting_peer_oldest.get("age_seconds") or 0
+                ):
+                    awaiting_peer_oldest = next_row
+        current_rows.append(next_row)
+
+    current_rows.sort(
+        key=lambda row: (
+            _parse_iso_utc(str(row.get("updated_at") or row.get("created_at") or ""))
+            or datetime.min.replace(tzinfo=timezone.utc),
+            str(row.get("msg_id") or ""),
+        ),
+        reverse=True,
+    )
+    problem_count = len(parse_errors) + len(candidate_mentions) + len(identity_mismatches) + len(cross_task_open_p0)
+    if parse_errors:
+        diagnosis = "message section has parse errors; canonical inbox/current views may be incomplete"
+    elif candidate_mentions:
+        diagnosis = "message section contains noncanonical agent mentions that inbox/current views ignore"
+    elif identity_mismatches:
+        diagnosis = (
+            "message section has open messages routed to noncanonical identities; canonical inbox may be incomplete"
+        )
+    elif cross_task_open_p0:
+        diagnosis = "task filter hides open p0 inbound message(s) on other task ids"
+    elif inbox_rows:
+        diagnosis = "canonical inbox has open messages for this agent"
+    elif awaiting_peer:
+        diagnosis = "canonical inbox is empty; current thread is waiting on the peer"
+    else:
+        diagnosis = "canonical inbox is empty and no suspicious message-section mentions were found"
+    payload: dict[str, object] = {
+        "agent": agent_clean,
+        "peer": peer_clean,
+        "task_id": str(task_id or "").strip(),
+        "canonical_inbox_count": len(inbox_rows),
+        "canonical_current_count": len(current_rows),
+        "awaiting_me": awaiting_me,
+        "awaiting_peer": awaiting_peer,
+        "awaiting_peer_oldest_seconds": int(awaiting_peer_oldest.get("age_seconds") or 0)
+        if awaiting_peer_oldest
+        else 0,
+        "awaiting_peer_msg_id": str(awaiting_peer_oldest.get("msg_id") or "") if awaiting_peer_oldest else "",
+        "parse_error_count": len(parse_errors),
+        "candidate_mention_count": len(candidate_mentions),
+        "identity_mismatch_count": len(identity_mismatches),
+        "stale_identity_mismatch_count": len(stale_identity_mismatches),
+        "cross_task_open_p0_count": len(cross_task_open_p0),
+        "problem_count": problem_count,
+        "parse_errors": parse_errors[:max_rows],
+        "candidate_mentions": candidate_mentions[:max_rows],
+        "identity_mismatches": identity_mismatches[:max_rows],
+        "stale_identity_mismatches": stale_identity_mismatches[:max_rows],
+        "cross_task_open_p0": cross_task_open_p0[:max_rows],
+        "messages": current_rows[:max_rows],
+        "diagnosis": diagnosis,
+    }
+    if problem_count:
+        payload["error"] = "message lane audit found problems"
+    return problem_count == 0, payload
+
+
+def wait_for_messages(
+    workboard_path: Path,
+    *,
+    agent: str = "",
+    peer: str = "",
+    task_id: str = "",
+    limit: int = 20,
+    timeout_seconds: float = 60.0,
+    poll_interval_seconds: float = 5.0,
+) -> tuple[bool, dict[str, object]]:
+    deadline = time.monotonic() + max(0.0, float(timeout_seconds or 0.0))
+    poll_interval = max(0.05, float(poll_interval_seconds or 0.0))
+    attempts = 0
+    while True:
+        attempts += 1
+        ok, payload = audit_messages(
+            workboard_path,
+            agent=agent,
+            peer=peer,
+            task_id=task_id,
+            limit=limit,
+        )
+        payload["wait_attempts"] = attempts
+        payload["timeout_seconds"] = float(timeout_seconds or 0.0)
+        payload["poll_interval_seconds"] = poll_interval
+        if not ok:
+            payload["wait_status"] = "problem"
+            return False, payload
+        if int(payload.get("awaiting_me") or 0) > 0:
+            payload["wait_status"] = "ready"
+            payload["timed_out"] = False
+            return True, payload
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            payload["wait_status"] = "timeout"
+            payload["timed_out"] = True
+            return True, payload
+        time.sleep(min(poll_interval, remaining))
+
+
 def unread_messages(
     workboard_path: Path,
     *,
@@ -465,6 +989,8 @@ def send_message(
     requested_action: str = "none",
     decision: str = "pending",
     msg_id: str = "",
+    replace_open: bool = False,
+    replace_open_peer: bool = False,
     require_claims_to_have_active_task: bool = True,
 ) -> tuple[bool, dict[str, object]]:
     with _file_lock():
@@ -480,6 +1006,8 @@ def send_message(
             return False, {
                 "error": (f"task_id is required for kind `{kind_clean}` (only coordination/ping may use task_id=none)")
             }
+        if replace_open and not replace_open_peer and _norm(task_clean) in {"", "none", "_none_"}:
+            return False, {"error": "--replace-open requires a non-none --task-id"}
 
         lines = workboard_path.read_text(encoding="utf-8").splitlines()
         section = _ensure_section(lines, heading=MESSAGE_HEADING)
@@ -509,6 +1037,25 @@ def send_message(
                 "updated_by": sender_clean,
             }
         )
+        replaced: list[dict[str, str]] = []
+        if replace_open or replace_open_peer:
+            for existing in rows:
+                if _norm(existing.get("state", "")) != "open":
+                    continue
+                if _norm(existing.get("from", "")) != _norm(sender_clean):
+                    continue
+                if _norm(existing.get("to", "")) != _norm(recipient_clean):
+                    continue
+                if not replace_open_peer:
+                    if _norm(existing.get("task_id", "")) != _norm(task_clean):
+                        continue
+                    if _norm(existing.get("kind", "")) != _norm(kind_clean):
+                        continue
+                existing["state"] = "resolved"
+                existing["decision"] = "none"
+                existing["updated_at"] = now_iso
+                existing["updated_by"] = sender_clean
+                replaced.append(dict(existing))
         rows.append(row)
         ok, violations = _write_messages(
             workboard_path,
@@ -517,7 +1064,28 @@ def send_message(
         )
         if not ok:
             return False, {"error": "message update rejected by gate", "violations": violations}
-        return True, {"message": row}
+        # Delivery verification: re-read the board we just wrote and confirm the
+        # row is really there. A misrouted write (wrong worktree board), a lost
+        # lock race, or a silent truncation can otherwise report PASS while the
+        # recipient never sees the message. Always surface the resolved path.
+        try:
+            written_back = workboard_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return False, {
+                "error": f"delivery verification failed: cannot re-read workboard ({exc})",
+                "workboard": str(workboard_path),
+            }
+        if message_id not in written_back:
+            return False, {
+                "error": "delivery verification failed: message absent from workboard after write",
+                "workboard": str(workboard_path),
+            }
+        return True, {
+            "message": row,
+            "replaced_messages": replaced,
+            "replaced_count": len(replaced),
+            "workboard": str(workboard_path),
+        }
 
 
 def latest_activity_by_task(
@@ -654,6 +1222,15 @@ def resolve_message(
     )
 
 
+def _normalize_argv(argv: Sequence[str] | None) -> list[str] | None:
+    if argv is None:
+        argv = sys.argv[1:]
+    args = list(argv)
+    if args and args[0].lower() in ACTION_FLAGS:
+        args[0] = f"--{args[0].lower()}"
+    return ["--workboard" if arg == "--board" else arg for arg in args]
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Manage agent message traffic in WORKBOARD.md.")
     parser.add_argument("--workboard", default=str(DEFAULT_WORKBOARD))
@@ -664,27 +1241,55 @@ def run(argv: Sequence[str] | None = None) -> int:
     action.add_argument("--ack", action="store_true")
     action.add_argument("--resolve", action="store_true")
     action.add_argument("--list", action="store_true")
+    action.add_argument("--inbox", action="store_true")
+    action.add_argument("--current", action="store_true")
+    action.add_argument("--audit", action="store_true")
+    action.add_argument("--wait", action="store_true")
 
     parser.add_argument("--msg-id", default="")
     parser.add_argument("--from-agent", default="")
     parser.add_argument("--to-agent", default="")
     parser.add_argument("--by", default="")
     parser.add_argument("--summary", default="")
-    parser.add_argument("--task-id", default="none")
+    parser.add_argument("--task-id", default="none", help="Task id for send or filtering list/inbox/current output.")
     parser.add_argument("--kind", default="coordination")
     parser.add_argument("--priority", default="p1")
     parser.add_argument("--requested-action", default="none")
     parser.add_argument("--decision", default="")
     parser.add_argument("--state", default="")
     parser.add_argument("--agent", default="", help="Current agent identity for default inbox/sent modes.")
+    parser.add_argument("--peer", default="", help="With --current, narrow the thread to this peer agent.")
+    parser.add_argument("--limit", type=int, default=20, help="With --current, maximum rows to show.")
+    parser.add_argument("--timeout-seconds", type=float, default=60.0, help="With --wait, maximum seconds to poll.")
+    parser.add_argument(
+        "--poll-interval-seconds",
+        type=float,
+        default=5.0,
+        help="With --wait, seconds between polls.",
+    )
+    parser.add_argument(
+        "--fail-on-timeout",
+        action="store_true",
+        help="With --wait, return nonzero if no inbound message arrives before timeout.",
+    )
     parser.add_argument("--all", action="store_true", help="With --list, show all messages instead of my unread inbox.")
     parser.add_argument("--sent", action="store_true", help="With --list, show messages sent by the current agent.")
-    args = parser.parse_args(argv)
+    parser.add_argument(
+        "--replace-open",
+        action="store_true",
+        help="With --send, resolve older open same sender/to/task/kind messages before appending the new message.",
+    )
+    parser.add_argument(
+        "--replace-open-peer",
+        action="store_true",
+        help="With --send, resolve older open same sender/to messages before appending the new message.",
+    )
+    args = parser.parse_args(_normalize_argv(argv))
 
     workboard_path = Path(args.workboard).expanduser()
     if not workboard_path.is_absolute():
         workboard_path = (ROOT / workboard_path).resolve()
-    if not workboard_path.exists():
+    if not workboard_path.exists() and (args.send or args.ack or args.resolve):
         payload = {"ok": False, "error": f"missing workboard file: {workboard_path}"}
         if args.json:
             print(json.dumps(payload, sort_keys=True))
@@ -706,6 +1311,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                 requested_action=args.requested_action,
                 decision=args.decision or "pending",
                 msg_id=args.msg_id,
+                replace_open=bool(args.replace_open),
+                replace_open_peer=bool(args.replace_open_peer),
             )
             action_name = "send"
         elif args.ack:
@@ -730,6 +1337,56 @@ def run(argv: Sequence[str] | None = None) -> int:
                 decision=args.decision,
             )
             action_name = "resolve"
+        elif args.inbox:
+            recipient = args.to_agent or resolve_current_agent(args.agent)
+            if not recipient:
+                raise ValueError("--inbox requires --agent/--to-agent or an agent identity environment variable")
+            ok, payload = list_messages(
+                workboard_path,
+                recipient=recipient,
+                state=args.state or "open",
+                task_id=args.task_id if _norm(args.task_id) not in {"", "none"} else "",
+            )
+            action_name = "inbox"
+        elif args.current:
+            actor = resolve_current_agent(args.agent)
+            if not actor:
+                raise ValueError("--current requires --agent or an agent identity environment variable")
+            ok, payload = current_messages(
+                workboard_path,
+                agent=actor,
+                peer=args.peer,
+                task_id=args.task_id if _norm(args.task_id) not in {"", "none"} else "",
+                limit=int(args.limit or 20),
+            )
+            action_name = "current"
+        elif args.audit:
+            actor = resolve_current_agent(args.agent)
+            ok, payload = audit_messages(
+                workboard_path,
+                agent=actor,
+                peer=args.peer,
+                task_id=args.task_id if _norm(args.task_id) not in {"", "none"} else "",
+                limit=int(args.limit or 20),
+            )
+            action_name = "audit"
+        elif args.wait:
+            actor = resolve_current_agent(args.agent)
+            if not actor:
+                raise ValueError("--wait requires --agent or an agent identity environment variable")
+            ok, payload = wait_for_messages(
+                workboard_path,
+                agent=actor,
+                peer=args.peer,
+                task_id=args.task_id if _norm(args.task_id) not in {"", "none"} else "",
+                limit=int(args.limit or 20),
+                timeout_seconds=float(args.timeout_seconds or 0.0),
+                poll_interval_seconds=float(args.poll_interval_seconds or 0.0),
+            )
+            action_name = "wait"
+            if bool(args.fail_on_timeout) and payload.get("wait_status") == "timeout":
+                ok = False
+                payload["error"] = "timed out waiting for inbound message"
         else:
             sender = args.from_agent
             recipient = args.to_agent
@@ -765,7 +1422,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     else:
         print("Workboard message tool: PASS" if ok else "Workboard message tool: FAIL")
         if ok:
-            if action_name == "list":
+            if action_name in {"list", "inbox", "current"}:
                 for row in list(payload.get("messages") or []):
                     priority = str(row.get("priority") or "").strip()
                     escalation = str(row.get("escalation") or "").strip()
@@ -774,16 +1431,44 @@ def run(argv: Sequence[str] | None = None) -> int:
                     if escalation:
                         badge = f"{badge} ESCALATED"
                     print(f"- {row.get('msg_id')}: {row.get('from')} -> {row.get('to')} [{badge}] {row.get('summary')}")
+            elif action_name in {"audit", "wait"}:
+                if action_name == "wait":
+                    print(f"- wait_status: {payload.get('wait_status', '')}")
+                print(f"- diagnosis: {payload.get('diagnosis', '')}")
+                print(
+                    "- counts: "
+                    f"inbox={payload.get('canonical_inbox_count', 0)}; "
+                    f"current={payload.get('canonical_current_count', 0)}; "
+                    f"parse_errors={payload.get('parse_error_count', 0)}; "
+                    f"candidate_mentions={payload.get('candidate_mention_count', 0)}; "
+                    f"identity_mismatches={payload.get('identity_mismatch_count', 0)}; "
+                    f"stale_identity_mismatches={payload.get('stale_identity_mismatch_count', 0)}; "
+                    f"cross_task_open_p0={payload.get('cross_task_open_p0_count', 0)}"
+                )
             else:
                 row = dict(payload.get("message") or {})
                 print(
                     f"- {row.get('msg_id')}: {row.get('from')} -> {row.get('to')} "
                     f"[{row.get('state')}] {row.get('summary')}"
                 )
+                delivered_to = payload.get("workboard") or str(workboard_path)
+                print(f"- delivered to: {delivered_to}")
         else:
             print(f"- {payload.get('error', 'unknown error')}")
             for item in list(payload.get("violations") or []):
                 print(f"- {item}")
+            if action_name in {"audit", "wait"}:
+                print(f"- diagnosis: {payload.get('diagnosis', '')}")
+                for item in list(payload.get("parse_errors") or []):
+                    print(f"- parse_error line {item.get('line')}: {item.get('error')}")
+                for item in list(payload.get("candidate_mentions") or []):
+                    print(f"- candidate_mention line {item.get('line')}: {item.get('text')}")
+                for item in list(payload.get("identity_mismatches") or []):
+                    print(
+                        f"- identity_mismatch {item.get('msg_id')}: "
+                        f"{item.get('from')} -> {item.get('actual_to')} "
+                        f"(expected {item.get('expected_to')})"
+                    )
     return 0 if ok else 1
 
 

@@ -5,14 +5,67 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import math
 from collections.abc import Callable
 from typing import Any
 
 from aiohttp import web
 
+# TERMINAL_STATES is taken from task_bot_runtime, NOT from task_bot_states, on
+# purpose. `thomas/core/task_bot_states.py` exists in this working tree but is
+# UNTRACKED -- it is another agent's in-flight split of task_bot_runtime, and at
+# HEAD task_bot_runtime still defines TERMINAL_STATES inline. A tracked file that
+# imports the new module makes a fresh checkout of dev fail at import.
+# task_bot_runtime exports the name either way, so this works before and after
+# that split lands.
+from thomas.core import task_bot_runtime
+from thomas.core.task_bot_runtime import TERMINAL_STATES
 from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
+
+log = logging.getLogger(__name__)
+
+# Map a task_bot delegation state to a Mission Control (room, status) so live chat
+# delegations (the named worker bots — Nova, Taylor, …) show up on the board the
+# same way runs and jobs do. This is the bridge that makes Mission Control reflect
+# what the chat is actually doing instead of only the run/autonomy stores.
+_DELEGATION_STATE_ROOM_STATUS: dict[str, tuple[str, str]] = {
+    "requested": ("inbox", "queued"),
+    "classified": ("inbox", "queued"),
+    "queued": ("inbox", "queued"),
+    "claimed": ("planning", "running"),
+    "executing": ("tools", "running"),
+    "running": ("tools", "running"),
+    "awaiting_proof": ("review", "awaiting_approval"),
+    "blocked": ("review", "blocked"),
+    "verified": ("done", "completed"),
+    "completed": ("done", "completed"),
+    "failed": ("review", "failed"),
+    "abandoned": ("review", "failed"),
+    # "cancelled" was the ONE state in task_bot_states.VALID_STATES with no entry
+    # here, and the lookup below falls back to ("inbox", "queued") -- so a task
+    # the owner deliberately stopped was displayed as work still QUEUED and
+    # waiting. It also missed the terminal set, so its elapsed time ticked up
+    # live forever, which is the exact bug the "FREEZE elapsed for finished work"
+    # comment further down exists to prevent.
+    #
+    # Filed under "done" rather than "review": stopping a run on purpose is an
+    # ending, not something for the owner to go and look at. task_bot_states says
+    # the same at its own line -- "'cancelled' is its own ending. Stopping a run
+    # on purpose is not a failure." The status word stays "cancelled" rather than
+    # being folded into "failed" for that reason; the shell already recognises it
+    # as terminal.
+    "cancelled": ("done", "cancelled"),
+}
+_DELEGATION_ACTIVE_STATES = {"requested", "classified", "queued", "claimed", "executing", "running", "awaiting_proof"}
+# Derived from the writer's own vocabulary instead of being spelled out again.
+# The literal that used to sit inline at the `is_terminal` line omitted
+# "cancelled", so the two disagreed about what "finished" means -- the same shape
+# as an icon and its heading being chosen by two different failure tests.
+# "verified" is added because this surface treats it as an ending (it maps to
+# done/completed above) while the state machine keeps it distinct from complete.
+_DELEGATION_TERMINAL_STATES = TERMINAL_STATES | {"verified"}
 
 from .mission_runtime_views import (
     _job_room_and_summary,
@@ -41,6 +94,10 @@ def build_mission_control_routes(
     run_store_enabled_key: Any,
     run_store_module_key: Any,
 ):
+    snapshot_cache: dict[str, Any] = {"payload": None, "built_at": 0.0}
+    snapshot_lock = asyncio.Lock()
+    snapshot_cache_ttl_s = 1.5
+
     def _resolve_approvals_broker():
         broker = app.get(APP_APPROVALS_BROKER)
         if broker is None:
@@ -238,12 +295,13 @@ def build_mission_control_routes(
                 if not run_id or run_id in seen_run_ids:
                     continue
                 seen_run_ids.add(run_id)
-                last_evt = _latest_run_event(run_store_mod, run_id)
+                ended_at_raw = str(run.get("ended_at") or "").strip()
+                last_evt = _latest_run_event(run_store_mod, run_id, terminal=bool(ended_at_raw))
                 status, room, summary = _run_state_room_and_summary(run, last_evt)
                 updated_at = _run_updated_at(run, last_evt)
                 created_at = _coerce_iso(run.get("created_at") or run.get("started_at"))
                 started_at = _coerce_iso(run.get("started_at")) if run.get("started_at") else created_at
-                ended_at = _coerce_iso(run.get("ended_at")) if run.get("ended_at") else ""
+                ended_at = _coerce_iso(ended_at_raw) if ended_at_raw else ""
                 session_id = str(run.get("session_id") or "").strip()
                 mode = str(run.get("mode") or "").strip()
                 profile_name = str(run.get("profile") or "").strip()
@@ -411,6 +469,88 @@ def build_mission_control_routes(
                     }
                 )
 
+        # Live chat delegations (the task manager's worker bots). This is the source
+        # of truth for "Thomas make me X" work — without it Mission Control shows 0
+        # agents even while a bot is actively building in the background.
+        try:
+            delegations = list(task_bot_runtime.list_executions(refresh=True) or [])
+        # Reads the delegation summary off disk and re-shapes it: OSError for the
+        # files, ValueError for JSON that will not parse, TypeError/KeyError/
+        # AttributeError for a summary that is not the shape we expect. Say so --
+        # an empty board because the read failed must not look like an idle board.
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            log.warning("Mission Control: could not read live delegations", exc_info=True)
+            delegations = []
+        # Drop stale rows entirely: a non-terminal task no agent has touched in a
+        # while is a dead orphan, not live or recently-finished work — it should not
+        # appear on the board at all (this is what clears the "claimed by an agent
+        # that isn't there" ghosts). Completed/failed tasks are terminal, never
+        # stale, so real finished work still shows.
+        delegations = [d for d in delegations if not bool((d or {}).get("stale"))]
+        active_delegations = [
+            d for d in delegations if str((d or {}).get("state") or "").strip().lower() in _DELEGATION_ACTIVE_STATES
+        ]
+        active_delegations.sort(key=lambda d: _iso_to_epoch((d or {}).get("updated_at")), reverse=True)
+        ended_delegations = [
+            d for d in delegations if str((d or {}).get("state") or "").strip().lower() not in _DELEGATION_ACTIVE_STATES
+        ]
+        ended_delegations.sort(key=lambda d: _iso_to_epoch((d or {}).get("updated_at")), reverse=True)
+        for deleg in active_delegations[:40] + ended_delegations[:20]:
+            exec_id = str((deleg or {}).get("execution_id") or "").strip()
+            if not exec_id:
+                continue
+            state = str(deleg.get("state") or "").strip().lower()
+            room, status = _DELEGATION_STATE_ROOM_STATUS.get(state, ("inbox", "queued"))
+            bot_id = str(deleg.get("bot_id") or "").strip()
+            bot_name = str(deleg.get("claimed_owner") or "").strip() or (
+                bot_id[:1].upper() + bot_id[1:] if bot_id else "Worker"
+            )
+            summary = str(deleg.get("progress_summary") or deleg.get("summary") or "").strip()
+            task_ask = str(deleg.get("summary") or "").strip()
+            created_at = _coerce_iso(deleg.get("created_at"))
+            updated_at = _coerce_iso(deleg.get("updated_at") or deleg.get("created_at"))
+            is_terminal = state in _DELEGATION_TERMINAL_STATES
+            # FREEZE elapsed for finished work: a task that ran for 3 minutes must not
+            # display "7h" just because it finished 7 hours ago. Active tasks elapse
+            # live (now - created); terminal tasks freeze at (ended - created).
+            ended_at = _coerce_iso(deleg.get("completed_at")) or updated_at if is_terminal else ""
+            start_epoch = _iso_to_epoch(created_at)
+            end_epoch = _iso_to_epoch(ended_at) if (is_terminal and ended_at) else _iso_to_epoch(_utc_iso_now())
+            elapsed_seconds = max(0, int(end_epoch - start_epoch)) if (start_epoch and end_epoch) else 0
+            agents.append(
+                {
+                    "id": f"delegation:{exec_id}",
+                    "source": "chat_delegation",
+                    "kind": "delegation",
+                    "name": bot_name,
+                    "room": room,
+                    "status": status,
+                    "summary": _trim_summary(summary or task_ask, 160),
+                    "task": _trim_summary(task_ask, 120),
+                    "updated_at": updated_at,
+                    "created_at": created_at,
+                    "started_at": created_at,
+                    "ended_at": ended_at,
+                    "elapsed_seconds": elapsed_seconds,
+                    "session_id": str(deleg.get("conversation_id") or ""),
+                    "execution_id": exec_id,
+                    "bot_id": bot_id,
+                    "backend": str(deleg.get("backend_type") or ""),
+                    "parent_id": "",
+                }
+            )
+            events.append(
+                {
+                    "id": f"evt:delegation:{exec_id}",
+                    "source": "chat_delegation",
+                    "agent_id": f"delegation:{exec_id}",
+                    "run_id": "",
+                    "ts": updated_at,
+                    "type": f"delegation_{state or 'update'}",
+                    "text": _trim_summary(f"{bot_name}: {summary or task_ask}", 160),
+                }
+            )
+
         desktop_snapshot, desktop_agent, desktop_events = _desktop_operator_snapshot_payload()
         if desktop_agent is not None:
             agents.append(desktop_agent)
@@ -471,14 +611,28 @@ def build_mission_control_routes(
             "events": events,
         }
 
+    async def _mission_snapshot_payload(*, force: bool = False) -> dict[str, Any]:
+        async with snapshot_lock:
+            now = asyncio.get_running_loop().time()
+            cached = snapshot_cache.get("payload")
+            built_at = float(snapshot_cache.get("built_at") or 0.0)
+            if not force and isinstance(cached, dict) and (now - built_at) < snapshot_cache_ttl_s:
+                return cached
+
+            payload = _build_mission_control_payload()
+            payload["approvals"] = await _mission_approvals_payload()
+            payload["topology"] = _mission_topology_payload(payload)
+            totals = payload.get("totals")
+            if isinstance(totals, dict):
+                totals["approvals_pending"] = int(payload["approvals"].get("pending_total") or 0)
+            snapshot_cache["payload"] = payload
+            snapshot_cache["built_at"] = asyncio.get_running_loop().time()
+            return payload
+
     async def api_mission_control(request: web.Request) -> web.Response:
         require_api_access(request)
-        payload = _build_mission_control_payload()
-        payload["approvals"] = await _mission_approvals_payload()
-        payload["topology"] = _mission_topology_payload(payload)
-        totals = payload.get("totals")
-        if isinstance(totals, dict):
-            totals["approvals_pending"] = int(payload["approvals"].get("pending_total") or 0)
+        force = str(request.query.get("fresh") or "").strip() in {"1", "true", "yes"}
+        payload = await _mission_snapshot_payload(force=force)
         return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
     async def api_mission_stream(request: web.Request) -> web.StreamResponse:
@@ -523,12 +677,7 @@ def build_mission_control_routes(
         updates_sent = 0
         try:
             while True:
-                payload = _build_mission_control_payload()
-                payload["approvals"] = await _mission_approvals_payload()
-                payload["topology"] = _mission_topology_payload(payload)
-                totals = payload.get("totals")
-                if isinstance(totals, dict):
-                    totals["approvals_pending"] = int(payload["approvals"].get("pending_total") or 0)
+                payload = await _mission_snapshot_payload()
                 updates_sent += 1
                 await send({"type": "snapshot", "seq": updates_sent, "payload": payload})
                 if max_updates and updates_sent >= max_updates:

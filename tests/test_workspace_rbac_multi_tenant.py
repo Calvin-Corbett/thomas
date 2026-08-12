@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import Column, String, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from server.workspace.rbac import WorkspaceRole, can_manage_members, can_write, role_allows
-from server.workspace.scoping import register_workspace_scoping
+from thomas.server.workspace.rbac import WorkspaceRole, can_manage_members, can_write, role_allows
+from thomas.server.workspace.scoping import register_workspace_scoping
 
 Base = declarative_base()
 

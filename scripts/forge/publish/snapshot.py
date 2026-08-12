@@ -7,10 +7,25 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+# Make `scripts.forge.publish` importable when this file is run directly
+# (`python scripts/forge/publish/snapshot.py`) as well as via
+# `python -m scripts.forge.publish.snapshot`.
+_SNAPSHOT_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_SNAPSHOT_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SNAPSHOT_REPO_ROOT))
+
+from scripts.forge.publish.private_markers import (  # noqa: E402
+    ACCEPTED_PRIVATE_MARKER_LINES,
+    PRIVATE_MARKER,
+    line_has_private_marker,
+    path_has_private_marker,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_HYGIENE_BASELINE = ROOT / "docs" / "repo_hygiene_baseline.json"
@@ -73,6 +88,21 @@ def _load_repo_hygiene_baseline(repo_root: Path) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
+def _line_has_private_marker(line: str) -> bool:
+    return line_has_private_marker(line)
+
+
+def _has_private_marker(repo_root: Path, rel_path: str) -> bool:
+    return path_has_private_marker(repo_root, rel_path)
+
+
+def _publishable_normalized_path(repo_root: Path, raw: str) -> str:
+    rel = _normalize_path(raw)
+    if not rel or _has_private_marker(repo_root, rel):
+        return ""
+    return rel
+
+
 def _filter_publish_paths(
     repo_root: Path,
     rel_paths: Sequence[str],
@@ -80,11 +110,11 @@ def _filter_publish_paths(
     respect_repo_hygiene: bool,
 ) -> list[str]:
     if not respect_repo_hygiene:
-        return sorted({_normalize_path(path) for path in rel_paths if _normalize_path(path)})
+        return sorted({rel for path in rel_paths if (rel := _publishable_normalized_path(repo_root, path))})
 
     baseline = _load_repo_hygiene_baseline(repo_root)
     if not baseline:
-        return sorted({_normalize_path(path) for path in rel_paths if _normalize_path(path)})
+        return sorted({rel for path in rel_paths if (rel := _publishable_normalized_path(repo_root, path))})
 
     allowed_root = {
         _normalize_path(item) for item in (baseline.get("allowed_tracked_root_files") or []) if _normalize_path(item)
@@ -106,6 +136,8 @@ def _filter_publish_paths(
     for raw in rel_paths:
         rel = _normalize_path(raw)
         if not rel:
+            continue
+        if _has_private_marker(repo_root, rel):
             continue
         if "/" not in rel and allowed_root and rel not in allowed_root:
             continue
@@ -136,6 +168,16 @@ def _copy_directory_if_present(repo_root: Path, snapshot_root: Path, rel_path: s
         return
     dst = snapshot_root / rel_path
     shutil.copytree(src, dst, dirs_exist_ok=True)
+
+
+def _remove_private_marker_files(snapshot_root: Path) -> list[str]:
+    removed: list[str] = []
+    for path in sorted(item for item in snapshot_root.rglob("*") if item.is_file()):
+        rel = _normalize_path(str(path.relative_to(snapshot_root)))
+        if _has_private_marker(snapshot_root, rel):
+            path.unlink()
+            removed.append(rel)
+    return removed
 
 
 def _resolve_snapshot_root(output_root: str | None) -> Path:
@@ -230,6 +272,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     copied = _copy_snapshot_paths(repo_root, snapshot_root, rel_paths)
     for rel in (".github", "docs", "scripts", "tests", "thomas", "cli", "extensions", "apps"):
         _copy_directory_if_present(repo_root, snapshot_root, rel)
+    removed_private_marker_files = _remove_private_marker_files(snapshot_root)
 
     _init_snapshot_repo(snapshot_root, origin_url=_current_origin(repo_root))
     preflight = _run_preflight(snapshot_root, deep=bool(args.deep_preflight))
@@ -237,6 +280,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         "ok": bool(preflight.get("ok")),
         "snapshot_root": str(snapshot_root),
         "copied_file_count": len(copied),
+        "removed_private_marker_file_count": len(removed_private_marker_files),
+        "removed_private_marker_files": removed_private_marker_files,
         "include_untracked": bool(args.include_untracked),
         "respect_repo_hygiene": bool(args.respect_repo_hygiene),
         "preflight": preflight,
@@ -246,6 +291,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     else:
         print(f"snapshot root: {snapshot_root}")
         print(f"copied files: {len(copied)}")
+        print(f"removed private marker files: {len(removed_private_marker_files)}")
         print(f"preflight ok: {bool(preflight.get('ok'))}")
     return 0 if bool(preflight.get("ok")) else 1
 

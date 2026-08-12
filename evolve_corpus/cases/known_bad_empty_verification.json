@@ -1,0 +1,17 @@
+{
+  "case_id": "known_bad_empty_verification",
+  "description": "A changed session with no verification evidence must never auto-promote.",
+  "expected_supervisor_outcome": "hold_or_reject",
+  "session": {
+    "status": "ready",
+    "delta": {
+      "changed_count": 1,
+      "changed_files": [
+        "thomas/core/example.py"
+      ]
+    },
+    "verification": [],
+    "policy_violations": [],
+    "session_rejections": []
+  }
+}

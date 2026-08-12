@@ -150,25 +150,3 @@ def plan_to_markdown(plan: ExecutionPlan) -> str:
     if plan.last_result:
         lines.extend(["", f"**Last result:** {plan.last_result[:300]}"])
     return "\n".join(lines)
-
-
-def parse_steps_from_text(text_raw: Any) -> list[PlanStep]:
-    import re
-
-    text = str(text_raw or "").strip()
-    if not text:
-        return []
-    steps: list[PlanStep] = []
-    for match in re.finditer(r"(?:^|\n)\s*(?:\d+[\.\)]\s*|[-*]\s+)(.+)", text):
-        description = str(match.group(1) or "").strip()
-        if not description:
-            continue
-        steps.append(PlanStep(step_id=new_step_id(), description=description))
-    if steps:
-        return steps
-    lines = [line.strip("-* \t") for line in text.splitlines()]
-    for line in lines:
-        if len(line) < 4:
-            continue
-        steps.append(PlanStep(step_id=new_step_id(), description=line))
-    return steps[:12]

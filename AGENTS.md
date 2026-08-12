@@ -154,6 +154,27 @@ Before writing ANY code, read:
 
 **The changelog is the project's memory across sessions.** Future agents rely on it to understand what changed and why.
 
+## How To Write About Calvin (Required — applies to every agent)
+
+Commit messages, changelog entries, PR titles and bodies, and release notes are
+public and effectively permanent: a merged pull request keeps its commit list on
+GitHub forever. Calvin reads these, and has already found himself described in
+them without knowing they existed. This repo runs 58 gates over its code and none
+of them read the prose wrapped around it — so this is the rule instead.
+
+1. **Second person.** Write "you" and "your". Not "the owner", not "the user", not
+   his name in the third person.
+2. **Never characterize his ability, background, or knowledge.** No "is not a
+   programmer", "non-technical", "cannot read code", "did not understand". Name
+   what the software did and what it failed to show him. That is the finding. The
+   person is not the finding.
+3. **Quote the request, never judge the requester.** His own words about what he
+   wanted are the strongest justification a change can carry. Quote those.
+4. **Do not infer pronouns.** They have not been stated. If a third-person
+   reference is genuinely unavoidable, use they/them.
+5. Applies to everything that leaves this machine: issues, published plans, and
+   generated docs — not just commits.
+
 ## Agent Commit Path (Required for Agents)
 
 - Use `python scripts/crew/brief/commit.py --message "<msg>"` instead of raw `git commit`.

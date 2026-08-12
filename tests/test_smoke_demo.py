@@ -42,6 +42,7 @@ def _terminate_process(proc: subprocess.Popen[str]) -> None:
 def _wait_for_health(
     base_url: str,
     proc: subprocess.Popen[str],
+    output_path: Path,
     timeout_s: float = 180.0,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_s
@@ -62,12 +63,10 @@ def _wait_for_health(
             last_error = f"{type(exc).__name__}: {exc}"
         time.sleep(0.25)
 
-    output_tail = ""
-    if proc.poll() is not None and proc.stdout is not None:
-        try:
-            output_tail = proc.stdout.read()[-3000:]
-        except Exception:
-            output_tail = ""
+    try:
+        output_tail = output_path.read_text(encoding="utf-8", errors="replace")[-3000:]
+    except OSError:
+        output_tail = ""
 
     raise AssertionError(
         f"Demo server failed to become healthy at {url}; last_error={last_error}; output_tail={output_tail}"
@@ -102,16 +101,21 @@ def test_demo_server_no_key_boot_contract_windows_safe(tmp_path: Path) -> None:
         str(data_root),
     ]
 
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(repo_root),
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    # Write child output to a FILE, not a pipe: nothing drains a pipe while we
+    # poll health, so a chatty boot fills the OS pipe buffer and the server
+    # blocks mid-boot on a print — deadlocking the test until its timeout.
+    output_path = tmp_path / "demo-server-output.log"
+    with output_path.open("w", encoding="utf-8", errors="replace") as output_file:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(repo_root),
+            env=env,
+            stdout=output_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
     try:
-        payload = _wait_for_health(f"http://127.0.0.1:{port}", proc, timeout_s=180.0)
+        payload = _wait_for_health(f"http://127.0.0.1:{port}", proc, output_path, timeout_s=180.0)
         assert "status" in payload
         assert demo_root.exists()
         assert not stale_marker.exists()

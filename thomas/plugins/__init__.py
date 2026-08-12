@@ -1,4 +1,4 @@
-"""Plugin runtime package for accelerated catch-up work."""
+"""Plugin runtime package and prompt-pack module catalog."""
 
 from .catalog_index import list_plugin_modules
 

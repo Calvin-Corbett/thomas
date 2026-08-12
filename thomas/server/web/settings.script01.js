@@ -2,7 +2,14 @@
     // State and Helpers
     const PREFERENCES_API = '/api/preferences';
     const BREAKGLASS_OPT_IN_API = '/api/security/breakglass-opt-in';
-    const SETTINGS_EXTENSION_SCRIPT = 'settings.isolated-desktop.js';
+    const CHAT_THEME_STORAGE_KEY = 'thomas_chat_theme';
+    const CHAT_THEME_NAMES = Object.freeze({
+      nebula: 'Nebula Core',
+      dark: 'Dark',
+      light: 'Light',
+      aurora: 'Aurora',
+      sandstone: 'Sandstone',
+    });
     const settings = {};
     let currentSection = 'general';
     let pendingConfirmAction = null;
@@ -10,14 +17,14 @@
     function defaultLegacySettings() {
       return {
         agentName: 'Thomas-Main',
-        defaultModel: 'claude-opus',
-        defaultProvider: 'anthropic',
-        theme: 'dark',
+        defaultModel: 'gpt-5.6-sol',
+        defaultProvider: 'openai_codex',
+        theme: 'nebula',
         language: 'en',
         workflowMode: 'guided',
         startupBehavior: false,
         openaiKey: '',
-        openaiModel: 'gpt-4',
+        openaiModel: 'gpt-5.6-sol',
         anthropicKey: '',
         anthropicModel: 'claude-opus',
         googleKey: '',
@@ -66,12 +73,50 @@
       };
     }
 
+    function normalizeChatTheme(theme, fallback = 'nebula') {
+      const normalized = String(theme || '').trim().toLowerCase();
+      return Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, normalized) ? normalized : fallback;
+    }
+
+    function readStoredChatTheme() {
+      try {
+        const stored = window.localStorage.getItem(CHAT_THEME_STORAGE_KEY);
+        return stored && Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, stored) ? stored : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
     function toUiTheme(theme) {
-      return theme === 'auto' ? 'system' : (theme || 'dark');
+      const stored = readStoredChatTheme();
+      if (stored) return stored;
+      return theme === 'light' ? 'light' : (theme === 'dark' ? 'dark' : 'nebula');
     }
 
     function toApiTheme(theme) {
-      return theme === 'system' ? 'auto' : (theme || 'dark');
+      return ['light', 'sandstone'].includes(normalizeChatTheme(theme)) ? 'light' : 'dark';
+    }
+
+    function applyChatTheme(theme, options = {}) {
+      const normalized = normalizeChatTheme(theme);
+      /* The unified engine owns BOTH root attributes and color-scheme; setting
+         only data-theme left a stale data-thomas-theme outranking the change. */
+      if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) {
+        window.ThomasWorkspaceShell.applyTheme(normalized, { persist: false });
+      } else {
+        document.documentElement.dataset.theme = normalized;
+        document.documentElement.dataset.thomasTheme = normalized;
+      }
+      if (document.body) document.body.dataset.theme = normalized;
+      settings.theme = normalized;
+      const select = document.getElementById('theme');
+      if (select && select.value !== normalized) select.value = normalized;
+      const label = document.getElementById('activeThemeName');
+      if (label) label.textContent = CHAT_THEME_NAMES[normalized];
+      if (options.persist) {
+        try { window.localStorage.setItem(CHAT_THEME_STORAGE_KEY, normalized); } catch (error) { /* localStorage is optional */ }
+      }
+      return normalized;
     }
 
     function toUiFontSize(fontSize) {
@@ -131,6 +176,7 @@
 
     function toUiProvider(activeProfile) {
       const raw = String(activeProfile || '').toLowerCase();
+      if (raw === 'openai_codex' || raw.includes('codex')) return 'openai_codex';
       if (raw.includes('openai')) return 'openai';
       if (raw.includes('google')) return 'google';
       if (raw.includes('ollama') || raw.includes('local')) return 'ollama';
@@ -198,6 +244,8 @@
         compactMode: iface.ui_density ? iface.ui_density !== 'comfortable' : (storedLegacy.compactMode ?? defaults.compactMode),
         desktopNotifications: (preferences && preferences.notifications && preferences.notifications.desktop) ?? storedLegacy.desktopNotifications ?? defaults.desktopNotifications,
         debugMode: iface.debug_panel_enabled ?? storedLegacy.debugMode ?? defaults.debugMode,
+        __apiAppearanceTheme: (preferences && preferences.appearance && preferences.appearance.theme) || 'dark',
+        __themeDirty: false,
         __legacySettings: {
           ...defaults,
           ...storedLegacy,
@@ -227,15 +275,19 @@
           ...nextToolPermissions,
         },
       };
-      const { protectedOverrideApproval, ...persistedLegacy } = mergedLegacy;
+      const { protectedOverrideApproval, ...persistedLegacyValues } = mergedLegacy;
       void protectedOverrideApproval;
+      const apiAppearanceTheme = settings.__themeDirty
+        ? toApiTheme(mergedLegacy.theme)
+        : (settings.__apiAppearanceTheme || toApiTheme(mergedLegacy.theme));
+      const persistedLegacy = { ...persistedLegacyValues, theme: apiAppearanceTheme };
 
       const patch = {
         profile: {
           display_name: String(mergedLegacy.agentName || defaults.agentName).trim(),
         },
         appearance: {
-          theme: toApiTheme(mergedLegacy.theme),
+          theme: apiAppearanceTheme,
           font_size: toApiFontSize(mergedLegacy.fontSize),
           bubble_style: toApiBubbleStyle(mergedLegacy.bubbleStyle),
         },
@@ -291,16 +343,16 @@
       return patch;
     }
 
-    async function loadSettingsExtensionScript() {
-      return new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = SETTINGS_EXTENSION_SCRIPT; s.onload = resolve; s.onerror = () => reject(new Error('Failed to load settings extensions')); document.body.appendChild(s); });
-    }
-
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', async () => {
-      await loadSettingsExtensionScript();
-      await loadSettings();
+      document.body.classList.toggle('is-embedded', new URLSearchParams(window.location.search).get('embed') === '1');
+      applyChatTheme(readStoredChatTheme() || 'nebula');
       setupEventListeners();
       setupSearch();
+      const desktopStatus = typeof window.refreshIsolatedDesktopStatus === 'function'
+        ? window.refreshIsolatedDesktopStatus()
+        : Promise.resolve();
+      await Promise.allSettled([loadSettings(), desktopStatus]);
     });
 
     // Load settings from API
@@ -311,12 +363,10 @@
         const data = await response.json();
         Object.assign(settings, buildLegacySettings(data));
         populateForm();
-        await refreshIsolatedDesktopStatus();
       } catch (error) {
         console.error('Error loading settings:', error);
         Object.assign(settings, buildLegacySettings({}));
         populateForm();
-        await refreshIsolatedDesktopStatus();
         showToast('Failed to load settings', 'error');
       }
     }
@@ -327,7 +377,7 @@
       setInputValue('agentName', settings.agentName || 'Thomas-Main');
       setSelectValue('defaultModel', settings.defaultModel || 'claude-opus');
       setSelectValue('defaultProvider', settings.defaultProvider || 'anthropic');
-      setSelectValue('theme', settings.theme || 'dark');
+      applyChatTheme(settings.theme || 'nebula');
       setSelectValue('language', settings.language || 'en');
       setSelectValue('workflowMode', settings.workflowMode || 'guided');
       setToggle('startupBehavior', settings.startupBehavior);
@@ -440,6 +490,25 @@
         });
       });
 
+      document.getElementById('theme')?.addEventListener('change', event => {
+        settings.__themeDirty = true;
+        applyChatTheme(event.target.value, { persist: true });
+      });
+
+      window.addEventListener('storage', event => {
+        if (event.key === CHAT_THEME_STORAGE_KEY && event.newValue) applyChatTheme(event.newValue);
+      });
+
+      window.addEventListener('thomas:themechange', event => {
+        if (event.detail && event.detail.theme) applyChatTheme(event.detail.theme);
+      });
+
+      window.addEventListener('message', event => {
+        if (event.origin !== window.location.origin) return;
+        if (!event.data || event.data.type !== 'thomas:theme') return;
+        applyChatTheme(event.data.theme, { persist: true });
+      });
+
       // Escape to close modal
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeModal();
@@ -526,6 +595,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !!enabled }),
       });
+
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.ok) {
         const reason = payload.reason || payload.message || 'protected override approval was not changed';
@@ -673,35 +743,14 @@
       button.setAttribute('aria-label', isPassword ? 'Hide key' : 'Show key');
     }
 
-    // Integration connections (mock implementations)
-    function connectGoogleWorkspace() {
-      showToast('Opening Google OAuth consent screen...', 'info');
-      // In production, redirect to OAuth endpoint
-      setTimeout(() => {
-        document.getElementById('googleWorkspaceStatus').className = 'status-badge status-connected';
-        document.getElementById('googleWorkspaceStatus').innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
-        showToast('Google Workspace connected', 'success');
-      }, 1500);
+    // These buttons are intentionally honest until real authorization routes exist.
+    function showUnavailableIntegration(name) {
+      showToast(`${name} setup is not available in this build. No account changes were made.`, 'info');
     }
 
-    function connectSlack() {
-      showToast('Opening Slack OAuth consent screen...', 'info');
-      setTimeout(() => {
-        document.getElementById('slackStatus').className = 'status-badge status-connected';
-        document.getElementById('slackStatus').innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
-        document.getElementById('slackWebhookItem').style.display = 'block';
-        showToast('Slack workspace connected', 'success');
-      }, 1500);
-    }
-
-    function connectNotion() {
-      showToast('Opening Notion OAuth consent screen...', 'info');
-      setTimeout(() => {
-        document.getElementById('notionStatus').className = 'status-badge status-connected';
-        document.getElementById('notionStatus').innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
-        showToast('Notion workspace connected', 'success');
-      }, 1500);
-    }
+    function connectGoogleWorkspace() { showUnavailableIntegration('Google Workspace'); }
+    function connectSlack() { showUnavailableIntegration('Slack'); }
+    function connectNotion() { showUnavailableIntegration('Notion'); }
 
     // Maintenance functions
     function clearCache() {
@@ -737,6 +786,7 @@
     function confirmReset() {
       pendingConfirmAction = async () => {
         try {
+          settings.__themeDirty = true;
           const response = await fetch(PREFERENCES_API, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -744,6 +794,7 @@
           });
           if (!response.ok) throw new Error('Failed to reset settings');
           const data = await response.json();
+          applyChatTheme(defaultLegacySettings().theme, { persist: true });
           Object.assign(settings, buildLegacySettings(data));
           populateForm();
           showToast('All settings reset to factory defaults', 'success');

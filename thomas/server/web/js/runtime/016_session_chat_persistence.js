@@ -36,7 +36,8 @@ function formatSidebarSessionTitle(session) {
 }
 
 function formatSidebarSessionMeta(session) {
-    const model = safeString(session?.model) || activeProfileNameForPersistence();
+    const rawModel = safeString(session?.model) || activeProfileNameForPersistence();
+    const model = rawModel ? formatProviderDisplay(rawModel, { compact: false }) : '';
     const timestamp = safeString(session?.timestamp);
     if (model && timestamp) return `${model} | ${timestamp}`;
     if (model) return model;
@@ -115,6 +116,24 @@ function buildPersistedChatPayload() {
 }
 
 async function persistActiveChat({ quiet = true } = {}) {
+    // EMBEDDED AS A WORKSPACE: never write chat state.
+    //
+    // The modern shell hosts the old workspaces (Virtual Office, Canvas,
+    // Channels, Token Economy, Marketplace, Paper Trading) by loading this whole
+    // application into an iframe with ?embed=1, then hiding its chat surface
+    // with CSS. Hidden is not the same as absent: the old onboarding module
+    // still boots and calls persistActiveChat, which PUTs /api/chats/<id> with
+    // `title: deriveChatTitleFromMessages(...)`. Inside the frame there is no
+    // conversation, so that title derives to "Chat <id-prefix>" or "Untitled
+    // chat" -- and the owner's real chat was silently renamed by the act of
+    // opening a workspace.
+    //
+    // A page with no composer and no transcript cannot legitimately own chat
+    // state, so it does not get to write any.
+    if (typeof document !== 'undefined' && document.documentElement
+        && document.documentElement.classList.contains('tcw-embed')) {
+        return false;
+    }
     const payload = buildPersistedChatPayload();
     if (!payload) return false;
     activeChatId = safeString(payload.id);
@@ -209,22 +228,19 @@ function officeApplyDefaultAgentStyleDiversification(agents, prefsRaw) {
         return;
     }
     const colorPool = [...OFFICE_AGENT_STYLE_COLOR_POOL];
-    const costumePool = [...OFFICE_AGENT_COSTUME_POOL];
     for (let i = colorPool.length - 1; i > 0; i -= 1) {
         const j = Math.floor(Math.random() * (i + 1));
         [colorPool[i], colorPool[j]] = [colorPool[j], colorPool[i]];
-    }
-    for (let i = costumePool.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [costumePool[i], costumePool[j]] = [costumePool[j], costumePool[i]];
     }
 
     agents.forEach((agent, index) => {
         if (!agent) return;
         const color = colorPool[index % colorPool.length] || agent.color;
-        const costume = costumePool[index % costumePool.length] || agent.costume || 'none';
         agent.color = /^#[0-9a-f]{6}$/i.test(safeString(color)) ? color : agent.color;
-        agent.costume = new Set(OFFICE_AGENT_COSTUME_POOL).has(costume) ? costume : (agent.costume || 'none');
+        // Default agents to no costume — the random cap/visor/bowtie overlays
+        // read as visual noise at office scale. Colour variety stays; users can
+        // still opt into a costume per-agent from the roster panel.
+        agent.costume = 'none';
         agent.tint = officeAgentTintFromColor(agent.color);
     });
 }
@@ -291,7 +307,6 @@ function officeSpeechRevealMsForText(textRaw) {
 function officeBanterForAgent(agent, contextRaw = 'ambient', detail = {}) {
     const context = safeString(contextRaw).toLowerCase();
     const roomTheme = safeString(detail?.roomTheme).toLowerCase();
-    const taskTitle = safeString(detail?.taskTitle).toLowerCase();
 
     if (context === 'collision') {
         return officePickPersonaLine(agent, 'collision', officePick(OFFICE_DIALOGUE.collision));
@@ -324,18 +339,6 @@ function officeBanterForAgent(agent, contextRaw = 'ambient', detail = {}) {
         return officePickPersonaLine(agent, 'working', officePick(OFFICE_DIALOGUE.pickup));
     }
     if (context === 'task_done') {
-        if (taskTitle.includes('benchmark')) {
-            return officePick([
-                'Benchmarks wrapped and readable.',
-                'Performance pass complete.',
-            ]);
-        }
-        if (taskTitle.includes('deploy')) {
-            return officePick([
-                'Deploy lane complete.',
-                'Release task wrapped.',
-            ]);
-        }
         return officePick(OFFICE_DIALOGUE.complete);
     }
     if (context === 'social_lead') {

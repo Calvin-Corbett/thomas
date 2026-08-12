@@ -1,0 +1,601 @@
+.tc-work-home,
+.tc-work-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 30px 32px 100px;
+}
+.tc-work-home {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.tc-work-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 11px;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  font: 700 13px var(--font-sans);
+  cursor: pointer;
+}
+.tc-work-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(245px, 320px));
+  justify-content: center;
+  gap: 15px;
+  margin-top: 26px;
+}
+.tc-work-app-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 190px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 17px;
+  background: linear-gradient(145deg, var(--c-surface), var(--c-surface-2));
+  color: var(--c-text);
+  text-align: left;
+  transition:
+    transform 0.16s,
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+.tc-work-app-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--c-accent-line);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.16);
+}
+.tc-work-app-card.is-create {
+  padding: 20px;
+  border-style: dashed;
+  background: transparent;
+  cursor: pointer;
+}
+.tc-work-card-open {
+  flex: 1;
+  width: 100%;
+  padding: 20px 20px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tc-work-card-open small {
+  display: block;
+  color: var(--c-muted);
+  font: 600 10px var(--font-sans);
+}
+.tc-work-app-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 19px;
+  border-radius: 11px;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  font-size: 18px;
+}
+.tc-work-app-card strong {
+  display: block;
+  font-size: 15px;
+}
+.tc-work-app-card p {
+  height: 43px;
+  margin: 8px 0 18px;
+  color: var(--c-dim);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow: hidden;
+}
+.tc-work-app-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--c-muted);
+  font-size: 11px;
+  padding: 12px 16px 16px;
+}
+.tc-work-card-controls {
+  display: flex;
+  gap: 6px;
+}
+.tc-work-card-controls button {
+  padding: 6px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text);
+  font: 700 10px var(--font-sans);
+  cursor: pointer;
+}
+.tc-work-card-controls button:hover:not(:disabled) {
+  border-color: var(--c-accent-line);
+  color: var(--c-accent);
+}
+.tc-work-card-controls button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.tc-work-status {
+  display: inline-flex;
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  color: var(--c-dim);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.tc-work-status.is-active {
+  border-color: rgba(52, 224, 176, 0.25);
+  background: rgba(52, 224, 176, 0.1);
+  color: #65e9c2;
+}
+.tc-work-status.is-paused {
+  border-color: rgba(255, 195, 90, 0.25);
+  background: rgba(255, 195, 90, 0.1);
+  color: #ffd078;
+}
+.tc-work-compact {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--c-border);
+}
+.tc-work-onboarding {
+  max-width: 880px;
+  margin: 22px auto;
+}
+.tc-work-progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.tc-work-progress span {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tc-work-progress span.is-done {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+.tc-work-transcript {
+  min-height: 360px;
+  max-height: calc(100vh - 340px);
+  overflow: auto;
+  padding: 10px 4px 60px;
+  scrollbar-width: thin;
+}
+.tc-work-welcome {
+  display: flex;
+  gap: 14px;
+  max-width: 650px;
+  margin: 42px auto;
+  padding: 22px;
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  background: var(--c-surface);
+}
+.tc-work-welcome p {
+  margin: 6px 0 0;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.tc-work-orb {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  font-weight: 900;
+}
+.tc-work-message {
+  display: flex;
+  gap: 10px;
+  max-width: 720px;
+  /* No auto side margins on the base row: the is-user / is-thomas rules own
+     horizontal alignment. `margin: 0 auto` here left user bubbles with auto on
+     BOTH sides (is-user only reset the left), centering them mid-column. */
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border: 0;
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.tc-work-message.is-user {
+  width: fit-content;
+  max-width: min(720px, 88%);
+  margin-left: auto;
+  margin-right: 0;
+  padding: 12px 15px;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 15px;
+  background: var(--c-accent-soft);
+}
+.tc-work-message.is-thomas {
+  margin-left: 0;
+  margin-right: auto;
+  background: transparent;
+}
+.tc-work-message-avatar {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  font-size: 15px;
+}
+.tc-work-message-body {
+  min-width: 0;
+}
+.tc-work-message-role {
+  margin-bottom: 5px;
+  color: var(--c-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tc-work-thinking {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--c-muted);
+  font-size: 12px;
+  animation: tc-work-pulse 1.3s ease-in-out infinite;
+}
+/* Work has no composer of its own any more — .tc-work-composer and its
+   send button were deleted with the second composer. Typing happens in the
+   one shell composer at the bottom of the window, for every mode. */
+
+.tc-work-collapse-chat {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--c-muted);
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.tc-work-collapse-chat:hover,
+.tc-work-collapse-chat:focus-visible {
+  color: var(--c-text);
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+.tc-work-job-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(420px, 1fr) 310px;
+  gap: 18px;
+  margin-top: 20px;
+}
+.tc-work-job-main {
+  min-width: 0;
+}
+.tc-work-operations {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tc-work-workflows,
+.tc-work-operations {
+  align-self: start;
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 210px);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.tc-work-all-work {
+  margin-bottom: 15px;
+}
+.tc-work-rail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--c-text);
+  font: 800 11px var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tc-work-rail-heading small {
+  color: var(--c-muted);
+}
+.tc-work-workflow-row {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--c-dim);
+  text-align: left;
+  cursor: pointer;
+}
+.tc-work-workflow-row:hover,
+.tc-work-workflow-row.is-selected {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+  color: var(--c-text);
+}
+.tc-work-workflow-row span,
+.tc-work-workflow-row small {
+  display: block;
+}
+.tc-work-workflow-row span {
+  font: 700 12px var(--font-sans);
+}
+.tc-work-workflow-row small {
+  margin-top: 3px;
+  color: var(--c-muted);
+  font: 600 9px var(--font-sans);
+  text-transform: capitalize;
+}
+.tc-work-workflow-focus,
+.tc-work-workflow-form {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: var(--c-surface);
+}
+.tc-work-workflow-focus > small,
+.tc-work-workflow-focus > strong {
+  display: block;
+}
+.tc-work-workflow-focus > small {
+  color: var(--c-muted);
+  font: 700 9px var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tc-work-workflow-focus > strong {
+  margin-top: 4px;
+  color: var(--c-text);
+  font-size: 12px;
+}
+.tc-work-workflow-focus p {
+  margin: 6px 0 10px;
+  color: var(--c-dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.tc-work-workflow-focus > div {
+  display: flex;
+  gap: 6px;
+}
+.tc-work-workflow-runner {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+}
+.tc-work-workflow-runner input,
+.tc-work-workflow-runner select {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: 500 10px var(--font-sans);
+}
+.tc-work-workflow-focus button,
+.tc-work-workflow-form button,
+.tc-work-workflow-runner button {
+  padding: 7px 9px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text);
+  font: 700 10px var(--font-sans);
+  cursor: pointer;
+}
+.tc-work-primary.is-compact {
+  padding: 7px 9px;
+}
+.tc-work-workflow-form {
+  display: grid;
+  gap: 7px;
+}
+.tc-work-workflow-form input,
+.tc-work-workflow-form textarea,
+.tc-work-workflow-form select {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: 500 10px var(--font-sans);
+}
+.tc-work-workflow-form textarea {
+  min-height: 62px;
+  resize: vertical;
+}
+.tc-work-conversation {
+  min-height: 540px;
+  border: 1px solid var(--c-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--c-surface) 65%, transparent);
+  overflow: hidden;
+}
+.tc-work-conversation-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--c-border);
+}
+.tc-work-conversation-label strong,
+.tc-work-conversation-label small {
+  display: block;
+}
+.tc-work-conversation-label strong {
+  color: var(--c-text);
+  font-size: 12px;
+}
+.tc-work-conversation-label small {
+  margin-top: 2px;
+  color: var(--c-muted);
+  font-size: 9px;
+}
+.tc-work-job-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.tc-work-job-actions button,
+.tc-work-list-row button {
+  padding: 6px 9px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text);
+  font: 600 11px var(--font-sans);
+  cursor: pointer;
+}
+.tc-work-job-actions button:hover,
+.tc-work-list-row button:hover {
+  border-color: var(--c-accent-line);
+  color: var(--c-accent);
+}
+.tc-work-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tc-work-metrics > div {
+  padding: 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 13px;
+  background: var(--c-surface);
+}
+.tc-work-metrics strong,
+.tc-work-metrics span {
+  display: block;
+}
+.tc-work-metrics strong {
+  font-size: 18px;
+}
+.tc-work-metrics span {
+  margin-top: 3px;
+  color: var(--c-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.tc-work-card {
+  padding: 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  background: var(--c-surface);
+}
+.tc-work-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.tc-work-card > header span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.tc-work-card > header small {
+  color: var(--c-muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+.tc-work-muted {
+  margin: 0 0 11px;
+  color: var(--c-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.tc-work-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.tc-work-list-row strong,
+.tc-work-list-row small {
+  display: block;
+}
+.tc-work-list-row strong {
+  font-size: 11px;
+}
+.tc-work-list-row small {
+  max-width: 205px;
+  margin-top: 2px;
+  color: var(--c-muted);
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-work-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.tc-work-list-row .tc-work-row-actions .is-danger {
+  color: #ff9a9a;
+}
+.tc-work-automation-edit {
+  margin-bottom: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+.tc-work-bound {
+  color: var(--c-accent);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.tc-work-inline-connect {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  max-width: 155px;
+}
+.tc-work-inline-connect input {
+  min-width: 0;
+  width: 92px;
+  padding: 6px 7px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: 500 10px var(--font-sans);
+}

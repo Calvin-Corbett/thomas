@@ -37,20 +37,15 @@ async function maybeRenderSessionIntro() {
     showStarterSuggestionRail({ force: true, title: 'Recovered' });
 }
 
-function maybeShowAssistantFollowups({ assistantText = '', userText = '' } = {}) {
+function maybeShowAssistantFollowups() {
     if (!isOnboardingComplete()) return;
     if (easySetupState.interviewStarted) return;
     if (safeString(suggestionContext) === 'onboarding') return;
-    const context = {
-        userText: safeString(userText),
-        assistantText: safeString(assistantText),
-    };
-    const intent = classifySuggestionIntent(context);
     setAssistantSuggestions({
         title: 'Suggestions',
-        context: `followup_${intent}`,
+        context: 'followup',
         dismissible: true,
-        options: buildIntentSuggestionOptions(intent, context),
+        options: buildUniversalFollowupSuggestionOptions(),
     });
 }
 
@@ -58,7 +53,7 @@ function refreshEasySetupProfileOptions() {
     const profiles = Array.isArray(availableModelProfiles) ? availableModelProfiles : [];
     const manualProfiles = profiles.filter((p) => {
         const provider = safeString(p?.provider).toLowerCase();
-        return provider !== 'codex' && provider !== 'ollama' && provider !== 'local';
+        return provider !== 'codex' && provider !== 'openai_codex' && provider !== 'openai-codex' && provider !== 'ollama' && provider !== 'local';
     });
     const localProfiles = profiles.filter((p) => {
         const provider = safeString(p?.provider).toLowerCase();
@@ -67,7 +62,13 @@ function refreshEasySetupProfileOptions() {
 
     if (easySetupManualProfile) {
         easySetupManualProfile.innerHTML = '';
-        const source = manualProfiles.length > 0 ? manualProfiles : profiles.filter((p) => safeString(p?.name).toLowerCase() !== 'codex');
+        const source = manualProfiles.length > 0
+            ? manualProfiles
+            : profiles.filter((p) => {
+                const provider = safeString(p?.provider).toLowerCase();
+                const name = safeString(p?.name).toLowerCase();
+                return name !== 'codex' && name !== 'chatgpt' && provider !== 'codex' && provider !== 'openai_codex' && provider !== 'openai-codex';
+            });
         source.forEach((profile) => {
             const option = document.createElement('option');
             option.value = safeString(profile?.name);
@@ -171,6 +172,53 @@ function syncEasySetupPhysicsControls() {
     row.classList.toggle('is-disabled', !available);
 }
 
+/**
+ * Resolve the provider key of the profile currently selected in the manual
+ * easy-setup path (the <select id="easySetupManualProfile">). Returns a lower-
+ * case provider identity (e.g. 'anthropic', 'openai', 'gemini') or '' if none.
+ */
+function easySetupManualProviderKey() {
+    const profileName = safeString(easySetupManualProfile?.value);
+    if (!profileName) return '';
+    const profile = Array.isArray(availableModelProfiles)
+        ? availableModelProfiles.find((entry) => safeString(entry?.name).toLowerCase() === profileName.toLowerCase())
+        : null;
+    return safeString(profile?.provider || profileName).toLowerCase();
+}
+
+/**
+ * Provider-aware guidance for the manual API-key path. Returns the connection
+ * meta sentence + the API-key source guidance for the selected provider, so the
+ * copy never hardcodes ChatGPT/Codex for an Anthropic or Google profile.
+ */
+function easySetupManualProviderGuidance(providerKeyRaw = '') {
+    const key = safeString(providerKeyRaw).toLowerCase();
+    const display = formatProviderDisplay(key || 'provider') || 'your provider';
+    let keySource = `Paste your ${display} API key, then run live connectivity validation.`;
+    if (key.includes('anthropic') || key.includes('claude')) {
+        keySource = 'Paste your Anthropic API key from console.anthropic.com, then run live connectivity validation.';
+    } else if (key.includes('openai') || key.includes('gpt') || key.includes('chatgpt')) {
+        keySource = 'Paste your OpenAI API key from platform.openai.com/api-keys, then run live connectivity validation.';
+    } else if (key.includes('google') || key.includes('gemini')) {
+        keySource = 'Paste your Google AI Studio (Gemini) API key from aistudio.google.com/app/apikey, then run live connectivity validation.';
+    } else if (key.includes('mistral')) {
+        keySource = 'Paste your Mistral API key from console.mistral.ai, then run live connectivity validation.';
+    } else if (key.includes('groq')) {
+        keySource = 'Paste your Groq API key from console.groq.com/keys, then run live connectivity validation.';
+    } else if (key.includes('xai') || key.includes('grok')) {
+        keySource = 'Paste your xAI (Grok) API key from console.x.ai, then run live connectivity validation.';
+    } else if (key.includes('openrouter')) {
+        keySource = 'Paste your OpenRouter API key from openrouter.ai/keys, then run live connectivity validation.';
+    } else if (key.includes('perplexity')) {
+        keySource = 'Paste your Perplexity API key from perplexity.ai/settings/api, then run live connectivity validation.';
+    }
+    return {
+        display,
+        meta: `Manual key path. ${keySource}`,
+        keySource,
+    };
+}
+
 function syncEasySetupConnectionBlocks() {
     if (easySetupCodexBlock) easySetupCodexBlock.classList.toggle('hidden', easySetupState.selectedPath !== 'codex');
     if (easySetupManualBlock) easySetupManualBlock.classList.toggle('hidden', easySetupState.selectedPath !== 'manual');
@@ -178,9 +226,9 @@ function syncEasySetupConnectionBlocks() {
 
     if (easySetupConnectionMeta) {
         if (easySetupState.selectedPath === 'codex') {
-            easySetupConnectionMeta.textContent = 'ChatGPT OAuth path. Sign in, confirm account status, and validate a Codex profile.';
+            easySetupConnectionMeta.textContent = 'ChatGPT (OpenAI) sign-in. Sign in with your ChatGPT account and validate your profile — no CLI needed.';
         } else if (easySetupState.selectedPath === 'manual') {
-            easySetupConnectionMeta.textContent = 'Manual key path. Save API key to chosen profile and run live connectivity validation.';
+            easySetupConnectionMeta.textContent = easySetupManualProviderGuidance(easySetupManualProviderKey()).meta;
         } else if (easySetupState.selectedPath === 'local') {
             easySetupConnectionMeta.textContent = 'Local path. Validate Ollama endpoint and profile readiness on this machine.';
         } else {
@@ -205,15 +253,15 @@ function buildEasySetupDependencyPlan(bootstrap, selectedPath) {
     };
 
     if (selectedPath === 'codex') {
-        addDep('node', 'Node.js runtime', tools?.node?.installed, true, 'Runs the Codex CLI runtime (official Node.js installer).', tools?.node?.install_url || 'https://nodejs.org/en/download');
-        addDep('npm', 'npm package manager', tools?.npm?.installed, true, 'Installs and updates Codex CLI packages.', tools?.npm?.install_url || 'https://nodejs.org/en/download');
-        addDep('codex', 'Codex CLI', tools?.codex?.installed, true, 'Handles ChatGPT/Codex sign-in and bridge execution.', tools?.codex?.install_url || 'https://developers.openai.com/codex');
+        // ChatGPT path uses native OAuth — no CLI download of any kind.
+        addDep('chatgpt_oauth', 'Sign in with ChatGPT (OpenAI)', true, false, 'Thomas signs in with your ChatGPT account directly — nothing to install.', '');
     } else if (selectedPath === 'local') {
         addDep('ollama_installed', 'Ollama installed', tools?.ollama?.installed, true, 'Local runtime for on-device model execution.', tools?.ollama?.install_url || 'https://ollama.com/download');
         addDep('ollama_running', 'Ollama service running', tools?.ollama?.running, true, 'Verifies local Ollama service is reachable.', tools?.ollama?.install_url || 'https://ollama.com/download');
     } else if (selectedPath === 'manual') {
-        addDep('manual_key', 'Provider key connected', easySetupState.verified, false, 'Manual key flow does not require local runtime downloads.', '');
-        addDep('codex_optional', 'Codex CLI (optional)', tools?.codex?.installed, false, 'Optional only if you want ChatGPT OAuth later.', tools?.codex?.install_url || 'https://developers.openai.com/codex');
+        // Provider-aware: only an API key is needed, never a CLI.
+        const guidance = easySetupManualProviderGuidance(easySetupManualProviderKey());
+        addDep('manual_key', `${guidance.display} key connected`, easySetupState.verified, false, guidance.keySource, '');
     }
 
     return plan;
@@ -239,7 +287,7 @@ function buildEasySetupDependencyTrustNote(selectedPath, plan) {
     if (path === 'manual') {
         pathGuidance = 'Manual API Key is the lowest-download path.';
     } else if (path === 'codex') {
-        pathGuidance = 'Codex path requires official Node.js, npm, and Codex CLI tooling.';
+        pathGuidance = 'ChatGPT (OpenAI) signs in natively in Thomas — nothing to install.';
     } else if (path === 'local') {
         pathGuidance = 'Local path requires Ollama running on this machine.';
     }
@@ -322,14 +370,18 @@ function updateEasySetupReadyList() {
     const rows = [
         `Connection path: ${safeString(easySetupState.selectedPath) || 'not selected'}`,
         `Verification: ${easySetupState.verified ? 'passed' : 'not verified'}`,
-        `Validated profile: ${verifiedProfile}`,
-        `Codex models detected: ${codexModelCount}`,
+        `Validated profile: ${formatProviderDisplay(verifiedProfile) || verifiedProfile}`,
+    ];
+    if (easySetupState.selectedPath === 'codex' && codexModelCount > 0) {
+        rows.push(`ChatGPT models detected: ${codexModelCount}`);
+    }
+    rows.push(
         `Animation fidelity: ${normalizeAnimationFidelity(easySetupState.animationFidelity, recommendedAnimationFidelity())}`,
         `Advanced chat physics: ${easySetupState.chatPhysicsEnabled ? 'enabled' : 'disabled'}`,
         depMissing > 0
             ? `Required downloads still missing: ${depMissing}`
             : 'Required downloads: complete or not needed for selected path.',
-    ];
+    );
 
     easySetupReadyList.innerHTML = '';
     rows.forEach((rowText) => {
@@ -473,6 +525,89 @@ async function runEasySetupLocalModelSync(profile = 'local') {
         skipped: false,
         summary,
     };
+}
+
+function resolveEasySetupSelectedProfile() {
+    if (safeString(easySetupState.verifiedProfile)) return safeString(easySetupState.verifiedProfile);
+    if (easySetupState.selectedPath === 'manual') return safeString(easySetupManualProfile?.value);
+    if (easySetupState.selectedPath === 'local') return safeString(easySetupLocalProfile?.value) || 'local';
+    if (easySetupState.selectedPath === 'codex') {
+        const codexProfile = findEasySetupNativeCodexProfile()
+            || (availableModelProfiles || []).find((profile) => (
+                safeString(profile?.provider).toLowerCase() === 'codex'
+                || safeString(profile?.name).toLowerCase() === 'codex'
+            ));
+        return safeString(codexProfile?.name) || 'codex';
+    }
+    return safeString(currentPreferences?.advanced?.model?.active_profile);
+}
+
+function findEasySetupNativeCodexProfile() {
+    return (availableModelProfiles || []).find((profile) => {
+        const provider = safeString(profile?.provider).toLowerCase();
+        const name = safeString(profile?.name).toLowerCase();
+        return provider === 'openai_codex' || provider === 'openai-codex' || name === 'chatgpt';
+    }) || null;
+}
+
+function resolveEasySetupSelectedModelId(profileName = '') {
+    const profile = safeString(profileName);
+    if (!profile) return '';
+    const codexModel = easySetupState.selectedPath === 'codex' && Array.isArray(easySetupState.codexModels)
+        ? safeString(easySetupState.codexModels[0])
+        : '';
+    return codexModel
+        || resolveStoredModelSelection(profile, { allowLocalBackup: true })
+        || defaultModelIdForProfile(profile);
+}
+
+/**
+ * BUG 2 FIX: when a connection test verifies a provider/profile in easy setup,
+ * make that profile the ACTIVE model so the choice actually sticks (and survives
+ * a reload). Mirrors the verified-working model-setup Apply path: PATCH
+ * advanced.model.active_profile + model_id, refresh in-memory model state, and
+ * update the header + composer labels immediately. Without this the wizard
+ * configured a profile but never activated it, so the old/default model stayed.
+ */
+async function activateEasySetupProfile() {
+    const profile = resolveEasySetupSelectedProfile();
+    if (!profile) return;
+    const modelId = resolveEasySetupSelectedModelId(profile);
+
+    // Immediate in-memory + UI state (so the label flips before the round-trip).
+    if (modelId) activeModelOverride = modelId;
+    if (setupProviderSelector) setupProviderSelector.value = profile;
+    if (modelSelector) modelSelector.value = profile;
+    try { window.localStorage.setItem('thomas_active_profile', profile); } catch (_) {}
+    if (modelId) {
+        try { window.localStorage.setItem('thomas_active_model_id', modelId); } catch (_) {}
+    }
+
+    try {
+        const res = await fetch('/api/preferences', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                advanced: {
+                    model: {
+                        active_profile: profile,
+                        model_id: modelId || safeString(currentPreferences?.advanced?.model?.model_id),
+                    },
+                },
+            }),
+        });
+        if (res.ok) {
+            try { currentPreferences = await res.json(); } catch (_) {}
+        }
+    } catch (e) {
+        console.error('Failed to activate easy-setup profile', e);
+    }
+
+    // Refresh model state + every user-facing label so the new model shows now.
+    try { await fetchModels(); } catch (_) {}
+    if (modelSetupCurrentLabel) modelSetupCurrentLabel.textContent = _profileHeaderLabel(profile);
+    try { renderChatComposerSubbar(); } catch (_) {}
+    try { updateSetupProviderPickerButton(profile); } catch (_) {}
 }
 
 async function persistOnboardingPrefs(overrides = {}) {
@@ -642,7 +777,10 @@ async function openEasySetup({ source = 'manual', force = false, restart = false
         if (easySetupRecommendedHint) {
             const quickStartReason = safeString(bootstrap?.quick_start?.reason);
             if (recommendedPath) {
-                easySetupRecommendedHint.textContent = `Recommended: ${recommendedPath}. ${quickStartReason}`;
+                const recommendedLabel = typeof humanizeConnectionPath === 'function'
+                    ? humanizeConnectionPath(recommendedPath)
+                    : recommendedPath;
+                easySetupRecommendedHint.textContent = `Recommended: ${recommendedLabel}. ${quickStartReason}`;
             } else {
                 easySetupRecommendedHint.textContent = quickStartReason || 'Select the path you want. We will verify before applying.';
             }
@@ -706,40 +844,88 @@ async function handleEasySetupConnectionTest() {
 
     try {
         if (easySetupState.selectedPath === 'codex') {
-            const statusRes = await fetchJsonSafe('/api/codex/status');
-            let loggedIn = Boolean(statusRes.data?.logged_in);
-            if (!loggedIn) {
-                const loginRes = await fetchJsonSafe('/api/codex/login', { method: 'POST' });
-                loggedIn = Boolean(loginRes.data?.ok);
+            const nativeProfile = findEasySetupNativeCodexProfile();
+            if (nativeProfile?.name) {
+                const profileName = safeString(nativeProfile.name);
+                const statusUrl = `/api/openai-codex/status?profile=${encodeURIComponent(profileName)}`;
+                let statusRes = await fetchJsonSafe(statusUrl);
+                let loggedIn = Boolean(statusRes.data?.logged_in);
                 if (!loggedIn) {
-                    const errText = safeString(loginRes.data?.error) || 'Codex login failed.';
-                    throw new Error(`${errText} Remediation: install/login Codex CLI and retry.`);
+                    const loginRes = await fetchJsonSafe('/api/openai-codex/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ profile: profileName }),
+                        timeoutMs: 310000,
+                    });
+                    loggedIn = Boolean(loginRes.data?.ok && loginRes.data?.logged_in !== false);
+                    if (!loggedIn) {
+                        const pending = Boolean(loginRes.data?.pending || loginRes.data?.needs_paste);
+                        const errText = safeString(loginRes.data?.error) || 'ChatGPT OAuth login failed.';
+                        const pasteHint = pending ? ' Finish the browser sign-in, then retry connection test.' : '';
+                        throw new Error(`${errText}${pasteHint} Remediation: complete ChatGPT sign-in and retry.`);
+                    }
+                    statusRes = await fetchJsonSafe(statusUrl);
                 }
-            }
-            const modelsRes = await fetchJsonSafe('/api/codex/models');
-            easySetupState.codexModels = Array.isArray(modelsRes.data?.models) ? modelsRes.data.models : [];
 
-            const codexProfile = availableModelProfiles.find((p) => safeString(p?.provider).toLowerCase() === 'codex');
-            if (codexProfile?.name) {
-                const validateRes = await fetchJsonSafe(`/api/models/${encodeURIComponent(codexProfile.name)}/validate?tool_smoke=0`);
+                const modelsRes = await fetchJsonSafe(`/api/openai-codex/models?profile=${encodeURIComponent(profileName)}`);
+                easySetupState.codexModels = (Array.isArray(modelsRes.data?.models) ? modelsRes.data.models : [])
+                    .map((model) => safeString(model?.id || model))
+                    .filter(Boolean);
+
+                const validateRes = await fetchJsonSafe(`/api/models/${encodeURIComponent(profileName)}/validate?tool_smoke=0`);
                 if (!validateRes.ok || !Boolean(validateRes.data?.ok)) {
-                    const reason = safeString(validateRes.data?.error) || safeString(validateRes.text) || 'Codex profile validation failed.';
+                    const reason = safeString(validateRes.data?.error) || safeString(validateRes.text) || 'ChatGPT profile validation failed.';
                     throw new Error(`${reason} Remediation: run auto repair and retry.`);
                 }
-                easySetupState.verifiedProfile = safeString(codexProfile.name);
+                easySetupState.verifiedProfile = profileName;
+                easySetupState.verified = true;
+                const codexName = safeString(statusRes.data?.display_name) || safeString(statusRes.data?.email) || 'ChatGPT account';
+                setEasySetupStatus(
+                    easySetupConnectionStatus,
+                    `Connected as ${codexName}. Models detected: ${easySetupState.codexModels.length}.`,
+                    'ok'
+                );
+                if (easySetupCodexMeta) {
+                    easySetupCodexMeta.textContent = `Signed in with ChatGPT. Detected ${easySetupState.codexModels.length} model(s).`;
+                }
             } else {
-                easySetupState.verifiedProfile = 'codex';
-            }
+                const statusRes = await fetchJsonSafe('/api/codex/status');
+                let loggedIn = Boolean(statusRes.data?.logged_in);
+                if (!loggedIn) {
+                    const loginRes = await fetchJsonSafe('/api/codex/login', { method: 'POST', timeoutMs: 310000 });
+                    loggedIn = Boolean(loginRes.data?.ok);
+                    if (!loggedIn) {
+                        const errText = safeString(loginRes.data?.error) || 'ChatGPT login failed.';
+                        throw new Error(`${errText} Remediation: complete ChatGPT sign-in and retry.`);
+                    }
+                }
+                const modelsRes = await fetchJsonSafe('/api/codex/models');
+                easySetupState.codexModels = (Array.isArray(modelsRes.data?.models) ? modelsRes.data.models : [])
+                    .map((model) => safeString(model?.id || model))
+                    .filter(Boolean);
 
-            easySetupState.verified = true;
-            const codexName = safeString(statusRes.data?.display_name) || safeString(statusRes.data?.email) || 'Codex account';
-            setEasySetupStatus(
-                easySetupConnectionStatus,
-                `Connected as ${codexName}. Models detected: ${easySetupState.codexModels.length}.`,
-                'ok'
-            );
-            if (easySetupCodexMeta) {
-                easySetupCodexMeta.textContent = `Signed in. Detected ${easySetupState.codexModels.length} Codex model(s).`;
+                const codexProfile = availableModelProfiles.find((p) => safeString(p?.provider).toLowerCase() === 'codex');
+                if (codexProfile?.name) {
+                    const validateRes = await fetchJsonSafe(`/api/models/${encodeURIComponent(codexProfile.name)}/validate?tool_smoke=0`);
+                    if (!validateRes.ok || !Boolean(validateRes.data?.ok)) {
+                        const reason = safeString(validateRes.data?.error) || safeString(validateRes.text) || 'ChatGPT profile validation failed.';
+                        throw new Error(`${reason} Remediation: run auto repair and retry.`);
+                    }
+                    easySetupState.verifiedProfile = safeString(codexProfile.name);
+                } else {
+                    easySetupState.verifiedProfile = 'codex';
+                }
+
+                easySetupState.verified = true;
+                const codexName = safeString(statusRes.data?.display_name) || safeString(statusRes.data?.email) || 'ChatGPT account';
+                setEasySetupStatus(
+                    easySetupConnectionStatus,
+                    `Connected as ${codexName}. Models detected: ${easySetupState.codexModels.length}.`,
+                    'ok'
+                );
+                if (easySetupCodexMeta) {
+                    easySetupCodexMeta.textContent = `Signed in with ChatGPT. Detected ${easySetupState.codexModels.length} model(s).`;
+                }
             }
         } else if (easySetupState.selectedPath === 'manual') {
             const profile = safeString(easySetupManualProfile?.value);
@@ -801,6 +987,11 @@ async function handleEasySetupConnectionTest() {
 
     easySetupState.dependencyPlan = buildEasySetupDependencyPlan(easySetupState.bootstrap, easySetupState.selectedPath);
     setEasySetupDependencyDefaultStatus();
+    // BUG 2 FIX: a verified profile must become the active model immediately so
+    // the pick persists (and survives reload), not just get configured.
+    if (easySetupState.verified) {
+        await activateEasySetupProfile();
+    }
     updateEasySetupNavigation();
     await persistOnboardingPrefs({
         current_step: 'connect',
@@ -837,9 +1028,8 @@ async function runEasySetupRepair(trigger = 'repair') {
 
     if (!Boolean(res.data?.ok)) {
         const errorMsg = safeString(res.data?.error) || `Repair exited with code ${res.data?.exit_code}.`;
-        const stderrTail = safeString(res.data?.stderr_tail);
-        const finalMsg = stderrTail ? `${errorMsg}\n${stderrTail}` : errorMsg;
-        setEasySetupStatus(easySetupDependencyStatus, `${finalMsg} Remediation: approve prompts and retry.`, 'error');
+        /* The wizard speaks plainly; exit codes and stderr stay in telemetry. */
+        setEasySetupStatus(easySetupDependencyStatus, "Setup couldn't finish installing what Thomas needs. Approve the prompts and retry.", 'error');
         emitOnboardingTelemetry('wizard.download_approval_failed', {
             trigger,
             error: errorMsg,
@@ -1042,6 +1232,18 @@ function initEasySetup() {
     if (easySetupApproveAllBtn) {
         easySetupApproveAllBtn.addEventListener('click', () => {
             handleEasySetupApproveAll();
+        });
+    }
+    if (easySetupManualProfile) {
+        // Re-render the connection copy + dependency plan so the guidance always
+        // matches the picked provider (Anthropic/OpenAI/Google/...), never a
+        // hardcoded ChatGPT/Codex blurb.
+        easySetupManualProfile.addEventListener('change', () => {
+            if (easySetupState.selectedPath === 'manual') {
+                easySetupState.dependencyPlan = buildEasySetupDependencyPlan(easySetupState.bootstrap, easySetupState.selectedPath);
+                syncEasySetupConnectionBlocks();
+                renderEasySetupDependencies();
+            }
         });
     }
     if (easySetupReviewDownloadsBtn) easySetupReviewDownloadsBtn.addEventListener('click', handleEasySetupReviewDownloads);

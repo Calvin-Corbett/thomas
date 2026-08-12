@@ -9,7 +9,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
 from thomas.server.routes import chat_v2 as chat_v2_routes
-from thomas.tools.voice import VoiceProviderException
+from thomas.tools.voice import AudioData, VoiceProviderException
 
 
 def _parse_ndjson(blob: str):
@@ -24,10 +24,11 @@ def _parse_ndjson(blob: str):
 
 class _FakeBrain:
     calls = []
+    init_calls = []
 
     def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
         _ = args
-        _ = kwargs
+        _FakeBrain.init_calls.append(dict(kwargs or {}))
 
     async def process_message(self, session_id, conversation, prompt, dispatcher, **kwargs):  # noqa: ANN001
         payload = dict(kwargs or {})
@@ -56,11 +57,26 @@ class _FakeLLMClient:
     calls = []
     closed = []
 
-    def __init__(self, config, fallback_configs=None, failover_enabled=False):  # noqa: ANN001
+    def __init__(
+        self,
+        config,
+        fallback_configs=None,
+        failover_enabled=False,
+        failover_cooldown_s=300,
+        failover_on_auth_error=False,
+        max_retries=3,
+        base_retry_delay_s=0.8,
+        request_overrides=None,
+    ):  # noqa: ANN001
         self.config = config
         self._primary_config = config
         self._fallback_configs = list(fallback_configs or [])
         self._failover_enabled = bool(failover_enabled)
+        self._failover_cooldown_s = int(failover_cooldown_s)
+        self._failover_on_auth_error = bool(failover_on_auth_error)
+        self._max_retries = int(max_retries)
+        self._base_retry_delay = float(base_retry_delay_s)
+        self._request_overrides = dict(request_overrides or {})
         self._codex_provider = None
         _FakeLLMClient.calls.append(
             {
@@ -79,21 +95,70 @@ class _FakeLLMClient:
             }
         )
 
+    def runtime_trace(self):  # noqa: ANN201
+        runtime = {
+            "profile": getattr(self.config, "name", ""),
+            "provider": getattr(self.config, "provider", ""),
+            "model": getattr(self.config, "model", ""),
+            "base_url": getattr(self.config, "base_url", ""),
+        }
+        return {
+            "requested": dict(runtime),
+            "active": dict(runtime),
+            "failover_enabled": self._failover_enabled,
+            "failover_used": False,
+            "attempts": [{**runtime, "status": "success"}],
+        }
+
 
 class _FakeDelegationStarter:
     calls = []
 
     @staticmethod
-    async def start(app, *, session_id, prompt, mode, recent_messages, emit_event, repo_root=None, force=False):  # noqa: ANN001
+    async def start(
+        app,
+        *,
+        session_id,
+        prompt,
+        mode,
+        recent_messages,
+        emit_event,
+        repo_root=None,
+        force=False,
+        autonomy_level=4,
+        profile=None,
+        model_id=None,
+        reasoning_effort=None,
+        effort="diligent",
+        file_access=None,
+        guardrails="",
+        guardrail_modes=None,
+        session_llm=None,
+        work_context_id="",
+        memory_enabled=True,
+        runtime_policy=None,
+    ):  # noqa: ANN001
         _ = app
         _ = repo_root
-        _ = force
+        _ = guardrail_modes
+        _ = session_llm
         _FakeDelegationStarter.calls.append(
             {
                 "session_id": session_id,
                 "prompt": prompt,
                 "mode": mode,
                 "recent_messages": list(recent_messages or []),
+                "profile": profile,
+                "model_id": model_id,
+                "reasoning_effort": reasoning_effort,
+                "effort": effort,
+                "file_access": file_access,
+                "guardrails": guardrails,
+                "force": force,
+                "autonomy_level": autonomy_level,
+                "work_context_id": work_context_id,
+                "memory_enabled": memory_enabled,
+                "runtime_policy": dict(runtime_policy or {}),
             }
         )
         await emit_event(
@@ -120,14 +185,23 @@ class _FakeDelegationStarter:
 class _FakeVoiceBridge:
     calls = []
 
+    def __init__(self) -> None:
+        self._current_stt = SimpleNamespace(get_provider_name=lambda: "fake_stt")
+        self._current_tts = SimpleNamespace(get_provider_name=lambda: "fake_tts")
+
     async def transcribe(self, audio):  # noqa: ANN001
         _FakeVoiceBridge.calls.append(
             {
                 "format": getattr(audio, "format", ""),
                 "bytes": len(getattr(audio, "data", b"")),
+                "language": getattr(audio, "language", ""),
             }
         )
         return "hello from mic"
+
+    async def synthesize(self, text, voice="default", speed=1.0):  # noqa: ANN001, ANN201
+        _FakeVoiceBridge.calls.append({"text": text, "voice": voice, "speed": speed})
+        return AudioData(data=b"RIFFfakeWAVE", format="wav", sample_rate=16000, duration_ms=250, language="en-US")
 
 
 class _VoiceProviderBoom:
@@ -156,9 +230,15 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self._environment = patch.dict(
+            "os.environ",
+            {"THOMAS_DB_PATH": f"{self._tmpdir.name}/preferences.db"},
+        )
+        self._environment.start()
 
     def tearDown(self) -> None:
         try:
+            self._environment.stop()
             self._tmpdir.cleanup()
         finally:
             super().tearDown()
@@ -179,7 +259,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         )
         return create_app(cfg)
 
-    async def test_max_mode_streams_thomas_reply_and_background_delegation(self):
+    async def test_max_mode_streams_reply_and_leaves_dispatch_to_model(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -192,6 +272,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
                     "session_id": "sess-max",
                     "profile": "local",
                     "mode": "max",
+                    "model_id": "gpt-5.6-luna",
+                    "reasoning_effort": "xhigh",
                     "message": "please implement this plan",
                 },
             )
@@ -202,18 +284,16 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertIn("application/x-ndjson", str(resp.headers.get("Content-Type") or ""))
 
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
+        self.assertNotIn("delegation_started", event_types)
         reply_text = "".join(str(evt.get("text") or "") for evt in events if evt.get("type") == "text")
         self.assertEqual(reply_text, "Thomas reply.")
         self.assertNotIn("Got it. Sending", reply_text)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "max")
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
 
     async def test_session_delegations_endpoint_returns_runtime_state(self):
         with patch(
-            "thomas.server.routes.chat_v2.session_active_delegations",
+            "thomas.server.routes.chat_v2_request_support.session_active_delegations",
             return_value=[
                 {
                     "execution_id": "exec-xyz",
@@ -233,8 +313,55 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         delegations = payload.get("delegations") or []
         self.assertEqual(str(payload.get("session_id") or ""), "sess-delegations")
         self.assertTrue(any(str(row.get("task_id") or "") == "task-xyz" for row in delegations))
+        receipt = delegations[0].get("receipt") or {}
+        self.assertEqual(receipt.get("kind"), "delegated")
+        self.assertEqual(receipt.get("session_id"), "sess-delegations")
+        self.assertEqual(receipt.get("execution_id"), "exec-xyz")
+        self.assertIsNone(receipt.get("ok"))
 
-    async def test_auto_mode_launches_background_delegation_for_actionable_requests(self):
+    async def test_legacy_chat_url_is_a_deprecated_alias_for_v2(self):
+        _FakeBrain.calls = []
+        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": "sess-v1-alias",
+                    "profile": "local",
+                    "text": "Use the canonical engine.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertEqual(resp.headers.get("X-Thomas-Chat-Engine"), "v2")
+        self.assertEqual(resp.headers.get("Deprecation"), "true")
+        self.assertIn("successor-version", str(resp.headers.get("Link") or ""))
+        self.assertEqual(len(_FakeBrain.calls), 1)
+        self.assertTrue(any(event.get("type") == "done" for event in events))
+
+    async def test_legacy_agent_modes_migrate_to_v2_max(self):
+        for legacy_mode in ("batch", "swarm"):
+            _FakeBrain.calls = []
+            with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain):
+                resp = await self.client.post(
+                    "/api/chat",
+                    json={
+                        "session_id": f"sess-{legacy_mode}-migration",
+                        "profile": "local",
+                        "mode": legacy_mode,
+                        "text": "Run this long-horizon request.",
+                    },
+                )
+
+            self.assertEqual(resp.status, 200)
+            events = _parse_ndjson(await resp.text())
+            migrated = [event for event in events if event.get("type") == "mode_migrated"]
+            self.assertEqual(len(migrated), 1)
+            self.assertEqual(migrated[0].get("from"), legacy_mode)
+            self.assertEqual(migrated[0].get("to"), "max")
+            self.assertEqual(_FakeBrain.calls[0].get("mode"), "max")
+
+    async def test_auto_mode_wires_send_task_at_agent_autonomy_no_regex_launch(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -247,6 +374,10 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
                     "session_id": "sess-auto",
                     "profile": "local",
                     "mode": "auto",
+                    # At L3+ the MODEL gets the send_task tool and decides whether to
+                    # hand work off — organically, no regex pre-classification, no
+                    # auto-launch behind its back.
+                    "autonomy_level": 3,
                     "message": "please implement this plan",
                 },
             )
@@ -254,13 +385,51 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "auto")
+        # No regex-driven auto-launch: dispatch is the model's call via send_task.
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(len(_FakeDelegationStarter.calls), 0)
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
-        self.assertTrue(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
-        self.assertIn("[Visible reply constraint]", str(_FakeBrain.calls[0].get("prompt") or ""))
+        # The send_task callback IS wired at L3 (the model can dispatch organically).
+        self.assertIsNotNone(_FakeBrain.calls[0].get("send_task"))
+        # Thomas also receives the bounded governed-operator callback, never the
+        # raw registry. The controller itself enforces autonomy and guardrails.
+        self.assertIsNotNone(_FakeBrain.calls[0].get("operate"))
+        # No canned background-ack path; the prompt is unmodified (no visible-reply hack).
+        self.assertFalse(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
+        self.assertEqual(str(_FakeBrain.calls[0].get("prompt") or ""), "please implement this plan")
+
+    async def test_live_repo_words_do_not_force_background_dispatch(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
+        prompt = (
+            "Development task. Work in the live Thomas repo. Locally uninstall these "
+            "marketplace modules: Life Manager, Brownies, Smart Home, and Telegram Channel. "
+            "Use your file tools for repo edits."
+        )
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-auto-live-repo",
+                    "profile": "local",
+                    "mode": "auto",
+                    "autonomy_level": 3,
+                    "file_access": "project",
+                    "message": prompt,
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        event_types = [str(evt.get("type") or "") for evt in events]
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+        self.assertEqual(len(_FakeBrain.calls), 1)
+        self.assertIsNotNone(_FakeBrain.calls[0].get("send_task"))
+        self.assertEqual(_FakeBrain.calls[0].get("prompt"), prompt)
 
     async def test_auto_mode_low_autonomy_keeps_actionable_request_inline(self):
         _FakeBrain.calls = []
@@ -286,11 +455,11 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertNotIn("delegation_started", event_types)
         self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
-        self.assertFalse(bool(_FakeBrain.calls[0].get("background_ack_only", False)))
+        self.assertNotIn("dispatch_actionable", _FakeBrain.calls[0])
+        self.assertNotIn("background_ack_only", _FakeBrain.calls[0])
         self.assertEqual(str(_FakeBrain.calls[0].get("prompt") or ""), "please implement this plan")
 
-    async def test_auto_mode_enables_inline_actionable_for_explicit_file_tool_requests(self):
+    async def test_file_tool_words_do_not_toggle_a_hidden_actionable_route(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -310,9 +479,9 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertTrue(bool(_FakeBrain.calls[0].get("dispatch_actionable", False)))
+        self.assertNotIn("dispatch_actionable", _FakeBrain.calls[0])
 
-    async def test_auto_mode_can_launch_background_delegation_when_user_requests_reply_first(self):
+    async def test_reply_first_words_do_not_prelaunch_background_work(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -332,13 +501,11 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "auto")
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertFalse(bool(_FakeBrain.calls[0].get("dispatch_actionable", True)))
 
-    async def test_auto_mode_l4_launches_background_delegation_for_explicit_subagent_request(self):
+    async def test_subagent_words_do_not_prelaunch_background_work(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         with (
@@ -359,13 +526,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         event_types = [str(evt.get("type") or "") for evt in events]
-        self.assertIn("delegation_started", event_types)
-        self.assertEqual(len(_FakeDelegationStarter.calls), 1)
-        self.assertEqual(_FakeDelegationStarter.calls[0]["mode"], "auto")
-        self.assertEqual(
-            str(_FakeDelegationStarter.calls[0]["prompt"] or ""),
-            "Spawn exactly three real sub-agents now and keep the response short.",
-        )
+        self.assertNotIn("delegation_started", event_types)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
         self.assertEqual(
             str(_FakeBrain.calls[0].get("prompt") or ""),
@@ -397,23 +559,80 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(_FakeDelegationStarter.calls, [])
         self.assertEqual(len(_FakeBrain.calls), 1)
 
-    async def test_chat_v2_forwards_token_economy_to_brain(self):
+    async def test_token_economy_does_not_prelaunch_delegation(self):
         _FakeBrain.calls = []
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain):
+        _FakeDelegationStarter.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
             resp = await self.client.post(
                 "/api/v2/chat",
                 json={
                     "session_id": "sess-economy",
                     "profile": "local",
                     "mode": "auto",
+                    "autonomy_level": 4,
                     "token_economy": "max",
                     "message": "Say only hello.",
                 },
             )
 
         self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertNotIn("delegation_started", [str(event.get("type") or "") for event in events])
+        reply_text = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
+        self.assertEqual(reply_text, "Thomas reply.")
         self.assertEqual(len(_FakeBrain.calls), 1)
-        self.assertEqual(str(_FakeBrain.calls[0].get("token_economy") or ""), "max")
+        self.assertIsNotNone(_FakeBrain.calls[0].get("send_task"))
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+
+    async def test_chat_v2_max_token_economy_respects_low_autonomy_cap(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-economy-low-autonomy",
+                    "profile": "local",
+                    "mode": "auto",
+                    "autonomy_level": 2,
+                    "token_economy": "max",
+                    "message": "Compare the three options.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(len(_FakeBrain.calls), 1)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+
+    async def test_max_mode_controls_do_not_start_worker_without_model_call(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-worker-controls",
+                    "profile": "local",
+                    "mode": "max",
+                    "file_access": "full",
+                    "token_economy": "max",
+                    "thomas_guardrails": "fortress",
+                    "message": "Create a safe workspace artifact.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+        self.assertEqual(len(_FakeBrain.calls), 1)
 
     async def test_chat_v2_transcribe_route_accepts_audio_upload(self):
         from unittest.mock import AsyncMock
@@ -424,6 +643,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         ):
             form = __import__("aiohttp").FormData()
             form.add_field("audio", b"RIFFfake", filename="sample.wav", content_type="audio/wav")
+            form.add_field("language", "en-US")
             resp = await self.client.post(
                 "/api/v2/chat/transcribe",
                 data=form,
@@ -435,6 +655,27 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(str(payload.get("text") or ""), "hello from mic")
         self.assertEqual(len(_FakeVoiceBridge.calls), 1)
         self.assertEqual(str(_FakeVoiceBridge.calls[0].get("format") or ""), "wav")
+        self.assertEqual(str(_FakeVoiceBridge.calls[0].get("language") or ""), "en-US")
+
+    async def test_chat_v2_speak_route_returns_audio_and_provider_receipt(self):
+        from unittest.mock import AsyncMock
+
+        _FakeVoiceBridge.calls = []
+        with patch(
+            "thomas.server.routes.chat_v2._voice_bridge_for_request",
+            AsyncMock(return_value=_FakeVoiceBridge()),
+        ):
+            response = await self.client.post(
+                "/api/v2/chat/speak",
+                json={"text": "hello owner", "voice": "default", "speed": 1.25},
+            )
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(await response.read(), b"RIFFfakeWAVE")
+        self.assertEqual(response.headers["Content-Type"], "audio/wav")
+        self.assertEqual(response.headers["X-Thomas-Voice-Provider"], "fake_tts")
+        self.assertEqual(response.headers["X-Thomas-Audio-Language"], "en-US")
+        self.assertEqual(_FakeVoiceBridge.calls[-1]["speed"], 1.25)
 
     async def test_chat_v2_applies_reasoning_effort_from_payload(self):
         _FakeBrain.calls = []
@@ -459,6 +700,118 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertTrue(_FakeLLMClient.calls)
         self.assertEqual(_FakeLLMClient.calls[-1]["reasoning_effort"], "low")
+
+    async def test_chat_v2_memory_toggle_disables_long_term_memory_for_turn(self):
+        _FakeBrain.calls = []
+        _FakeBrain.init_calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-memory-disabled",
+                    "profile": "local",
+                    "mode": "auto",
+                    "memory": False,
+                    "message": "Say only hello.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        self.assertTrue(_FakeBrain.init_calls)
+        self.assertIsNone(_FakeBrain.init_calls[-1]["memory_engine"])
+
+    async def test_chat_v2_persists_memory_off_across_later_model_turns(self):
+        _FakeBrain.init_calls = []
+        _FakeDelegationStarter.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            first = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-memory-persisted-off",
+                    "profile": "local",
+                    "mode": "max",
+                    "memory": False,
+                    "message": "Build a small report.",
+                },
+            )
+            second = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-memory-persisted-off",
+                    "mode": "max",
+                    "message": "Build another small report.",
+                },
+            )
+
+        self.assertEqual(first.status, 200)
+        self.assertEqual(second.status, 200)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+        self.assertIsNone(_FakeBrain.init_calls[-1]["memory_engine"])
+        meta = await self.app[chat_v2_routes.APP_SESSION_STORE].load_meta("sess-memory-persisted-off")
+        self.assertIsNotNone(meta)
+        self.assertFalse(meta.memory_enabled)
+
+    async def test_reasoning_effort_does_not_override_independent_token_economy(self):
+        _FakeBrain.calls = []
+        _FakeLLMClient.calls = []
+        _FakeDelegationStarter.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-independent-settings",
+                    "profile": "local",
+                    "mode": "max",
+                    "reasoning_effort": "xhigh",
+                    "token_economy": "cheap",
+                    "message": "Build a small report.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
+        self.assertEqual(_FakeLLMClient.calls[-1]["reasoning_effort"], "xhigh")
+        self.assertEqual(_FakeBrain.calls[-1]["token_economy"], "cheap")
+
+    async def test_chat_v2_applies_model_id_from_payload(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
+        _FakeLLMClient.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
+        ):
+            resp = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-model-override",
+                    "profile": "local",
+                    "mode": "auto",
+                    "model_id": "office-chat-model",
+                    "message": "Say only hello.",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        self.assertTrue(_FakeLLMClient.calls)
+        self.assertEqual(_FakeLLMClient.calls[-1]["model"], "office-chat-model")
+        runtime_event = next(event for event in _parse_ndjson(await resp.text()) if event["type"] == "model_runtime")
+        self.assertEqual(runtime_event["runtime"]["requested"]["profile"], "local")
+        self.assertEqual(runtime_event["runtime"]["active"]["model"], "office-chat-model")
+        self.assertFalse(runtime_event["runtime"]["failover_used"])
 
     async def test_chat_v2_reuses_cached_llm_for_same_session(self):
         _FakeBrain.calls = []
@@ -532,32 +885,46 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         entry = cache["sess-cache-refresh"]
         self.assertEqual(getattr(entry.llm.config, "reasoning_effort", ""), "high")
 
-    async def test_get_or_create_session_llm_uses_warm_codex_provider(self):
+    async def test_chat_v2_reuses_saved_model_and_reasoning_when_later_turn_omits_them(self):
+        _FakeBrain.calls = []
+        _FakeDelegationStarter.calls = []
         _FakeLLMClient.calls = []
         _FakeLLMClient.closed = []
-        warm_provider = object()
-        model_cfg = ModelConfig(name="codex", provider="codex", model="gpt-5.4")
-        pool_key = chat_v2_routes._warm_codex_pool_key(model_cfg)
-        self.app[chat_v2_routes.APP_SESSION_LLM_CACHE].clear()
-        self.app[chat_v2_routes.APP_WARM_CODEX_POOL].clear()
-        self.app[chat_v2_routes.APP_WARM_CODEX_TASKS].clear()
-        self.app[chat_v2_routes.APP_WARM_CODEX_POOL][pool_key] = warm_provider
-
         with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
             patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
-            patch("thomas.server.routes.chat_v2._schedule_codex_prewarm", lambda app, cfg: None),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _FakeDelegationStarter.start),
         ):
-            llm, _lock = await chat_v2_routes._get_or_create_session_llm(
-                self.app,
-                session_id="sess-warm-provider",
-                model_cfg=model_cfg,
-                fallback_cfgs=[],
-                failover_enabled=False,
+            first = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-saved-settings",
+                    "profile": "local",
+                    "mode": "auto",
+                    "autonomy_level": 4,
+                    "model_id": "gpt-5.6-terra",
+                    "reasoning_effort": "xhigh",
+                    "message": "Say only hello.",
+                },
+            )
+            # Simulate a process-local LLM cache miss. The durable SessionMeta,
+            # rather than the first client instance, must restore the settings.
+            self.app[chat_v2_routes.APP_SESSION_LLM_CACHE].clear()
+            second = await self.client.post(
+                "/api/v2/chat",
+                json={
+                    "session_id": "sess-saved-settings",
+                    "mode": "max",
+                    "message": "Build a small text report in the background.",
+                },
             )
 
-        self.assertEqual(len(_FakeLLMClient.calls), 1)
-        self.assertIs(getattr(llm, "_codex_provider", None), warm_provider)
-        self.assertNotIn(pool_key, self.app[chat_v2_routes.APP_WARM_CODEX_POOL])
+        self.assertEqual(first.status, 200)
+        self.assertEqual(second.status, 200)
+        self.assertEqual(len(_FakeLLMClient.calls), 2)
+        self.assertEqual(_FakeLLMClient.calls[-1]["model"], "gpt-5.6-terra")
+        self.assertEqual(_FakeLLMClient.calls[-1]["reasoning_effort"], "xhigh")
+        self.assertEqual(_FakeDelegationStarter.calls, [])
 
     async def test_chat_v2_session_delete_evicts_cached_llm(self):
         _FakeBrain.calls = []
@@ -587,7 +954,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         cache = self.app[chat_v2_routes.APP_SESSION_LLM_CACHE]
         self.assertNotIn("sess-cache-delete", cache)
 
-    async def test_reply_first_background_constrains_visible_prompt(self):
+    async def test_reply_first_words_are_not_rewritten_before_model(self):
         _FakeBrain.calls = []
         _FakeDelegationStarter.calls = []
         prompt = (
@@ -611,9 +978,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(len(_FakeBrain.calls), 1)
         visible_prompt = str(_FakeBrain.calls[0].get("prompt") or "")
-        self.assertIn("[Visible reply constraint]", visible_prompt)
-        self.assertIn("Reply fast with one sentence now", visible_prompt)
-        self.assertNotIn("draft a detailed hour-by-hour Friday plan.", visible_prompt)
+        self.assertEqual(visible_prompt, prompt)
+        self.assertEqual(_FakeDelegationStarter.calls, [])
 
     async def test_chat_v2_rejects_empty_message_payload(self):
         resp = await self.client.post(
@@ -679,7 +1045,7 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(len(_FakeBrain.calls), 1)
 
-    async def test_chat_v2_surfaces_launcher_failure_as_delegation_failed_event(self):
+    async def test_launcher_is_not_called_without_structured_model_dispatch(self):
         _FakeBrain.calls = []
 
         async def _boom(*args, **kwargs):  # noqa: ANN002, ANN003
@@ -703,8 +1069,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
         failure_events = [evt for evt in events if evt.get("type") == "delegation_failed"]
-        self.assertEqual(len(failure_events), 1)
-        self.assertIn("delegation launcher blew up", str(failure_events[0].get("last_progress") or ""))
+        self.assertEqual(failure_events, [])
+        self.assertEqual(len(_FakeBrain.calls), 1)
 
     async def test_chat_v2_emits_error_event_when_brain_raises(self):
         with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrainBoom):
@@ -722,7 +1088,8 @@ class TestServerChatV2MaxMode(AioHTTPTestCase):
         events = _parse_ndjson(await resp.text())
         error_events = [evt for evt in events if evt.get("type") == "error"]
         self.assertEqual(len(error_events), 1)
-        self.assertIn("brain exploded", str(error_events[0].get("error") or ""))
+        self.assertEqual(error_events[0].get("error"), "Thomas could not complete this chat turn safely.")
+        self.assertNotIn("brain exploded", str(error_events[0]))
 
     async def test_chat_v2_transcribe_requires_audio_and_surfaces_errors(self):
         wrong_type = await self.client.post("/api/v2/chat/transcribe", data=b"raw-bytes")

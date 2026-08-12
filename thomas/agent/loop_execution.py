@@ -10,39 +10,9 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from thomas.agent.response_tone import (
-    best_practice_default_hint,
-    best_practice_gate_hint,
-    live_test_default_hint,
-    prompt_requests_code_output,
-    simplified_review_default_hint,
-)
-from thomas.agent.skills_runtime import (
-    format_runtime_skills_context,
-    resolve_runtime_skills,
-)
-from thomas.core.autonomy import autonomy_spec
-from thomas.core.config import load_config
-from thomas.core.events import AgentEvent, EventType
-from thomas.core.llm import LLMError
-from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
-from thomas.core.token_economy import (
-    build_token_economy_meta,
-    loop_context_budgets,
-    loop_iteration_prompt_caps,
-    loop_tool_spec_budgets,
-    normalize_token_economy_level,
-    runtime_overhead_policy,
-)
-from thomas.core.tokens import estimate_tokens, estimate_tools_tokens
-
-try:
-    from thomas.agent.context_compaction import compact_conversation
-
-    _HAS_COMPACTION = True
-except ImportError:
-    _HAS_COMPACTION = False
-
+from thomas.agent.checkin_policy import resolve_checkin_policy
+from thomas.agent.constraint_envelope import ConstraintEnvelope, envelope_events
+from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.agent.loop_completion import handle_post_loop_completion
 from thomas.agent.loop_core import LoopState
 from thomas.agent.loop_helpers import (
@@ -51,43 +21,92 @@ from thomas.agent.loop_helpers import (
     _validate_benchmark_code_output,
     httpx_ConnectError,
 )
+from thomas.agent.loop_tool_protocol import (
+    _MAX_TOOL_RESULT_CHARS as _MAX_TOOL_RESULT_CHARS,
+)
+from thomas.agent.loop_tool_protocol import (
+    _canonical_code_tool_name as _canonical_code_tool_name,
+)
+from thomas.agent.loop_tool_protocol import (
+    _code_tool_action as _code_tool_action,
+)
+from thomas.agent.loop_tool_protocol import (
+    _failed_tool_signature as _failed_tool_signature,
+)
+from thomas.agent.loop_tool_protocol import (
+    _is_code_mutation_name as _is_code_mutation_name,
+)
+from thomas.agent.loop_tool_protocol import (
+    _record_failed_tool as _record_failed_tool,
+)
+from thomas.agent.loop_tool_protocol import (
+    _shell_command_is_mutation as _shell_command_is_mutation,
+)
+from thomas.agent.loop_tool_protocol import (
+    _tool_result_with_recovery as _tool_result_with_recovery,
+)
+from thomas.agent.loop_tool_protocol import (
+    _tool_spec_name as _tool_spec_name,
+)
+from thomas.agent.response_tone import (
+    best_practice_default_hint,
+    simplified_review_default_hint,
+)
+from thomas.agent.routing import PATH_CODING, PATH_MODEL_OWNED
+from thomas.agent.skills_runtime import (
+    format_runtime_skills_context,
+    resolve_runtime_skills,
+)
+from thomas.core.autonomy import autonomy_spec
+from thomas.core.config import load_config
+from thomas.core.events import AgentEvent, EventType
+from thomas.core.llm import LLMError
+from thomas.core.llm_shared import callable_accepts_keyword
+from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
+from thomas.core.token_economy import (
+    build_token_economy_meta,
+    coerce_base_iterations,
+    compute_max_passes,
+    loop_context_budgets,
+    loop_iteration_prompt_caps,
+    normalize_token_economy_level,
+    runtime_overhead_policy,
+)
+from thomas.core.tokens import estimate_tokens
 
 if TYPE_CHECKING:
     from thomas.agent.loop import AgentLoop
 
 log = logging.getLogger(__name__)
 
-_MAX_TOOL_RESULT_CHARS = 5_000
 _TPM_WINDOW_SECONDS = 60.0
-_TPM_MAX_AUTO_WAIT_S = 20.0
-_REPLY_FIRST_ROUTE_PATHS = frozenset({"casual_chat", "personal_context", "assistant_meta", "general", "planning"})
-_STREAM_HOLDBACK_CHARS = 32
+_TPM_WAIT_SLICE_SECONDS = 20.0
 
 
-def _is_reply_first_route(*, route_path: str, project_related: bool, explicit_action: bool) -> bool:
-    path = str(route_path or "").strip().lower()
-    if path == "planning":
-        return True
-    if path not in _REPLY_FIRST_ROUTE_PATHS:
-        return False
-    return not (project_related and explicit_action)
+def _connection_error_message(llm: Any) -> str:
+    """Name the provider that actually dropped the connection.
 
-
-def _stable_text_emit_length(text: str) -> int:
-    src = str(text or "")
-    if not src:
-        return 0
-    if src.endswith(("\n", ".", "!", "?", ":")):
-        return len(src)
-    if len(src) <= _STREAM_HOLDBACK_CHARS:
-        return 0
-    return len(src) - _STREAM_HOLDBACK_CHARS
+    The old template printed ``Cannot connect to LLM at {base_url}. Is Ollama
+    running?`` for every provider — but hosted profiles (ChatGPT/Codex) have
+    no base_url, so a network blip mid-run surfaced as ``at .`` with advice
+    to start Ollama: a diagnosis that was wrong in every part. The Ollama
+    hint belongs only to a local endpoint."""
+    cfg = getattr(llm, "config", None)
+    base_url = str(getattr(cfg, "base_url", "") or "").strip()
+    provider = str(getattr(cfg, "provider", "") or "").strip()
+    model = str(getattr(cfg, "model", "") or "").strip()
+    target = base_url or provider or model or "the configured model provider"
+    message = f"Lost the connection to {target} mid-run (network drop or expired login)."
+    if base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
+        message += " If this is a local Ollama endpoint, check: ollama serve"
+    return message
 
 
 async def _agent_loop_run(
     self: AgentLoop,
     prompt: Any,
     *,
+    intent_text: str | None = None,
     mode: str = "auto",
     tools_policy: str = "auto",
     token_economy: str = "optimal",
@@ -105,79 +124,48 @@ async def _agent_loop_run(
     4. Append tool results, loop back to LLM
     5. Stop on: no tool calls, max iterations, context overflow, or error
     """
-    # Extract plain text for heuristics/memory even if prompt is multimodal.
+    # ``prompt`` is the complete model context. ``intent_text`` remains the
+    # user-visible current turn for receipts, but no deterministic layer
+    # classifies either string before the model sees them.
     prompt_text = prompt if isinstance(prompt, str) else ""
     if isinstance(prompt, list):
         for part in prompt:
             if isinstance(part, dict) and part.get("type") == "text":
                 prompt_text += str(part.get("text", "")) + "\n"
         prompt_text = prompt_text.strip()
+    request_text = str(intent_text) if intent_text is not None else prompt_text
+    routing_text = request_text
     benchmark_mode = str(job_type or "").strip().lower() == "benchmark"
-
-    # Suspicious prompt gate: if the prompt matches jailbreak/extraction patterns,
-    # require Windows PIN before continuing. Abort if denied.
+    current_job_type = str(job_type or "").strip().lower()
+    raw_write_guard_limit = str(os.environ.get("THOMAS_SELF_DEVELOPMENT_WRITE_GUARD_LIMIT") or "6").strip()
     try:
-        from thomas.tools.windows_auth import check_prompt_suspicious, gate_suspicious_prompt
+        write_guard_limit = int(raw_write_guard_limit)
+    except (TypeError, ValueError, OverflowError):
+        write_guard_limit = 6
+    self._current_job_type = current_job_type
+    self._self_development_write_guard = (
+        {
+            "inspection_count": 0,
+            "write_seen": False,
+            "limit": max(0, min(write_guard_limit, 50)),
+        }
+        if current_job_type == "self_development"
+        else None
+    )
 
-        is_suspicious, matched_pattern = check_prompt_suspicious(prompt_text)
-        if is_suspicious:
-            log.warning("Suspicious prompt detected (matched: %r). Requiring PIN.", matched_pattern)
-            yield AgentEvent(
-                type=EventType.SECURITY_FLAG,
-                data={
-                    "flag": "suspicious_prompt",
-                    "matched_pattern": matched_pattern[:100],
-                    "message": "This request matched a suspicious pattern. Windows PIN required to proceed.",
-                },
-            )
-            # Pass precomputed result — avoids running the regex a second time
-            authorized = gate_suspicious_prompt(
-                prompt_text,
-                action_description="Proceed with flagged request",
-                precomputed=(is_suspicious, matched_pattern),
-                no_human_mode=os.environ.get("THOMAS_NO_HUMAN_MODE")
-                or os.environ.get("THOMAS_GUARDRAILS_NO_HUMAN_MODE")
-                or "human",
-            )
-            if not authorized:
-                yield AgentEvent(
-                    type=EventType.AGENT_END,
-                    data={
-                        "reason": "suspicious_prompt_denied",
-                        "message": "Request blocked: Windows PIN not entered or incorrect.",
-                    },
-                )
-                return
-            log.info("Suspicious prompt authorized via Windows PIN.")
-    except Exception as e:  # REVIEWED: log-and-continue — gate check is optional, non-fatal
-        log.debug("Suspicious prompt gate check failed (non-fatal): %s", e)
-
-    route_input, route_input_source = self._routing_input_text(prompt_text)
-
-    # Check conversation intelligence for multi-turn context
-    is_followup = self.check_if_followup(prompt_text)
-    user_is_confused = self.detect_user_confusion(prompt_text)
-    if is_followup:
-        # For follow-ups, try to resolve pronouns and references
-        resolved_prompt = self.resolve_message_references(prompt_text)
-        # Only use resolved version if it added context
-        if len(resolved_prompt) > len(prompt_text):
-            prompt_text = resolved_prompt
-
+    # Provider policy and structured tool authorization remain active. Thomas
+    # does not inspect prompt words to pre-reject a natural-language turn.
+    route_input = routing_text
+    route_input_source = "current_turn"
     route = self._router.decide(
-        route_input,
+        routing_text,
         requested_mode=mode,
         requested_tools_policy=tools_policy,
-        is_followup=is_followup,
     )
-    route_path = str(route.path or "")
-    project_related = self._is_project_related_prompt(prompt_text)
-    explicit_action = self._has_explicit_action_intent(prompt_text)
-    continuation_turn = bool(route_input_source == "history_augmented")
-    reply_first_route = _is_reply_first_route(
-        route_path=route_path,
-        project_related=project_related,
-        explicit_action=explicit_action,
+    prompt_route_path = (
+        PATH_CODING
+        if current_job_type in {"benchmark", "coding", "coding_task", "self_development"}
+        else PATH_MODEL_OWNED
     )
     autonomy = autonomy_spec(self._autonomy_level)
     autonomy_name = str(autonomy.name)
@@ -192,12 +180,8 @@ async def _agent_loop_run(
         or str(self._profile_type or "").strip().lower() == "non_coder"
         or str(self._profile_type or "").strip().lower() == "non-coder"
     )
-    best_practice_gate_active = bool(overhead_policy.include_best_practice_hint) and (
-        bool(self._non_coder_profile) or bool(best_practice_gate_hint(prompt_text))
-    )
+    best_practice_gate_active = bool(overhead_policy.include_best_practice_hint) and bool(self._non_coder_profile)
     best_practice_gate_source = "profile_non_coder" if bool(self._non_coder_profile) else ""
-    if not best_practice_gate_source and best_practice_gate_hint(prompt_text):
-        best_practice_gate_source = "prompt"
 
     review_quality_hint = ""
     if overhead_policy.include_review_quality_hint:
@@ -206,11 +190,9 @@ async def _agent_loop_run(
             non_coder_profile=bool(self._non_coder_profile),
         )
     best_practice_hint = ""
-    if overhead_policy.include_best_practice_hint:
-        best_practice_hint = (
-            best_practice_default_hint() if bool(self._non_coder_profile) else best_practice_gate_hint(prompt_text)
-        )
-    code_output_validation_enabled = bool(prompt_requests_code_output(prompt_text))
+    if overhead_policy.include_best_practice_hint and bool(self._non_coder_profile):
+        best_practice_hint = best_practice_default_hint()
+    code_output_validation_enabled = benchmark_mode
     runtime_skills_context = ""
     runtime_skills_payload: dict[str, Any] = {
         "enabled": False,
@@ -221,23 +203,17 @@ async def _agent_loop_run(
         "roots": [],
         "selected": [],
     }
-    # Skip runtime skill discovery on reply-first turns unless the user
-    # explicitly asks for a skill.
-    prompt_lower = str(prompt_text or "").lower()
-    explicit_skill_hint = ("$" in str(prompt_text or "")) or ("skill " in prompt_lower)
+    # Runtime skill policy owns explicit/pinned skill handling.  AgentLoop does
+    # not inspect prompt words to decide whether discovery should run.
     skills_mode = str(overhead_policy.runtime_skills_mode or "off").strip().lower()
-    should_resolve_runtime_skills = False
-    if skills_mode == "auto":
-        should_resolve_runtime_skills = (not reply_first_route) or explicit_skill_hint
-    elif skills_mode == "explicit":
-        should_resolve_runtime_skills = explicit_skill_hint
+    should_resolve_runtime_skills = skills_mode in {"auto", "explicit"}
     if should_resolve_runtime_skills:
         try:
             runtime_skills = resolve_runtime_skills(
                 self.config,
-                prompt_text=prompt_text,
+                prompt_text=routing_text,
                 relevance_text=route_input,
-                route_path=str(route.path or ""),
+                route_path=prompt_route_path,
                 cwd=Path.cwd(),
             )
             runtime_skills_context = format_runtime_skills_context(runtime_skills)
@@ -248,257 +224,29 @@ async def _agent_loop_run(
     usage_before = self._session_usage_snapshot()
     stream_usage = self._normalize_usage(0, 0, 0)
 
-    if self._is_tool_usage_question(prompt_text):
-        preserve_first, preserve_last = self._history_preserve_counts(route)
-        history_token_cap = self._history_token_cap(route)
-        answer = self._tool_usage_response()
-
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "prompt": prompt_text,
-                "route": route.to_dict(),
-                "route_input_source": route_input_source,
-                "mode": effective_mode,
-                "tools_policy": "never",
-                "autonomy_level": int(self._autonomy_level),
-                "autonomy_name": autonomy_name,
-                "token_economy": token_economy_meta,
-                "library_enabled": bool(self._library is not None),
-                "skills": dict(runtime_skills_payload),
-                "history_policy": {
-                    "preserve_first": int(preserve_first),
-                    "preserve_last": int(preserve_last),
-                    "history_token_cap": int(history_token_cap),
-                },
-            },
-        )
-
-        if prompt_text and not benchmark_mode:
-            self._record_event("user_message", prompt_text)
-            self._capture_profile_hints(prompt_text)
-        self._conversation.append({"role": "user", "content": prompt})
-        self._sync_user_message_to_intelligence(prompt)
-        self._conversation.append({"role": "assistant", "content": answer})
-        self._sync_assistant_message_to_intelligence(answer)
-        yield AgentEvent.text_delta(answer, iteration=0)
-
-        usage_obj = {
-            "prompt_tokens": estimate_tokens(prompt_text),
-            "completion_tokens": estimate_tokens(answer),
-            "total_tokens": estimate_tokens(prompt_text) + estimate_tokens(answer),
-        }
-        token_report = self._build_token_report(
-            prompt_text=prompt_text,
-            usage_obj=usage_obj,
-            mode=effective_mode,
-            iterations=1,
-            peak_context_tokens=usage_obj["total_tokens"],
-            avg_context_tokens=usage_obj["total_tokens"],
-            memory_tokens=0,
-            tool_chars_total=0,
-            tool_chars_kept=0,
-        )
-        token_report["route"] = route.to_dict()
-        token_report["effective_tools_policy"] = "never"
-        token_report["autonomy_level"] = int(self._autonomy_level)
-        token_report["autonomy_name"] = autonomy_name
-        token_report["continuity"] = {
-            "route_input_source": route_input_source,
-            "followup_suppressed_count": 0,
-            "thought_leak_suppressed_count": 0,
-            "full_auto_reprompt_count": 0,
-            "clarification_question_cap": 0,
-            "clarification_questions_asked": 0,
-            "clarification_reprompt_count": 0,
-            "best_practice_gate_active": bool(best_practice_gate_active),
-            "best_practice_gate_source": str(best_practice_gate_source),
-            "profile_type": str(self._profile_type),
-            "code_output_guard_reprompts": 0,
-            "code_output_guard_last_issue": "",
-            "strict_issue_ownership": bool(strict_issue_ownership),
-            "high_prompt_spend_fail_iters": 0,
-        }
-        token_report["token_economy"] = dict(token_economy_meta)
-        token_report["skills"] = dict(runtime_skills_payload)
-        cfg_errors: list[str] = []
-        cfg_unknown: list[str] = []
-        try:
-            cfg_path = Path(os.environ.get("THOMAS_CONFIG") or "thomas.toml")
-            loaded_cfg = load_config(cfg_path)
-            cfg_errors = loaded_cfg.validate()
-            cfg_unknown = list(loaded_cfg.unknown_core_keys)
-        except Exception as e:  # REVIEWED: log-and-continue — audit optional, sets error list
-            cfg_errors = [f"config_audit_failed: {type(e).__name__}: {e}"]
-
-        quality_cfg = getattr(self.config, "quality", None)
-        combined_quality_events = list(_quality_carry_forward_events or [])
-        rules_report = evaluate_rules(
-            route_path=str(route.path or ""),
-            prompt_text=prompt_text,
-            response_text=answer,
-            tool_events=combined_quality_events,
-            requested_job_type=job_type,
-            config_errors=cfg_errors,
-            unknown_core_keys=cfg_unknown,
-            require_verification_for_coding=bool(getattr(quality_cfg, "require_verification_for_coding", True)),
-            require_tests_for_code_edits=bool(getattr(quality_cfg, "require_tests_for_code_edits", False)),
-            require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
-            strict_issue_ownership=bool(strict_issue_ownership),
-            skill_required_checks=list(runtime_skills_payload.get("required_checks") or []),
-            attempt=int(_quality_retry_count),
-            repo_root=Path.cwd(),
-        )
-        token_report["rules_of_road"] = rules_report
-
-        quality_enabled = bool(getattr(quality_cfg, "enabled", True))
-        quality_enforce = bool(getattr(quality_cfg, "enforce", True))
-        quality_max_retries = max(
-            0,
-            min(3, int(getattr(quality_cfg, "max_auto_retries", 1) or 0)),
-        )
-        if strict_issue_ownership:
-            quality_max_retries = max(quality_max_retries, 2)
-        issue_ownership_signals = rules_report.get("signals") if isinstance(rules_report, dict) else {}
-        if not isinstance(issue_ownership_signals, dict):
-            issue_ownership_signals = {}
-        issue_ownership_blocked = bool(
-            bool(issue_ownership_signals.get("strict_issue_ownership"))
-            and bool(issue_ownership_signals.get("unresolved_issue_detected"))
-        )
-        quality_required = not bool(rules_report.get("passed", False))
-        if (
-            quality_required
-            and _quality_retry_count < quality_max_retries
-            and ((quality_enabled and quality_enforce) or strict_issue_ownership)
-        ):
-            remediation_prompt = build_remediation_prompt(rules_report)
-            if remediation_prompt:
-                retry_job_type = str(job_type or rules_report.get("job_type") or "").strip().lower() or None
-                async for retry_event in self.run(
-                    remediation_prompt,
-                    mode=mode,
-                    tools_policy=tools_policy,
-                    token_economy=applied_token_economy,
-                    max_iterations=max_iterations,
-                    job_type=retry_job_type,
-                    _quality_retry_count=_quality_retry_count + 1,
-                    _quality_carry_forward_events=combined_quality_events,
-                ):
-                    yield retry_event
-                return
-            if strict_issue_ownership and issue_ownership_blocked:
-                block_error = (
-                    "Issue-ownership quality gate blocked completion: "
-                    "user-facing text still appears to describe unresolved issues or workaround-only work."
-                )
-                yield AgentEvent.agent_error(block_error, iteration=0)
-            return
-        if (
-            quality_required
-            and strict_issue_ownership
-            and issue_ownership_blocked
-            and _quality_retry_count >= quality_max_retries
-        ):
-            block_error = (
-                "Issue-ownership quality gate blocked completion: "
-                "user-facing text still appears to describe unresolved issues or workaround-only work."
-            )
-            yield AgentEvent.agent_error(block_error, iteration=0)
-            return
-
-        yield AgentEvent.agent_done(
-            text=answer,
-            iterations=1,
-            tool_calls=0,
-            usage=usage_obj,
-            token_report=token_report,
-        )
-        return
-
-    # Mode presets (the caller can still override with max_iterations).
+    # Effort controls a bounded number of passes. Explicit callers can still
+    # provide an exact pass count; model context fit is enforced per request.
+    configured_max_iter = coerce_base_iterations(getattr(self.config, "max_agent_iterations", None))
     if max_iterations is not None:
-        max_iter = max_iterations
-    elif effective_mode == "fast":
-        # Fast mode should not truncate task completion. Keep the same loop
-        # budget as normal mode; "fast" is handled by lighter behavior/budgets.
-        max_iter = self.config.max_agent_iterations
-    elif effective_mode == "thinking":
-        max_iter = min(self.config.max_agent_iterations * 2, 25)
+        max_iter = coerce_base_iterations(max_iterations)
     else:
-        max_iter = self.config.max_agent_iterations
-    if max_iterations is None and autonomy.prefers_extended_iterations:
-        if effective_mode == "fast":
-            # Fast mode still needs enough room for at least one tool turn + follow-up,
-            # but should not inherit very long full-auto iteration budgets.
-            max_iter = max(max_iter, min(max(self.config.max_agent_iterations, 2), 6))
-        else:
-            max_iter = max(max_iter, min(self.config.max_agent_iterations * 3, 32))
-    action_route = route_path in ("coding_task", "debug_audit", "planning", "research")
-    full_auto_action_turn = bool(
-        int(self._autonomy_level) == 4 and (project_related or explicit_action or action_route)
-    )
-    clarification_budget_active = bool(project_related or explicit_action or action_route)
-    clarification_question_cap = 2
-    if clarification_budget_active:
-        clarification_question_cap = 1
-    if clarification_budget_active and explicit_action and int(self._autonomy_level) >= 3:
-        clarification_question_cap = 0
-    if continuation_turn:
-        clarification_question_cap = 0 if clarification_budget_active else 1
-    if full_auto_action_turn:
-        clarification_question_cap = 0
-    clarification_question_cap = max(0, int(clarification_question_cap))
+        max_iter = compute_max_passes(applied_token_economy, configured_max_iter)
+    # The model owns whether to answer, clarify, or call a capability.  These
+    # counters remain in receipts for compatibility but no prose classifier
+    # triggers hidden clarification rewrites.
+    clarification_question_cap = 0
     full_auto_reprompt_count = 0
     clarification_questions_asked = 0
     clarification_reprompt_count = 0
     effective_tools_policy = route.tools_policy
-    if tools_policy == "auto" and route.tools_policy == "auto":
-        if effective_mode == "fast":
-            effective_tools_policy = "never"
-        elif effective_mode == "thinking":
-            effective_tools_policy = "always"
-    if tools_policy == "auto" and reply_first_route and not explicit_action and not project_related:
+    forced_tools_policy = autonomy.force_tools_policy
+    if forced_tools_policy == "never":
+        # Chat autonomy is a permission boundary, not an intent guess.
         effective_tools_policy = "never"
+    elif tools_policy == "auto" and forced_tools_policy in {"auto", "always"}:
+        effective_tools_policy = str(forced_tools_policy)
 
-    # API/cloud providers should always have tools available unless the
-    # user explicitly disabled them. The routing heuristic was originally
-    # tuned for local models where hiding tools saves context.
-    from thomas.models.protocol import profile_prefers_always_tools
-
-    if (
-        tools_policy == "auto"
-        and effective_tools_policy == "never"
-        and profile_prefers_always_tools(self.llm.config)
-        and (project_related or explicit_action)
-    ):
-        effective_tools_policy = "auto"
-    if tools_policy == "auto" and effective_tools_policy == "never" and project_related:
-        effective_tools_policy = "auto"
-    if self._autonomy_level == 2 and effective_tools_policy == "always":
-        effective_tools_policy = "auto"
-    if autonomy.force_tools_policy in ("never", "auto", "always"):
-        forced = str(autonomy.force_tools_policy)
-        if forced == "always" and reply_first_route and not explicit_action and not project_related:
-            # Only downgrade "always" to "never" when truly conversational
-            # (no action verbs AND no project signals).
-            effective_tools_policy = "never"
-        else:
-            effective_tools_policy = forced
-
-    tool_specs = self._select_tools(prompt_text, policy=effective_tools_policy, route=route)
-
-    # EMERGENCY BRAKE: Tool definition bloat.
-    if tool_specs:
-        hard_tool_count_cap, max_tool_spec_tokens = loop_tool_spec_budgets(
-            _budget_economy,
-            effective_mode,
-        )
-        if len(tool_specs) > hard_tool_count_cap:
-            tool_specs = tool_specs[:hard_tool_count_cap]
-
-        while len(tool_specs) > 1 and estimate_tools_tokens(tool_specs) > max_tool_spec_tokens:
-            tool_specs = tool_specs[:-1]
+    tool_specs = self._select_tools(routing_text, policy=effective_tools_policy, route=route)
 
     preserve_first, preserve_last = self._history_preserve_counts(route)
     history_token_cap = self._history_token_cap(route)
@@ -515,9 +263,11 @@ async def _agent_loop_run(
     followup_suppressed_count = 0
     thought_leak_suppressed_count = 0
     quality_tool_events: list[dict[str, Any]] = []
-    consecutive_failed_tool_iters = 0
-    repeated_failure_signature = ""
+    failure_counts: dict[str, int] = {}
     repeated_failure_count = 0
+    code_mutation_seen = False
+    pre_edit_inspections = 0
+    post_edit_inspections = 0
     runaway_guard_reason: str | None = None
     memory_text = ""
     continuity_hint = ""
@@ -532,10 +282,18 @@ async def _agent_loop_run(
         _budget_economy,
         effective_mode,
     )
-    provider_tpm_limit = self._provider_tpm_limit()
+    try:
+        provider_tpm_limit = int(self._provider_tpm_limit() or 0)
+    except (TypeError, ValueError):
+        provider_tpm_limit = 0
     provider_tpm_budget = 0
     if provider_tpm_limit > 0:
-        provider_tpm_budget = max(1, int(provider_tpm_limit * self._provider_tpm_headroom()))
+        try:
+            provider_tpm_headroom = float(self._provider_tpm_headroom() or 0.90)
+        except (TypeError, ValueError):
+            provider_tpm_headroom = 0.90
+        provider_tpm_headroom = max(0.5, min(provider_tpm_headroom, 1.0))
+        provider_tpm_budget = max(1, int(provider_tpm_limit * provider_tpm_headroom))
     provider_prompt_window: list[tuple[float, int]] = []
     provider_tpm_wait_events = 0
     provider_tpm_wait_seconds = 0.0
@@ -570,7 +328,7 @@ async def _agent_loop_run(
     yield AgentEvent(
         type=EventType.AGENT_START,
         data={
-            "prompt": prompt_text,
+            "prompt": request_text,
             "route": route.to_dict(),
             "route_input_source": route_input_source,
             "mode": effective_mode,
@@ -580,12 +338,6 @@ async def _agent_loop_run(
             "token_economy": token_economy_meta,
             "library_enabled": bool(self._library is not None),
             "skills": dict(runtime_skills_payload),
-            "conversation_intelligence": {
-                "is_followup": is_followup,
-                "user_is_confused": user_is_confused,
-                "turn_count": self._conv_intel.turn_count,
-                "current_topic": self._conv_intel.current_topic,
-            },
             "history_policy": {
                 "preserve_first": int(preserve_first),
                 "preserve_last": int(preserve_last),
@@ -598,52 +350,28 @@ async def _agent_loop_run(
         self._apply_memory_policy(route)
 
     # Record user message in memory
-    if prompt_text and not benchmark_mode:
-        self._record_event("user_message", prompt_text)
-        self._capture_profile_hints(prompt_text)
-    # Keep reply-first turns lean unless continuity or policy signals need extra context.
-    if prompt_text:
-        should_retrieve_memory = bool(
-            (not benchmark_mode)
-            and (
-                not reply_first_route
-                or continuation_turn
-                or user_is_confused
-                or best_practice_gate_active
-                or code_output_validation_enabled
-            )
-        )
-        if should_retrieve_memory:
+    if request_text and not benchmark_mode:
+        self._record_event("user_message", request_text)
+    if routing_text:
+        if not benchmark_mode:
             memory_mode = self.config.memory.mode or "auto"
             if effective_mode == "fast":
                 memory_mode = "fast"
             if effective_mode == "thinking":
                 memory_mode = "thorough"
             memory_text = self._retrieve_memory(
-                prompt_text,
+                routing_text,
                 mode=memory_mode,
                 budget_override=route.memory_budget_tokens,
             )
-        continuity_hint = self._input_continuity_hint(prompt_text) if (continuation_turn or user_is_confused) else ""
     test_visibility_hint = ""
-    if overhead_policy.include_test_visibility_hint and not reply_first_route:
-        test_visibility_hint = live_test_default_hint(prompt_text)
     library_text = ""
-    # Ensure best-practice gate hint reaches the system prompt even when the
-    # library-context block doesn't run (e.g. reply_first_route or coding-task
-    # routes without thinking mode). Tests in test_agent_loop_conversation.py
-    # assert the hint is present whenever non_coder_profile=True.
     if best_practice_gate_active and best_practice_hint and not memory_text:
         memory_text = str(best_practice_hint)
     elif best_practice_gate_active and best_practice_hint and best_practice_hint not in memory_text:
         memory_text = memory_text + "\n\n" + str(best_practice_hint)
-    if (
-        overhead_policy.include_library_context
-        and not benchmark_mode
-        and (not reply_first_route)
-        and (route_path != "coding_task" or str(effective_mode or "").strip().lower() == "thinking")
-    ):
-        library_text = self._retrieve_library(prompt_text, route)
+    if overhead_policy.include_library_context and not benchmark_mode:
+        library_text = self._retrieve_library(routing_text, route)
         extra_context_parts: list[str] = []
         if memory_text:
             extra_context_parts.append(str(memory_text))
@@ -665,7 +393,17 @@ async def _agent_loop_run(
 
     # Add user message to conversation for history
     self._conversation.append({"role": "user", "content": prompt})
-    self._sync_user_message_to_intelligence(prompt)
+    turn_user_content: Any = prompt
+
+    # Mid-run check-in policy (CAP-051): zero overhead unless configured.
+    checkin_policy = getattr(self, "_checkin_policy", None) or resolve_checkin_policy(self.config)
+    if checkin_policy is not None:
+        self._checkin_policy = checkin_policy
+
+    # Constraint envelope (CAP-048): token ceiling + checkpoint summaries with
+    # deterministic stop reasons. Inert unless configured via env, so default
+    # behavior is unchanged.
+    constraint_envelope = ConstraintEnvelope.from_env()
 
     for iteration in range(max_iter):
         state.iteration = iteration
@@ -700,18 +438,24 @@ async def _agent_loop_run(
                 mem = (mem + "\n\n" + test_visibility_hint).strip() if mem else test_visibility_hint
             if library_text:
                 mem = (mem + "\n\n" + library_text).strip() if mem else library_text
+        self_development_job = current_job_type == "self_development"
+        # The model keeps every tool for the whole run. Thomas used to strip the
+        # read tools after 6 inspections, and ALL tools after 6 post-edit reads, so
+        # the one action most likely to catch a mistake -- re-reading what you just
+        # wrote -- was removed precisely when it mattered.
+        iteration_tool_specs = tool_specs
         messages = self._build_messages(
             state,
             memory_text=mem,
-            tool_specs=tool_specs,
+            tool_specs=iteration_tool_specs,
             include_purpose=bool(route.include_purpose) and bool(overhead_policy.include_purpose_brief),
             preserve_first=preserve_first,
             preserve_last=preserve_last,
             history_token_cap=history_token_cap,
-            route_path=str(route.path or ""),
+            route_path=prompt_route_path,
             skills_context=runtime_skills_context,
             include_autonomy_profile=bool(overhead_policy.include_autonomy_profile),
-            include_editing_policy=bool(overhead_policy.include_editing_policy),
+            include_editing_policy=bool(overhead_policy.include_editing_policy) and not self_development_job,
             include_project_instructions=bool(overhead_policy.include_project_instructions),
         )
         iter_token_estimates.append(int(state.token_estimate))
@@ -730,31 +474,26 @@ async def _agent_loop_run(
                 provider_prompt_tokens_last_minute = int(current_prompt)
                 if wait_s <= 0:
                     break
-                if wait_s <= _TPM_MAX_AUTO_WAIT_S:
-                    provider_tpm_wait_events += 1
-                    provider_tpm_wait_seconds += float(wait_s)
+                if next_prompt_estimate > provider_tpm_budget:
                     yield AgentEvent.status(
                         (
-                            f"Throttling {wait_s:.1f}s to avoid provider rate limit "
-                            f"({projected_prompt:,}/{provider_tpm_budget:,} estimated prompt tokens/min)."
+                            "This request exceeds the optional local TPM estimate; "
+                            "Thomas is deferring enforcement to the provider instead of stopping the task."
                         ),
                         iteration=iteration,
                     )
-                    await asyncio.sleep(wait_s)
-                    continue
-
-                profile_name = str(getattr(self.llm.config, "name", "") or "active-model")
-                runaway_guard_reason = (
-                    "Stopped automatically to prevent provider rate-limit failure: "
-                    f"projected prompt load {projected_prompt:,}/{provider_tpm_budget:,} "
-                    f"tokens/min for profile '{profile_name}'. Retry in about {int(wait_s)}s."
+                    break
+                sleep_s = min(float(wait_s), _TPM_WAIT_SLICE_SECONDS)
+                provider_tpm_wait_events += 1
+                provider_tpm_wait_seconds += sleep_s
+                yield AgentEvent.status(
+                    (
+                        f"Pausing {sleep_s:.1f}s for the explicitly configured provider rate policy "
+                        f"({projected_prompt:,}/{provider_tpm_budget:,} estimated prompt tokens/min)."
+                    ),
+                    iteration=iteration,
                 )
-                yield AgentEvent.agent_error(runaway_guard_reason, iteration=iteration)
-                state.error = runaway_guard_reason
-                state.finished = True
-                break
-            if state.finished:
-                break
+                await asyncio.sleep(sleep_s)
 
         yield AgentEvent(
             type=EventType.AGENT_ITERATION,
@@ -771,24 +510,26 @@ async def _agent_loop_run(
         # Collect this iteration's response
         text_chunks: list[str] = []
         pending_tool_calls: list[dict[str, Any]] = []
-        # Reply-first routes can stream once a sanitized prefix is stable.
-        # Execution-first routes still buffer the full answer for stronger hygiene.
-        buffer_text_tokens = not reply_first_route
-        streamed_visible_text = ""
         iter_prompt_start_total = int(stream_usage.get("prompt_tokens", 0) or 0)
 
-        # Observational plugin hook: fires immediately before the LLM call.
+        # Hook surface (model category): fires immediately before the LLM call.
         # Read-only this release (return value ignored); never breaks the turn.
-        await self._run_plugin_hook(
-            "before_model",
+        await emit_hook(
+            self,
+            HookEvent.MODEL_CALL,
             {"messages": messages, "model": str(getattr(self.llm.config, "model", "") or "")},
         )
 
         try:
             llm_stream_error: str | None = None
             await _ensure_llm_hardened_client(self.llm)
+            stream_chat_kwargs = (
+                {"turn_user_content": turn_user_content}
+                if callable_accepts_keyword(self.llm.stream_chat, "turn_user_content")
+                else {}
+            )
             llm_stream = await _coerce_async_iterator(
-                self.llm.stream_chat(messages, tool_specs),
+                self.llm.stream_chat(messages, iteration_tool_specs, **stream_chat_kwargs),
                 source="LLMClient.stream_chat",
             )
 
@@ -803,21 +544,6 @@ async def _agent_loop_run(
                 elif event.type == "token":
                     text = event.data.get("text", "")
                     text_chunks.append(text)
-                    if not buffer_text_tokens:
-                        visible_text, _ = self._sanitize_assistant_text(
-                            "".join(text_chunks),
-                            prompt_text=prompt_text,
-                            route=route,
-                            route_input_source=route_input_source,
-                            pending_tool_calls=0,
-                        )
-                        flush_len = _stable_text_emit_length(visible_text)
-                        visible_prefix = visible_text[:flush_len]
-                        if visible_prefix.startswith(streamed_visible_text):
-                            delta = visible_prefix[len(streamed_visible_text) :]
-                            if delta:
-                                streamed_visible_text = visible_prefix
-                                yield AgentEvent.text_delta(delta, iteration=iteration)
 
                 elif event.type == "tool_call_start":
                     tc_id = event.data.get("id", "")
@@ -831,71 +557,6 @@ async def _agent_loop_run(
                         yield AgentEvent.tool_call_args_delta(tc_id, delta, iteration=iteration)
 
                 elif event.type == "tool_call_end":
-                    # Codex app-server executes tools itself; treat tool_call_end as a tool result
-                    # passthrough (do not execute via Thomas's tool registry).
-                    if self.llm.config.provider == "codex" and "output" in event.data:
-                        tc_id = str(event.data.get("id", ""))
-                        tc_name = str(event.data.get("name", ""))
-                        output = str(event.data.get("output", ""))
-                        exit_code = event.data.get("exit_code")
-                        tool_chars_total += len(output)
-                        tool_chars_kept += len(output)
-
-                        ok = True
-                        if exit_code is not None:
-                            try:
-                                ok = int(exit_code) == 0
-                            except (ValueError, TypeError):
-                                ok = False
-
-                        await self._audit_action(
-                            kind="tool_action_result",
-                            tool_call_id=tc_id,
-                            tool_name=tc_name,
-                            decision="EXECUTED" if ok else "FAILED",
-                            payload={
-                                "provider": "codex",
-                                "ok": ok,
-                                "exit_code": exit_code,
-                                "output_preview": output[:1000],
-                            },
-                        )
-
-                        yield AgentEvent.tool_call_end(tc_id, iteration=iteration)
-                        yield AgentEvent(
-                            type=EventType.TOOL_RESULT,
-                            data={
-                                "tool_id": tc_id,
-                                "tool_name": tc_name,
-                                "result": output[:4000],  # summary for event consumers
-                                "result_text": output,  # full text (not fed back to LLM)
-                                "ok": ok,
-                                "duration_ms": 0,
-                            },
-                            iteration=iteration,
-                        )
-                        quality_command = ""
-                        quality_path = ""
-                        if not tc_name.lower().startswith("edit:"):
-                            quality_command = tc_name
-                        else:
-                            quality_path = tc_name.split(":", 1)[1].strip()
-                        if (not quality_path or quality_path == "?") and output.startswith("File changed:"):
-                            quality_path = output.split(":", 1)[1].strip()
-                        if quality_path == "?":
-                            quality_path = ""
-                        quality_tool_events.append(
-                            {
-                                "name": tc_name,
-                                "ok": ok,
-                                "command": quality_command,
-                                "path": quality_path,
-                                "output_preview": output[:2000],
-                            }
-                        )
-                        state.total_tool_calls += 1
-                        continue
-
                     tc_data = {
                         "id": event.data.get("id", ""),
                         "name": event.data.get("name", ""),
@@ -905,7 +566,7 @@ async def _agent_loop_run(
                     yield AgentEvent.tool_call_end(tc_data["id"], iteration=iteration)
 
                 elif event.type == "error":
-                    # Some providers (e.g. Codex bridge) surface errors as events.
+                    # Some providers surface errors as stream events.
                     err = str(event.data.get("error", "")).strip() or "LLM error"
                     llm_stream_error = err
                     yield AgentEvent.agent_error(err, iteration=iteration)
@@ -932,18 +593,40 @@ async def _agent_loop_run(
 
         except LLMError as e:
             error_msg = str(e)
+            if int(getattr(e, "status", 0) or 0) == 429 and iteration + 1 < max_iter:
+                remaining_fn = getattr(self.llm, "_rate_limit_remaining", None)
+                remaining = 0.0
+                if callable(remaining_fn):
+                    try:
+                        remaining = max(0.0, float(remaining_fn(self.llm.config) or 0.0))
+                    except (AttributeError, RuntimeError, TypeError, ValueError):
+                        remaining = 0.0
+                while remaining > 0:
+                    sleep_s = min(remaining, _TPM_WAIT_SLICE_SECONDS)
+                    yield AgentEvent.status(
+                        f"The provider asked Thomas to pause for {sleep_s:.1f}s; work will resume automatically.",
+                        iteration=iteration,
+                    )
+                    await asyncio.sleep(sleep_s)
+                    if callable(remaining_fn):
+                        try:
+                            remaining = max(0.0, float(remaining_fn(self.llm.config) or 0.0))
+                        except (AttributeError, RuntimeError, TypeError, ValueError):
+                            remaining = max(0.0, remaining - sleep_s)
+                    else:
+                        remaining = max(0.0, remaining - sleep_s)
+                yield AgentEvent.status("Provider rate limit cleared; resuming this task.", iteration=iteration)
+                continue
             # Detect connection errors and give a helpful message
             if "connect" in error_msg.lower() or "refused" in error_msg.lower():
-                base_url = self.llm.config.base_url
-                error_msg = f"Cannot connect to LLM at {base_url}. Is Ollama running? Try: ollama serve"
+                error_msg = _connection_error_message(self.llm)
             yield AgentEvent.agent_error(error_msg, iteration=iteration)
             state.error = error_msg
             state.finished = True
             break
 
         except (httpx_ConnectError, ConnectionError, OSError):
-            base_url = self.llm.config.base_url
-            error_msg = f"Cannot connect to LLM at {base_url}. Is Ollama running? Try: ollama serve"
+            error_msg = _connection_error_message(self.llm)
             yield AgentEvent.agent_error(error_msg, iteration=iteration)
             state.error = error_msg
             state.finished = True
@@ -953,7 +636,7 @@ async def _agent_loop_run(
         iter_text = "".join(text_chunks)
         iter_text, suppressed = self._sanitize_assistant_text(
             iter_text,
-            prompt_text=prompt_text,
+            prompt_text=routing_text,
             route=route,
             route_input_source=route_input_source,
             pending_tool_calls=len(pending_tool_calls),
@@ -965,50 +648,8 @@ async def _agent_loop_run(
         if iter_text.strip() == "Understood. How can I assist you further?":
             iter_text = "I didn't answer that. Please ask a specific question."
 
-        # Clarification budget guardrail for action turns: avoid repeated
-        # ask-back loops when the model can proceed with sensible defaults.
-        is_clarifying_question = bool(not pending_tool_calls and self._looks_like_clarifying_question(iter_text))
-        if is_clarifying_question:
-            clarification_questions_asked += 1
-        reached_clarification_cap = (
-            clarification_questions_asked >= clarification_question_cap
-            if full_auto_action_turn
-            else clarification_questions_asked > clarification_question_cap
-        )
-        if (
-            clarification_budget_active
-            and is_clarifying_question
-            and reached_clarification_cap
-            and clarification_reprompt_count < 2
-            and (iteration + 1) < max_iter
-        ):
-            clarification_reprompt_count += 1
-            if full_auto_action_turn:
-                full_auto_reprompt_count += 1
-                nudge = self._full_auto_nudge(prompt_text, full_auto_reprompt_count)
-            else:
-                nudge = self._assume_and_proceed_nudge(
-                    prompt_text,
-                    retry_index=clarification_reprompt_count,
-                    question_cap=clarification_question_cap,
-                    questions_seen=clarification_questions_asked,
-                    route_input_source=route_input_source,
-                )
-            self._conversation.append({"role": "user", "content": nudge})
-            self._sync_user_message_to_intelligence(nudge)
-            continue
-        if buffer_text_tokens and iter_text:
-            # Flush buffered text after full-auto guardrails accept it.
+        if iter_text:
             yield AgentEvent.text_delta(iter_text, iteration=iteration)
-        elif iter_text:
-            if iter_text.startswith(streamed_visible_text):
-                tail = iter_text[len(streamed_visible_text) :]
-                if tail:
-                    yield AgentEvent.text_delta(tail, iteration=iteration)
-                    streamed_visible_text = iter_text
-            elif not streamed_visible_text:
-                yield AgentEvent.text_delta(iter_text, iteration=iteration)
-                streamed_visible_text = iter_text
 
         if provider_tpm_budget > 0:
             stream_prompt_now = int(stream_usage.get("prompt_tokens", 0) or 0)
@@ -1025,14 +666,11 @@ async def _agent_loop_run(
         iter_prompt_spend = max(0, iter_prompt_now - int(iter_prompt_start_total))
         iter_prompt_spends.append(int(iter_prompt_spend))
 
-        if iter_prompt_hard_cap is not None and iter_prompt_spend > int(iter_prompt_hard_cap):
-            high_prompt_spend_fail_iters += 1
-            runaway_guard_reason = (
-                "High prompt-token spend per iteration exceeded hard cap. "
-                "Stopping to prevent token waste and runaway budget usage."
-            )
-            yield AgentEvent.agent_error(runaway_guard_reason, iteration=iteration)
-            state.error = runaway_guard_reason
+        envelope_decision = constraint_envelope.observe(int(stream_usage.get("total_tokens", 0) or 0))
+        for envelope_event in envelope_events(envelope_decision, iteration=iteration):
+            yield envelope_event
+        if envelope_decision.should_stop:
+            state.error = envelope_decision.stop_message
             state.finished = True
             break
 
@@ -1040,14 +678,14 @@ async def _agent_loop_run(
         benchmark_issue = ""
         if str(job_type or "").strip().lower() == "benchmark" and code_output_validation_enabled:
             benchmark_validation_ok, benchmark_issue, _ = _validate_benchmark_code_output(
-                prompt_text=prompt_text,
+                prompt_text=routing_text,
                 continuation=iter_text,
             )
         if not benchmark_validation_ok:
             code_output_guard_reprompts += 1
             code_output_guard_last_issue = str(benchmark_issue or "")
             if (iteration + 1) < max_iter:
-                guard_context = str(prompt_text or "").strip().replace("\n", " ")
+                guard_context = str(routing_text or "").strip().replace("\n", " ")
                 if guard_context:
                     user_prompt = (
                         f"Original request: {guard_context}\n"
@@ -1062,7 +700,6 @@ async def _agent_loop_run(
                         "Return only valid Python continuation code meeting code-output requirements."
                     )
                 self._conversation.append({"role": "user", "content": user_prompt})
-                self._sync_user_message_to_intelligence(user_prompt)
                 continue
             issue_error = f"Code-output guard blocked completion: {code_output_guard_last_issue}".strip()
             state.error = issue_error
@@ -1070,18 +707,21 @@ async def _agent_loop_run(
             state.finished = True
             break
 
-        state.text_response += iter_text
+        state.aggregate_response += iter_text
 
         # If no tool calls, we're done
         if not pending_tool_calls:
             if iter_text:
+                # Keep the user-facing handoff separate from prose emitted while
+                # tools were still running. ``aggregate_response`` retains the
+                # complete internal transcript without becoming one giant reply.
+                state.text_response = iter_text
                 self._conversation.append({"role": "assistant", "content": iter_text})
-                self._sync_assistant_message_to_intelligence(iter_text)
                 if not benchmark_mode:
                     self._record_event("assistant_response", iter_text)
-            # Observational plugin hook: fires at end-of-turn once the final
-            # assistant text is finalized. Read-only this release.
-            await self._run_plugin_hook("after_response", {"text": state.text_response})
+            # Hook surface (completion category): fires at end-of-turn once the
+            # final assistant text is finalized. Read-only this release.
+            await emit_hook(self, HookEvent.COMPLETION, {"text": state.text_response})
             state.finished = True
             break
 
@@ -1103,12 +743,26 @@ async def _agent_loop_run(
             for tc in pending_tool_calls
         ]
         self._conversation.append(assistant_msg)
-        self._sync_assistant_message_to_intelligence(iter_text)
 
         # Execute tool calls (parallel when multiple), streaming each completion.
+        # A provider may emit dozens of calls in one response, so enforce the
+        # inspection budget before scheduling the batch rather than after every
+        # task has already run. Refused calls still receive tool-result messages,
+        # preserving a valid provider history without the 35-call log avalanche.
+        # Every requested call is executed. A call over an inspection budget used to
+        # be dropped and returned as a tool result with ok=False -- telling the model
+        # its tool FAILED when it had simply never been attempted. Teaching a model
+        # something false about its own environment is the worst version of this bug.
+        execution_tool_calls = pending_tool_calls
+
         tool_results: list[AgentEvent] = []
         tool_results_by_id: dict[str, AgentEvent] = {}
-        async for result_event in self._execute_tools(pending_tool_calls, iteration):
+
+        async def _bounded_tool_results() -> AsyncIterator[AgentEvent]:
+            async for executed in self._execute_tools(execution_tool_calls, iteration):
+                yield executed
+
+        async for result_event in _bounded_tool_results():
             tc_id = str(result_event.data.get("tool_id", ""))
             tc: dict[str, Any] = {}
             for maybe_tc in pending_tool_calls:
@@ -1142,7 +796,9 @@ async def _agent_loop_run(
             )
 
             # Truncate tool results that would dominate context
-            result_text = result_event.data.get("result_text", "")
+            result_text = str(result_event.data.get("result_text", ""))
+            if not result_event.data.get("ok"):
+                result_text = _tool_result_with_recovery(str(tc.get("name") or ""), result_text)
             original_len = len(result_text)
             if len(result_text) > _MAX_TOOL_RESULT_CHARS:
                 footer = (
@@ -1179,7 +835,7 @@ async def _agent_loop_run(
                         # Inject live follow-up user input into the active run.
                         # The next iteration will route against this updated request.
                         self._conversation.append({"role": "user", "content": interrupt_text})
-                        self._sync_user_message_to_intelligence(interrupt_text)
+                        turn_user_content = interrupt_text
                         yield AgentEvent(
                             type=EventType.THINKING,
                             data={"text": "Received additional user instructions. Adapting plan.\n"},
@@ -1191,21 +847,41 @@ async def _agent_loop_run(
 
             state.total_tool_calls += 1
 
-            # Detect repeated failures
-            if not result_event.data.get("ok"):
-                consecutive_failed_tool_iters += 1
+            if checkin_policy is not None:
+                for checkin in checkin_policy.observe_step(
+                    total_tokens=int(stream_usage.get("total_tokens", 0) or 0),
+                    label=str(tc.get("name") or ""),
+                ):
+                    yield AgentEvent(
+                        type=EventType.STATUS,
+                        data={"message": checkin.message, "checkin": checkin.to_dict()},
+                        iteration=iteration,
+                    )
+                    if checkin.ack_required:
+                        await checkin_policy.wait_until_acknowledged()
+
+            if current_job_type == "coding":
+                tool_action = _code_tool_action(str(tc.get("name") or ""), args_meta)
+                if tool_action == "mutation" and result_event.data.get("ok"):
+                    code_mutation_seen = True
+                    post_edit_inspections = 0
+                elif code_mutation_seen and tool_action == "inspection":
+                    post_edit_inspections += 1
+                elif tool_action == "inspection":
+                    pre_edit_inspections += 1
+
+            # Stop only an identical failing call, not different failures from
+            # the same multi-purpose tool.
+            if result_event.data.get("budget_refusal"):
+                repeated_failure_count = 0
+            elif not result_event.data.get("ok"):
+                repeated_failure_count = _record_failed_tool(
+                    failure_counts, str(tc.get("name") or ""), parsed_args or {}, result_text
+                )
             else:
-                consecutive_failed_tool_iters = 0
+                repeated_failure_count = 0
 
-            if consecutive_failed_tool_iters >= 2:
-                current_signature = f"{tc.get('name', '')}:fail"
-                if current_signature == repeated_failure_signature:
-                    repeated_failure_count += 1
-                else:
-                    repeated_failure_signature = current_signature
-                    repeated_failure_count = 1
-
-            if repeated_failure_count >= 2:
+            if repeated_failure_count >= 3:
                 yield AgentEvent.agent_error(
                     "Tool loop stability issue: "
                     f"{tc.get('name')} has failed repeatedly. Prevent token waste by stopping this loop.",
@@ -1221,49 +897,37 @@ async def _agent_loop_run(
         if state.finished or state.user_interrupted:
             break
 
-        # Context compaction: if approaching budget, compact older messages
-        # instead of immediately stopping. This mirrors Claude Code behavior.
-        if (
-            _HAS_COMPACTION
-            and iteration >= 2
-            and cumulative_context_tokens >= int(hard_context_budget * 0.80)
-            and cumulative_context_tokens < hard_context_budget
-        ):
-            try:
-                compacted = compact_conversation(
-                    self._conversation,
-                    target_tokens=int(hard_context_budget * 0.60),
-                    preserve_recent=8,
-                )
-                old_len = len(self._conversation)
-                self._conversation = compacted
-                log.info(
-                    "Context compacted: %d -> %d messages at iteration %d",
-                    old_len,
-                    len(compacted),
-                    iteration + 1,
-                )
-            except Exception as _ce:
-                log.debug("Context compaction failed: %s", _ce)
-
-        # Runaway guard: if context is getting too big and we're doing tool loops,
-        # proactively stop before we hit hard limits.
-        if iteration >= 2 and cumulative_context_tokens >= hard_context_budget:
-            runaway_guard_reason = (
-                f"Stopped after iteration {iteration + 1}: context approaching hard limit "
-                f"({cumulative_context_tokens:,} / {hard_context_budget:,} tokens). "
-                f"Consider smaller steps or narrower scope."
-            )
-            yield AgentEvent.agent_error(runaway_guard_reason, iteration=iteration)
-            state.error = runaway_guard_reason
-            state.finished = True
-            break
+    if not state.finished and not state.user_interrupted:
+        # NOT YET FIXED — deliberately left as an error, and here is why.
+        #
+        # Recording "I used up my own allowance" as a failed run is wrong: the work
+        # survives on disk and every instrument that reads these records learns
+        # something false. The fix is a THIRD state — done / paused-and-continuable /
+        # failed — because the two that exist collapse "unfinished" into "failed".
+        #
+        # I tried the one-line version (drop state.error, emit STATUS) and it made
+        # things worse: with no error set, post-loop completion emits AGENT_DONE, so
+        # a run that stopped mid-repair would claim it had finished. Claiming
+        # completion you did not reach is a worse lie than claiming a failure you did
+        # not have. test_optimal_effort_exhaustion_is_incomplete_not_done exists to
+        # catch exactly that and correctly caught me.
+        #
+        # Doing this properly means teaching handle_post_loop_completion a paused
+        # outcome that keeps the artifacts and suppresses the done event. That is a
+        # real change, not a line edit, and it should be made deliberately.
+        runaway_guard_reason = (
+            f"Pass budget exhausted after {max_iter} passes while work was still active. "
+            "The task is incomplete; continue it in the same conversation."
+        )
+        state.error = runaway_guard_reason
+        state.finished = True
+        yield AgentEvent.agent_error(runaway_guard_reason, iteration=max(0, max_iter - 1))
 
     # Delegate post-loop completion (validation, quality gates, final events) to helper
     async for completion_event in handle_post_loop_completion(
         self,
         state,
-        prompt_text,
+        routing_text,
         route,
         job_type,
         mode,

@@ -1,98 +1,59 @@
-from thomas.agent.routing import (
-    PATH_CASUAL,
-    PATH_CODING,
-    PATH_DEBUG,
-    PATH_META,
-    PATH_PERSONAL,
-    IntentRouter,
-)
+"""Contracts for model-owned AgentLoop routing behavior."""
+
+from thomas.agent.routing import PATH_MODEL_OWNED, IntentRouter
 
 
-def test_router_detects_coding_path() -> None:
+def test_natural_language_never_changes_the_execution_route() -> None:
     router = IntentRouter()
-    d = router.decide("Please refactor src/app.py and add tests for api handler")
-    assert d.path == PATH_CODING
-    assert d.include_purpose is False
-    assert d.tools_policy == "auto"
-    assert d.memory_include_global is True
-
-
-def test_router_detects_casual_path_and_keeps_tools_available() -> None:
-    router = IntentRouter()
-    d = router.decide("hey, how are you today?")
-    assert d.path == PATH_CASUAL
-    assert d.tools_policy == "auto"
-    assert d.include_purpose is False
-    assert d.memory_include_global is True
-
-
-def test_router_detects_debug_path_without_forced_reasoning_mode() -> None:
-    router = IntentRouter()
-    d = router.decide("Traceback: failing tests and security audit regression in parser")
-    assert d.path == PATH_DEBUG
-    assert d.mode == "auto"
-    assert d.tools_policy == "auto"
-
-
-def test_router_detects_assistant_meta_questions() -> None:
-    router = IntentRouter()
-    d = router.decide("How do you work and why are you following these instructions?")
-    assert d.path == PATH_META
-    assert d.tools_policy == "auto"
-    assert d.include_purpose is False
-
-
-def test_router_detects_liveness_ping_as_casual() -> None:
-    router = IntentRouter()
-    d = router.decide("are you working")
-    assert d.path == PATH_CASUAL
-    assert d.tools_policy == "auto"
-    assert d.include_purpose is False
-
-
-def test_router_detects_integration_setup_as_coding() -> None:
-    router = IntentRouter()
-    d = router.decide("set up telegram integration for me")
-    assert d.path == PATH_CODING
-    assert d.tools_policy == "auto"
-    assert d.include_purpose is False
-
-
-def test_router_respects_explicit_mode_and_tools_policy_overrides() -> None:
-    router = IntentRouter()
-    d = router.decide(
-        "hey there",
-        requested_mode="fast",
-        requested_tools_policy="always",
+    prompts = (
+        "hey, how are you today?",
+        "refactor src/app.py and add tests",
+        "make me a graph of current trends",
+        "I don't care, you pick",
+        "don't use tools or start a project",
     )
-    assert d.mode == "fast"
-    assert d.tools_policy == "always"
+
+    decisions = [router.decide(prompt) for prompt in prompts]
+
+    assert {decision.path for decision in decisions} == {PATH_MODEL_OWNED}
+    assert {tuple(decision.reasons) for decision in decisions} == {("model_owned",)}
+    assert {decision.tools_policy for decision in decisions} == {"auto"}
 
 
-def test_router_prefers_coding_for_programming_preference_phrase() -> None:
-    router = IntentRouter()
-    d = router.decide("I want Thomas to program and fix this, not tell me it cannot proceed.")
-    assert d.path == PATH_CODING
-    assert d.tools_policy == "auto"
-
-
-def test_router_prefers_non_execution_for_no_task_conversation_feedback() -> None:
-    router = IntentRouter()
-    d = router.decide(
-        "No, I meant continue talking about what I said. I did not give you a task and we never started coding."
+def test_explicit_mode_and_tool_controls_are_preserved() -> None:
+    decision = IntentRouter().decide(
+        "wording is not inspected",
+        requested_mode="thinking",
+        requested_tools_policy="never",
     )
-    assert d.path in {PATH_CASUAL, PATH_META}
-    assert d.tools_policy == "auto"
+
+    assert decision.mode == "thinking"
+    assert decision.tools_policy == "never"
 
 
-def test_router_detects_behavior_feedback_as_meta() -> None:
-    router = IntentRouter()
-    d = router.decide("You sound too robotic. Please improve how you talk like a real assistant.")
-    assert d.path in {PATH_META, PATH_PERSONAL}
-    assert d.tools_policy == "auto"
+def test_invalid_tool_control_fails_to_neutral_auto() -> None:
+    decision = IntentRouter().decide("anything", requested_tools_policy="invented")
+
+    assert decision.tools_policy == "auto"
 
 
-def test_router_prefers_debug_for_settings_reset_troubleshooting() -> None:
-    router = IntentRouter()
-    d = router.decide("my settings keep resetting every restart where should i look first")
-    assert d.path in {PATH_DEBUG, PATH_CODING}
+def test_structured_followup_metadata_does_not_reclassify_the_turn() -> None:
+    decision = IntentRouter().decide(
+        "that one",
+        is_followup=True,
+        prior_route="coding_task",
+    )
+
+    assert decision.path == PATH_MODEL_OWNED
+    assert decision.is_followup is True
+
+
+def test_route_decision_is_serializable_and_has_memory_policy() -> None:
+    decision = IntentRouter().decide("")
+    payload = decision.to_dict()
+
+    assert payload["path"] == PATH_MODEL_OWNED
+    assert payload["confidence"] == 1.0
+    assert payload["memory_include_global"] is True
+    assert payload["memory_include_profile"] is True
+    assert int(payload["memory_budget_tokens"]) > 0

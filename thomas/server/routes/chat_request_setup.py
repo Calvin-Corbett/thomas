@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import sqlite3
 from typing import Any
 
 from aiohttp import web
@@ -73,7 +74,7 @@ async def setup_chat_request(
             )
             if resolved_profile in cfg.models:
                 return resolved_profile, str(resolved_model_id or "")
-        except Exception:
+        except (OSError, RuntimeError, sqlite3.Error, TypeError, ValueError):
             pass
         fallback = str(cfg.default_model or "").strip()
         if fallback not in cfg.models and cfg.models:
@@ -98,7 +99,7 @@ async def setup_chat_request(
                             len(recovered_conversation),
                             sid[:12],
                         )
-        except Exception as e:
+        except (OSError, UnicodeDecodeError, TypeError, ValueError) as e:
             log.debug("Session recovery from disk failed for %s: %s", sid[:12], e)
         default_profile, default_model_id = _resolve_default_model_pair()
         session_profile = default_profile if default_profile in cfg.models else str(cfg.default_model)
@@ -145,9 +146,9 @@ async def setup_chat_request(
                         ).fetchone()
                         is not None
                     )
-            except Exception:
+            except (OSError, sqlite3.Error):
                 runtime_prefs_saved = False
-        except Exception:
+        except (OSError, sqlite3.Error, TypeError, ValueError):
             runtime_prefs = None
             runtime_prefs_saved = False
         advanced_prefs = getattr(runtime_prefs, "advanced", None)
@@ -168,9 +169,9 @@ async def setup_chat_request(
                         ).fetchone()
                         is not None
                     )
-            except Exception:
+            except (OSError, sqlite3.Error):
                 runtime_prefs_saved = False
-        except Exception:
+        except (OSError, sqlite3.Error, TypeError, ValueError):
             runtime_prefs = None
             runtime_prefs_saved = False
         advanced_prefs = getattr(runtime_prefs, "advanced", None)
@@ -441,18 +442,6 @@ async def setup_chat_request(
     if manager is not None:
         with contextlib.suppress(Exception):
             manager.record_user_message()
-    with contextlib.suppress(Exception):
-        from thomas.server.routes.autopilot import maybe_auto_start_autopilot_from_chat
-
-        await maybe_auto_start_autopilot_from_chat(
-            request,
-            text=raw_user_text,
-            session_id=sid,
-            profile=profile,
-            model_id=session.model_id,
-            autonomy_level=int(getattr(session, "autonomy_level", 3) or 3),
-        )
-
     ledger = _resolve_app_value(request.app, APP_TASK_LEDGER)
     if ledger is not None:
         try:
@@ -472,7 +461,16 @@ async def setup_chat_request(
                 source="chat.request",
                 force_event=True,
             )
-        except Exception as e:
+        except (
+            AttributeError,
+            ImportError,
+            KeyError,
+            OSError,
+            RuntimeError,
+            sqlite3.Error,
+            TypeError,
+            ValueError,
+        ) as e:
             log.debug("Task ledger pre-chat update failed: %s", e)
 
     # Return all setup state

@@ -1,4 +1,4 @@
-"""Deterministic review helpers for UI edit safety and intent alignment."""
+"""Deterministic structural review helpers for UI edit safety."""
 
 from __future__ import annotations
 
@@ -12,60 +12,6 @@ _HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 _RGB_COLOR_RE = re.compile(r"\brgba?\([^)]+\)")
 _HSL_COLOR_RE = re.compile(r"\bhsla?\([^)]+\)")
 _ANIMATION_RE = re.compile(r"\banimation(?:-name)?\s*:")
-_WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]{2,}")
-
-_INTENT_STOPWORDS = {
-    "the",
-    "and",
-    "for",
-    "with",
-    "that",
-    "this",
-    "from",
-    "into",
-    "over",
-    "under",
-    "when",
-    "while",
-    "your",
-    "their",
-    "have",
-    "has",
-    "had",
-    "will",
-    "would",
-    "should",
-    "could",
-    "just",
-    "more",
-    "less",
-    "very",
-    "really",
-    "about",
-    "make",
-    "makes",
-    "made",
-    "need",
-    "needs",
-    "want",
-    "wants",
-    "user",
-    "users",
-    "page",
-    "ui",
-    "design",
-    "update",
-    "edit",
-    "edits",
-    "better",
-    "good",
-    "solid",
-    "please",
-    "must",
-    "match",
-    "intent",
-}
-
 _UI_REVIEW_EXTS = {".css", ".js", ".jsx", ".ts", ".tsx", ".html"}
 _UI_REVIEW_PREFIXES = (
     "thomas/server/web/",
@@ -103,18 +49,6 @@ def is_ui_review_path(rel_path: str) -> bool:
     return suffix in _UI_REVIEW_EXTS
 
 
-def intent_keywords(text: str) -> list[str]:
-    words = [word.lower() for word in _WORD_RE.findall(str(text or ""))]
-    out: list[str] = []
-    seen: set[str] = set()
-    for word in words:
-        if len(word) < 4 or word in _INTENT_STOPWORDS or word in seen:
-            continue
-        seen.add(word)
-        out.append(word)
-    return out[:24]
-
-
 def review_ui_edits(
     *,
     root: Path,
@@ -124,6 +58,10 @@ def review_ui_edits(
     strict: bool = True,
     inferred_intent: str = "",
 ) -> dict[str, Any]:
+    # Backward-compatible parameters only. Natural-language intent is evidence for
+    # the frontier model, never a deterministic pass/fail input here.
+    _ = intent
+    _ = inferred_intent
     raw_paths = list(changed_paths or collect_changed_paths(root))
     changed = sorted({str(path or "").replace("\\", "/").strip() for path in raw_paths if str(path or "").strip()})
     ui_paths = [path for path in changed if is_ui_review_path(path)]
@@ -136,9 +74,6 @@ def review_ui_edits(
             "ui_changed_count": 0,
             "paths": [],
         }
-
-    intent_text = str(intent or "").strip() or str(inferred_intent or "").strip()
-    keys = intent_keywords(intent_text)
 
     combined_text_chunks: list[str] = []
     issues: list[dict[str, Any]] = []
@@ -195,28 +130,6 @@ def review_ui_edits(
             }
         )
 
-    corpus = " ".join(combined_text_chunks).lower()
-    matched_keywords: list[str] = []
-    missing_keywords: list[str] = []
-    if keys:
-        for key in keys:
-            if key in corpus:
-                matched_keywords.append(key)
-            else:
-                missing_keywords.append(key)
-        alignment_score = round(len(matched_keywords) / float(len(keys)), 3)
-        if alignment_score < 0.35:
-            issues.append(
-                {
-                    "id": "review.intent_alignment_low",
-                    "severity": "high" if strict else "medium",
-                    "message": f"Intent alignment is low ({alignment_score:.2f}); edited UI may not match requested outcome.",
-                    "missing_keywords": missing_keywords[:12],
-                }
-            )
-    else:
-        alignment_score = None
-
     high_issues = [row for row in issues if str(row.get("severity") or "").lower() == "high"]
     if strict and high_issues:
         verdict = "fail"
@@ -228,8 +141,6 @@ def review_ui_edits(
     score = 100
     score -= 20 * len(high_issues)
     score -= 8 * (len(issues) - len(high_issues))
-    if alignment_score is not None:
-        score = min(score, int(round(40 + alignment_score * 60)))
     score = max(0, min(100, int(score)))
 
     return {
@@ -245,13 +156,6 @@ def review_ui_edits(
             "hardcoded_colors_total": hardcoded_colors_total,
             "animation_without_reduced_motion": animation_without_reduced_motion,
             "interactive_without_focus": interactive_without_focus,
-        },
-        "intent": {
-            "text": intent_text,
-            "keywords": keys,
-            "matched_keywords": matched_keywords,
-            "missing_keywords": missing_keywords,
-            "alignment_score": alignment_score,
         },
         "issues": issues,
     }

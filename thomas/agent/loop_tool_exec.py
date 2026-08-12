@@ -13,8 +13,15 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.hook_events import HookEvent, bridge_guardrails_event, emit_hook
+from thomas.agent.loop_tool_paths import (
+    _WRITE_TOOL_PATH_KEYS,
+    _declares_a_path_parameter,
+    _sanitize_write_tool_path,
+)
 from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
+from thomas.core.file_access import is_file_access_refusal
 
 try:
     from thomas.agent.verification import format_verification_feedback, verify_after_tool
@@ -44,17 +51,15 @@ _WRITE_TOOL_KEYWORDS = (
     "fs.rename",
 )
 
-_WRITE_TOOL_PATH_KEYS = (
-    "path",
-    "file",
-    "filename",
-    "filepath",
-    "file_path",
-    "source_path",
-    "destination_path",
-    "payload_path",
-    "auth_path",
-    "auth_payload_path",
+_SELF_DEVELOPMENT_WRITE_TOOLS = {"diff.create", "fs.write_file", "fs.write_protected_file"}
+_SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
+    "fs.read",
+    "fs.list",
+    "fs.search",
+    "code.search",
+    "code.view",
+    "git.status",
+    "shell.exec",
 )
 
 
@@ -66,122 +71,61 @@ def _is_write_tool(name: str, file_audit_module: Any) -> bool:
             try:
                 return bool(checker(name_lower))
             except Exception:
-                pass
+                log.debug(
+                    "file_audit.is_write_tool checker failed for tool %r; using fallback", name_lower, exc_info=True
+                )
     return any(kw in name_lower for kw in _WRITE_TOOL_KEYWORDS)
 
 
-def _validate_filesystem_path(
-    path_value: Any,
+def _self_development_write_guard_event(
+    loop: Any,
     *,
-    sandbox_root: Path | None = None,
-    benchmark_root: Path | None = None,
-) -> tuple[str | None, str | None]:
-    if path_value is None:
-        return None, "missing path value"
+    name: str,
+    tc_id: str,
+    iteration: int,
+) -> AgentEvent | None:
+    """Block runaway inspection loops in live Thomas self-development runs.
 
-    try:
-        path_text = os.fspath(path_value)
-    except TypeError:
-        return None, "path must be a string or path-like value"
-
-    if not isinstance(path_text, str):
-        return None, "path must be a string or path-like value"
-
-    path_text = str(path_text).strip()
-
-    if path_text == "":
-        return None, "path cannot be empty"
-
-    if "\x00" in path_text:
-        return None, "path cannot contain null bytes"
-
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in path_text):
-        return None, "path cannot contain control characters"
-
-    if os.path.isabs(path_text) or path_text.startswith(("/", "\\")):
-        if benchmark_root is None:
-            return None, "absolute paths are not allowed"
-        try:
-            resolved = Path(path_text).expanduser().resolve()
-        except OSError as exc:
-            return None, f"absolute path could not be resolved: {exc}"
-        try:
-            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(resolved)]))
-        except ValueError:
-            return None, "absolute path is outside the benchmark root"
-        if common.resolve() != benchmark_root.resolve():
-            return None, "absolute path is outside the benchmark root"
-        return str(resolved), None
-
-    if re.match(r"^[A-Za-z]:", path_text) or re.match(r"^[/\\]{2,}", path_text):
-        return None, "disallowed root/path prefix in file path"
-
-    if "://" in path_text:
-        return None, "path cannot contain URI-like prefixes"
-
-    parts = re.split(r"[\\/]", path_text)
-    if ".." in parts:
-        return None, "path traversal via '..' segment is not allowed"
-
-    if any(part == "" for part in parts):
-        return None, "path segments cannot be empty"
-
-    # Reject any attempts to normalise into an ancestor path
-    if ".." in Path(path_text).parts:
-        return None, "path traversal via parent directory reference is not allowed"
-
-    if benchmark_root is not None:
-        if sandbox_root is None:
-            return None, "sandbox root is required for benchmark path validation"
-        try:
-            candidate = (sandbox_root.resolve() / path_text).resolve()
-        except OSError as exc:
-            return None, f"path could not be resolved: {exc}"
-        try:
-            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(candidate)]))
-        except ValueError:
-            return None, "path is outside the benchmark root"
-        if common.resolve() != benchmark_root.resolve():
-            return None, "path is outside the benchmark root"
-
-    return path_text, None
-
-
-def _sanitize_write_tool_path(
-    args: dict[str, Any],
-    *,
-    require_path: bool = True,
-    sandbox_root: Path | None = None,
-    benchmark_root: Path | None = None,
-) -> tuple[str | None, str | None]:
-    if not isinstance(args, dict):
-        return None, "tool arguments must be an object"
-
-    validated_path: str | None = None
-    saw_path_key = False
-
-    for key in _WRITE_TOOL_PATH_KEYS:
-        if key not in args:
-            continue
-        saw_path_key = True
-        path_value = args.get(key)
-        if not isinstance(path_value, (str, os.PathLike)):
-            return None, f"{key} must be a string or path-like value"
-        checked_path, error = _validate_filesystem_path(
-            path_value,
-            sandbox_root=sandbox_root,
-            benchmark_root=benchmark_root,
-        )
-        if error is not None:
-            return None, f"invalid {key}: {error}"
-        args[key] = checked_path
-        if validated_path is None:
-            validated_path = checked_path
-
-    if not saw_path_key and require_path:
-        return None, "missing path argument (expected path, file, or filename)"
-
-    return validated_path, None
+    Normal coding tasks can inspect as much as their iteration budget allows. A
+    self-development background task, however, has a hard completion contract:
+    no changed live source/test/doc file means failure. After a small inspection
+    budget, return a tool error so the model sees the real constraint and uses
+    the write tool instead of burning the whole run on search/list/status calls.
+    """
+    if str(getattr(loop, "_current_job_type", "") or "").strip().lower() != "self_development":
+        return None
+    guard = getattr(loop, "_self_development_write_guard", None)
+    if not isinstance(guard, dict) or bool(guard.get("write_seen")):
+        return None
+    name_lower = str(name or "").strip().lower()
+    if name_lower in _SELF_DEVELOPMENT_WRITE_TOOLS:
+        guard["write_seen"] = True
+        return None
+    if not any(name_lower.startswith(prefix) for prefix in _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES):
+        return None
+    count = int(guard.get("inspection_count", 0) or 0) + 1
+    guard["inspection_count"] = count
+    limit = max(0, int(guard.get("limit", 6) or 0))
+    if count <= limit:
+        return None
+    msg = (
+        "Self-development write-first guard: this live repo task already used "
+        f"{count} inspection tools without a write. Stop inspecting. The next "
+        "substantive tool call must be fs.write_file or fs.write_protected_file "
+        "on a scoped source/test/doc file, or explicitly report the blocker."
+    )
+    return AgentEvent(
+        type=EventType.TOOL_RESULT,
+        data={
+            "tool_id": tc_id,
+            "tool_name": name,
+            "result": msg,
+            "result_text": msg,
+            "ok": False,
+            "duration_ms": 0,
+        },
+        iteration=iteration,
+    )
 
 
 def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:
@@ -228,24 +172,6 @@ def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:
         return None, f"Tool arguments must be an object, got {type(parsed).__name__}"
     except Exception as e:
         return None, f"Could not parse tool arguments: {type(e).__name__}: {e}"
-
-
-async def _run_loop_hook(loop: Any, hook: str, payload: dict[str, Any]) -> None:
-    """Invoke ``loop._run_plugin_hook`` if present; otherwise no-op.
-
-    ``execute_tools`` accepts any loop-like object, so resolve the plugin-hook
-    invoker defensively. The real AgentLoop always provides it (base class);
-    minimal test stubs and other callers that omit it simply skip hooks. The
-    invoker itself already swallows plugin exceptions, so a hook can never break
-    tool execution.
-    """
-    invoker = getattr(loop, "_run_plugin_hook", None)
-    if invoker is None:
-        return
-    try:
-        await invoker(hook, payload)
-    except Exception as e:  # REVIEWED: plugin hooks must never break a turn
-        log.debug("Plugin hook %r failed (non-fatal): %s", hook, e)
 
 
 async def execute_tools(
@@ -295,6 +221,17 @@ async def execute_tools(
 
         validated_path: str | None = None
         is_write_tool_call = _is_write_tool(name, file_audit_module)
+        guard_event = _self_development_write_guard_event(loop, name=name, tc_id=tc_id, iteration=iteration)
+        if guard_event is not None:
+            await loop._audit_action(
+                kind="tool_action_rejected",
+                tool_call_id=tc_id,
+                tool_name=name,
+                decision="FAILED",
+                reason="self_development_write_first_guard",
+                payload={},
+            )
+            return guard_event
         should_sanitize_paths = is_write_tool_call or any(key in args for key in _WRITE_TOOL_PATH_KEYS)
         if should_sanitize_paths:
             if is_write_tool_call and benchmark_error:
@@ -321,12 +258,27 @@ async def execute_tools(
                 )
             validated_path, path_error = _sanitize_write_tool_path(
                 args,
-                require_path=is_write_tool_call,
+                require_path=is_write_tool_call and _declares_a_path_parameter(getattr(loop, "tools", None), name),
                 sandbox_root=sandbox_root,
                 benchmark_root=benchmark_root if is_write_tool_call else None,
+                # Absolute WRITE targets are judged by the file-access ladder
+                # (the authority fs.write_file itself consults), so a refused
+                # Desktop write carries the ladder's remedy sentence instead of
+                # a bare "absolute paths are not allowed" (measured live,
+                # exec-c3adbfcfa341 2026-08-07). Benchmark lane and non-write
+                # tools keep the old blanket rejection.
+                file_access=(
+                    getattr(getattr(loop.config, "tools", None), "file_access", None)
+                    if is_write_tool_call and benchmark_root is None
+                    else None
+                ),
             )
             if path_error is not None:
-                msg = f"Invalid file path argument for write tool {name}: {path_error}"
+                msg = (
+                    path_error
+                    if is_file_access_refusal(path_error)
+                    else f"Invalid file path argument for write tool {name}: {path_error}"
+                )
                 if is_write_tool_call:
                     audit_benchmark_event(
                         benchmark_context,
@@ -373,9 +325,9 @@ async def execute_tools(
                     },
                 )
 
-        # Observational plugin hook: fires after arg parsing / path sanitization
-        # and before tool execution. Read-only this release (return ignored).
-        await _run_loop_hook(loop, "before_tool", {"name": name, "args": args})
+        # Hook surface (tool category): fires after arg parsing / path
+        # sanitization and before tool execution. Read-only this release.
+        await emit_hook(loop, HookEvent.TOOL_PRE, {"name": name, "args": args})
 
         start = time.monotonic()
         await loop._audit_action(
@@ -398,6 +350,9 @@ async def execute_tools(
                     }
 
                 async def _emit_guardrails_event(evt_type: str, payload: dict[str, Any]) -> None:
+                    # Hook surface (approval category): bridge the guardrails
+                    # TOOL_APPROVAL_REQUIRED event onto the approval_requested hook.
+                    await bridge_guardrails_event(loop, evt_type, payload)
                     cb = loop._guardrails_event_cb
                     if cb is None:
                         return
@@ -427,7 +382,13 @@ async def execute_tools(
                     runtime_root=str(loop.config.memory.root_path),
                     conversation_summary=conversation_summary,
                     emit_event=_emit_guardrails_event,
-                    no_human_mode="allow" if int(loop._autonomy_level or 0) >= 4 else None,
+                    # The caller (e.g. the guardrails "gatekeeper" mode) may pin the
+                    # approval posture via this attribute; otherwise derive from autonomy.
+                    no_human_mode=(
+                        loop._no_human_mode_override
+                        if hasattr(loop, "_no_human_mode_override")
+                        else ("allow" if int(loop._autonomy_level or 0) >= 4 else None)
+                    ),
                 )
 
             try:
@@ -473,6 +434,7 @@ async def execute_tools(
                     try:
                         result_text = json.dumps(guarded.get("data"), ensure_ascii=False, default=str)
                     except Exception:
+                        log.debug("guarded tool result data serialization failed; using string fallback", exc_info=True)
                         result_text = str(guarded.get("data"))
                 elif guarded.get("error"):
                     result_text = json.dumps(
@@ -517,6 +479,8 @@ async def execute_tools(
             except Exception as e:
                 duration = (time.monotonic() - start) * 1000
                 err_text = f"{type(e).__name__}: {e}"
+                # Broad catch: tool implementations may raise any exception; capture for audit and agent feedback.
+                log.debug("Tool %r raised an exception during execution: %s", name, err_text, exc_info=True)
                 await loop._audit_action(
                     kind="tool_action_exception",
                     tool_call_id=tc_id,
@@ -625,11 +589,11 @@ async def execute_tools(
             # Append verification feedback to result so the LLM sees it
             event_data["result_text"] = result_text + "\n\n" + verification_feedback
 
-        # Observational plugin hook: fires after the tool completes, once
+        # Hook surface (tool category): fires after the tool completes, once
         # duration/ok/result_text are known. Read-only this release.
-        await _run_loop_hook(
+        await emit_hook(
             loop,
-            "after_tool",
+            HookEvent.TOOL_POST,
             {"name": name, "args": args, "ok": ok, "result_text": result_text},
         )
 
@@ -660,6 +624,8 @@ async def execute_tools(
                 tc = tool_tasks.get(done, {})
                 tc_id = str(tc.get("id", ""))
                 tool_name = str(tc.get("name") or "tool")
+                # Broad catch: asyncio task wrapper can surface any exception from the tool coroutine.
+                log.debug("Tool task for %r completed with unhandled exception: %s", tool_name, e, exc_info=True)
                 await loop._audit_action(
                     kind="tool_action_exception",
                     tool_call_id=tc_id,

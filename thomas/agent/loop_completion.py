@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.completion_gate import GATE_BLOCK, evaluate_completion_gate
+from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.core.config import load_config
 from thomas.core.events import AgentEvent
 from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
@@ -222,12 +224,6 @@ async def handle_post_loop_completion(
     )
     token_report["rules_of_road"] = rules_report
 
-    issue_ownership_signals = rules_report.get("signals") or {}
-    issue_ownership_blocked = bool(
-        bool(issue_ownership_signals.get("strict_issue_ownership"))
-        and bool(issue_ownership_signals.get("unresolved_issue_detected"))
-    )
-
     # Quality-gate retries are for action routes only
     quality_required = not bool(rules_report.get("passed", False))
     if strict_issue_ownership:
@@ -256,44 +252,35 @@ async def handle_post_loop_completion(
                 yield retry_event
             return
 
-    if (
-        quality_required
-        and strict_issue_ownership
-        and issue_ownership_blocked
-        and _quality_retry_count >= quality_max_retries
-        and not bool(state.error)
-    ):
-        block_error = (
-            "Issue-ownership quality gate blocked completion: "
-            "user-facing text still appears to describe unresolved issues or workaround-only work."
-        )
-        yield AgentEvent.agent_error(block_error, iteration=state.iteration)
-        state.error = block_error
+    # Errors and exhausted pass budgets are incomplete outcomes. Never append a
+    # success event after an AGENT_ERROR; Code and Work must not present partial
+    # changes as finished work.
+    if state.error:
+        # Hook surface (failure category): the run terminated with an error.
+        await emit_hook(self, HookEvent.FAILURE, {"error": str(state.error), "run_id": self._run_id})
         return
 
-    # Yield final completion event
-    yield AgentEvent.agent_done(
+    # Completion is derived from the structured validation report only.
+    # Assistant prose is never interpreted as success, failure, or give-up.
+    gate_decision = evaluate_completion_gate(
+        validation_passed=bool(rules_report.get("passed", False)),
+        gate_active=bool(((quality_enabled and quality_enforce) or strict_issue_ownership) and quality_retry_enabled),
+    )
+    token_report["completion_gate"] = gate_decision.to_payload()
+
+    if gate_decision.outcome == GATE_BLOCK:
+        block_error = f"Completion gate blocked AGENT_DONE: {gate_decision.reason}"
+        yield AgentEvent.agent_error(block_error, iteration=state.iteration)
+        state.error = block_error
+        await emit_hook(self, HookEvent.FAILURE, {"error": block_error, "run_id": self._run_id})
+        return
+
+    # Yield final completion event.
+    done_event = AgentEvent.agent_done(
         text=state.text_response,
         iterations=state.iteration + 1,
         tool_calls=state.total_tool_calls,
         usage=usage_obj,
         token_report=token_report,
     )
-
-    # Auto-generate reusable tool from completed task
-    if state.text_response and state.total_tool_calls > 0:
-        try:
-            from thomas.core.tool_factory import get_tool_factory
-
-            factory = get_tool_factory()
-            tool_schema = factory.create_tool_from_task(
-                task_description=prompt_text,
-                steps_taken=self._conversation[-10:],  # recent context
-                code_written=None,  # could extract from tool results
-                outcome="success" if not state.error else "error",
-            )
-            if tool_schema:
-                factory.register(tool_schema)
-                log.debug("ToolFactory: registered tool '%s' from task", tool_schema.name)
-        except Exception as e:  # REVIEWED: log-and-continue
-            log.debug("ToolFactory: failed to create tool from task: %s", e)
+    yield done_event

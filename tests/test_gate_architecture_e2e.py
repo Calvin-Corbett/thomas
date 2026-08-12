@@ -247,8 +247,16 @@ def test_agent_safety_toml_still_lists_protected_runtime_dirs() -> None:
 
     cfg = tomllib.loads((REPO_ROOT / "agent_safety.toml").read_text(encoding="utf-8"))
     protected_dirs = cfg["runtime_protection"]["protected_dirs"]
-    # These five must always be in the protected runtime list.
-    for required in ("thomas/tools/", "thomas/agent/", "thomas/core/", "thomas/server/", "scripts/"):
+    # These runtime and blue-owned support trees must always be protected.
+    for required in (
+        "thomas/tools/",
+        "thomas/agent/",
+        "thomas/core/",
+        "thomas/server/",
+        "scripts/",
+        "evolve_supervisor/",
+        "evolve_corpus/",
+    ):
         assert required in protected_dirs, (
             f"runtime_protection.protected_dirs lost {required!r}; "
             "this would let agents write to a runtime path that used to be protected"

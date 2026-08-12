@@ -35,12 +35,14 @@ function officeSetFollowMode(enabled, agentId = '') {
     if (!enabled) {
         officeState.followAgentId = '';
         officeUpdateFollowUi();
+        if (typeof officePersistServerFollowAgent === 'function') void officePersistServerFollowAgent('');
         return;
     }
     const fallbackId = safeString(agentId) || safeString(officeState.selectedAgentId) || safeString(officeState.agents[0]?.id);
     if (!fallbackId) {
         officeState.followAgentId = '';
         officeUpdateFollowUi();
+        if (typeof officePersistServerFollowAgent === 'function') void officePersistServerFollowAgent('');
         return;
     }
     officeState.followAgentId = fallbackId;
@@ -49,6 +51,7 @@ function officeSetFollowMode(enabled, agentId = '') {
         officeCenterOnWorldPoint((target.x / 100) * officeState.mapWidth, (target.y / 100) * officeState.mapHeight);
     }
     officeUpdateFollowUi();
+    if (typeof officePersistServerFollowAgent === 'function') void officePersistServerFollowAgent(fallbackId);
 }
 
 function officeTickFollowCamera() {
@@ -479,7 +482,15 @@ function officeCreateAgentElement(agent) {
 }
 
 function officeRenderAgents(now = performance.now()) {
-    if (!officeState?.agentLayerEl) return;
+    const liveAgentLayer = officeState?.agentLayerEl instanceof HTMLElement
+        && officeState.agentLayerEl.isConnected
+        && (!officeScene || officeScene.contains(officeState.agentLayerEl));
+    if (!liveAgentLayer) {
+        if (typeof officeRenderDraftAgentLayerOnly === 'function') {
+            officeRenderDraftAgentLayerOnly(now);
+        }
+        return;
+    }
     const selectedId = safeString(officeState.selectedAgentId);
     officeState.agents.forEach((agent) => {
         let el = officeState.agentElements.get(agent.id);
@@ -515,10 +526,13 @@ function officeRenderAgents(now = performance.now()) {
 
         const pixelEl = el.querySelector('.office-pixel-agent');
         if (pixelEl) {
+            pixelEl.style.setProperty('--agent-primary', palette.primary);
+            pixelEl.style.setProperty('--agent-secondary', palette.secondary);
+            pixelEl.style.setProperty('--agent-glow', palette.glow);
             pixelEl.classList.toggle('facing-left', agent.facing < 0);
             pixelEl.classList.toggle('looking-user', Boolean(agent.speech));
             pixelEl.classList.toggle('is-bonking', now < agent.bumpUntil);
-            pixelEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
+            pixelEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie', 'costume-toolbelt', 'costume-satchel', 'costume-scarf', 'costume-badge', 'costume-tablet', 'costume-wrench', 'costume-mug');
             if (agent.costume && agent.costume !== 'none') {
                 pixelEl.classList.add(`costume-${agent.costume}`);
             }
@@ -1150,4 +1164,3 @@ function officeRoomPixels(room, width, height) {
         doorY: (room.doorY / 100) * height,
     };
 }
-

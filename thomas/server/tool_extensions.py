@@ -8,6 +8,8 @@ import logging
 
 _log = logging.getLogger(__name__)
 
+_OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD = 100
+
 _OPTIONAL_TOOL_MODULES = [
     ("thomas.tools.engineering", "register_engineering_tools"),
     ("thomas.api_gateway.tools", "register_api_gateway_tools"),
@@ -148,18 +150,127 @@ _OPTIONAL_TOOL_MODULES = [
     ("thomas.webhooks.tools", "register_webhooks_tools"),
     ("thomas.webrtc.tools", "register_webrtc_tools"),
     ("thomas.workflow_v2.tools", "register_workflow_v2_tools"),
+    ("thomas.marketplace.paper_trading.tools", "register_paper_trading_tools"),
 ]
 
 
 def _try_import(module_path: str, func_name: str):
+    candidates = [module_path]
+    if module_path.startswith("thomas.") and not module_path.startswith(
+        ("thomas.marketplace.", "thomas.tools.", "thomas.forge.")
+    ):
+        candidates.append(f"thomas.marketplace.{module_path.removeprefix('thomas.')}")
+
+    for candidate in candidates:
+        try:
+            mod = __import__(candidate, fromlist=[func_name])
+            fn = getattr(mod, func_name, None)
+            if callable(fn):
+                return fn
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            continue
+        except (OSError, RuntimeError, SyntaxError, TypeError, ValueError) as exc:
+            _log.warning("Skipping broken optional tool module %s.%s: %s", candidate, func_name, exc)
+            return None
+    return None
+
+
+def _register_self_extend(registry) -> None:
+    """Always register the self-extension tool (create_skill).
+
+    This is a first-class capability, not an optional domain module: it lets
+    Thomas scaffold new skills at runtime when it hits a request it cannot
+    fulfill with its current tools. Registered into the same registry that the
+    worker and chat agent build, so both can call it.
+    """
     try:
-        mod = __import__(module_path, fromlist=[func_name])
-        return getattr(mod, func_name)
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        return None
-    except Exception as exc:
-        _log.debug("Skipping optional tool module %s.%s: %s", module_path, func_name, exc)
-        return None
+        from thomas.tools.self_extend import register_self_extend_tools
+
+        register_self_extend_tools(registry)
+    # The same set _try_import names for an optional tool module: the import can
+    # be missing or broken, and registration itself is dict/name work. Never
+    # break startup over it.
+    except (ImportError, AttributeError, OSError, RuntimeError, SyntaxError, TypeError, ValueError) as exc:
+        _log.debug("Skipping self_extend tools: %s", exc)
+
+
+def _register_email_calendar(registry) -> None:
+    """Register the email/calendar tools (email.send, email.read, calendar.*).
+
+    These tool classes use the legacy ``run(ctx, **params)`` / ``params_schema``
+    interface, so they are wrapped in a thin adapter to the registry's
+    ``Tool.execute(args)`` contract. The tools are always *registered* (so the
+    model can see and call them); they fail with a clear, actionable error at
+    execution time if email credentials are not configured.
+    """
+    try:
+        from thomas.tools.base import Tool, ToolResult
+        from thomas.tools.email_calendar import get_tools as _email_get_tools
+
+        # The same httpx (or vendored shim) the email tools actually call with,
+        # so the adapter below can name its transport errors precisely.
+        from thomas.tools.email_calendar import httpx as _httpx
+    except (ImportError, AttributeError, OSError, RuntimeError, SyntaxError, TypeError, ValueError) as exc:
+        _log.debug("Skipping email/calendar tools: %s", exc)
+        return
+
+    class _LegacyToolAdapter(Tool):
+        """Adapt a legacy ``run()``/``params_schema`` tool to the registry."""
+
+        category = "email_calendar"
+
+        def __init__(self, legacy) -> None:
+            self._legacy = legacy
+            self.name = str(getattr(legacy, "name", "") or "")
+            self.description = str(getattr(legacy, "description", "") or "")
+            self.parameters = dict(getattr(legacy, "params_schema", {}) or {})
+
+        async def execute(self, args: dict) -> "ToolResult":
+            try:
+                data = await self._legacy.run(None, **(args or {}))
+            # ToolError (missing creds, provider refusals) is a RuntimeError;
+            # the provider calls go out over httpx, and a mis-shaped response or
+            # a bad argument set arrives as ValueError/TypeError/KeyError/
+            # AttributeError. Every one of them becomes a clear actionable
+            # message rather than a silent failure or a dead agent turn.
+            except (
+                _httpx.HTTPError,
+                OSError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+            ) as exc:
+                return ToolResult(ok=False, error=f"{type(exc).__name__}: {exc}")
+            return ToolResult(ok=True, data=data)
+
+    registered = 0
+    for legacy_tool in _email_get_tools():
+        name = str(getattr(legacy_tool, "name", "") or "")
+        if not name:
+            continue
+        try:
+            registry.register(_LegacyToolAdapter(legacy_tool))
+            registered += 1
+        # register() rejects a nameless tool with ValueError; building the
+        # adapter reads attributes off the legacy tool (AttributeError/TypeError)
+        # and copies its schema dict (TypeError/KeyError).
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            _log.debug("Skipping email tool %s: %s", name, exc)
+    if registered:
+        _log.info("Registered %d email/calendar tools", registered)
+
+
+def _register_work_google_drive(registry) -> None:
+    """Register Drive tools that execute only through a Work-bound registry."""
+    try:
+        from thomas.tools.google_drive import get_tools
+
+        for tool in get_tools():
+            registry.register(tool)
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _log.debug("Skipping Work Google Drive tools: %s", exc)
 
 
 def register_all_optional_tools(registry) -> int:
@@ -173,5 +284,20 @@ def register_all_optional_tools(registry) -> int:
                 count += 1
             except Exception as exc:
                 _log.debug("Skipping %s: %s", func_name, exc)
+
+    # First-class capabilities (always registered, independent of the optional
+    # module table above).
+    _register_self_extend(registry)
+    _register_email_calendar(registry)
+    _register_work_google_drive(registry)
+
     _log.info("Loaded %d/%d optional tool modules", count, len(_OPTIONAL_TOOL_MODULES))
+    if count < _OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD:
+        _log.warning(
+            "Loaded only %d/%d optional tool modules; expected at least %d. "
+            "This may indicate registry drift or a broken Thomas install.",
+            count,
+            len(_OPTIONAL_TOOL_MODULES),
+            _OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD,
+        )
     return count

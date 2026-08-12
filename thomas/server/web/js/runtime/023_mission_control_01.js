@@ -211,9 +211,21 @@ function missionJobStatusRank(statusRaw) {
     return Object.prototype.hasOwnProperty.call(rank, status) ? rank[status] : 7;
 }
 
+function missionPlainText(value) {
+    // Worker prose renders as PLAIN text here - markdown markers ("**360**",
+    // "`file`", "## Heading") must not leak raw syntax. Mirrors chat.html deMd.
+    // Markers strip even when unpaired: summaries arrive truncated (the
+    // closing ** may be cut off) and headings appear mid-sentence.
+    return safeString(value)
+        .replace(/\*\*/g, '')
+        .replace(/__/g, '')
+        .replace(/`/g, '')
+        .replace(/(^|\s)#{1,6}\s+/gm, '$1');
+}
+
 function missionJobSummary(job) {
     const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {};
-    return (
+    return missionPlainText(
         safeString(payload?.goal)
         || safeString(payload?.prompt)
         || safeString(payload?.task)
@@ -592,7 +604,7 @@ function missionRenderPriorityList(payload, roomLabelById) {
 
         const summary = document.createElement('div');
         summary.className = 'mission-item-summary';
-        summary.textContent = safeString(item?.summary) || 'No summary reported.';
+        summary.textContent = missionPlainText(item?.summary) || 'No summary reported.';
 
         const meta = document.createElement('div');
         meta.className = 'mission-item-meta';

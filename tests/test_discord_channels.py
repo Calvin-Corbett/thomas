@@ -1,7 +1,30 @@
+"""Discord channel coverage under model-owned routing.
+
+Three tests here used to assert on deterministic prose that
+``thomas/server/routes/discord_channels_support.py`` produced by regex-matching
+the user's wording ("Discord bridge status:", "Recent Discord conversations:",
+an "owner-only" refusal). That interception was deleted in 0eedd8cc
+("refactor(chat): retire Discord prose command interception"), which is the rule
+CONTRIBUTING_AI.md calls Semantic Intent Ownership: only the model decides
+whether prose becomes an action. The commit updated the two other test modules
+that named the removed helper and missed this one, so the three tests survived
+as assertions on code that no longer exists -- and they failed by calling a live
+model that is not configured on a test box, which is a network failure wearing
+the name of a routing guarantee.
+
+What replaced them is the pair of regressions CONTRIBUTING_AI.md asks for when
+orchestration changes: prose that *looks* like a Discord command produces no
+side effect on its own (with the model stubbed, so the turn is deterministic and
+the assertion cannot pass merely because the model call failed), and the
+structured Discord surface still answers without any model at all.
+"""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
@@ -9,6 +32,36 @@ from aiohttp.test_utils import TestClient, TestServer
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
 from thomas.server.app import create_app
+
+
+def _stub_model_turn(reply: str):
+    """Return a ``process_message`` replacement that answers without a provider.
+
+    The routing path under test is everything around the model: request parsing,
+    surface binding, the event stream, and whatever governs side effects. Only
+    the provider call is stubbed, so a box with no model endpoint exercises the
+    same code a box with one does.
+    """
+
+    async def _process(
+        self: Any,
+        session_id: str,
+        conversation: Any,
+        prompt: str,
+        dispatcher: Any,
+        **_kwargs: Any,
+    ) -> Any:
+        conversation = conversation.append_message("user", prompt).append_message("assistant", reply)
+        await dispatcher.emit_text(reply)
+        await dispatcher.emit_done(
+            session_id=session_id,
+            conversation_version=conversation.version,
+            iterations=1,
+            tool_calls=0,
+        )
+        return conversation
+
+    return _process
 
 
 def _parse_ndjson(blob: str) -> list[dict[str, object]]:
@@ -420,72 +473,83 @@ async def test_discord_runtime_route_updates_voice_settings(tmp_path: Path, monk
 
 
 @pytest.mark.asyncio
-async def test_local_chat_can_report_discord_status_without_agent_loop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("owner", [False, True])
+async def test_discord_shaped_prose_in_chat_never_starts_the_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: bool
 ) -> None:
+    """Wording alone is not a lifecycle command, for the owner either.
+
+    This is direction 2 of the regression pair CONTRIBUTING_AI.md requires:
+    "similar words in user or assistant prose produce no side effect on their
+    own". Chat has no structured capability that starts the bridge -- the only
+    ways in are the ``/api/channels/discord/*`` routes and the ``channels``
+    workspace action ``channels.discord.set_enabled`` -- so this must hold
+    regardless of who is speaking, which is why the owner case is asserted too.
+    A refusal that only covered non-owners would be a weaker guarantee than the
+    one the code actually makes.
+
+    The model is stubbed rather than left to fail. With no provider configured
+    the turn errors out and *nothing at all* happens, which would satisfy this
+    assertion for the wrong reason; stubbing makes the turn complete normally so
+    the absence of a side effect is a real result.
+    """
     bot_root = _build_bot_root(tmp_path)
     _set_test_bridge_env(monkeypatch, tmp_path, bot_root)
     cfg = _build_config(tmp_path)
+    before = DiscordBridgeRuntime(cfg, bridge_root=bot_root).load_state()
     app = create_app(cfg)
     client = await _start_client(app)
     try:
-        sess_resp = await client.post("/api/session/new")
-        assert sess_resp.status == 200
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        resp = await client.post(
-            "/api/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "mode": "fast",
-                "text": "show discord status",
-            },
-        )
+        with patch(
+            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            _stub_model_turn("Sure -- I can talk about the Discord bridge."),
+        ):
+            resp = await client.post(
+                "/api/chat",
+                json={
+                    "session_id": "thomas-discord:dm:111:v4",
+                    "profile": "local",
+                    "mode": "fast",
+                    "text": "start the discord bot",
+                    "channel": "discord",
+                    "source": "discord_bridge",
+                    "client": "discord_bot",
+                    "surface": "discord",
+                    "metadata": _discord_owner_metadata(owner=owner),
+                },
+            )
+            body = await resp.text()
         assert resp.status == 200
-        events = _parse_ndjson(await resp.text())
+        events = _parse_ndjson(body)
+        # The stub's reply proves the turn really ran. Without it this test would
+        # also pass on a box where the model call blew up before deciding
+        # anything, which is exactly the failure mode being retired here.
+        assert any(str(event.get("text") or "") == "Sure -- I can talk about the Discord bridge." for event in events)
         done = next(event for event in events if event.get("type") == "done")
         assert done["tool_calls"] == 0
-        assert "Discord bridge status:" in str(done["text"])
+
+        after = DiscordBridgeRuntime(cfg, bridge_root=bot_root).load_state()
+        assert after["pid"] is None
+        assert after["enabled"] is False
+        assert after["last_started_at"] == before["last_started_at"]
     finally:
         await client.close()
 
 
 @pytest.mark.asyncio
-async def test_non_owner_discord_request_cannot_start_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    bot_root = _build_bot_root(tmp_path)
-    _set_test_bridge_env(monkeypatch, tmp_path, bot_root)
-    cfg = _build_config(tmp_path)
-    app = create_app(cfg)
-    client = await _start_client(app)
-    try:
-        resp = await client.post(
-            "/api/chat",
-            json={
-                "session_id": "thomas-discord:dm:111:v4",
-                "profile": "local",
-                "mode": "fast",
-                "text": "start the discord bot",
-                "channel": "discord",
-                "source": "discord_bridge",
-                "client": "discord_bot",
-                "surface": "discord",
-                "metadata": _discord_owner_metadata(owner=False),
-            },
-        )
-        assert resp.status == 200
-        events = _parse_ndjson(await resp.text())
-        done = next(event for event in events if event.get("type") == "done")
-        assert "owner-only" in str(done["text"]).lower()
-        runtime = DiscordBridgeRuntime(cfg, bridge_root=bot_root)
-        assert runtime.load_state()["pid"] is None
-    finally:
-        await client.close()
-
-
-@pytest.mark.asyncio
-async def test_owner_discord_request_can_reference_recent_history(
+async def test_owner_scoped_discord_history_is_readable_without_a_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The turns a bridge recorded stay attributable, on the structured surface.
+
+    The retired prose command formatted this history into a chat reply. What
+    survives the retirement is the structured half: a recorded turn is
+    retrievable by search and by session, and it still carries the scope and the
+    owner flag it was filed under -- which is what makes it safe to hand to a
+    model as context for that owner and no one else. Asserted against the
+    endpoints directly, so this test needs no model and cannot fail for a
+    network reason.
+    """
     bot_root = _build_bot_root(tmp_path)
     _set_test_bridge_env(monkeypatch, tmp_path, bot_root)
     cfg = _build_config(tmp_path)
@@ -508,24 +572,22 @@ async def test_owner_discord_request_can_reference_recent_history(
     app = create_app(cfg)
     client = await _start_client(app)
     try:
-        resp = await client.post(
-            "/api/chat",
-            json={
-                "session_id": "thomas-discord:dm:111:v4",
-                "profile": "local",
-                "mode": "fast",
-                "text": "show recent discord conversations",
-                "channel": "discord",
-                "source": "discord_bridge",
-                "client": "discord_bot",
-                "surface": "discord",
-                "metadata": _discord_owner_metadata(owner=True),
-            },
-        )
-        assert resp.status == 200
-        events = _parse_ndjson(await resp.text())
-        done = next(event for event in events if event.get("type") == "done")
-        assert "Recent Discord conversations:" in str(done["text"])
-        assert "thomas-discord:dm:111:v4" in str(done["text"])
+        search_resp = await client.get("/api/channels/discord/history?q=podcast")
+        assert search_resp.status == 200
+        search_payload = await search_resp.json()
+        hit = next(row for row in search_payload["hits"] if row["session_id"] == "thomas-discord:dm:111:v4")
+        assert hit["owner"] is True
+        assert hit["scope_key"] == "dm:111"
+        assert hit["display_name"] == "Owner User"
+        assert "podcast guest follow-up" in hit["excerpt"]
+
+        session_resp = await client.get("/api/channels/discord/history/thomas-discord:dm:111:v4")
+        assert session_resp.status == 200
+        session_payload = await session_resp.json()
+        assert session_payload["session"]["scope_key"] == "dm:111"
+        turn = session_payload["turns"][-1]
+        assert turn["owner"] is True
+        assert turn["display_name"] == "Owner User"
+        assert turn["assistant_text"] == "We said to send the guest the calendar link tomorrow morning."
     finally:
         await client.close()

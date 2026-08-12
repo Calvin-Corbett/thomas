@@ -298,11 +298,9 @@ function officeTaskPriorityScore(task) {
     const now = Date.now();
     const ageMs = Math.max(0, now - (Number(task.createdAt) || now));
     const ageScore = Math.min(3.6, ageMs / 22_000);
-    const urgencyFromWords = /\b(urgent|asap|priority|critical|now)\b/i.test(safeString(task.rawText))
-        ? 2.2
-        : 0;
+    const structuredPriority = officeClamp(Number(task.priority) || 0, 0, 4);
     const roomBoost = safeString(task.roomId) === 'room-support' ? 0.5 : 0;
-    return ageScore + urgencyFromWords + roomBoost;
+    return ageScore + structuredPriority + roomBoost;
 }
 
 function officeAgentTaskFitScore(agent, task) {
@@ -612,27 +610,239 @@ function officeRenderDebugOverlay(now = performance.now()) {
 
 function officeMissionStatusToOfficeState(statusRaw) {
     const status = safeString(statusRaw).toLowerCase();
-    if (status === 'active' || status === 'running' || status === 'in_progress') return 'working';
-    if (status === 'idle' || status === 'waiting') return 'idle';
-    if (status === 'blocked' || status === 'paused') return 'yield';
+    if (status === 'active' || status === 'running' || status === 'in_progress' || status === 'executing' || status === 'claimed' || status === 'awaiting_proof') return 'working';
+    if (status === 'idle' || status === 'waiting' || status === 'queued' || status === 'requested' || status === 'classified') return 'idle';
+    if (status === 'blocked' || status === 'paused' || status === 'awaiting_approval') return 'yield';
     if (status === 'break') return 'break';
     return '';
+}
+
+function officeMissionStatusToTaskStatus(statusRaw) {
+    const status = safeString(statusRaw).toLowerCase();
+    if (new Set(['completed', 'complete', 'done', 'succeeded', 'verified', 'success']).has(status)) return 'done';
+    if (new Set(['running', 'active', 'executing', 'claimed', 'in_progress', 'awaiting_proof', 'awaiting_approval', 'blocked']).has(status)) return 'active';
+    return 'queued';
+}
+
+function officeMissionEntryText(entry) {
+    return safeString(entry?.task || entry?.summary || entry?.title || entry?.name || entry?.id || 'Mission task');
+}
+
+function officeMissionRoomToOfficeRoomId(roomRaw, entry = {}) {
+    const missionRoom = safeString(roomRaw || entry?.room || entry?.room_id).toLowerCase();
+    return OFFICE_MISSION_ROOM_TO_OFFICE_ROOM[missionRoom] || 'room-lobby';
+}
+
+function officeMissionAgentName(entry) {
+    const name = safeString(entry?.name || entry?.claimed_owner || entry?.claimedOwner || entry?.bot_name || entry?.botName);
+    if (name && !/^worker$/i.test(name)) return name.slice(0, 24);
+    const botId = safeString(entry?.bot_id || entry?.botId);
+    if (botId) return officeTaskTitle(botId.replace(/[_-]+/g, ' ')).slice(0, 24);
+    const kind = safeString(entry?.kind || entry?.source || 'Worker');
+    const id = safeString(entry?.execution_id || entry?.job_id || entry?.run_id || entry?.objective_id || entry?.id);
+    const suffix = id ? String(officeStableHash(id) % 997).padStart(3, '0') : '';
+    return `${officeTaskTitle(kind.replace(/[_-]+/g, ' '))}${suffix ? ` ${suffix}` : ''}`.slice(0, 24);
+}
+
+function officeMissionAgentStableId(entry) {
+    const botId = safeString(entry?.bot_id || entry?.botId);
+    if (botId) return `bot-${officeAgentHandle(botId)}`;
+    const name = officeMissionAgentName(entry);
+    const handle = officeAgentHandle(name);
+    if (handle && !new Set(['worker', 'agent', 'taskmanager']).has(handle)) {
+        const existing = officeFindAgentByHandle(handle);
+        if (existing) return existing.id;
+        return `agent-${handle}`;
+    }
+    const kind = officeAgentHandle(entry?.kind || entry?.source || 'mission');
+    const id = safeString(entry?.execution_id || entry?.job_id || entry?.run_id || entry?.objective_id || entry?.id || name);
+    return `${kind || 'mission'}-${officeStableHash(id)}`;
+}
+
+function officeMissionSpecialty(entry, roomId) {
+    const kind = safeString(entry?.kind || entry?.source).replace(/[_-]+/g, ' ');
+    const room = officeRoomById(roomId);
+    if (kind) return officeTaskTitle(kind).slice(0, 64);
+    return safeString(room?.meta || room?.label || 'Generalist').slice(0, 64);
+}
+
+function officeEnsureMissionAgent(entry, roomId, now = performance.now()) {
+    if (!officeState) return null;
+    const stableId = officeMissionAgentStableId(entry);
+    const name = officeMissionAgentName(entry);
+    let agent = officeGetAgentById(stableId);
+    if (!agent && name && !/^worker(?:\s+\d+)?$/i.test(name)) {
+        agent = officeFindAgentByHandle(name);
+    }
+    if (agent) {
+        agent.remoteIds = agent.remoteIds && typeof agent.remoteIds === 'object' ? agent.remoteIds : {};
+        const remoteId = safeString(entry?.id);
+        if (remoteId) agent.remoteIds[remoteId] = remoteId;
+        agent.source = safeString(entry?.source || entry?.kind || agent.source || 'mission');
+        agent.specialty = safeString(agent.specialty || officeMissionSpecialty(entry, roomId) || 'Generalist').slice(0, 64);
+        agent.personality = safeString(agent.personality || 'Helpful, direct, and persistent.').slice(0, 160);
+        return agent;
+    }
+
+    const seedIndex = officeStableHash(stableId) % Math.max(1, OFFICE_AGENT_SEEDS.length);
+    const seed = OFFICE_AGENT_SEEDS[seedIndex] || OFFICE_AGENT_SEEDS[0] || {};
+    const roomNav = officeState.roomNav?.get(roomId);
+    const slotIds = Array.isArray(roomNav?.slotNodeIds) ? roomNav.slotNodeIds : [];
+    const slotId = slotIds.length ? slotIds[officeStableHash(stableId) % slotIds.length] : roomNav?.centerNodeId;
+    const spawn = officeState.navMap?.get(slotId) || officeState.navMap?.get(roomNav?.centerNodeId) || { x: 50, y: 50 };
+    agent = {
+        id: stableId,
+        name,
+        color: /^#[0-9a-f]{6}$/i.test(safeString(seed.color)) ? seed.color : '#9ad8ff',
+        costume: new Set(OFFICE_AGENT_COSTUME_POOL).has(seed.costume) ? seed.costume : 'none',
+        tint: safeString(seed.tint || officeAgentTintFromColor(seed.color || '#9ad8ff')),
+        specialty: officeMissionSpecialty(entry, roomId),
+        personality: safeString(seed.personality || 'Helpful, direct, and persistent.').slice(0, 160),
+        source: safeString(entry?.source || entry?.kind || 'mission'),
+        remoteIds: {},
+        remoteRoomId: roomId,
+        remoteStatus: safeString(entry?.status),
+        lastMissionSummary: officeMissionEntryText(entry).slice(0, 180),
+        x: officeClamp(Number(spawn.x) || 50, 3, 97),
+        y: officeClamp(Number(spawn.y) || 50, 5, 96),
+        targetX: officeClamp(Number(spawn.x) || 50, 3, 97),
+        targetY: officeClamp(Number(spawn.y) || 50, 5, 96),
+        speed: officeRandomRange(2.35, 3.75),
+        facing: officeChance(0.5) ? 1 : -1,
+        laneBias: officeRandomRange(-0.65, 0.65),
+        state: 'idle',
+        intent: 'wander',
+        taskId: '',
+        workStreak: 0,
+        workUntil: 0,
+        breakUntil: 0,
+        idleUntil: now + officeRandomRange(450, 1700),
+        nextAmbientAt: now + officeRandomRange(3500, 9000),
+        nextWorkLineAt: now + officeRandomRange(2400, 6200),
+        nextSocialAt: now + officeRandomRange(5000, 14000),
+        nextBreakAt: now + officeRandomRange(34_000, 82_000),
+        speech: null,
+        bumpUntil: 0,
+        jumpUntil: 0,
+        collisionCooldownUntil: 0,
+        crowdReliefUntil: 0,
+        yieldUntil: 0,
+        yieldResumeIntent: '',
+        stuckSince: 0,
+        lastMoveX: officeClamp(Number(spawn.x) || 50, 3, 97),
+        lastMoveY: officeClamp(Number(spawn.y) || 50, 5, 96),
+        returnAfterRunAt: 0,
+        runawayPhase: '',
+        runawayExitX: 0,
+        runawayExitY: 0,
+        currentNodeId: officeFindNearestNode(officeState.navMap, Number(spawn.x) || 50, Number(spawn.y) || 50),
+        routeWaypoints: [],
+        routeDestinationNodeId: '',
+        reservedLaneEdgeKey: '',
+    };
+    const remoteId = safeString(entry?.id);
+    if (remoteId) agent.remoteIds[remoteId] = remoteId;
+    officeApplyStoredAgentPrefs([agent], loadStoredOfficeAgentPrefs());
+    officeState.agents.push(agent);
+    if (!officeState.selectedAgentId) {
+        officeState.selectedAgentId = agent.id;
+    }
+    officeRenderAgentSelector(officeState.selectedAgentId);
+    return agent;
+}
+
+function officeUpsertMissionTask(entry, agent, roomId, now = performance.now()) {
+    if (!officeState || !agent) return null;
+    const remoteId = safeString(entry?.id || entry?.execution_id || entry?.job_id || entry?.run_id || entry?.objective_id || `${agent.id}:${officeMissionEntryText(entry)}`);
+    const taskId = `mission:${remoteId}`;
+    const room = officeRoomById(roomId) || officeRoomById('room-lobby');
+    const taskText = officeMissionEntryText(entry);
+    const status = officeMissionStatusToTaskStatus(entry?.status);
+    let task = officeState.tasks.find((entryTask) => safeString(entryTask?.id) === taskId);
+    if (!task) {
+        task = {
+            id: taskId,
+            title: officeTaskTitle(taskText),
+            rawText: taskText,
+            source: safeString(entry?.source || entry?.kind || 'mission-stream'),
+            roomId: room?.id || 'room-lobby',
+            roomLabel: room?.label || 'Main Lobby',
+            status,
+            assignedAgentId: agent.id,
+            createdAt: Date.now(),
+            startedAt: status === 'active' ? Date.now() : 0,
+            completedAt: status === 'done' ? Date.now() : 0,
+        };
+        officeState.tasks.push(task);
+        return task;
+    }
+    task.title = officeTaskTitle(taskText);
+    task.rawText = taskText;
+    task.source = safeString(entry?.source || entry?.kind || task.source || 'mission-stream');
+    task.roomId = room?.id || 'room-lobby';
+    task.roomLabel = room?.label || 'Main Lobby';
+    task.assignedAgentId = agent.id;
+    if (task.status !== status) {
+        task.status = status;
+    }
+    if (status === 'active' && !task.startedAt) {
+        task.startedAt = Date.now();
+    }
+    if (status === 'done' && !task.completedAt) {
+        task.completedAt = Date.now();
+    }
+    return task;
+}
+
+function officeRefreshDraftMapAfterMissionChange(now = performance.now(), options = {}) {
+    if (typeof officeRenderDraftMapScene !== 'function') return;
+    const requiresSceneRender = options?.requiresSceneRender === true;
+    const draftMapActive = typeof officeDraftMapPlane === 'function' && Boolean(officeDraftMapPlane());
+    if (!draftMapActive || requiresSceneRender || typeof officeRenderDraftAgentLayerOnly !== 'function') {
+        officeRenderDraftMapScene();
+        return;
+    }
+    if (typeof officeEnsureDraftMapState === 'function') {
+        const state = officeEnsureDraftMapState();
+        state.missionAgentLayerDirty = true;
+    }
+}
+
+function officeMissionDraftMapActive() {
+    return typeof officeDraftMapPlane === 'function' && Boolean(officeDraftMapPlane());
+}
+
+function officeMissionAgentAlreadyDraftRouting(agent, roomId, task) {
+    if (!officeMissionDraftMapActive() || !agent) return false;
+    const taskId = safeString(task?.id || agent.taskId);
+    const motion = agent.draftMotion && typeof agent.draftMotion === 'object' ? agent.draftMotion : null;
+    return safeString(agent.remoteRoomId) === safeString(roomId)
+        && safeString(agent.taskId) === taskId
+        && taskId
+        && safeString(motion?.targetSignature).includes(`|${safeString(roomId)}|${taskId}|`)
+        && (
+            Array.isArray(motion?.route)
+            || safeString(agent.intent) === 'task'
+            || safeString(agent.state) === 'walking'
+        );
 }
 
 function officeReconcileFromMissionPayload(payload, now = performance.now()) {
     if (!officeState || !payload || typeof payload !== 'object') return false;
     let changed = false;
+    let requiresSceneRender = false;
 
     const rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
     rooms.forEach((entry) => {
         const id = safeString(entry?.id);
         if (!id) return;
-        const room = officeRoomById(id);
+        const room = officeRoomById(officeMissionRoomToOfficeRoomId(id, entry));
         if (!room) return;
         const nextLabel = safeString(entry?.label);
-        if (nextLabel && room.label !== nextLabel) {
+        if (nextLabel && id === room.id && room.label !== nextLabel) {
             room.label = nextLabel;
             changed = true;
+            requiresSceneRender = true;
         }
     });
 
@@ -655,7 +865,7 @@ function officeReconcileFromMissionPayload(payload, now = performance.now()) {
             return;
         }
         const label = safeString(entry?.title || entry?.name || id);
-        const roomId = safeString(entry?.room || entry?.room_id || 'room-lobby');
+        const roomId = officeMissionRoomToOfficeRoomId(entry?.room || entry?.room_id, entry);
         const room = officeRoomById(roomId) || officeRoomById('room-lobby');
         officeState.tasks.push({
             id,
@@ -675,29 +885,73 @@ function officeReconcileFromMissionPayload(payload, now = performance.now()) {
 
     const agents = Array.isArray(payload.agents) ? payload.agents : [];
     agents.forEach((entry) => {
-        const remoteId = safeString(entry?.id);
-        const remoteName = safeString(entry?.name);
-        const local = officeState.agents.find((agent) => (
-            (remoteId && agent.id === remoteId)
-            || (remoteName && officeAgentHandle(agent.name) === officeAgentHandle(remoteName))
-        ));
-        if (!local) return;
+        const roomId = officeMissionRoomToOfficeRoomId(entry?.room || entry?.room_id, entry);
+        const agent = officeEnsureMissionAgent(entry, roomId, now);
+        if (!agent) return;
+        const task = officeUpsertMissionTask(entry, agent, roomId, now);
         const mappedState = officeMissionStatusToOfficeState(entry?.status);
-        if (!mappedState) return;
-        local.remoteStatus = mappedState;
-        if (local.taskId) return;
-        if (mappedState === 'working' && local.state === 'idle') {
-            local.state = 'working';
-            local.workUntil = now + officeRandomRange(2800, 6400);
-            local.nextWorkLineAt = now + officeRandomRange(1400, 2600);
+        const taskStatus = officeMissionStatusToTaskStatus(entry?.status);
+        const summary = officeMissionEntryText(entry).slice(0, 180);
+        agent.remoteRoomId = roomId;
+        agent.remoteStatus = safeString(entry?.status || mappedState || taskStatus);
+        agent.lastMissionSummary = summary;
+        agent.source = safeString(entry?.source || entry?.kind || agent.source || 'mission');
+        agent.specialty = safeString(agent.specialty || officeMissionSpecialty(entry, roomId) || 'Generalist').slice(0, 64);
+        if (task) {
+            agent.taskId = taskStatus === 'done' ? '' : task.id;
+        }
+        if (taskStatus === 'done') {
+            if (agent.state === 'working' || agent.intent === 'task') {
+                agent.state = 'idle';
+                agent.intent = 'wander';
+                agent.idleUntil = now + officeRandomRange(900, 2200);
+            }
+            if (task) {
+                task.status = 'done';
+                task.completedAt = task.completedAt || Date.now();
+            }
             changed = true;
-        } else if (mappedState === 'break' && local.state === 'idle') {
-            local.state = 'break';
-            local.breakUntil = now + officeRandomRange(1900, 4600);
-            local.nextWorkLineAt = now + officeRandomRange(900, 1800);
+            return;
+        }
+        if (mappedState === 'yield') {
+            if (agent.state !== 'yield') {
+                officeSetYieldState(agent, now, officeRandomRange(-0.8, 0.8), officeRandomRange(-0.8, 0.8));
+            }
+            agent.taskId = task?.id || agent.taskId;
+            agent.workUntil = now + 24_000;
             changed = true;
-        } else if (mappedState === 'yield' && local.state === 'walking') {
-            officeSetYieldState(local, now, officeRandomRange(-0.8, 0.8), officeRandomRange(-0.8, 0.8));
+            return;
+        }
+        if (taskStatus === 'active' || mappedState === 'working') {
+            const currentRoom = officeCurrentRoomForAgent(agent);
+            const alreadyHeadingThere = safeString(agent.routeDestinationNodeId)
+                && officeState.roomNav?.get(roomId)?.slotNodeIds?.includes(safeString(agent.routeDestinationNodeId));
+            const draftAlreadyHeadingThere = officeMissionAgentAlreadyDraftRouting(agent, roomId, task);
+            if (draftAlreadyHeadingThere) {
+                agent.intent = 'task';
+                if (agent.state !== 'working') agent.state = 'walking';
+            } else if (safeString(currentRoom?.id) !== roomId && !alreadyHeadingThere) {
+                officeRouteAgentToRoom(agent, roomId, {
+                    intent: 'task',
+                    speed: officeRandomRange(3.2, 4.3),
+                });
+            } else if (agent.state !== 'walking') {
+                agent.state = 'working';
+                agent.intent = 'task';
+            }
+            agent.taskId = task?.id || agent.taskId;
+            agent.workUntil = now + 24_000;
+            agent.nextWorkLineAt = now + officeRandomRange(1800, 4200);
+            changed = true;
+            return;
+        }
+        if (taskStatus === 'queued') {
+            if (!agent.taskId && agent.state === 'idle') {
+                officeRouteAgentToRoom(agent, roomId, {
+                    intent: 'wander',
+                    speed: officeRandomRange(2.5, 3.4),
+                });
+            }
             changed = true;
         }
     });
@@ -705,6 +959,11 @@ function officeReconcileFromMissionPayload(payload, now = performance.now()) {
     if (changed) {
         officeTrimTasks();
         officeState.tasksDirty = true;
+        officeRenderTaskList();
+        officeRenderAgentSelector(officeState.selectedAgentId);
+        officeRefreshDraftMapAfterMissionChange(now, { requiresSceneRender });
+        officePersistAgentPrefs();
+        officePersistRuntimeState(now, { force: true });
     }
     return changed;
 }

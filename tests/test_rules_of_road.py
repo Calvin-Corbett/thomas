@@ -362,47 +362,33 @@ def test_config_job_fails_on_unknown_keys():
     assert "No unknown core config keys" in prompt
 
 
-def test_strict_issue_ownership_fails_workaround_only_completion() -> None:
-    report = evaluate_rules(
-        route_path="coding_task",
-        prompt_text="fix this bug end-to-end",
-        response_text="I applied a temporary workaround for now. The issue is still failing.",
-        tool_events=[],
-        requested_job_type="coding",
-        config_errors=[],
-        unknown_core_keys=[],
-        require_verification_for_coding=True,
-        require_tests_for_code_edits=False,
-        require_monolith_guard_for_coding=True,
-        strict_issue_ownership=True,
-        attempt=0,
-    )
-    assert report["passed"] is False
-    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
-    assert "issue_ownership" in failed_ids
+def test_prompt_and_response_wording_do_not_select_quality_rules() -> None:
+    reports = [
+        evaluate_rules(
+            route_path="model_owned",
+            prompt_text=prompt,
+            response_text=response,
+            tool_events=[],
+            requested_job_type=None,
+            config_errors=[],
+            unknown_core_keys=[],
+            require_verification_for_coding=True,
+            require_tests_for_code_edits=True,
+            require_monolith_guard_for_coding=True,
+            strict_issue_ownership=True,
+            attempt=0,
+        )
+        for prompt, response in (
+            ("make a video and edit config", "This still has an unresolved workaround."),
+            ("hello", "Everything is perfect."),
+        )
+    ]
 
-
-def test_non_strict_issue_ownership_does_not_require_gate() -> None:
-    report = evaluate_rules(
-        route_path="coding_task",
-        prompt_text="fix this bug end-to-end",
-        response_text="I applied a temporary workaround for now. The issue is still failing.",
-        tool_events=[],
-        requested_job_type="coding",
-        config_errors=[],
-        unknown_core_keys=[],
-        require_verification_for_coding=False,
-        require_tests_for_code_edits=False,
-        require_monolith_guard_for_coding=False,
-        strict_issue_ownership=False,
-        attempt=0,
-    )
-    issue_check = next(
-        (c for c in report["checks"] if c.get("id") == "issue_ownership"),
-        None,
-    )
-    assert isinstance(issue_check, dict)
-    assert issue_check["required"] is False
+    assert [report["job_type"] for report in reports] == ["general", "general"]
+    assert [[check["id"] for check in report["checks"]] for report in reports] == [
+        ["response_present", "tool_failures_not_dominant", "git_topology_protection"],
+        ["response_present", "tool_failures_not_dominant", "git_topology_protection"],
+    ]
 
 
 def test_coding_placeholder_backed_write_without_completion_note_fails(tmp_path) -> None:

@@ -123,7 +123,10 @@ def _runtime_status_message(row: dict[str, Any]) -> str:
         "claimed": f"Task claimed{owner_text}: {summary}",
         "executing": f"Task running{owner_text}: {summary}",
         "awaiting_proof": f"Task awaiting proof{owner_text}: {summary}",
-        "verified": f"Task verified{owner_text}: {summary}",
+        # "verified" here means the proof's automatic file checks passed — the
+        # ask itself was not separately judged. A bare "Task verified" reads as
+        # "it works" (gauntlet g-fieldgoal), so the words name what ran.
+        "verified": f"Task passed automatic checks{owner_text}: {summary}",
         "completed": f"Task complete{owner_text}: {summary}",
         "blocked": f"Task blocked{owner_text}: {blocker or summary}",
         "failed": f"Task failed{owner_text}: {blocker or summary}",
@@ -195,7 +198,17 @@ async def watch_task(
                     last_runtime_state = state
                     last_runtime_summary = summary
                     last_runtime_blocker = blocker
-                    if state in {"completed", "failed", "abandoned"}:
+                    # Derived from the writer's own vocabulary instead of being
+                    # spelled out again. The literal that used to sit here --
+                    # {"completed", "failed", "abandoned"} -- predated
+                    # cancelled becoming a real terminal state, so a run the
+                    # user had STOPPED never satisfied this check: the watcher
+                    # kept polling the record every 2s for the full 600s
+                    # _MAX_WATCH_DURATION and then told the chat "Task <id> is
+                    # still running." Ten minutes after they stopped it.
+                    # The legacy workboard branch below already broke on its
+                    # own "cancelled"; only the runtime-first path disagreed.
+                    if state in task_bot_runtime.TERMINAL_STATES:
                         break
             else:
                 task_info = await asyncio.get_event_loop().run_in_executor(None, lambda: _find_task_status(wb, task_id))

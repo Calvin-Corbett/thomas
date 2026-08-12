@@ -57,7 +57,8 @@ function stopGeneration() {
 
 function _getSendIconClass() {
     /* Return theme-appropriate send icon */
-    return document.body.classList.contains('te-theme-light') ? 'ph-pen-nib' : 'ph-arrow-up';
+    const _t = String(document.documentElement.dataset.thomasTheme || document.documentElement.dataset.theme || '').toLowerCase();
+    return (_t === 'light' || _t === 'sandstone') ? 'ph-pen-nib' : 'ph-arrow-up';
 }
 
 function setGeneratingState(generating) {
@@ -88,8 +89,20 @@ function renderAttachmentsPreview() {
     all.forEach((item, index) => {
         const chip = document.createElement('div');
         chip.className = 'attachment-chip';
-        const icon = document.createElement('i');
-        icon.className = `ph ${item.type === 'img' ? 'ph-image' : 'ph-file-text'}`;
+
+        const imgSrc = String(item.data_url || '');
+        if (item.type === 'img' && imgSrc.startsWith('data:image/')) {
+            const thumb = document.createElement('img');
+            thumb.className = 'attachment-chip-thumb';
+            thumb.src = imgSrc;
+            thumb.alt = String(item.name || 'image');
+            chip.appendChild(thumb);
+        } else {
+            const icon = document.createElement('i');
+            const isPdf = /\.pdf$/i.test(String(item.name || ''));
+            icon.className = `ph ${item.type === 'img' ? 'ph-image' : (isPdf ? 'ph-file-pdf' : 'ph-file-text')}`;
+            chip.appendChild(icon);
+        }
 
         const label = document.createElement('span');
         label.textContent = String(item.name || '');
@@ -99,7 +112,6 @@ function renderAttachmentsPreview() {
         remove.dataset.index = String(index);
         remove.dataset.type = item.type;
 
-        chip.appendChild(icon);
         chip.appendChild(label);
         chip.appendChild(remove);
         attachmentsPreview.appendChild(chip);
@@ -152,6 +164,76 @@ function addCodeBlockControls(container) {
         wrapper.appendChild(header);
         wrapper.appendChild(pre);
     });
+}
+
+/**
+ * Build the attachment visuals (image thumbnails + document badges) for a
+ * message. Returns null when there are no attachments. Nodes are created
+ * directly here (not via the markdown sanitizer); the data URLs come from the
+ * user's own picked files, so they are trusted local content.
+ */
+function buildMessageAttachments(msg) {
+    const images = Array.isArray(msg && msg.images) ? msg.images : [];
+    const docs = Array.isArray(msg && msg.docs) ? msg.docs : [];
+    if (images.length === 0 && docs.length === 0) return null;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'message-attachments';
+
+    images.forEach((img) => {
+        const src = safeString(img && img.data_url);
+        if (!src.startsWith('data:image/')) return;
+        const name = safeString(img && img.name) || 'image';
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'message-attachment-thumb';
+        tile.title = name;
+        const el = document.createElement('img');
+        el.src = src;
+        el.alt = name;
+        el.loading = 'lazy';
+        tile.appendChild(el);
+        tile.addEventListener('click', () => openAttachmentLightbox(src, name));
+        wrap.appendChild(tile);
+    });
+
+    docs.forEach((doc) => {
+        const name = safeString(doc && doc.name) || 'document';
+        const isPdf = /\.pdf$/i.test(name);
+        const badge = document.createElement('div');
+        badge.className = 'message-attachment-doc';
+        const icon = document.createElement('i');
+        icon.className = `ph ${isPdf ? 'ph-file-pdf' : 'ph-file-text'}`;
+        const label = document.createElement('span');
+        label.textContent = name;
+        badge.appendChild(icon);
+        badge.appendChild(label);
+        wrap.appendChild(badge);
+    });
+
+    return wrap;
+}
+
+/**
+ * Full-screen preview of an attached image. Click anywhere (or press Esc) to close.
+ */
+function openAttachmentLightbox(src, name) {
+    const existing = document.getElementById('attachmentLightbox');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'attachmentLightbox';
+    overlay.className = 'attachment-lightbox';
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = safeString(name) || 'attachment';
+    overlay.appendChild(img);
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', close);
+    const onKey = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
 }
 
 /**
@@ -213,6 +295,11 @@ function renderMessage(msg) {
     content.setAttribute('data-message-timestamp', chatMessageTimestampText(createdAt));
 
     stack.appendChild(content);
+
+    const attachmentsEl = buildMessageAttachments(msg);
+    if (attachmentsEl) {
+        stack.appendChild(attachmentsEl);
+    }
 
     const footer = document.createElement('div');
     footer.className = 'message-footer';
@@ -428,10 +515,11 @@ function resolveProfileReasoningEffort(profileName = '') {
         : null;
     const reasoningControl = profile?.chat_controls?.model?.reasoning_effort;
     const persistedEffort = getPersistedReasoningEffort(targetProfile);
+    const provider = safeString(profile?.provider).toLowerCase();
     const defaultEffort = normalizeReasoningEffort(
         reasoningControl?.default_value
         || profile?.reasoning_effort
-        || (safeString(profile?.provider) === 'codex' ? 'medium' : '')
+        || (provider === 'codex' || provider === 'openai_codex' || provider === 'openai-codex' ? 'medium' : '')
     );
     if (!reasoningControl?.supported && !defaultEffort && !persistedEffort) return '';
     if (persistedEffort) return persistedEffort;
@@ -457,13 +545,34 @@ function findSetupProviderProfile(profileName = '') {
     return availableModelProfiles.find((entry) => safeString(entry?.name) === targetProfile) || null;
 }
 
+function isKeylessLocalProfile(profile) {
+    // Local/Ollama providers need no API key — they are "connected" when the
+    // local runtime is reachable, not when a key is present. Without this they
+    // are classified inactive, so picking a local model in Model Setup always
+    // bounces through the full onboarding wizard instead of just switching.
+    const provider = safeString(profile?.provider).toLowerCase();
+    const name = safeString(profile?.name).toLowerCase();
+    const baseUrl = safeString(profile?.base_url).toLowerCase();
+    if (provider === 'local' || provider === 'ollama' || name === 'local' || name.includes('ollama')) return true;
+    return baseUrl.includes('11434') || baseUrl.includes('//localhost') || baseUrl.includes('//127.0.0.1');
+}
+
+function isSetupProviderProfileActive(profile) {
+    return Boolean(profile?.has_api_key) || isKeylessLocalProfile(profile);
+}
+
 function classifySetupProviderProfiles() {
     const profiles = Array.isArray(availableModelProfiles)
-        ? availableModelProfiles.filter((profile) => Boolean(safeString(profile?.name)))
+        ? availableModelProfiles.filter((profile) => {
+            const name = safeString(profile?.name);
+            // Drop the legacy "codex" profile from the picker entirely — the
+            // ChatGPT OAuth path lives on the "openai_codex" profile.
+            return Boolean(name) && name.toLowerCase() !== 'codex';
+        })
         : [];
     return {
-        active: profiles.filter((profile) => Boolean(profile?.has_api_key)),
-        inactive: profiles.filter((profile) => !profile?.has_api_key),
+        active: profiles.filter((profile) => isSetupProviderProfileActive(profile)),
+        inactive: profiles.filter((profile) => !isSetupProviderProfileActive(profile)),
     };
 }
 
@@ -471,8 +580,10 @@ function updateSetupProviderPickerButton(profileName = '') {
     if (!setupProviderPickerBtn || !setupProviderPickerLabel) return;
     const selectedProfile = safeString(profileName) || safeString(setupProviderSelector?.value);
     const profile = findSetupProviderProfile(selectedProfile);
-    const isConnected = Boolean(profile?.has_api_key);
-    setupProviderPickerLabel.textContent = selectedProfile || 'Select provider';
+    const isConnected = isSetupProviderProfileActive(profile);
+    setupProviderPickerLabel.textContent = selectedProfile
+        ? formatProviderDisplay(selectedProfile)
+        : 'Select provider';
     setupProviderPickerBtn.dataset.state = isConnected ? 'connected' : (profile ? 'inactive' : 'idle');
     if (setupProviderPickerState) setupProviderPickerState.textContent = '';
 }
@@ -486,7 +597,7 @@ function createSetupProviderMenuLabel(text, className = 'setup-provider-section-
 
 function createSetupProviderOptionButton(profile, selectedProfile = '') {
     const profileName = safeString(profile?.name);
-    const isConnected = Boolean(profile?.has_api_key);
+    const isConnected = isSetupProviderProfileActive(profile);
     const isSelected = profileName === safeString(selectedProfile);
     const button = document.createElement('button');
     button.type = 'button';
@@ -499,7 +610,7 @@ function createSetupProviderOptionButton(profile, selectedProfile = '') {
 
     const name = document.createElement('span');
     name.className = 'setup-provider-option-name';
-    name.textContent = profileName;
+    name.textContent = formatProviderDisplay(profileName) || profileName;
 
     button.append(name);
     return button;
@@ -509,7 +620,7 @@ function resolveEasySetupPathForProfile(profileName = '') {
     const profile = findSetupProviderProfile(profileName);
     const provider = safeString(profile?.provider).toLowerCase();
     const profileKey = safeString(profile?.name).toLowerCase();
-    if (provider === 'codex' || profileKey === 'codex') return 'codex';
+    if (provider === 'codex' || provider === 'openai_codex' || provider === 'openai-codex' || profileKey === 'codex' || profileKey === 'chatgpt') return 'codex';
     if (provider === 'local' || provider === 'ollama' || profileKey === 'local' || profileKey.includes('ollama')) return 'local';
     return 'manual';
 }
@@ -541,8 +652,8 @@ async function handoffInactiveProviderToEasySetup(profileName = '') {
     primeEasySetupProfileSelection(selectedProfile, path);
     if (easySetupConnectionStatus) {
         const statusMessage = path === 'codex'
-            ? 'ChatGPT / Codex selected. Run connection test.'
-            : `Selected ${selectedProfile}. Run connection test.`;
+            ? 'ChatGPT (OpenAI) selected. Run connection test.'
+            : `Selected ${formatProviderDisplay(selectedProfile) || selectedProfile}. Run connection test.`;
         setEasySetupStatus(easySetupConnectionStatus, statusMessage);
     }
 }
@@ -1229,4 +1340,3 @@ function parseEngineRows(enginePayload) {
     });
     return rows;
 }
-

@@ -21,103 +21,15 @@ from thomas.skills import discover_native_skill_roots, discover_native_skills, e
 from .skills_policy import (
     classify_skill_risk,
     evaluate_skill_trust,
-    has_skill_approval_phrase,
-    is_globally_approved,
     load_runtime_skill_trust_policy,
-    prompt_negates_risky_approval,
 )
 
-_LOW_INTENT_ROUTES = {"casual_chat", "assistant_meta", "personal_context", "general"}
 _REQUIRED_CHECK_LINE_RE = re.compile(
     r"\b(before finishing|required(?: local)? probes?|literal probe|expected output|must run|run probes?)\b",
     re.IGNORECASE,
 )
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 _EXPECTED_OUTPUT_RE = re.compile(r"\bexpect(?:ed|ing)?(?:\s+(?:output|result|remaining|ids?))?\b", re.IGNORECASE)
-_STOPWORDS = {
-    "a",
-    "about",
-    "accept",
-    "across",
-    "add",
-    "after",
-    "an",
-    "and",
-    "any",
-    "are",
-    "as",
-    "at",
-    "be",
-    "behavior",
-    "before",
-    "both",
-    "by",
-    "change",
-    "changes",
-    "component",
-    "components",
-    "constraint",
-    "constraints",
-    "current",
-    "data",
-    "default",
-    "defaults",
-    "dependencies",
-    "during",
-    "each",
-    "either",
-    "end",
-    "existing",
-    "expected",
-    "file",
-    "files",
-    "for",
-    "from",
-    "got",
-    "handle",
-    "including",
-    "how",
-    "i",
-    "if",
-    "in",
-    "inside",
-    "instead",
-    "is",
-    "it",
-    "keep",
-    "must",
-    "new",
-    "not",
-    "of",
-    "only",
-    "on",
-    "or",
-    "part",
-    "parser",
-    "preserve",
-    "requested",
-    "require",
-    "required",
-    "run",
-    "same",
-    "should",
-    "specific",
-    "support",
-    "supports",
-    "that",
-    "the",
-    "this",
-    "thomas",
-    "to",
-    "type",
-    "use",
-    "value",
-    "when",
-    "with",
-    "work",
-    "you",
-    "your",
-}
 
 
 def _is_enabled_env(name: str, default: bool = True) -> bool:
@@ -183,25 +95,6 @@ def _ordered_unique(items: Iterable[str]) -> list[str]:
         seen.add(norm)
         out.append(key)
     return out
-
-
-def _keyword_tokens(text: str) -> list[str]:
-    src = str(text or "").lower()
-    raw = re.findall(r"[a-z0-9][a-z0-9._-]{1,60}", src)
-    out: list[str] = []
-    for token in raw:
-        # Keep dense identifiers (for example "cloudflare-deploy"), but skip
-        # low-signal short words.
-        if len(token) < 3 and token not in {"ui", "ux"}:
-            continue
-        if token in _STOPWORDS:
-            continue
-        out.append(token)
-        if "-" in token:
-            out.extend([part for part in token.split("-") if len(part) >= 3 and part not in _STOPWORDS])
-        if "_" in token:
-            out.extend([part for part in token.split("_") if len(part) >= 3 and part not in _STOPWORDS])
-    return _ordered_unique(out)
 
 
 def _read_skill_description(skill_md: Path) -> str:
@@ -331,7 +224,6 @@ class RuntimeSkill:
     skill_sha256: str = ""
     risk_level: str = "low"
     risk_tags: list[str] = field(default_factory=list)
-    keyword_tokens: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> str:
@@ -448,7 +340,6 @@ def discover_runtime_skills(
         except Exception:
             skill_sha = ""
         risk_level, risk_tags = classify_skill_risk(bundle.name, bundle.description, excerpt)
-        skill_tokens = _keyword_tokens("\n".join([bundle.name, bundle.description, excerpt[:450]]))
         rows.append(
             RuntimeSkill(
                 name=str(bundle.name),
@@ -460,7 +351,6 @@ def discover_runtime_skills(
                 skill_sha256=skill_sha,
                 risk_level=risk_level,
                 risk_tags=risk_tags,
-                keyword_tokens=skill_tokens,
             )
         )
 
@@ -518,44 +408,8 @@ def _skill_name_aliases(name: str) -> list[str]:
 
 def _extract_explicit_mentions(prompt_text: str) -> list[str]:
     text = str(prompt_text or "")
-    names: list[str] = []
-    for pattern in (
-        r"\$([A-Za-z0-9][A-Za-z0-9._-]{1,80})",
-        r"`([A-Za-z0-9][A-Za-z0-9._-]{1,80})`",
-        r"\bskill\s+([A-Za-z0-9][A-Za-z0-9._-]{1,80})\b",
-    ):
-        for match in re.findall(pattern, text):
-            names.append(_normalize_skill_name(str(match)))
+    names = [_normalize_skill_name(str(match)) for match in re.findall(r"\$([A-Za-z0-9][A-Za-z0-9._-]{1,80})", text)]
     return _ordered_unique(names)
-
-
-def _skill_name_mentioned(prompt_text: str, name_alias: str) -> bool:
-    src = str(prompt_text or "").lower()
-    target = str(name_alias or "").lower().strip()
-    if not src or not target:
-        return False
-    escaped = re.escape(target)
-    return bool(re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", src))
-
-
-def _skill_relevance_score(query_tokens: set[str], skill: RuntimeSkill) -> int:
-    """Prefer skill identity matches over incidental overlap in long instructions."""
-    if not query_tokens:
-        return 0
-
-    all_tokens = set(skill.keyword_tokens)
-    overlap = query_tokens.intersection(all_tokens)
-    if not overlap:
-        return 0
-
-    name_tokens = set(_keyword_tokens(skill.name.replace("-", " ")))
-    description_tokens = set(_keyword_tokens(skill.description))
-
-    name_overlap = overlap.intersection(name_tokens)
-    description_overlap = overlap.intersection(description_tokens) - name_overlap
-    body_overlap = overlap - name_overlap - description_overlap
-
-    return (len(name_overlap) * 3) + (len(description_overlap) * 2) + len(body_overlap)
 
 
 def resolve_runtime_skills(
@@ -568,6 +422,9 @@ def resolve_runtime_skills(
     include_roots: Sequence[str | Path] | None = None,
     max_selected: int | None = None,
 ) -> RuntimeSkillSelection:
+    # Backward-compatible inputs only. They may not select a skill from prose.
+    _ = relevance_text
+    _ = route_path
     enabled = _is_enabled_env("THOMAS_RUNTIME_SKILLS_ENABLED", default=True)
     selection = RuntimeSkillSelection(enabled=enabled)
     if not enabled:
@@ -598,8 +455,6 @@ def resolve_runtime_skills(
             allow_non_positive=True,
         )
     )
-    if _is_enabled_env("THOMAS_RUNTIME_LOAD_ALL_SKILLS", default=False):
-        max_count = 0
     max_count = None if int(max_count or 0) <= 0 else int(max_count)
     max_total_chars = _int_env(
         "THOMAS_RUNTIME_MAX_SKILL_CHARS",
@@ -611,16 +466,6 @@ def resolve_runtime_skills(
         "THOMAS_RUNTIME_SKILLS_REQUIRE_EXPLICIT_RISK_APPROVAL",
         default=True,
     )
-    min_relevance_score = _int_env(
-        "THOMAS_RUNTIME_SKILL_MIN_RELEVANCE_SCORE",
-        5,
-        allow_non_positive=True,
-    )
-    auto_relevance_enabled = _is_enabled_env(
-        "THOMAS_RUNTIME_SKILLS_AUTO_RELEVANCE",
-        default=False,
-    )
-    global_risk_approved = is_globally_approved(prompt_text)
     trust_policy = load_runtime_skill_trust_policy(config, cwd=cwd)
     selection.trust_policy = trust_policy.summary()
 
@@ -630,11 +475,6 @@ def resolve_runtime_skills(
             by_alias.setdefault(alias, []).append(skill)
 
     explicit_mentions = _extract_explicit_mentions(prompt_text)
-    for skill in discovered:
-        for alias in _skill_name_aliases(skill.name):
-            if _skill_name_mentioned(prompt_text, alias):
-                explicit_mentions.append(alias)
-                break
     explicit_mentions = _ordered_unique(explicit_mentions)
     selection.explicit_mentions = explicit_mentions
 
@@ -697,19 +537,14 @@ def resolve_runtime_skills(
             )
             return
         if str(skill.risk_level) == "high" and require_explicit_risky:
-            # R5 (praxis-unbypassable-2026-05-29): an explicit mention approves a
-            # high-risk skill ONLY when the prompt does not negate risky-skill
-            # approval. Previously `reason == "explicit"` alone approved it, so
-            # "Use $cloudflare-deploy ... but I do not approve risky skills"
-            # auto-approved the deploy skill despite the refusal. A genuine
-            # explicit invocation ("please use $deploy-prod now") still works.
-            explicit_ok = bool(reason == "explicit" and not prompt_negates_risky_approval(prompt_text))
-            approved = bool(explicit_ok or global_risk_approved or has_skill_approval_phrase(prompt_text, skill.name))
-            if not approved:
+            # Ordinary prose never grants or denies skill authorization. Only
+            # the literal `$skill-name` control reaches this path as explicit;
+            # pinned high-risk skills stay gated.
+            if reason != "explicit":
                 _block(
                     skill,
                     code="risky_skill_requires_explicit_approval",
-                    reason="high-risk skill requires explicit, non-negated approval; mention plus a refusal is not approval",
+                    reason=f"high-risk skill requires literal ${skill.name} invocation",
                     selected_reason=reason,
                 )
                 return
@@ -729,44 +564,6 @@ def resolve_runtime_skills(
             matched = True
         if matched:
             selection.pinned_matches.append(pinned_name)
-
-    low_intent = str(route_path or "").strip() in _LOW_INTENT_ROUTES
-    query_tokens = set(_keyword_tokens(f"{prompt_text}\n{relevance_text}\n{route_path.replace('_', ' ')}"))
-
-    if auto_relevance_enabled and query_tokens and (not low_intent or bool(selected)):
-        scored: list[tuple[int, int, RuntimeSkill]] = []
-        for skill in discovered:
-            if skill.key in selected_keys:
-                continue
-            overlap_tokens = query_tokens.intersection(set(skill.keyword_tokens))
-            overlap = len(overlap_tokens)
-            score = _skill_relevance_score(query_tokens, skill)
-            if overlap <= 0 or score <= 0:
-                continue
-            if min_relevance_score > 0 and score < min_relevance_score:
-                continue
-            scored.append((score, overlap, skill))
-        scored.sort(key=lambda item: (-int(item[0]), -int(item[1]), item[2].name.lower(), item[2].path.lower()))
-        selected_before_relevance = len(selected)
-        top_score = int(scored[0][0]) if scored else 0
-        top_relevance_blocked = False
-        top_relevance_selected = False
-        for score, _overlap, skill in scored:
-            if (
-                selected_before_relevance == 0
-                and top_relevance_blocked
-                and not top_relevance_selected
-                and int(score) < top_score
-            ):
-                break
-            before_selected = len(selected)
-            before_blocked = len(blocked_rows)
-            _add(skill, f"relevance:{score}")
-            if int(score) == top_score:
-                if len(selected) > before_selected:
-                    top_relevance_selected = True
-                if len(blocked_rows) > before_blocked:
-                    top_relevance_blocked = True
 
     # Prompt-size guardrail: keep compact by limiting cumulative skill payload.
     if selected and max_total_chars is not None:
@@ -804,7 +601,7 @@ def format_runtime_skills_context(selection: RuntimeSkillSelection) -> str:
         "if a required check cannot run, state why.",
         "If a skill names a literal probe, exact command, expected output, or required "
         "local probe, run that exact check; nearby or simplified checks are not a substitute.",
-        "Selection priority: explicit mention > pinned > relevance.",
+        "Selection priority: explicit literal invocation > user-owned pinned skill.",
         f"Trust policy: mode={trust_mode}, require_hash={str(require_hash).lower()}, "
         f"trusted={int(selection.trusted_count)}/{int(selection.discovered_count)} discovered skills.",
     ]
@@ -828,7 +625,7 @@ def format_runtime_skills_context(selection: RuntimeSkillSelection) -> str:
                 lines.append(f"   {chunk}")
     lines.append(
         "If skill instructions conflict, follow the user's direct request first, "
-        "then explicit skill mentions, then pinned/relevance selections."
+        "then explicit skill invocations, then user-owned pinned selections."
     )
     if selection.approved_risky:
         lines.append(

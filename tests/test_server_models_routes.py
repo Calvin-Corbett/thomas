@@ -102,6 +102,17 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         self.assertIn("autonomy_level", controls.get("thomas", {}))
         self.assertIn("token_economy", controls.get("thomas", {}))
 
+    async def test_models_exposes_model_preferences(self):
+        resp = await self.client.get("/api/models")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        preferences = body.get("preferences")
+        self.assertIsInstance(preferences, dict)
+        self.assertIn("active_profile", preferences)
+        self.assertIn("model_id", preferences)
+        self.assertIsInstance(preferences.get("role_profiles"), dict)
+        self.assertIsInstance(preferences.get("role_model_ids"), dict)
+
     async def test_models_capabilities(self):
         resp = await self.client.get("/api/models/capabilities")
         self.assertEqual(resp.status, 200)
@@ -124,7 +135,7 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         body = await resp.json()
         self.assertIn("models", body)
-        self.assertEqual(body["aliases"]["latest.openai.frontier"], "gpt-5.5")
+        self.assertEqual(body["aliases"]["latest.openai.frontier"], "gpt-5.6-sol")
 
     async def test_models_can_embed_catalog_payload(self):
         resp = await self.client.get("/api/models?catalog=1&cached=1")
@@ -132,7 +143,7 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         body = await resp.json()
         self.assertIn("profiles", body)
         self.assertIn("catalog", body)
-        self.assertEqual(body["catalog"]["aliases"]["latest.openai.frontier"], "gpt-5.5")
+        self.assertEqual(body["catalog"]["aliases"]["latest.openai.frontier"], "gpt-5.6-sol")
 
     async def test_profile_unknown_returns_404(self):
         resp = await self.client.get("/api/models/nonexistent/handshake")

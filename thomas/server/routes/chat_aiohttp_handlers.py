@@ -14,12 +14,10 @@ from aiohttp import web
 from thomas.agent.execution_plan import plan_from_payload
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
-from thomas.models.chat_controls import resolve_ui_control_request
 from thomas.server.app_keys import (
     APP_SESSIONS,
     ChatSession,
 )
-from thomas.server.chat_control_mode import handle_ui_control_chat
 
 from .chat_aiohttp_helpers import (
     _SESSION_MSG_QUEUES,
@@ -34,16 +32,31 @@ from .chat_plan_mode import build_plan_payload, serialize_web_slash_specs
 
 log = logging.getLogger(__name__)
 _DEFAULT_AGENT_LOOP = AgentLoop
-_DEFAULT_RESOLVE_UI_CONTROL_REQUEST = resolve_ui_control_request
-_DEFAULT_HANDLE_UI_CONTROL_CHAT = handle_ui_control_chat
 
 
 def register_chat_routes(
     app: web.Application,
     *,
     deps: ChatRouteDeps,
+    register_primary_chat: bool = True,
 ) -> None:
-    """Register chat routes with the aiohttp application."""
+    """Register legacy chat helpers and, for isolated compatibility apps, V1 chat.
+
+    The production server passes ``register_primary_chat=False`` so `/api/chat`
+    is owned by the V2 route bundle and cannot execute this parallel engine.
+
+    Settled 2026-07-28: nothing in ``thomas/`` calls this function at all, so
+    the V1 primary-chat path is retired rather than merely disabled, and
+    ``app_routes_init`` deliberately does NOT fall back to it when Chat V2
+    fails to register. Two things make a fallback impossible as well as
+    unwanted: the explicit-mode bridge in ``chat_modes.maybe_handle_swarm_mode``
+    imports ``thomas.server.routes.chat_swarm``, a module that does not exist,
+    so "swarm" cannot execute here either way; and Chat V2 has already folded
+    the legacy mode names into token-economy aliases
+    (``_LEGACY_MODE_MIGRATIONS`` in ``chat_v2.py`` maps swarm/batch -> "max").
+    A Chat V2 failure now serves a 503 sentinel and degrades ``/api/health``
+    instead of resurrecting this engine.
+    """
 
     async def api_chat(request: web.Request) -> web.StreamResponse:
         # This endpoint can execute tool-calling flows, including file writes.
@@ -80,20 +93,29 @@ def register_chat_routes(
             wants_fork = busy_strategy in {"fork", "parallel", "branch"}
 
             if wants_interrupt:
-                q = _SESSION_MSG_QUEUES.get(request_sid)
-                if q is None:
-                    raise web.HTTPConflict(
-                        text="session is already processing another request (interrupt queue not ready)"
-                    )
                 if not msg_text:
                     raise web.HTTPBadRequest(text="message text is required when queueing interrupt input")
+                # Rapid follow-ups must NEVER fail with a 409. Two former failure modes
+                # are closed here: (1) RACE — the run marked the session busy before its
+                # interrupt queue existed, so a fast follow-up found None -> create one
+                # on demand (the active run reuses it via setdefault). (2) SATURATION —
+                # a full queue raised QueueFull -> coalesce by dropping the oldest queued
+                # message and keeping the newest, so a burst is merged, not rejected.
+                q = _SESSION_MSG_QUEUES.get(request_sid)
+                if q is None:
+                    q = asyncio.Queue(maxsize=64)
+                    _SESSION_MSG_QUEUES[request_sid] = q
                 try:
                     q.put_nowait(msg_text)
-                except asyncio.QueueFull as queue_err:
-                    log.warning("Interrupt queue full for session %s: %s", request_sid[:12], queue_err)
-                    raise web.HTTPConflict(
-                        text="session is already processing another request (interrupt queue is full)"
-                    ) from queue_err
+                except asyncio.QueueFull:
+                    try:
+                        q.get_nowait()  # drop oldest, keep the most recent instruction
+                    except asyncio.QueueEmpty:
+                        pass
+                    try:
+                        q.put_nowait(msg_text)
+                    except asyncio.QueueFull:
+                        log.warning("Interrupt queue still full after coalesce for session %s", request_sid[:12])
 
                 deps.task_ledger_update(
                     request_sid,
@@ -173,13 +195,19 @@ def register_chat_routes(
             if session_run_guard_active:
                 try:
                     await deps.end_session_run(sid)
-                except Exception as guard_err:
+                except (KeyError, RuntimeError, TypeError, ValueError) as guard_err:
                     log.warning("[thomas] session run guard cleanup failed: %s", guard_err)
                 if fork_parent_sid is not None and forked_sid is not None:
+                    fork_sessions: dict[str, Any] | None = None
                     try:
-                        sessions = _resolve_app_value(request.app, APP_SESSIONS, expected_type=dict, required=True)
-                        parent_session = sessions.get(fork_parent_sid)
-                        fork_session = sessions.get(forked_sid)
+                        fork_sessions = _resolve_app_value(
+                            request.app,
+                            APP_SESSIONS,
+                            expected_type=dict,
+                            required=True,
+                        )
+                        parent_session = fork_sessions.get(fork_parent_sid)
+                        fork_session = fork_sessions.get(forked_sid)
                         if isinstance(parent_session, ChatSession) and isinstance(fork_session, ChatSession):
                             if not isinstance(parent_session.conversation, list):
                                 parent_session.conversation = []
@@ -188,10 +216,11 @@ def register_chat_routes(
                                 if merge_start < len(fork_session.conversation):
                                     for msg in fork_session.conversation[merge_start:]:
                                         parent_session.conversation.append(_clone_conversation_fallback(msg))
-                    except Exception as merge_err:
+                    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as merge_err:
                         log.warning("Parallel fork merge failed: %s", merge_err)
                     finally:
-                        sessions.pop(forked_sid, None)
+                        if fork_sessions is not None:
+                            fork_sessions.pop(forked_sid, None)
 
     async def _api_chat_inner(
         request: web.Request,
@@ -245,7 +274,8 @@ def register_chat_routes(
         deps.require_api_access(request)
         return web.json_response({"commands": serialize_web_slash_specs()})
 
-    app.router.add_post("/api/chat", api_chat)
+    if register_primary_chat:
+        app.router.add_post("/api/chat", api_chat)
     app.router.add_get("/api/chat/plan/{session_id}", api_chat_plan_state)
     app.router.add_get("/api/chat/slash-commands", api_chat_slash_commands)
 

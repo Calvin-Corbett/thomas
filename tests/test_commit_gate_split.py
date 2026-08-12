@@ -27,7 +27,7 @@ def test_precommit_config_moves_global_gates_to_merge_readiness() -> None:
     assert "id: thomas-workboard-inbox-commit-msg-gate" in content
     assert "stages: [commit-msg]" in content
     assert "id: thomas-merge-readiness" in content
-    assert "entry: python scripts/forge/gates/merge_readiness.py" in content
+    assert "scripts/forge/gates/merge_readiness.py" in content
     assert "stages: [pre-push]" in content
     assert "id: thomas-repo-hygiene-gate" not in content
     assert "id: thomas-release-hygiene-gate" not in content

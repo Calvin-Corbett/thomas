@@ -1,0 +1,483 @@
+/* Virtual Office modern shell. The shared workspace shell owns all theme values. */
+
+#officeWorkspace.office-modern-workspace {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: calc(100vh - 76px);
+    overflow: hidden;
+    color: var(--c-text);
+    background:
+        radial-gradient(circle at 18% 10%, var(--c-accent-soft), transparent 34%),
+        var(--c-bg);
+    font-family: var(--font-sans, "Manrope", system-ui, sans-serif);
+    font-size: 13px;
+}
+
+#officeWorkspace.office-modern-workspace .office-toolbar,
+#officeWorkspace.office-modern-workspace .office-map-controls,
+#officeWorkspace.office-modern-workspace .office-debug-overlay,
+#officeWorkspace.office-modern-workspace .office-editor-modal,
+#officeWorkspace.office-modern-workspace .office-bottom-dock {
+    display: none;
+}
+
+#officeWorkspace.office-modern-workspace .office-stage {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    padding: 8px;
+}
+
+#officeWorkspace .office-map-viewport {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: calc(100vh - 92px);
+    overflow: hidden;
+    touch-action: none;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-card, 14px);
+    color: var(--c-text);
+    background:
+        radial-gradient(circle at 50% 0%, var(--c-accent-soft), transparent 42%),
+        color-mix(in srgb, var(--c-bg) 92%, black 8%);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-text) 5%, transparent);
+}
+
+#officeWorkspace .office-map-viewport:focus-visible {
+    outline: 2px solid var(--c-accent-line);
+    outline-offset: -3px;
+}
+
+#officeWorkspace .office-map-scene {
+    background: color-mix(in srgb, var(--c-bg) 88%, var(--c-accent) 12%);
+}
+
+#officeWorkspace .office-map-plane {
+    color: var(--c-text);
+}
+
+#officeWorkspace .office-live-room {
+    overflow: visible;
+    border: 3px solid var(--c-border-2);
+    border-radius: 28px;
+    background: color-mix(in srgb, var(--office-room-shell) 58%, var(--c-surface) 42%);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+#officeWorkspace .office-live-room[data-office-draft-overview="0"] {
+    border-radius: 36px;
+}
+
+#officeWorkspace .office-live-room[data-office-draft-selected="1"] {
+    border-color: var(--c-accent-line);
+    box-shadow: 0 0 0 2px var(--c-accent-soft), 0 14px 34px rgba(0, 0, 0, 0.24);
+}
+
+#officeWorkspace .office-live-room-floor {
+    position: absolute;
+    inset: 24px;
+    border: 1px solid var(--office-room-floor-border);
+    border-radius: 22px;
+    background-color: color-mix(in srgb, var(--office-room-floor) 68%, var(--c-surface-2) 32%);
+    background-image: var(--office-room-pattern, none), linear-gradient(
+        color-mix(in srgb, var(--office-room-floor) 68%, var(--c-surface-2) 32%),
+        color-mix(in srgb, var(--office-room-floor) 68%, var(--c-surface-2) 32%)
+    );
+    background-size: var(--office-room-pattern-size, auto), auto;
+}
+
+#officeWorkspace .office-room-label {
+    position: absolute;
+    z-index: 6;
+    top: 58px;
+    left: 32px;
+    padding: 7px 11px;
+    border: 1px solid var(--c-border-2);
+    border-radius: 10px;
+    background: var(--c-sidebar);
+    color: var(--c-text);
+    box-shadow: var(--c-shadow);
+    font: 700 13px/1.2 var(--font-label, var(--font-sans, "Manrope", system-ui, sans-serif));
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+#officeWorkspace .office-room-label[data-office-draft-selected="1"] {
+    border-color: var(--c-accent-line);
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
+}
+
+#officeWorkspace .office-map-toolbar {
+    position: absolute;
+    inset: 12px 12px auto;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 7px 9px;
+    overflow-x: auto;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-card, 14px);
+    background: var(--c-sidebar);
+    box-shadow: var(--c-shadow);
+    backdrop-filter: blur(18px);
+    scrollbar-width: none;
+}
+
+#officeWorkspace .office-map-brand { flex: 0 0 auto; }
+
+#officeWorkspace .office-control,
+#officeWorkspace .office-map-toolbar button,
+#officeWorkspace .office-modern-minimap button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 11px;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    color: var(--c-dim);
+    font: 600 13px/1 var(--font-sans, "Manrope", system-ui, sans-serif);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color .15s ease, background .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+#officeWorkspace .office-control:hover,
+#officeWorkspace .office-map-toolbar button:hover,
+#officeWorkspace .office-modern-minimap button:hover {
+    border-color: var(--c-border-2);
+    background: var(--c-hover);
+    color: var(--c-text);
+}
+
+#officeWorkspace .office-control:focus-visible,
+#officeWorkspace .office-map-toolbar button:focus-visible,
+#officeWorkspace .office-modern-minimap button:focus-visible {
+    outline: 2px solid var(--c-accent-line);
+    outline-offset: 2px;
+}
+
+#officeWorkspace .office-control.is-active,
+#officeWorkspace .office-map-toolbar button.is-active,
+#officeWorkspace .office-modern-minimap button.is-active,
+#officeWorkspace .office-control-primary {
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
+    color: var(--c-text);
+}
+
+#officeWorkspace .office-control:disabled,
+#officeWorkspace .office-map-toolbar button:disabled {
+    opacity: .46;
+    cursor: not-allowed;
+}
+
+#officeWorkspace .office-map-badge {
+    display: none;
+}
+
+#officeWorkspace .office-live-panel {
+    position: absolute;
+    top: 58px;
+    z-index: 13;
+    box-sizing: border-box;
+    width: min(520px, calc(100% - 24px));
+    max-height: calc(100% - 72px);
+    padding: 12px;
+    overflow: auto;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-card, 14px);
+    background: var(--c-sidebar);
+    color: var(--c-text);
+    box-shadow: var(--c-shadow);
+    backdrop-filter: blur(18px);
+}
+
+#officeWorkspace [data-office-editor-panel="1"] {
+    right: 12px;
+    height: calc(100% - 72px);
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#officeWorkspace [data-office-agent-roster-panel="1"] {
+    left: 12px;
+    width: min(430px, calc(100% - 24px));
+}
+
+#officeWorkspace [data-office-agent-chat-panel="1"] {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    gap: 10px;
+    overflow: hidden;
+}
+
+#officeWorkspace .office-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+#officeWorkspace .office-panel-head > strong {
+    font: 800 14px/1.2 var(--font-head, var(--font-sans, "Manrope", system-ui, sans-serif));
+    letter-spacing: -.01em;
+}
+
+#officeWorkspace .office-panel-head > span,
+#officeWorkspace .office-panel-note {
+    color: var(--c-muted);
+    font-size: 11.5px;
+    line-height: 1.4;
+}
+
+#officeWorkspace .office-panel-empty,
+#officeWorkspace .office-settings-group,
+#officeWorkspace .office-agent-summary {
+    padding: 10px;
+    border: 1px solid var(--c-border);
+    border-radius: 12px;
+    background: var(--c-surface);
+    color: var(--c-dim);
+}
+
+#officeWorkspace .office-agent-summary {
+    display: grid;
+    grid-template-columns: 68px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+
+#officeWorkspace .office-agent-summary.is-large {
+    grid-template-columns: 96px minmax(0, 1fr);
+}
+
+#officeWorkspace .office-agent-portrait {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 68px;
+    height: 66px;
+    overflow: hidden;
+    border: 1px solid var(--c-border);
+    border-radius: 12px;
+    background: var(--c-surface-2);
+}
+
+#officeWorkspace .office-agent-portrait > span { transform: scale(.82); transform-origin: center; }
+#officeWorkspace .office-agent-portrait.is-compact { width: 62px; height: 58px; }
+#officeWorkspace .office-agent-portrait.is-compact > span { transform: scale(.78); }
+#officeWorkspace .office-agent-portrait.is-large { width: 96px; height: 94px; }
+#officeWorkspace .office-agent-portrait.is-large > span { transform: scale(1.08); }
+
+#officeWorkspace .office-agent-summary-copy {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    color: var(--c-dim);
+    font-size: 11.5px;
+}
+
+#officeWorkspace .office-agent-summary-copy > strong,
+#officeWorkspace .office-roster-card-copy > strong {
+    overflow: hidden;
+    color: var(--c-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#officeWorkspace .office-accent-copy { color: var(--c-accent); }
+
+#officeWorkspace .office-chat-log {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    min-width: 0;
+    min-height: 220px;
+    max-height: 420px;
+    padding: 2px 4px 6px 2px;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+#officeWorkspace .office-chat-message { display: grid; gap: 3px; min-width: 0; }
+#officeWorkspace .office-chat-message.is-user { justify-items: end; }
+#officeWorkspace .office-chat-message.is-agent { justify-items: start; }
+
+#officeWorkspace .office-chat-message-bubble {
+    box-sizing: border-box;
+    max-width: 96%;
+    min-width: 0;
+    padding: 9px 11px;
+    overflow: hidden;
+    border: 1px solid var(--c-border);
+    border-radius: 12px;
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: 13px;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+#officeWorkspace .office-chat-message.is-user .office-chat-message-bubble {
+    border-color: var(--c-accent-line);
+    background: var(--c-user-bg);
+    color: var(--c-user-text);
+}
+
+#officeWorkspace .office-chat-message-time { color: var(--c-muted); font-size: 10px; }
+#officeWorkspace .office-chat-pending { justify-self: start; padding: 7px 10px; border-radius: 999px; background: var(--c-accent-soft); color: var(--c-dim); font-size: 11px; font-weight: 700; }
+#officeWorkspace .office-chat-error { padding: 8px 10px; border: 1px solid rgba(248, 112, 112, .35); border-radius: 10px; background: rgba(248, 112, 112, .12); color: var(--c-text); font-size: 11.5px; }
+
+#officeWorkspace .office-chat-composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: end;
+}
+
+#officeWorkspace .office-field {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    outline: none;
+    background: var(--c-composer-bg);
+    color: var(--c-text);
+    font: 500 13px/1.4 var(--font-sans, "Manrope", system-ui, sans-serif);
+}
+
+#officeWorkspace textarea.office-field { min-height: 72px; max-height: 150px; resize: vertical; }
+#officeWorkspace .office-field:focus { border-color: var(--c-accent-line); box-shadow: 0 0 0 3px var(--c-accent-soft); }
+#officeWorkspace .office-color-field { height: 38px; padding: 4px; }
+
+#officeWorkspace .office-roster-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+#officeWorkspace .office-roster-card { display: grid; gap: 7px; justify-items: center; min-width: 0; padding: 9px 7px; border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-surface); color: var(--c-text); cursor: pointer; }
+#officeWorkspace .office-roster-card:hover { border-color: var(--c-border-2); background: var(--c-hover); }
+#officeWorkspace .office-roster-card-copy { display: block; width: 100%; min-width: 0; text-align: center; }
+#officeWorkspace .office-roster-card-copy > span { display: block; margin-top: 2px; overflow: hidden; color: var(--c-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+#officeWorkspace .office-roster-detail { display: grid; gap: 12px; }
+#officeWorkspace .office-roster-back { justify-self: start; }
+#officeWorkspace .office-label { display: grid; gap: 4px; color: var(--c-dim); font-size: 11.5px; }
+#officeWorkspace .office-settings-group { display: grid; gap: 8px; }
+#officeWorkspace .office-roster-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+#officeWorkspace [data-office-editor-panel="1"] button:not([data-office-editor-catalog-asset]),
+#officeWorkspace [data-office-editor-panel="1"] input {
+    border-color: var(--c-border) !important;
+    border-radius: 10px !important;
+    background: var(--c-surface) !important;
+    color: var(--c-text) !important;
+    font-family: var(--font-sans, "Manrope", system-ui, sans-serif) !important;
+}
+
+#officeWorkspace [data-office-editor-panel="1"] button[aria-pressed="true"] {
+    border-color: var(--c-accent-line) !important;
+    background: var(--c-accent-soft) !important;
+}
+
+#officeWorkspace [data-office-editor-panel="1"] section,
+#officeWorkspace [data-office-editor-catalog-asset] {
+    border-color: var(--c-border) !important;
+    background: var(--c-surface) !important;
+    color: var(--c-text) !important;
+}
+
+#officeWorkspace [data-office-editor-panel="1"] [style*="color:rgba"] { color: var(--c-dim) !important; }
+#officeWorkspace [data-office-editor-panel="1"] strong { color: var(--c-text) !important; }
+
+#officeWorkspace .office-live-agent {
+    border: 0;
+    border-radius: 16px;
+    outline: none;
+    appearance: none;
+    background: transparent;
+    color: var(--c-text);
+    cursor: pointer;
+    padding: 0;
+    overflow: visible;
+    pointer-events: auto;
+    touch-action: none;
+    transition: transform 64ms linear;
+    will-change: transform;
+}
+
+#officeWorkspace .office-live-agent:focus-visible { outline: 2px solid var(--c-accent-line); outline-offset: 3px; }
+#officeWorkspace .office-live-agent[data-office-agent-overview="1"][data-office-agent-route-active="1"] { border: 2px solid var(--c-accent-line); }
+
+#officeWorkspace .office-live-agent-name {
+    position: absolute; z-index: 3; top: 1px; left: 50%; display: none; box-sizing: border-box;
+    max-width: 112px; padding: 3px 6px; overflow: hidden; transform: translateX(-50%); border: 1px solid var(--c-border);
+    border-radius: 999px; background: color-mix(in srgb, var(--c-sidebar) 88%, transparent); color: var(--c-text);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .18); font-size: 9px; font-weight: 800; line-height: 1;
+    text-overflow: ellipsis; text-shadow: 0 1px 4px var(--c-bg); white-space: nowrap; pointer-events: none;
+}
+
+#officeWorkspace .office-live-agent-bubble {
+    position: absolute; z-index: 4; top: 42px; left: 136px; display: none; box-sizing: border-box;
+    width: max-content; min-width: 94px; max-width: 172px; padding: 7px 9px; border: 1px solid var(--c-border-2);
+    border-radius: 9px; background: var(--c-sidebar); color: var(--c-text); box-shadow: var(--c-shadow);
+    font-size: 10px; line-height: 1.22; overflow-wrap: break-word; text-align: left; white-space: normal; pointer-events: none;
+}
+
+#officeWorkspace .office-live-agent-robot { position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: center; width: 96px; height: 106px; margin: 20px auto 0; transform-origin: center bottom; }
+#officeWorkspace .office-live-agent-prop { position: absolute; top: 58px; right: 10px; display: none; align-items: center; justify-content: center; min-width: 24px; height: 16px; padding: 0 4px; border: 1px solid var(--c-border-2); border-radius: 7px; background: var(--c-sidebar); color: var(--c-text); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+#officeWorkspace .office-live-agent-status { display: none; width: max-content; max-width: 100px; margin: 3px auto 0; padding: 2px 6px; overflow: hidden; border: 1px solid var(--c-border); border-radius: 999px; background: var(--c-surface); color: var(--c-dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+#officeWorkspace .office-live-agent-can { position: absolute; top: 70px; left: 92px; display: none; align-items: center; justify-content: center; box-sizing: border-box; width: 38px; height: 25px; padding: 0 5px; border: 2px solid color-mix(in srgb, var(--c-text) 85%, transparent); border-radius: 8px; background: linear-gradient(180deg, #ff5b58, #981f2d); color: #fff4e6; box-shadow: 0 7px 12px rgba(0, 0, 0, .26); font-size: 8px; font-weight: 900; transform: rotate(-7deg); }
+
+#officeWorkspace .office-modern-minimap {
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    z-index: 12;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-card, 14px);
+    background: var(--c-sidebar);
+    box-shadow: var(--c-shadow);
+    user-select: none;
+}
+
+#officeWorkspace .office-modern-minimap-head { position: absolute; inset: 7px 7px auto; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0; border: 0; background: transparent; }
+#officeWorkspace .office-modern-minimap-head > span { display: none; }
+#officeWorkspace .office-modern-minimap button { min-height: 28px; padding: 4px 8px; font-size: 11px; }
+#officeWorkspace .office-minimap-resize { position: absolute; right: 9px; bottom: 9px; width: 14px; height: 14px; cursor: nwse-resize; border-right: 3px solid var(--c-accent-line); border-bottom: 3px solid var(--c-accent-line); }
+#officeWorkspace .office-asset-detail { pointer-events: none; }
+
+@media (max-width: 900px) {
+    #officeWorkspace .office-map-toolbar { right: 8px; left: 8px; }
+    #officeWorkspace .office-live-panel { inset: 56px 8px 8px !important; width: auto; max-height: none; }
+    #officeWorkspace .office-roster-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #officeWorkspace .office-roster-field-grid { grid-template-columns: 1fr; }
+    #officeWorkspace .office-modern-minimap { right: 16px; bottom: 16px; }
+}
+
+@media (max-width: 560px) {
+    #officeWorkspace .office-map-brand { display: none; }
+    #officeWorkspace .office-map-toolbar { gap: 5px; padding: 6px; }
+    #officeWorkspace .office-map-toolbar button { min-height: 32px; padding: 6px 9px; font-size: 12px; }
+    #officeWorkspace .office-agent-summary { grid-template-columns: 1fr; }
+    #officeWorkspace .office-agent-portrait { display: none; }
+    #officeWorkspace .office-chat-composer { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #officeWorkspace *, #officeWorkspace *::before, #officeWorkspace *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}

@@ -13,6 +13,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 from thomas.core.config import AppConfig
 from thomas.server.secrets import SecretStore
 from thomas.tools.registry import ToolRegistry
@@ -34,7 +35,6 @@ APP_GUARDRAILS_ENABLED = web.AppKey("guardrails_enabled", bool)
 APP_GUARDED_TOOL_RUNNER = web.AppKey("guarded_tool_runner", object)
 APP_APPROVALS_BROKER = web.AppKey("approvals_broker", object)
 APP_GUARDRAILS_CTX = web.AppKey("guardrails_ctx", dict)
-APP_CODEX_BRIDGE = web.AppKey("_codex_bridge", object)
 APP_ENGINE_MANAGER = web.AppKey("engine_manager", object)
 APP_TASK_LEDGER = web.AppKey("task_ledger", object)
 APP_MUTATING_ROUTE_POLICY_SNAPSHOT = web.AppKey("mutating_route_policy_snapshot", dict)
@@ -52,6 +52,8 @@ APP_BOOT_DOCTOR_ROOT = web.AppKey("boot_doctor_root", Path)
 APP_LOCAL_STEP_UP_AUTH_PROVIDER = web.AppKey("local_step_up_auth_provider", object)
 APP_PROTECTED_INTERNALS_GATE = web.AppKey("protected_internals_gate", object)
 APP_REQUIRE_API_ACCESS = web.AppKey("require_api_access", object)
+APP_SELF_BASE_URL = web.AppKey("self_base_url", str)
+APP_DELIVERABLE_PREVIEW_SERVICE = web.AppKey("deliverable_preview_service", object)
 
 
 @dataclass
@@ -62,7 +64,7 @@ class ChatSession:
     conversation: list[dict[str, Any]]
     profile: str
     model_id: str | None = None
-    autonomy_level: int = 3
+    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL  # L2 Assist — ask before acting (Calvin law)
     system_prompt: str | None = None
     reasoning_effort: str | None = None
     session_token_spend: int = 0

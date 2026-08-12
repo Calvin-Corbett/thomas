@@ -53,6 +53,21 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
         open_ids = {int(r["id"]) for r in (data3.get("contradictions") or [])}
         self.assertNotIn(cid, open_ids)
 
+    async def test_delete_pin_reports_forgetting_not_only_unpinning(self):
+        pin = await self.client.post(
+            "/api/memory/pins",
+            json={"key": "user.preference", "text": "PARITY-FORGET-ROUTE-77"},
+        )
+        self.assertEqual(pin.status, 200)
+
+        deleted = await self.client.delete("/api/memory/pins/user.preference")
+
+        self.assertEqual(deleted.status, 200)
+        payload = await deleted.json()
+        self.assertTrue(payload.get("ok"))
+        self.assertTrue(payload.get("forgotten"))
+        self.assertTrue((payload.get("purged") or {}).get("forgotten"))
+
     async def test_contradiction_review_routes(self):
         pin1 = await self.client.post("/api/memory/pins", json={"key": "user.city", "text": "Miami"})
         self.assertEqual(pin1.status, 200)

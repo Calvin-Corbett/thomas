@@ -1,0 +1,456 @@
+.tc-code-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tc-code-context {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 8;
+}
+
+.tc-code-context > button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--c-border-2);
+  border-radius: 10px;
+  padding: 0 11px;
+  background: color-mix(in srgb, var(--c-composer-bg) 92%, transparent);
+  color: var(--c-dim);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--c-bg) 42%, transparent);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+}
+
+.tc-code-context > button:hover,
+.tc-code-context > button[aria-expanded="true"] {
+  border-color: var(--c-accent-line);
+  color: var(--c-text);
+}
+
+.tc-code-context > button small {
+  color: var(--c-muted);
+  font-size: 10px;
+}
+
+.tc-code-activity-count {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  box-shadow: 0 0 12px var(--c-accent);
+}
+
+.tc-code-layout {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.tc-code-transcript {
+  width: min(100%, 768px);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 52px var(--tc-code-gutter, 24px) 86px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-2) transparent;
+}
+
+/* A conversation shorter than the window sat pinned to the TOP, leaving the
+   newest message stranded above a gap -- measured on a 1080p screen, 175px of
+   empty surface between the last turn and the composer, with nothing to
+   scroll. A conversation reads bottom-up in time, so the newest thing belongs
+   next to the box you reply in.
+   `margin-top: auto` rather than `justify-content: flex-end`, because the
+   latter makes the top of an overflowing transcript unreachable. Once the
+   content is taller than the surface this has no effect at all and normal
+   scrolling takes over.
+   Scoped with `:has()` so it only applies when real turns exist -- the empty
+   state stays centred, which is where a hero belongs. Browsers without `:has()`
+   simply keep the previous top-aligned behaviour. */
+#tc-code-turns:has(.tc-code-turn) { margin-top: auto; }
+
+.tc-code-transcript::-webkit-scrollbar { width: 9px; }
+.tc-code-transcript::-webkit-scrollbar-track { background: transparent; }
+.tc-code-transcript::-webkit-scrollbar-thumb {
+  background: var(--c-border-2);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.tc-code-actions {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 12;
+  width: min(var(--tc-code-drawer-width, 360px), 92vw);
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 16px 32px;
+  border-left: 1px solid var(--c-border-2);
+  background: color-mix(in srgb, var(--c-sidebar) 96%, transparent);
+  box-shadow: -22px 0 54px color-mix(in srgb, var(--c-bg) 58%, transparent);
+  backdrop-filter: blur(22px);
+  transform: translateX(calc(100% + 28px));
+  transition: transform .2s ease;
+}
+
+.tc-code-panel.is-drawer-open .tc-code-actions { transform: translateX(0); }
+
+.tc-code-drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -16px 12px;
+  padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--c-border);
+  background: color-mix(in srgb, var(--c-sidebar) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+/* The flex ITEM has to be allowed to shrink, not just the text inside it.
+   `min-width: auto` is the default for a flex item and refuses to go below its
+   content, so setting `text-overflow: ellipsis` on the `small` alone did
+   nothing: the wrapper grew to fit the label and the label went with it.
+   Measured after that half-fix -- ellipsis applied, and still 458px wide inside
+   a 280px drawer. Both levels are needed. */
+.tc-code-drawer-head > div { min-width: 0; }
+.tc-code-drawer-head strong,
+.tc-code-drawer-head small { display: block; }
+.tc-code-drawer-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-code-drawer-head strong { font-size: 13px; }
+/* Truncated like every other filename in this rail. The project label is a path
+   segment with no spaces to break at, so a long one ran straight out of the
+   280px drawer and was cut off at the VIEWPORT edge -- measured at 458px wide
+   inside a 280px panel, with no ellipsis to say it had been shortened.
+   `.tc-code-change header strong` and `.tc-code-artifact-name` beside it already
+   did exactly this; the subtitle and the file tree were the two that did not. */
+.tc-code-drawer-head small {
+  margin-top: 2px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-muted);
+  font-size: 10.5px;
+}
+.tc-code-drawer-head > button,
+.tc-code-actions button,
+.tc-code-change button {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text);
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.tc-code-drawer-head > button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.tc-code-actions button:hover:not(:disabled),
+.tc-code-change button:hover {
+  border-color: var(--c-accent-line);
+  background: var(--c-hover);
+}
+
+/* Revert permanently discards a file's changes -- its own approval card says
+   "This permanently discards its current changes" -- and it sits directly
+   beside Keep, which is benign. Measured on a real run, the two were identical
+   on colour, background, border, font-weight, font-size AND padding; the only
+   difference between them was the 6px the longer word adds. Drawing two
+   actions with opposite consequences the same way encodes something false.
+   Three files means three of each, so the row reads as six equivalent buttons.
+
+   #ff9a9a is the colour the failed-verdict rail and icon already use, so this
+   reads as the same system rather than a second, unrelated red. Kept to the
+   text and border at rest rather than a filled red button: the drawer is a
+   place for reviewing work, and a shouty control there would pull the eye away
+   from the diff, which is the thing actually worth reading.
+
+   Equal-specificity note: `.tc-code-change button:hover` above and
+   `.tc-code-change button[data-code-revert]` here both score (0,2,1), so this
+   must stay AFTER it to win at rest. The hover rule below scores (0,3,1) and
+   wins outright. */
+.tc-code-change button[data-code-revert] {
+  color: var(--c-danger, #ff9a9a);
+  border-color: color-mix(in srgb, var(--c-danger, #ff9a9a) 34%, transparent);
+}
+
+.tc-code-change button[data-code-revert]:hover {
+  border-color: var(--c-danger, #ff9a9a);
+  background: color-mix(in srgb, var(--c-danger, #ff9a9a) 14%, transparent);
+}
+
+.tc-code-actions button:disabled { opacity: .42; cursor: default; }
+
+.tc-code-drawer-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  z-index: 4;
+  width: 10px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  cursor: col-resize !important;
+}
+
+.tc-code-drawer-resize::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 1px;
+  background: transparent;
+}
+
+.tc-code-drawer-resize:hover::after { background: var(--c-accent); }
+
+.tc-code-section-title {
+  margin: 8px 0;
+  color: var(--c-muted);
+  font: 750 10.5px/1.2 var(--font-label, inherit);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.tc-code-tree { margin-top: 18px; }
+.tc-code-tree-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tc-code-tree-head > button { padding: 3px 7px; font-size: 10px; }
+.tc-code-tree ul {
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0;
+  color: var(--c-dim);
+  font: 11px/1.65 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.tc-code-tree li,
+.tc-code-tree li > button { display: flex; align-items: center; gap: 6px; }
+.tc-code-tree li > button {
+  width: 100%;
+  padding: 3px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.tc-code-tree li > button:hover { background: var(--c-hover); }
+/* The name is wrapped in a span so it can be truncated. `text-overflow` needs a
+   block container: the button is `display: flex`, and a bare text node inside it
+   becomes an anonymous flex item, which the property never reaches -- so setting
+   it on the button alone clipped mid-character with no ellipsis, which is what
+   it did. Measured: scrollWidth 518 against clientWidth 247, `text-overflow:
+   clip`, spilling past the drawer's right edge.
+   `min-width: 0` on the span because a flex item's default `min-width: auto`
+   refuses to shrink below its content, so without it the span simply pushes the
+   row wider instead of ellipsing. */
+.tc-code-tree li > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-code-tree .is-dir { color: var(--c-text); font-weight: 650; }
+
+.tc-code-turn {
+  margin-bottom: 30px;
+  color: var(--c-text);
+  font-size: 15.5px;
+  line-height: 1.72;
+  letter-spacing: .002em;
+}
+
+.tc-code-turn.is-user {
+  width: fit-content;
+  max-width: min(78%, 540px);
+  margin-left: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 16px 16px 4px 16px;
+  background: var(--c-user-bg);
+  color: var(--c-user-text);
+  white-space: pre-wrap;
+  /* `pre-wrap` breaks at whitespace and does nothing for one long token -- a
+     hash, an API key, a path with no separators -- which is exactly the sort of
+     thing that gets pasted into a build request. Every sibling that renders
+     free text already handles it: `.tc-code-reply`, `.tc-code-event span` and
+     `.tc-code-technical code` all set `overflow-wrap: anywhere`. This one did
+     not, so THOMAS's messages wrapped and YOURS did not.
+
+     Measured with a 145-character unbreakable string: the bubble reported
+     scrollWidth 1171 against clientWidth 510 and was clipped mid-token on
+     screen, while the reply beside it wrapped onto two lines from the same
+     string. The first attempt at this measurement used a path containing
+     hyphens and slashes, which ARE break opportunities under `normal`, so it
+     wrapped and proved nothing -- the test could not have failed. */
+  overflow-wrap: anywhere;
+}
+
+.tc-code-message-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+.tc-code-message-head strong { font-size: 13px; }
+.tc-code-message-head small { color: var(--c-muted); font: 11.5px/1.2 var(--font-label, inherit); }
+.tc-code-copy {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--c-muted);
+  cursor: pointer;
+}
+.tc-code-copy:hover { background: var(--c-hover); color: var(--c-text); }
+.tc-code-avatar {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  font-size: 13px;
+}
+.tc-code-turn-body { min-width: 0; }
+.tc-code-reply { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tc-code-reply.is-error { color: var(--c-danger, #ffb0b0); }
+
+/* ==== One reading column, two consumers (owner redline, 2026-08-10) =======
+   The conversation and the composer are the same column of text. They only
+   read as one surface if they agree on their box in EVERY state, and they did
+   not. Measured at 1920 with a task open, chat column vs composer:
+
+     drawer closed   716..1484   vs   734..1502     18px apart
+     drawer open     576..1344   vs   734..1502    158px apart
+
+   Two separate causes. The 18px is structural: the composer's wrapper carries
+   18px of side padding and the transcript carries 24px, so each centred
+   correctly inside a box the other did not have. The 158px is the Activity
+   drawer reserving room on the layout and re-centring the transcript while the
+   composer, which lives outside the Code panel entirely, stayed put.
+
+   Owner: "when side panels move and stuff the composer should shrink exactly
+   the same size as the chat."
+
+   So both now take their box from the same two numbers: `--tc-code-gutter`,
+   the side padding, and a reserve driven by whichever side panel is open. One
+   number moves them together or neither of them moves.
+
+   Scoped to `[data-surface-mode="code"]` throughout -- Chat and Work keep
+   `.tc-rail`'s viewport anchor, which is right for them.
+
+   THREE properties, and every box in Code is built from them:
+
+     --tc-code-col-inset    how far in from the surface edge the column starts.
+                            With nothing open this is plain centring; the point
+                            is that it does not depend on what is open, so a
+                            panel appearing cannot move the left edge.
+     --tc-code-col-reserve  room a side panel needs on the RIGHT that the
+                            container has not already given up.
+     --tc-code-col-width    what is left, capped at the ideal reading measure.
+
+   `100%` inside them resolves against whichever element uses them, which is
+   the whole trick: the transcript and the composer sit in different subtrees,
+   and this is what makes "the same box" a single expression instead of two
+   that have to be kept in step by hand. It only holds because both containers
+   are the surface box with the same side padding -- hence --tc-code-gutter,
+   forced onto the composer's wrapper below. */
+#tc-shell[data-surface-mode="code"] {
+  --tc-code-gutter: 24px;
+  --tc-code-col-ideal: 768px;
+  --tc-code-col-reserve: 0px;
+  --tc-code-col-inset: max(0px, calc((100% - var(--tc-code-col-ideal)) / 2));
+  --tc-code-col-width: min(
+    var(--tc-code-col-ideal),
+    calc(100% - var(--tc-code-col-inset) - var(--tc-code-col-reserve))
+  );
+}
+
+/* The composer is the shell's, not the panel's: it sits below the mode surface
+   and no class on `.tc-code-panel` can reach it. `[data-code-side]` on the
+   shell is the whole channel, written by unified_code_mode.js on every render.
+
+   `!important` because the wrapper carries `padding: 6px 18px 18px` INLINE,
+   which outranks any stylesheet rule without it -- the first attempt at this
+   set 24px here, changed nothing, and the composer stayed 18px out. Only the
+   sides are overridden, so the inline top and bottom survive. */
+#tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] {
+  padding-left: var(--tc-code-gutter) !important;
+  padding-right: var(--tc-code-gutter) !important;
+}
+
+/* `.tc-rail` anchors the composer to a VIEWPORT position with `!important` --
+   deliberate in Chat, where the Canvas shrinks the column from the right. In
+   Code the column takes its place from the mode surface instead, so the anchor
+   has to be overridden at the same weight or the composer keeps sitting 18px
+   to the right of the conversation directly above it. */
+#tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] > .tc-rail {
+  width: var(--tc-code-col-width);
+  margin-left: var(--tc-code-col-inset) !important;
+  margin-right: auto !important;
+}
+
+/* Activity: the drawer overlays, so nothing gives up container width and the
+   column keeps its inset. Only its WIDTH is capped, and only far enough to
+   stop at the drawer -- at 1920 the cap is never reached, which is the owner's
+   "that menu isn't wide enough to need that" made literal.
+   Above 720px only: below that the drawer is `min(420px, 94vw)` with its
+   resize handle hidden, a near-full-width overlay, and reserving that much
+   would leave no column at all. */
+@media (min-width: 721px) {
+  #tc-shell[data-surface-mode="code"][data-code-side="activity"] {
+    --tc-code-col-reserve: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
+  }
+}
+
+/* The viewer IS wide enough to need the room. It takes its share off the
+   container instead -- `padding-right` on the layout for the transcript, the
+   same padding on the wrapper for the composer -- so the column re-centres in
+   what is left and keeps a readable measure rather than being squeezed against
+   an anchor it no longer has room for. The reserve above stays at 0 here or
+   the space would be charged twice. */
+#tc-shell[data-surface-mode="code"][data-code-side="viewer"] [data-ui-id="chat.composer"] {
+  padding-right: calc(var(--tc-code-gutter) + var(--tc-code-viewer-width, min(760px, 62vw))) !important;
+}
+
+@media (max-width: 720px) {
+  #tc-shell[data-surface-mode="code"] { --tc-code-gutter: 16px; }
+  .tc-code-context { top: 10px; right: 10px; }
+  .tc-code-transcript { padding: 52px var(--tc-code-gutter, 16px) 72px; }
+  .tc-code-actions { width: min(420px, 94vw); }
+  .tc-code-drawer-resize { display: none; }
+  .tc-code-turn.is-user { max-width: 90%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-code-actions { transition: none; }
+}

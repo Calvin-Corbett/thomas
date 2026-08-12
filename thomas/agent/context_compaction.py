@@ -623,18 +623,32 @@ def _apply_heuristic_compaction(
         return
 
     # Pass 3: Drop oldest non-system, non-summary messages
+    #
+    # This used to inspect messages[0] and then pop messages[1] without looking at
+    # what index 1 was. A real conversation is [system prompt, [context-summary],
+    # ...turns], so index 1 is the compaction summary -- the one artifact carrying
+    # the turns already compacted away. It was the first thing deleted, every time,
+    # and the marker below then reported it as one of "N earlier messages".
+    #
+    # Losing it is worse than losing the turns it replaced: a constraint agreed
+    # thirty messages ago lived only there. So the oldest DROPPABLE message is found
+    # by looking, which is what the heading above always said this did.
     dropped = 0
     while current_tokens > target_tokens and compactable_end > 0:
-        msg = messages[0]
-        if msg.get("role") == "system" or _is_compaction_summary(msg):
-            if len(messages) > preserve_recent + 1:
-                messages.pop(1)
-                compactable_end -= 1
-            else:
-                break
-        else:
-            messages.pop(0)
-            compactable_end -= 1
+        drop_at = next(
+            (
+                i
+                for i in range(compactable_end)
+                if messages[i].get("role") != "system" and not _is_compaction_summary(messages[i])
+            ),
+            None,
+        )
+        if drop_at is None:
+            # Everything still compactable is protected; shedding more would cost
+            # the system prompt or the summary, which is never the cheaper trade.
+            break
+        messages.pop(drop_at)
+        compactable_end -= 1
         dropped += 1
         current_tokens = estimate_conversation_tokens(messages)
 

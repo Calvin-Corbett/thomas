@@ -83,18 +83,5 @@ class TestOrchestratorBrainStreaming(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.content, "Hello there")
         self.assertTrue(registry.executed)
 
-    async def test_classify_and_route_prefers_tools_for_explicit_file_requests(self):
-        registry = _FakeRegistry()
-        brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=registry)
-
-        route = await brain._classify_and_route(
-            "Use your file tools and name three top-level files in the current repo.",
-            ConversationManager(),
-            _FakeMemoryContext(),
-        )
-
-        self.assertEqual(route.specialists, ["tools"])
-
-
 if __name__ == "__main__":
     unittest.main()

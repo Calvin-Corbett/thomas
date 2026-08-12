@@ -44,15 +44,13 @@ def test_hard_stops_reject_regardless_of_posture():
         )
 
 
-def test_reverted_policy_violation_promotes_clean_remainder():
-    # The agent touched a guardrail file, but it was reverted out of the mirror;
-    # the remaining clean change should still promote, with the revert noted.
+def test_policy_violation_rejects_whole_session():
     d = decide_promotion(posture="auto_safe", risk_tier="low", **_clean(policy_violation=True))
-    assert d.action == ACTION_PROMOTE
-    assert "reverted" in d.reason
-    # high-risk still holds for approval even with the reverted overstep
+    assert d.action == ACTION_REJECT
+    assert "protected path tamper" in d.reason
+
     held = decide_promotion(posture="auto_safe", risk_tier="high", **_clean(policy_violation=True))
-    assert held.action == ACTION_APPROVE
+    assert held.action == ACTION_REJECT
 
 
 def test_propose_always_holds_clean_changes():
@@ -92,9 +90,29 @@ def test_summarize_session_outcome_reads_engine_session():
     }
     outcome = summarize_session_outcome(session)
     assert outcome.verification_ok is True
+    assert outcome.verification_ran is True
     assert outcome.changed_count == 4
     assert outcome.policy_violation is False
     assert outcome.agent_failed is False
+    assert outcome.session_rejected is False
+    assert outcome.verification_floor_failed is False
+
+
+def test_missing_verification_holds_for_approval_instead_of_promoting():
+    session = {
+        "status": "ready",
+        "delta": {"changed_count": 1, "changed_files": ["thomas/server/web/js/runtime/example.js"]},
+        "policy_violations": [],
+        "verification": [],
+    }
+    outcome = summarize_session_outcome(session)
+    assert outcome.verification_ok is True
+    assert outcome.verification_ran is False
+
+    for posture in ("auto_safe", "autonomous"):
+        decision = decide_for_session(posture, session, "low")
+        assert decision.action == ACTION_APPROVE
+        assert "no verification ran" in decision.reason
 
 
 def test_summarize_flags_failed_verification_and_policy_violation():
@@ -106,7 +124,43 @@ def test_summarize_flags_failed_verification_and_policy_violation():
     }
     outcome = summarize_session_outcome(session)
     assert outcome.verification_ok is False
+    assert outcome.verification_ran is True
     assert outcome.policy_violation is True
+
+
+def test_summarize_flags_session_rejection_and_verification_floor_failure():
+    session = {
+        "status": "verification_failed",
+        "delta": {"changed_count": 1},
+        "policy_violations": [],
+        "session_rejections": ["test infrastructure changed: tests/conftest.py"],
+        "verification_floor_failures": ["no blast-radius tests selected for changed Python files: thomas/core/x.py"],
+        "verification": [{"command": "python -m py_compile thomas/core/x.py", "returncode": 0}],
+    }
+    outcome = summarize_session_outcome(session)
+    assert outcome.verification_ran is True
+    assert outcome.verification_ok is False
+    assert outcome.session_rejected is True
+    assert outcome.verification_floor_failed is True
+
+    rejected = decide_for_session("autonomous", session, "low")
+    assert rejected.action == ACTION_REJECT
+    assert "session rejected" in rejected.reason
+
+    floor_only = dict(session)
+    floor_only["session_rejections"] = []
+    floor_rejected = decide_for_session("autonomous", floor_only, "low")
+    assert floor_rejected.action == ACTION_REJECT
+    assert "verification floor" in floor_rejected.reason
+
+
+def test_decide_promotion_unverified_flag_holds_before_autopromote():
+    held = decide_promotion(posture="autonomous", risk_tier="low", **_clean(verification_ran=False))
+    assert held.action == ACTION_APPROVE
+    assert "no verification ran" in held.reason
+
+    failed = decide_promotion(posture="autonomous", risk_tier="low", **_clean(verification_ok=False))
+    assert failed.action == ACTION_REJECT
 
 
 def test_decide_for_session_end_to_end():

@@ -1,0 +1,43 @@
+{
+  "name": "Thomas",
+  "short_name": "Thomas",
+  "description": "Thomas - an AI workspace for chatting, building and running work.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#070912",
+  "theme_color": "#8b8cff",
+  "categories": ["productivity", "developer"],
+  "icons": [
+    {
+      "src": "/static/thomas-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/thomas-icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New chat",
+      "short_name": "Chat",
+      "description": "Start a new conversation with Thomas",
+      "url": "/?mode=chat",
+      "icons": [{ "src": "/static/thomas-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Build",
+      "short_name": "Build",
+      "description": "Open Build mode and start a coding task",
+      "url": "/?mode=code",
+      "icons": [{ "src": "/static/thomas-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

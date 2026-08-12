@@ -20,7 +20,7 @@ import shutil
 import tempfile
 from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 try:
@@ -70,6 +70,8 @@ class PluginInstallFromLocalPathResult:
 
 
 _PLUGIN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_MAX_PLUGIN_FILES = 2000
+_MAX_PLUGIN_BYTES = 100 * 1024 * 1024
 
 
 def _default_thomas_home() -> Path:
@@ -243,6 +245,100 @@ def _derive_plugin_name(source_path: Path) -> str:
     )
 
 
+def _validate_source_tree(source_path: Path) -> None:
+    """Reject link escapes and unexpectedly large local plugin trees before copying."""
+
+    file_count = 0
+    total_bytes = 0
+    try:
+        for entry in source_path.rglob("*"):
+            if entry.is_symlink():
+                raise PluginInstallFromLocalPathError(
+                    "unsafe_source_tree",
+                    "Plugin source must not contain symbolic links.",
+                    details={"path": str(entry)},
+                )
+            if not entry.is_file():
+                continue
+            file_count += 1
+            total_bytes += entry.stat().st_size
+            if file_count > _MAX_PLUGIN_FILES or total_bytes > _MAX_PLUGIN_BYTES:
+                raise PluginInstallFromLocalPathError(
+                    "plugin_too_large",
+                    "Plugin source exceeds the safe local install limit.",
+                    details={"file_count": file_count, "total_bytes": total_bytes},
+                )
+    except PluginInstallFromLocalPathError:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise PluginInstallFromLocalPathError(
+            "unsafe_source_tree",
+            "Plugin source tree could not be validated safely.",
+            details={"path": str(source_path), "reason": type(exc).__name__},
+        ) from exc
+
+
+def _validate_rich_manifest(source_path: Path, plugin_name: str) -> None:
+    """Validate the v1 rich manifest and every declared knowledge attachment."""
+
+    manifest_path = source_path / "manifest.json"
+    if not manifest_path.is_file():
+        return
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise PluginInstallFromLocalPathError(
+            "bad_plugin_config",
+            "Failed to parse rich plugin manifest.",
+            details={"path": str(manifest_path), "reason": type(exc).__name__},
+        ) from exc
+    if not isinstance(manifest, dict) or manifest.get("schema_version") != "v1":
+        return
+    try:
+        from thomas.plugins.p098_plugin_manifest_schema import PluginManifestSchemaError, validate_plugin_manifest
+
+        validate_plugin_manifest(manifest)
+    except PluginManifestSchemaError as exc:
+        raise PluginInstallFromLocalPathError(
+            "invalid_manifest",
+            "Plugin manifest failed validation.",
+            details={"path": str(manifest_path), "errors": list(exc.details.get("errors") or [])},
+        ) from exc
+
+    plugin = manifest.get("plugin") if isinstance(manifest.get("plugin"), dict) else {}
+    manifest_id = str(plugin.get("id") or "").strip()
+    if manifest_id and manifest_id != plugin_name:
+        raise PluginInstallFromLocalPathError(
+            "manifest_name_mismatch",
+            "Plugin manifest id does not match the install name.",
+            details={"plugin_name": plugin_name, "manifest_id": manifest_id},
+        )
+
+    assistant = manifest.get("assistant") if isinstance(manifest.get("assistant"), dict) else {}
+    knowledge_files = assistant.get("knowledge_files") if isinstance(assistant.get("knowledge_files"), list) else []
+    source_root = source_path.resolve()
+    for raw_path in knowledge_files:
+        relative = PurePosixPath(str(raw_path))
+        candidate = source_path.joinpath(*relative.parts)
+        try:
+            if candidate.is_symlink():
+                raise ValueError("symlink")
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(source_root)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise PluginInstallFromLocalPathError(
+                "unsafe_knowledge_path",
+                "Plugin knowledge file is missing or escapes the plugin package.",
+                details={"path": str(raw_path), "reason": type(exc).__name__},
+            ) from exc
+        if not resolved.is_file():
+            raise PluginInstallFromLocalPathError(
+                "unsafe_knowledge_path",
+                "Plugin knowledge attachment must be a regular file.",
+                details={"path": str(raw_path)},
+            )
+
+
 def _load_manifest(manifest_path: Path) -> dict[str, Any]:
     if not manifest_path.exists():
         return {"version": 1, "plugins": {}}
@@ -299,6 +395,8 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
         )
 
     plugin_name = _validate_plugin_name(req.plugin_name) if req.plugin_name else _derive_plugin_name(source_path)
+    _validate_source_tree(source_path)
+    _validate_rich_manifest(source_path, plugin_name)
     install_root = Path(req.install_root).expanduser().resolve() if req.install_root else _default_install_root()
 
     _ensure_package_dir(install_root)

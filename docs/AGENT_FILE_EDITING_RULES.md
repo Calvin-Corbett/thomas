@@ -40,22 +40,35 @@ thomas/server/web/js/runtime/040-045_*.js     ← Model/setup/settings
 ### Standalone scripts loaded directly by index.html:
 
 ```
-thomas/server/web/js/theme_rules.js           ← Theme engine
+thomas/server/web/js/theme_rules.js            ← Theme engine (classic)
 thomas/server/web/js/token_economy_space.js    ← Space background engine
 thomas/server/web/js/token_economy.js          ← Token Economy module
 thomas/server/web/js/templates/tpl_settings.js ← Settings HTML template
+thomas/server/web/js/chat_themes.js            ← Chat shell theme data — DERIVES its
+                                                  values from css/tokens.css at load
+thomas/server/web/js/chat_connect_prompt.js    ← ChatGPT-connect overlay (factory)
+thomas/server/web/js/workspace_shell.js        ← Unified theme engine (all pages)
 ```
+
+### CSS — WHERE TO EDIT (since the 2026-08-06 design unification):
+
+- `css/tokens.css` is THE design-token source: canonical `--c-*` palette, all
+  five theme blocks, the legacy-name bridge, reduced-motion and focus-visible
+  guards. The chat shell derives its theme payloads from this file at runtime.
+- `css/component_styles/` and `css/layout_styles/` hold the split component and
+  layout files (the old `components_parts/` / `layout_parts/` names are banned
+  by the monolith filename guard). `components.css` / `layout.css` /
+  `evolution.css` are @import hubs — edit the imported files, not the hubs.
 
 These are loaded by `<script>` tags in `index.html` and ARE active. Check `index.html` to confirm what's loaded.
 
-### DEAD FILES — Do NOT edit:
+### DEAD FILES — deleted, watch for resurrection:
 
-```
-thomas/server/web/js/app_runtime_primary.mjs   ← OLD monolith, NOT loaded by index.html
-thomas/server/web/js/app_parts/part-*.js        ← Legacy string arrays, dead code
-```
-
-**`app_runtime_primary.mjs` is a pre-split monolith.** It was the runtime before the split into `js/runtime/` files. It is NOT loaded by `index.html`. Editing it does nothing. Do NOT add features here.
+`app_runtime_primary.mjs` (the pre-split monolith) and the `app_parts/`
+string-array files were DELETED on 2026-08-06/07 with approved records
+(`docs/deletions/`). Only `app_parts/GUARDRAILS.md` remains, guarded by
+`agent_safety.toml`. If any of these files reappear in a diff, that is a
+regression — do not merge it.
 
 ### How to verify which JS files are live:
 ```bash
@@ -134,7 +147,7 @@ Before committing any change:
 1. **Is the file I edited the one that actually runs?**
    - JS runtime: Is it in `thomas/server/web/js/runtime/`? (the numbered files)
    - JS standalone: Is it loaded by a `<script>` tag in `index.html`?
-   - JS dead code: `app_runtime_primary.mjs` and `app_parts/` are NOT live
+   - JS dead code: the old monolith and `app_parts/` split files are deleted; if a diff resurrects them, reject it
    - Python: Is it a direct file or a monolith part?
 
 2. **Did I remove the old version?**

@@ -10,36 +10,28 @@ The core execution engine for Thomas. Handles:
 - Memory context injection
 
 This is a thin facade that delegates to specialized modules:
-- loop_core: Message building, initialization, routing helpers
+- loop_core: Message building and initialization
 - loop_tools: Tool selection and execution
 - loop_streaming: Memory, library, token management
-- loop_planning: Response sanitization, nudging, and the main run() loop
+- loop_planning: Protocol-safe response cleanup
 """
 
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.agent.loop_core import AgentLoop as _AgentLoopBase
 from thomas.agent.loop_core import LoopState
 from thomas.agent.loop_execution import _agent_loop_run
 from thomas.agent.loop_helpers import _coerce_async_iterator
-from thomas.agent.loop_planning import (
-    assume_and_proceed_nudge,
-    full_auto_nudge,
-    looks_like_clarifying_question,
-    routing_input_text,
-    sanitize_assistant_text,
-)
+from thomas.agent.loop_planning import sanitize_assistant_text
 from thomas.agent.loop_streaming import (
     apply_memory_policy,
     auto_capture_research,
     build_token_report,
-    capture_profile_hints,
-    input_continuity_hint,
     normalize_usage,
     record_event,
     retrieve_library,
@@ -123,10 +115,6 @@ class AgentLoop(_AgentLoopBase):
         """Record an event in memory."""
         record_event(self, etype, text)
 
-    def _capture_profile_hints(self, text: str) -> None:
-        """Promote stable user hints into global pins."""
-        capture_profile_hints(self, text)
-
     def _build_token_report(
         self,
         *,
@@ -171,14 +159,6 @@ class AgentLoop(_AgentLoopBase):
         """Calculate the difference between two usage snapshots."""
         return usage_delta(before, after)
 
-    def _routing_input_text(self, prompt_text: str) -> tuple[str, str]:
-        """Optionally augment routing input with prior assistant context."""
-        return routing_input_text(self, prompt_text)
-
-    def _input_continuity_hint(self, prompt_text: str) -> str:
-        """Infer whether the user just supplied data requested in the prior turn."""
-        return input_continuity_hint(self, prompt_text)
-
     def _sanitize_assistant_text(
         self,
         text: str,
@@ -196,58 +176,6 @@ class AgentLoop(_AgentLoopBase):
             route=route,
             route_input_source=route_input_source,
             pending_tool_calls=pending_tool_calls,
-        )
-
-    @staticmethod
-    def _looks_like_clarifying_question(text: str) -> bool:
-        """Check if text looks like a clarifying question."""
-        return looks_like_clarifying_question(text)
-
-    @staticmethod
-    def _claims_execution(text: str) -> bool:
-        """Heuristic detector for fabricated execution claims in plain text."""
-        low = str(text or "").strip().lower()
-        if not low:
-            return False
-        if "?" in low:
-            return False
-        if re.search(
-            r"\b(cannot|can't|unable|don't have access|do not have access|missing access|missing credentials)\b",
-            low,
-        ):
-            return False
-
-        patterns = (
-            r"\bi(?:'ve| have)?\s+(created|written|saved|executed|ran|launched|completed|finished)\b",
-            r"\bfile\s+(saved|written|created)\b",
-            r"\breport\s+(saved|written|created)\b",
-            r"\bhere(?:'s| is)\s+the\s+output\b",
-            r"\b\d+\s+agents?\s+running\b",
-            r"\bagents?\s+(running|launched|started)\b",
-        )
-        return any(re.search(pattern, low) for pattern in patterns)
-
-    @staticmethod
-    def _full_auto_nudge(prompt_text: str, retry_index: int) -> str:
-        """Generate nudge for Autonomy level 4."""
-        return full_auto_nudge(prompt_text, retry_index)
-
-    @staticmethod
-    def _assume_and_proceed_nudge(
-        prompt_text: str,
-        *,
-        retry_index: int,
-        question_cap: int,
-        questions_seen: int,
-        route_input_source: str,
-    ) -> str:
-        """Generate nudge to assume defaults and proceed."""
-        return assume_and_proceed_nudge(
-            prompt_text,
-            retry_index=retry_index,
-            question_cap=question_cap,
-            questions_seen=questions_seen,
-            route_input_source=route_input_source,
         )
 
     async def _audit_action(
@@ -282,6 +210,7 @@ class AgentLoop(_AgentLoopBase):
         self,
         prompt: Any,
         *,
+        intent_text: str | None = None,
         mode: str = "auto",
         tools_policy: str = "auto",
         token_economy: str = "optimal",
@@ -294,18 +223,38 @@ class AgentLoop(_AgentLoopBase):
 
         See _agent_loop_run for full documentation.
         """
-        async for event in _agent_loop_run(
+        # Hook surface (run category): run_start fires before the first event and
+        # run_end fires exactly once when the run is exhausted or closed.
+        await emit_hook(
             self,
-            prompt,
-            mode=mode,
-            tools_policy=tools_policy,
-            token_economy=token_economy,
-            max_iterations=max_iterations,
-            job_type=job_type,
-            _quality_retry_count=_quality_retry_count,
-            _quality_carry_forward_events=_quality_carry_forward_events,
-        ):
-            yield event
+            HookEvent.RUN_START,
+            {
+                "run_id": self._run_id,
+                "session_id": self._session_id,
+                "mode": mode,
+                "tools_policy": tools_policy,
+            },
+        )
+        try:
+            async for event in _agent_loop_run(
+                self,
+                prompt,
+                intent_text=intent_text,
+                mode=mode,
+                tools_policy=tools_policy,
+                token_economy=token_economy,
+                max_iterations=max_iterations,
+                job_type=job_type,
+                _quality_retry_count=_quality_retry_count,
+                _quality_carry_forward_events=_quality_carry_forward_events,
+            ):
+                yield event
+        finally:
+            await emit_hook(
+                self,
+                HookEvent.RUN_END,
+                {"run_id": self._run_id, "session_id": self._session_id},
+            )
 
 
 # Public exports for backward compatibility

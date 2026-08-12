@@ -14,16 +14,13 @@ from typing import Any
 from aiohttp import web
 
 from thomas.agent.loop import AgentLoop
-from thomas.core.autonomy import clamp_autonomy_level
 from thomas.core.config import AppConfig
-from thomas.models.chat_controls import resolve_ui_control_request
 from thomas.server.app_keys import (
     APP_MEMORY,
     APP_RUN_STORE_ENABLED,
     APP_RUN_STORE_MODULE,
     ChatSession,
 )
-from thomas.server.chat_control_mode import ChatControlDeps, handle_ui_control_chat
 
 from .chat_aiohttp_helpers import (
     ChatRouteDeps,
@@ -43,8 +40,6 @@ from .chat_request_setup import setup_chat_request
 log = logging.getLogger(__name__)
 
 _DEFAULT_AGENT_LOOP = AgentLoop
-_DEFAULT_RESOLVE_UI_CONTROL_REQUEST = resolve_ui_control_request
-_DEFAULT_HANDLE_UI_CONTROL_CHAT = handle_ui_control_chat
 
 # Get THOMAS_VERSION from package metadata
 try:
@@ -261,87 +256,6 @@ async def execute_chat_request(
     apply_usage_budget = setup["apply_usage_budget"]
 
     # ─── Phase 2: Control routing and dispatch ───────────────────────────────
-    switch_req = await deps.resolve_natural_model_switch(text, current_profile=session.profile)
-    resolve_control_req_fn = resolve_ui_control_request
-    handle_ui_control_chat_fn = handle_ui_control_chat
-    try:
-        from thomas.server import app as server_app
-
-        if resolve_control_req_fn is _DEFAULT_RESOLVE_UI_CONTROL_REQUEST:
-            resolve_candidate = getattr(
-                server_app,
-                "resolve_ui_control_request",
-                _DEFAULT_RESOLVE_UI_CONTROL_REQUEST,
-            )
-            if callable(resolve_candidate):
-                resolve_control_req_fn = resolve_candidate
-        if handle_ui_control_chat_fn is _DEFAULT_HANDLE_UI_CONTROL_CHAT:
-            handle_candidate = getattr(
-                server_app,
-                "handle_ui_control_chat",
-                _DEFAULT_HANDLE_UI_CONTROL_CHAT,
-            )
-            if callable(handle_candidate):
-                handle_ui_control_chat_fn = handle_candidate
-    except Exception:
-        resolve_control_req_fn = resolve_ui_control_request
-        handle_ui_control_chat_fn = handle_ui_control_chat
-
-    control_req = resolve_control_req_fn(text, model_switch=switch_req)
-    if control_req is not None:
-        async with session_lock:
-            return await handle_ui_control_chat_fn(
-                request,
-                cfg=cfg,
-                session=session,
-                payload=payload,
-                text=text,
-                profile=profile,
-                mode=mode,
-                start_t=start_t,
-                token_economy_meta=token_economy_meta,
-                switch_req=switch_req,
-                control_req=control_req,
-                run_store_enabled=bool(_resolve_app_value(request.app, APP_RUN_STORE_ENABLED, default=False)),
-                run_store_mod=_resolve_app_value(request.app, APP_RUN_STORE_MODULE),
-                start_run_writer=lambda run_id, run_mode: None,  # placeholder
-                deps=ChatControlDeps(
-                    clamp_autonomy_level=clamp_autonomy_level,
-                    normalize_usage_payload=_normalize_usage_payload,
-                ),
-            )
-
-    # Discord channel commands (e.g. "show discord status", "/discord recent")
-    # are dispatched WITHOUT spinning up the agent loop. The handler lives in
-    # discord_channels_support but was orphaned during the chat refactor —
-    # match_discord_chat_command + maybe_handle_discord_chat_command existed
-    # but nothing in the chat pipeline called them. Reconnect it here so
-    # ``tests/test_discord_channels.py::test_local_chat_can_report_discord_status_without_agent_loop``
-    # gets its expected "Discord bridge status:" reply.
-    try:
-        from thomas.server.routes.discord_channels_support import (
-            build_discord_request_context,
-            maybe_handle_discord_chat_command,
-        )
-
-        discord_request_context = build_discord_request_context(payload, sid)
-        discord_response = await maybe_handle_discord_chat_command(
-            request=request,
-            session=session,
-            sid=sid,
-            text=text,
-            cfg=cfg,
-            token_economy_meta=token_economy_meta,
-            start_t=start_t,
-            request_context=discord_request_context,
-        )
-        if discord_response is not None:
-            return discord_response
-    except Exception as discord_dispatch_err:
-        # Never let Discord short-circuit failures bubble up — fall through
-        # to the regular chat pipeline.
-        log.debug("Discord chat command dispatch skipped: %s", discord_dispatch_err)
-
     quick_reply = await maybe_handle_quick_casual_reply(
         request=request,
         session_lock=session_lock,
@@ -359,12 +273,12 @@ async def execute_chat_request(
     # ─── Dispatch routing ────────────────────────────────────────────────────
     try:
         from thomas.agent.chat_dispatcher import dispatch_async
-        from thomas.agent.dispatch import should_dispatch
         from thomas.server.routes.task_events import watch_task
 
-        dispatch_decision = should_dispatch(text)
         force_dispatch = _as_bool(payload.get("force_dispatch"))
-        if force_dispatch and dispatch_decision.action == "dispatch":
+        # Compatibility dispatch requires a structured client control. Prompt
+        # wording never promotes a chat message into work.
+        if force_dispatch:
             async with session_lock:
                 if not isinstance(session.conversation, list):
                     session.conversation = []
@@ -394,10 +308,10 @@ async def execute_chat_request(
                     with contextlib.suppress(ConnectionResetError, BrokenPipeError, OSError):
                         await dispatch_resp.write(line.encode("utf-8") + b"\n")
 
-                ack_text = "On it."
-                await dispatch_send({"type": "text", "text": ack_text})
-                session.conversation.append({"role": "assistant", "content": ack_text})
-
+                # No canned acknowledgment text. The live task card (the
+                # task_dispatched event + delegation updates below) is what tells
+                # the user the work started; we never fake an instant assistant
+                # reply. Thomas only "speaks" with model-authored text.
                 dispatch_result = await dispatch_async(
                     text,
                     sid,

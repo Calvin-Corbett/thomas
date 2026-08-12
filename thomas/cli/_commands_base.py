@@ -39,8 +39,8 @@ def _resolve_model_profile_name(config: AppConfig, profile_name: str | None) -> 
         from thomas.core.model_resolution import resolve_model_profile_name as _resolver
 
         return _resolver(config, profile_name)
-    except Exception:
-        # Broad catch: resolver failures fall back to the legacy local lookup to preserve CLI startup.
+    except (KeyError, RuntimeError, TypeError, ValueError):
+        # Resolver failures fall back to the legacy local lookup to preserve CLI startup.
         logging.getLogger(__name__).exception("Model profile resolver failed; using local fallback.")
         requested = str(profile_name or "").strip()
         if not requested:
@@ -71,6 +71,13 @@ def _repl_needs_codex_event_loop(config: AppConfig, active_profile: str) -> bool
     return False
 
 
+from thomas.cli.headless_run_log import (
+    OUTCOME_AGENT_ERROR,
+    OUTCOME_SUCCESS,
+    OUTCOME_TIMEOUT,
+    OUTCOME_USAGE_ERROR,
+    HeadlessRunRecorder,
+)
 from thomas.cli.main_runtime_ops import (
     doctor_cmd as _doctor_cmd,
 )
@@ -158,48 +165,6 @@ def _prepare_runtime_data_environment(
 argparse.ArgumentParser.add_subparsers._p026_browser_wrapped = True
 
 
-def _parse_model_switch_prompt(prompt: str, config: AppConfig) -> tuple[str | None, str | None, str | None]:
-    """
-    Parse natural-language model switch requests.
-    Returns (model_name, new_prompt, message).
-    - model_name: selected model or None
-    - new_prompt: remaining prompt to answer (None if no user question)
-    - message: optional user-facing message to print and exit early
-    """
-    text = prompt.strip()
-    if not text:
-        return None, None, None
-
-    lower = text.lower()
-    # List models
-    if "model" in lower and any(k in lower for k in ("list", "show", "what models", "available")):
-        available = ", ".join(config.models.keys())
-        return None, None, f"Available models: {available} (current: {config.default_model})"
-
-    import re
-
-    m = re.match(r"^(switch|use|set|change)\s+(to\s+)?(model\s+)?(?P<name>[\w\-\.:]+)(?P<rest>.*)$", lower)
-    if not m:
-        return None, None, None
-
-    name = m.group("name")
-    rest = (m.group("rest") or "").strip()
-    for key in config.models.keys():
-        if key.lower() == name:
-            name = key
-            break
-
-    if name not in config.models:
-        available = ", ".join(config.models.keys())
-        return None, None, f"Unknown model '{name}'. Available: {available}"
-
-    # Allow inline question: "use model X: question"
-    if rest.startswith(":"):
-        rest = rest[1:].strip()
-
-    return name, (rest or None), None
-
-
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.WARNING
     formatter = _RedactingFormatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S")
@@ -232,6 +197,15 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_diff_tools(registry, sandbox)
     register_ssh_tools(registry)
 
+    # Thomas can put the user into Redesign mode himself when they say they do
+    # not like how something looks, instead of explaining where settings live.
+    try:
+        from thomas.tools.ui_redesign import register_ui_redesign_tools
+
+        register_ui_redesign_tools(registry)
+    except ImportError:
+        pass
+
     # Investigation tools — registered only if investigation DB has cases
     try:
         from thomas.tools.investigation import register_investigation_tools
@@ -259,7 +233,31 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     except ImportError:
         pass
 
+    # Honor THOMAS_TOOL_DENYLIST (set e.g. by the evolve green sandbox via
+    # _merge_tool_denylist) so exec primitives like shell.exec / ssh.exec are
+    # actually stripped from the registry the agent sees. Matches by exact name,
+    # dotted-prefix, or tool category.
+    _apply_env_tool_denylist(registry)
+
     return registry
+
+
+def _apply_env_tool_denylist(registry: ToolRegistry) -> None:
+    """Drop tools named in THOMAS_TOOL_DENYLIST (name, dotted-prefix, or category)."""
+    deny = {tok.strip() for tok in os.environ.get("THOMAS_TOOL_DENYLIST", "").split(",") if tok.strip()}
+    if not deny:
+        return
+    registered = getattr(registry, "_tools", None)
+    if not isinstance(registered, dict):
+        return
+    for name, tool in list(registered.items()):
+        category = str(getattr(tool, "category", "") or "")
+        if any(name == tok or name.startswith(f"{tok}.") or category == tok for tok in deny):
+            try:
+                registry.unregister(name)
+            except (KeyError, RuntimeError, TypeError, ValueError):  # pragma: no cover - best-effort pruning
+                # Broad catch: unregister() signatures vary across ToolRegistry versions; denylist pruning is advisory.
+                log.debug("Failed to unregister denylist tool %r; skipping.", name, exc_info=True)
 
 
 def _build_memory(config: AppConfig):
@@ -275,8 +273,8 @@ def _build_memory(config: AppConfig):
     except ImportError:
         logging.getLogger(__name__).warning("Memory engine import failed; continuing without memory.")
         return None
-    except Exception:
-        # Broad catch: memory is optional for CLI chat and should not prevent command startup.
+    except (OSError, RuntimeError, TypeError, ValueError):
+        # Memory is optional for CLI chat and should not prevent command startup.
         logging.getLogger(__name__).exception("Memory engine failed to start; continuing without memory.")
         return None
 
@@ -287,8 +285,8 @@ def _build_library(config: AppConfig):
         from thomas.library import ResearchLibrary, default_library_root
 
         return ResearchLibrary(default_library_root(config))
-    except Exception:
-        # Broad catch: library support is optional and CLI commands can continue without it.
+    except (OSError, RuntimeError, TypeError, ValueError):
+        # Library support is optional and CLI commands can continue without it.
         logging.getLogger(__name__).exception("Library init failed; continuing without library support.")
         return None
 
@@ -299,8 +297,17 @@ async def _run_chat(
     model_name: str | None,
     *,
     autonomy_level: int = 3,
-) -> None:
-    """Run a single chat interaction with streaming output."""
+    max_iterations: int | None = None,
+    job_type: str | None = None,
+) -> dict[str, Any]:
+    """Run a single chat interaction with streaming output.
+
+    Returns a run summary dict for the headless exit-code/run-log contract
+    (see :mod:`thomas.cli.headless_run_log`): ``outcome`` is ``agent_error``
+    when any ``AGENT_ERROR`` event was emitted, else ``success``; ``error``
+    carries the joined error details; ``artifacts`` lists output paths
+    reported by the agent's completion event when present.
+    """
     # Resolve via sys.modules so tests that monkeypatch the symbols on
     # ``thomas.cli.main`` (which re-exports them) intercept this call site.
     # The defaults are the implementations imported above.
@@ -340,10 +347,16 @@ async def _run_chat(
         autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
     )
 
+    agent_errors: list[str] = []
+    run_artifacts: list[str] = []
     try:
         tool_active = False
         tool_args: dict[str, str] = {}
-        async for event in agent.run(prompt):
+        async for event in agent.run(
+            prompt,
+            max_iterations=max_iterations,
+            job_type=job_type,
+        ):
             if event.type == EventType.AGENT_START:
                 route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
                 mode = route.get("mode") or event.data.get("mode") or "auto"
@@ -391,6 +404,10 @@ async def _run_chat(
                 ms = event.data["duration_ms"]
                 status = "\033[32mok\033[0m" if ok else "\033[31mfailed\033[0m"
                 sys.stdout.write(f"\033[90m[{name}: {status} {ms:.0f}ms]\033[0m\n")
+                if not ok:
+                    failure_detail = str(event.data.get("result_text") or event.data.get("result") or "").strip()
+                    if failure_detail:
+                        sys.stdout.write(f"{failure_detail[:1000]}\n")
                 sys.stdout.flush()
                 tool_active = False
                 tool_id = str(event.data.get("tool_id", ""))
@@ -398,9 +415,13 @@ async def _run_chat(
                     tool_args.pop(tool_id, None)
 
             elif event.type == EventType.AGENT_ERROR:
+                agent_errors.append(str(event.data.get("error") or "agent error"))
                 sys.stderr.write(f"\n\033[31mError: {event.data['error']}\033[0m\n")
 
             elif event.type == EventType.AGENT_DONE:
+                done_artifacts = event.data.get("artifacts")
+                if isinstance(done_artifacts, (list, tuple)):
+                    run_artifacts.extend(str(item) for item in done_artifacts if item)
                 iters = event.data["iterations"]
                 tc = event.data["tool_calls"]
                 sys.stdout.write("\n")
@@ -436,6 +457,13 @@ async def _run_chat(
                     sys.stdout.write(f"\033[90m[runtime model: {active_profile_name}/{active_model}]\033[0m\n")
             except (OSError, FileNotFoundError):
                 pass
+        return {
+            "outcome": OUTCOME_AGENT_ERROR if agent_errors else OUTCOME_SUCCESS,
+            "error": "; ".join(err for err in agent_errors if err) or None,
+            "model_profile": active_profile,
+            "model_id": model_config.model,
+            "artifacts": run_artifacts,
+        }
     finally:
         await llm.close()
         if memory:
@@ -540,44 +568,40 @@ def cli(
     show_default=True,
     help="Execution autonomy level (1=manual review, 4=full auto).",
 )
+@click.option(
+    "--run-log",
+    "run_log_flag",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Append a machine-readable JSONL run summary to this path (THOMAS_RUN_LOG env var also works).",
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
     prompt: str,
     model_name: str | None,
     autonomy_level: int,
+    run_log_flag: str | None,
 ) -> None:
-    """Send a single prompt and get a response."""
+    """Send a single prompt and get a response.
+
+    Headless contract: exit 0 on success, 1 on agent/task error, 2 on
+    usage/config error, 3 on timeout/interrupt. See
+    :mod:`thomas.cli.headless_run_log` for the run-log record format.
+    """
     config: AppConfig = ctx.obj["config"]
+    recorder = HeadlessRunRecorder(prompt, run_log_flag)
     selected_profile = _resolve_model_profile_name(config, model_name) if model_name else ""
     if model_name and not selected_profile:
-        click.echo(f"Unknown model profile '{model_name}'. Available: {', '.join(config.models.keys())}", err=True)
-        sys.exit(2)
+        message = f"Unknown model profile '{model_name}'. Available: {', '.join(config.models.keys())}"
+        click.echo(message, err=True)
+        sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error=message))
 
     errors = config.validate()
     if errors:
         for e in errors:
             click.echo(f"Config error: {e}", err=True)
-        sys.exit(1)
-
-    # Natural-language model switching for single-shot chat
-    if model_name is None:
-        nl_model, nl_prompt, nl_message = _parse_model_switch_prompt(prompt, config)
-        if nl_message:
-            click.echo(nl_message)
-            return
-        if nl_model:
-            selected_profile = _resolve_model_profile_name(config, nl_model)
-            if not selected_profile:
-                click.echo(
-                    f"Unknown model profile '{nl_model}'. Available: {', '.join(config.models.keys())}", err=True
-                )
-                sys.exit(2)
-            model_name = selected_profile
-            if nl_prompt is None:
-                click.echo(f"Switched to model '{model_name}' for this run. Ask a question.")
-                return
-            prompt = nl_prompt
+        sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error="; ".join(errors)))
 
     from thomas.core.model_resolution import resolve_effective_model
 
@@ -588,30 +612,58 @@ def chat(
             env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
             user_id="default",
         )
-    except Exception:
-        # Broad catch: model resolution fallback preserves legacy CLI behavior when runtime resolution fails.
+    except (KeyError, RuntimeError, TypeError, ValueError):
+        # Model resolution fallback preserves legacy CLI behavior when runtime resolution fails.
         log.exception("Effective model resolution failed; falling back to configured default.")
         resolved_profile = ""
         resolved_model_id = ""
     if not resolved_profile:
         selected_profile = _resolve_model_profile_name(config, config.default_model)
         if not selected_profile:
-            click.echo("No valid model profile configured.", err=True)
-            sys.exit(2)
+            message = "No valid model profile configured."
+            click.echo(message, err=True)
+            sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error=message))
         resolved_profile = selected_profile
 
     config.default_model = resolved_profile
     if resolved_model_id and resolved_profile in config.models:
         config.models[resolved_profile].model = resolved_model_id
 
-    asyncio.run(
-        _run_chat(
-            config,
-            prompt,
-            resolved_profile,
-            autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+    recorder.model_profile = resolved_profile
+    if resolved_profile in config.models:
+        recorder.model_id = config.models[resolved_profile].model
+
+    try:
+        summary = asyncio.run(
+            _run_chat(
+                config,
+                prompt,
+                resolved_profile,
+                autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+            )
         )
-    )
+    except KeyboardInterrupt:
+        click.echo("Interrupted.", err=True)
+        sys.exit(recorder.finish(OUTCOME_TIMEOUT, error="interrupted"))
+    except TimeoutError as exc:
+        click.echo(f"Timed out: {exc}", err=True)
+        sys.exit(recorder.finish(OUTCOME_TIMEOUT, error=str(exc) or "timeout"))
+    except (ConnectionError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        log.exception("Headless chat run failed.")
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(recorder.finish(OUTCOME_AGENT_ERROR, error=f"{type(exc).__name__}: {exc}")) from exc
+
+    summary = summary if isinstance(summary, dict) else {}
+    if summary.get("model_profile"):
+        recorder.model_profile = str(summary["model_profile"])
+    if summary.get("model_id"):
+        recorder.model_id = str(summary["model_id"])
+    recorder.artifacts = [str(item) for item in (summary.get("artifacts") or [])]
+    outcome = str(summary.get("outcome") or OUTCOME_SUCCESS)
+    error_detail = summary.get("error")
+    exit_code = recorder.finish(outcome, error=str(error_detail) if error_detail else None)
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 def _emit_config_show(config: AppConfig) -> None:

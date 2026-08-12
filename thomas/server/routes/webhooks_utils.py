@@ -6,7 +6,6 @@ import contextlib
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 
 @contextlib.contextmanager
@@ -34,30 +33,13 @@ def file_lock(lock_path: Path) -> Iterator[None]:
                 import fcntl  # type: ignore
 
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        except Exception:
+        # Releasing a lock in a finally block must not mask the original error.
+        # The realistic faults are named rather than swallowed wholesale: the
+        # unlock itself failing, the platform module being absent, or the handle
+        # already being invalid.
+        except (OSError, ImportError, ValueError, AttributeError):
             pass
         try:
             f.close()
-        except Exception:
+        except (OSError, ValueError):
             pass
-
-
-def emit_webhook_event(name: str, payload: dict[str, Any]) -> None:
-    """Best-effort hook into `thomas.core.events` without strict API coupling."""
-    try:
-        from thomas.core import events as events_mod  # type: ignore
-
-        for fn_name in ("emit", "publish", "send", "dispatch"):
-            fn = getattr(events_mod, fn_name, None)
-            if callable(fn):
-                try:
-                    fn(name, payload)  # type: ignore[misc]
-                    return
-                except TypeError:
-                    try:
-                        fn(event=name, payload=payload)  # type: ignore[misc]
-                        return
-                    except Exception:
-                        return
-    except Exception:
-        return

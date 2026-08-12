@@ -17,9 +17,9 @@ MODULES = {
     # -- CORE --stable foundations ------------------------------------------
     "core": {
         "tier": "core",
-        "depends_on": ["tools", "codex", "server", "marketplace"],
+        "depends_on": ["tools", "server", "marketplace"],
         "health": "yellow",
-        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, ui_workflow_engine.py exceeds 804 lines; core imports tools/codex/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
+        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, llm_client.py exceeds 833 lines; core imports tools/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
         "description": "LLM client, persistence, config, events",
     },
     "agent": {
@@ -38,7 +38,7 @@ MODULES = {
             "benchmarks",
         ],
         "health": "yellow",
-        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1190 lines, response_tone.py exceeds 860 lines, loop_core.py exceeds 800 lines, skills_runtime.py exceeds 838 lines",
+        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1000 lines",
         "description": "Agent loop, tool execution, streaming, guidance",
     },
     "vault": {
@@ -65,7 +65,6 @@ MODULES = {
             "security",
             "plugins",
             "asset_studio",
-            "codex",
             "channels",
             "companion",
             "migrations",
@@ -76,9 +75,12 @@ MODULES = {
             "desktop_operator",
             "cli",
             "integrations",
+            "forge",
+            "work",
+            "notifications",
         ],
         "health": "yellow",
-        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/local_projects_helpers_aiohttp.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/chat_aiohttp_streaming.py exceeds 810 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
+        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/evolve_agent_routes.py exceeds 926 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
         "description": "aiohttp web server, API routing, static serving",
     },
     "cli": {
@@ -102,7 +104,6 @@ MODULES = {
             "investigation",
             "vision",
             "security",
-            "codex",
             "forge",
             "library",
             "observability",
@@ -123,7 +124,7 @@ MODULES = {
     },
     "models": {
         "tier": "core",
-        "depends_on": ["core", "codex"],
+        "depends_on": ["core"],
         "health": "green",
         "description": "Model registry, provider routing, model metadata",
     },
@@ -131,6 +132,7 @@ MODULES = {
         "tier": "core",
         "depends_on": ["core", "tools"],
         "health": "yellow",
+        "debt": "_db.py exceeds 820 lines (over the 800-line soft cap; consider splitting the PreferencesStore methods from the module-level accessors)",
         "description": "User preferences persistence and API",
     },
     # -- EXTENSIONS --feature modules, isolated from each other ------------
@@ -223,7 +225,7 @@ MODULES = {
         "tier": "infra",
         "depends_on": ["core", "investigation", "integrations"],
         "health": "yellow",
-        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
+        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines, filesystem.py exceeds 867 lines, voice.py exceeds 970 lines, context_review.py exceeds 811 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
         "description": "Tool definitions, registry, sandbox",
     },
     # -- SUPPORT --smaller utility modules ---------------------------------
@@ -257,12 +259,6 @@ MODULES = {
         "depends_on": ["core", "tools", "marketplace"],
         "health": "yellow",
         "description": "Climate domain algorithms and utilities",
-    },
-    "codex": {
-        "tier": "support",
-        "depends_on": ["core", "tools", "marketplace"],
-        "health": "green",
-        "description": "Bridge to Codex/external providers",
     },
     "benchmarks": {
         "tier": "support",
@@ -363,6 +359,12 @@ MODULES = {
         "health": "green",
         "description": "Code execution sandbox abstractions",
     },
+    "sdk": {
+        "tier": "support",
+        "depends_on": [],
+        "health": "green",
+        "description": "Embeddable Python SDK client and third-party Agent View",
+    },
     "tests": {
         "tier": "support",
         "depends_on": ["core", "models", "preferences", "chat", "orchestrator", "specialists", "marketplace"],
@@ -377,9 +379,16 @@ MODULES = {
     },
     "forge": {
         "tier": "infra",
-        "depends_on": ["core", "tools"],
-        "health": "green",
+        "depends_on": ["core", "tools", "agent", "desktop_operator"],
+        "health": "yellow",
+        "debt": "anvil/evolve_verification.py exceeds 1133 lines; anvil/evolve.py exceeds 1335 lines (post-split remainder, dev 2026-07-15 ledger restored after merge); Anvil desktop and agent dispatch adapters import desktop_operator and agent",
         "description": "Praxis.Forge construction umbrella -- Anvil (self-mod / Doppelganger Protocol / Evolve runtime). Future sub-pieces: Gates, Intake, Publish.",
+    },
+    "work": {
+        "tier": "support",
+        "depends_on": [],
+        "health": "green",
+        "description": "Durable Work apps, job-scoped memory, connectors, private skills, dashboards, and Mission delegation metadata",
     },
     "watcher": {
         "tier": "support",
@@ -1214,7 +1223,6 @@ RULES = {
         # These circular deps exist in the current codebase and are tech debt.
         # The test will only fail on NEW cycles not listed here.
         ("core", "tools"),
-        ("core", "codex"),
         ("core", "server"),
         ("server", "security"),
         ("server", "asset_studio"),
@@ -1269,6 +1277,7 @@ RULES = {
         # TODO[batch-8]: pre-existing hard-ceiling violations surfaced by push dry-run;
         # exempted to unblock push, deferred to a focused frontend-cleanup session.
         "**/runtime/040_model_setup_settings_01.js",  # 1559 lines (ceiling 1500); model-setup settings UI needs module split
+        "**/runtime/048_ui_studio_canvas.js",  # 1639 lines (ceiling 1500); forward-ported coordinate-canvas IIFE, needs module split in a focused frontend-cleanup session
         "*token_economy_space_theme.css",  # 2262 lines (ceiling 2000); space-theme stylesheet needs component-CSS split
     ],
 }

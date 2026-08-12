@@ -199,5 +199,5 @@ def test_models_catalog_command_surfaces_latest_gpt_alias(tmp_path: Path) -> Non
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.5"
-    assert any(row["id"] == "gpt-5.5" for row in payload["models"])
+    assert payload["aliases"]["latest.openai.frontier"] == "gpt-5.6-sol"
+    assert any(row["id"] == "gpt-5.6-sol" for row in payload["models"])

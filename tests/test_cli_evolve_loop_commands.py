@@ -30,6 +30,21 @@ def test_evolve_plan_lists_self_chosen_backlog(tmp_path: Path) -> None:
     assert any(g["category"] == "refactor" for g in payload["goals"])
 
 
+def test_evolve_json_output_is_console_encoding_safe(monkeypatch) -> None:
+    captured = {}
+
+    def cp1252_echo(text: str) -> None:
+        text.encode("cp1252")
+        captured["text"] = text
+
+    monkeypatch.setattr(cli_evolve.click, "echo", cp1252_echo)
+
+    cli_evolve._emit_json({"bad_char": "\ufffd", "plain": "ok"})
+
+    assert "\\ufffd" in captured["text"]
+    assert json.loads(captured["text"])["bad_char"] == "\ufffd"
+
+
 def test_evolve_loop_command_wires_options(tmp_path: Path, monkeypatch) -> None:
     captured = {}
 
@@ -100,30 +115,7 @@ def test_evolve_reject_marks_dismissed(tmp_path: Path) -> None:
     assert reloaded["pending_approvals"][0]["status"] == "rejected"
 
 
-def test_evolve_chat_interpret_only(tmp_path: Path) -> None:
-    runner = CliRunner()
-    result = runner.invoke(
-        evolve,
-        ["chat", "focus on hardening and ask me first", "--repo-root", str(tmp_path), "--interpret-only", "--json"],
-    )
-    assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
-    assert payload["action"] == "start"
-    assert payload["focus"] == "security"
-    assert payload["posture"] == "propose"
-
-
-def test_evolve_chat_status_reads_state(tmp_path: Path) -> None:
-    save_loop_state(tmp_path, EvolveLoopState(status="idle"))
-    runner = CliRunner()
-    result = runner.invoke(evolve, ["chat", "what are you working on", "--repo-root", str(tmp_path)])
-    assert result.exit_code == 0, result.output
-    assert "loop is" in result.output
-
-
-def test_evolve_chat_approve_with_nothing_pending(tmp_path: Path) -> None:
-    save_loop_state(tmp_path, EvolveLoopState(status="done"))
-    runner = CliRunner()
-    result = runner.invoke(evolve, ["chat", "approve that one", "--repo-root", str(tmp_path)])
-    assert result.exit_code == 0, result.output
-    assert "Nothing is waiting" in result.output
+def test_evolve_plain_language_chat_command_is_not_registered() -> None:
+    result = CliRunner().invoke(evolve, ["chat", "start evolving"])
+    assert result.exit_code != 0
+    assert "No such command 'chat'" in result.output

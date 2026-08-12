@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -24,6 +25,21 @@ DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 TASK_PROBLEMS_HEADING = "Task Problems"
 PROBLEMS_PREFIX = "plans/thomas/problems/"
 REQUIRED_FIELDS: tuple[str, ...] = ("task_id", "problem", "owner", "status", "updated_at", "summary")
+
+
+def _path_is_git_ignored(rel_path: str) -> bool:
+    """True when .gitignore excludes this path, so CI can never see it."""
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed binary, literal args
+            ["git", "check-ignore", "-q", "--", rel_path],
+            cwd=str(ROOT),
+            capture_output=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
 
 
 def _norm(value: str) -> str:
@@ -138,6 +154,16 @@ def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> list[str]:
 
         problem_abs = (ROOT / problem_path).resolve()
         if not problem_abs.exists():
+            # A problem record the repository deliberately refuses to track is
+            # not a missing record -- it is a record that must not be committed.
+            # .gitignore excludes plans/thomas/problems/* over a real incident
+            # (2026-05-19) where private content leaked through those files.
+            # This gate reads the filesystem, so it passed on a developer machine
+            # (file present) and failed in CI (checkout has no ignored files),
+            # and the only way to "fix" it was to force-add the very content the
+            # ignore exists to keep out. Ignored paths are skipped instead.
+            if _path_is_git_ignored(problem_path):
+                continue
             violations.append(f"task `{task_id}` problem file missing: {problem_path}")
         else:
             body = problem_abs.read_text(encoding="utf-8")

@@ -35,12 +35,12 @@
   "tags": [
     "official",
     "desktop",
-    "command_center",
+    "app",
     "workspace",
     "productivity",
     "automation"
   ],
-  "marketplace_type": "command_center",
+  "marketplace_type": "app",
   "category": "productivity",
   "categories": [
     "productivity",
@@ -50,6 +50,6 @@
     "life-manager-foundation"
   ],
   "left_nav_behavior": "workspace",
-  "default_nav_section": "command_centers",
+  "default_nav_section": "apps",
   "default_nav_order": 520
 }

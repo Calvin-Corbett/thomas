@@ -1,0 +1,6 @@
+[spend_governor]
+enabled = true
+ledger_path = "thomas_spend.jsonl"
+daily_usd_cap = 10.0
+total_usd_cap = 250.0
+per_iteration_usd_reserve = 0.25

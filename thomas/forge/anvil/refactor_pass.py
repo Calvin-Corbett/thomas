@@ -17,8 +17,11 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+import tomllib
+
+from .doppelganger import SUPERVISOR_OWNED_PATHS
 from .health_ledger import (
     build_review_queue,
     load_health_ledger,
@@ -36,6 +39,8 @@ HARD_LIMIT = 1500  # New hard limit -- files above this MUST be refactored
 SOFT_LIMIT = 800  # Soft limit -- files above this get flagged for review
 MAX_REFACTOR_TARGETS = 5  # Don't try to refactor more than 5 files per session
 REVIEW_MAX_AGE_HOURS = 168.0  # 1 week -- files reviewed within this are skipped
+REFACTOR_BLOCKED_PREFIXES = ("tests/", "scripts/", "thomas/forge/anvil/")
+PROTECTED_CONFIG_KEYS = ("policy_files", "guardrails_files", "enforcement_files", "enforcement_scripts")
 
 
 @dataclass
@@ -54,6 +59,7 @@ class RefactorPlan:
 
     targets: list[RefactorTarget] = field(default_factory=list)
     skipped_recently_reviewed: int = 0
+    skipped_ineligible: int = 0
     total_violations: int = 0
 
     @property
@@ -78,6 +84,62 @@ def detect_soft_violations(project_root: Path) -> list[dict[str, Any]]:
     return [f for f in all_files if SOFT_LIMIT < f["line_count"] <= HARD_LIMIT]
 
 
+def _normalize_refactor_path(path: Any) -> str:
+    return str(path or "").replace("\\", "/").lstrip("./")
+
+
+def _load_refactor_protected_paths(project_root: Path) -> set[str]:
+    protected = {_normalize_refactor_path(path) for path in SUPERVISOR_OWNED_PATHS}
+    config_path = project_root / "agent_safety.toml"
+    try:
+        payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return protected
+
+    protected_config = payload.get("protected")
+    if not isinstance(protected_config, dict):
+        return protected
+    for key in PROTECTED_CONFIG_KEYS:
+        rows = protected_config.get(key) or []
+        if isinstance(rows, list):
+            protected.update(_normalize_refactor_path(item) for item in rows if str(item).strip())
+    return protected
+
+
+def _is_refactor_eligible(path: Any, protected_paths: set[str]) -> bool:
+    rel = _normalize_refactor_path(path)
+    if not rel or rel in protected_paths:
+        return False
+    if any(item.endswith("/") and rel.startswith(item.rstrip("/") + "/") for item in protected_paths):
+        return False
+    return not any(rel == prefix.rstrip("/") or rel.startswith(prefix) for prefix in REFACTOR_BLOCKED_PREFIXES)
+
+
+def _append_refactor_target(
+    plan: RefactorPlan,
+    *,
+    path: Any,
+    line_count: int,
+    reason: str,
+    priority: int,
+    protected_paths: set[str],
+) -> None:
+    rel = _normalize_refactor_path(path)
+    if not _is_refactor_eligible(rel, protected_paths):
+        plan.skipped_ineligible += 1
+        return
+    if any(t.path == rel for t in plan.targets):
+        return
+    plan.targets.append(
+        RefactorTarget(
+            path=rel,
+            line_count=int(line_count),
+            reason=reason,
+            priority=priority,
+        )
+    )
+
+
 def build_refactor_plan(project_root: Path) -> RefactorPlan:
     """Build the prioritised refactor plan.
 
@@ -88,30 +150,31 @@ def build_refactor_plan(project_root: Path) -> RefactorPlan:
     """
     ledger = load_health_ledger(project_root)
     plan = RefactorPlan()
+    protected_paths = _load_refactor_protected_paths(project_root)
 
     # Priority 1: Hard limit violations
     oversized = detect_oversized_files(project_root)
     plan.total_violations = len(oversized)
     for f in oversized:
-        plan.targets.append(
-            RefactorTarget(
-                path=f["path"],
-                line_count=f["line_count"],
-                reason="oversized",
-                priority=0,
-            )
+        _append_refactor_target(
+            plan,
+            path=f["path"],
+            line_count=int(f["line_count"]),
+            reason="oversized",
+            priority=0,
+            protected_paths=protected_paths,
         )
 
     # Priority 2: Files marked "needs_work" in the ledger
     for path, rec in ledger.records.items():
-        if rec.status == "needs_work" and not any(t.path == path for t in plan.targets):
-            plan.targets.append(
-                RefactorTarget(
-                    path=path,
-                    line_count=rec.line_count,
-                    reason="needs_work",
-                    priority=1,
-                )
+        if rec.status == "needs_work":
+            _append_refactor_target(
+                plan,
+                path=path,
+                line_count=rec.line_count,
+                reason="needs_work",
+                priority=1,
+                protected_paths=protected_paths,
             )
 
     # Priority 3: Stale soft-limit violations (oldest reviewed first)
@@ -122,15 +185,14 @@ def build_refactor_plan(project_root: Path) -> RefactorPlan:
         min_lines=SOFT_LIMIT,
     )
     for item in review_queue:
-        if not any(t.path == item["path"] for t in plan.targets):
-            plan.targets.append(
-                RefactorTarget(
-                    path=item["path"],
-                    line_count=item["line_count"],
-                    reason="stale",
-                    priority=2,
-                )
-            )
+        _append_refactor_target(
+            plan,
+            path=item["path"],
+            line_count=int(item["line_count"]),
+            reason="stale",
+            priority=2,
+            protected_paths=protected_paths,
+        )
 
     # Sort by priority, then by line count descending (biggest first within tier)
     plan.targets.sort(key=lambda t: (t.priority, -t.line_count))
@@ -198,9 +260,10 @@ def build_refactor_prompt(target: RefactorTarget) -> str:
             "- If a check fails because of environment limits, report it instead of editing the guard.",
             "- Do NOT create *_part*.py or *.part*.py files.",
             "- Do NOT use exec() to load code from other files -- use normal imports.",
+            "- Use `diff.create` for targeted patches or `fs.write_file` for full-file rewrites.",
+            "- Shell/process tools are disabled in self-development; use Thomas file and diff tools.",
             "- Every except Exception: must have logger.exception() and a comment.",
-            "- Run `python -c \"import py_compile; py_compile.compile('{path}', doraise=True)\"` "
-            "on every file you modify.",
+            "- Run `python -m py_compile <modified-file>` on every Python file you modify.",
             "- End with a concise summary of what you changed and why.",
         ]
     )
@@ -234,6 +297,8 @@ handlers and missing logging -- those hide production bugs.
 RULES:
 - Work only in the current cwd (the green mirror).
 - Do not create new files unless extracting a module.
+- Use `diff.create` for targeted patches or `fs.write_file` for full-file rewrites.
+- Shell/process tools are disabled in self-development; use Thomas file and diff tools.
 - Run py_compile on every file you modify.
 - End with a summary of changes made.""".strip()
 
@@ -251,14 +316,16 @@ def run_refactor_pass(
     green_python: str = "",
     timeout_seconds: int = 1800,
     profile: str = "",
+    run_exec: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Execute the refactor pass. Returns results dict.
 
     This imports _run_exec from evolve to avoid duplicating subprocess logic.
     """
-    from .evolve import _run_exec
+    from .evolve import _build_green_chat_command, _run_exec
 
     python_bin = green_python or sys.executable
+    execute = run_exec or _run_exec
     plan = build_refactor_plan(project_root)
 
     results: dict[str, Any] = {
@@ -266,6 +333,7 @@ def run_refactor_pass(
         "targets_found": len(plan.targets),
         "total_violations": plan.total_violations,
         "skipped": plan.skipped_recently_reviewed,
+        "skipped_ineligible": plan.skipped_ineligible,
         "pass_results": [],
         "health_reviews": [],
     }
@@ -286,12 +354,9 @@ def run_refactor_pass(
         if target.reason != "oversized":
             continue
         prompt = build_refactor_prompt(target)
-        command = [python_bin, "-m", "thomas", "chat", "--autonomy-level", "4"]
-        if profile:
-            command.extend(["-m", profile])
-        command.append(prompt)
+        command = _build_green_chat_command(python_bin, profile, prompt)
 
-        result = _run_exec(
+        result = execute(
             command,
             cwd=paths.green_root,
             env=green_env,
@@ -306,12 +371,9 @@ def run_refactor_pass(
     if review_targets:
         files_info = [{"path": t.path, "line_count": t.line_count} for t in review_targets]
         prompt = build_health_review_prompt(files_info)
-        command = [python_bin, "-m", "thomas", "chat", "--autonomy-level", "4"]
-        if profile:
-            command.extend(["-m", profile])
-        command.append(prompt)
+        command = _build_green_chat_command(python_bin, profile, prompt)
 
-        result = _run_exec(
+        result = execute(
             command,
             cwd=paths.green_root,
             env=green_env,

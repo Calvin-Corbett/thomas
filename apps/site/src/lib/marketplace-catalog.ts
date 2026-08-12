@@ -78,11 +78,15 @@ export type MarketplaceCatalogPayload = {
   plugins: MarketplaceCatalogRow[];
 };
 
-const MARKETPLACE_TYPES = new Set(["command_center", "plugin", "dependency", "integration"]);
+const MARKETPLACE_TYPES = new Set(["app", "plugin", "dependency", "integration"]);
+// "command_center" renamed to "app" (2026-06-11); legacy values normalize on read.
+const LEGACY_TYPE_ALIASES: Record<string, string> = { command_center: "app" };
 const LEFT_NAV_BEHAVIORS = new Set(["none", "workspace"]);
-const DEFAULT_NAV_SECTIONS = new Set(["command_centers", "installed"]);
+const DEFAULT_NAV_SECTIONS = new Set(["apps", "installed"]);
+const LEGACY_NAV_ALIASES: Record<string, string> = { command_centers: "apps" };
 const TYPE_LABELS: Record<string, string> = {
-  command_center: "Command Center",
+  app: "App",
+  command_center: "App",
   plugin: "Plugin",
   dependency: "Dependency",
   integration: "Integration",
@@ -145,15 +149,16 @@ function ensureTag(tags: string[], value: unknown) {
 }
 
 function inferMarketplaceType(raw: JsonRecord, target: string, mode: string, hosted: HostedPluginRecord | null): string {
-  const explicit = safeString(raw.marketplace_type || hosted?.manifest.marketplace_type).trim().toLowerCase();
+  let explicit = safeString(raw.marketplace_type || hosted?.manifest.marketplace_type).trim().toLowerCase();
+  explicit = LEGACY_TYPE_ALIASES[explicit] ?? explicit;
   if (MARKETPLACE_TYPES.has(explicit)) {
     return explicit;
   }
   if (hosted && safeString(hosted.manifest.kind).toLowerCase() === "desktop_plugin" && mode) {
-    return "command_center";
+    return "app";
   }
   if (target === "desktop" && mode) {
-    return "command_center";
+    return "app";
   }
   return "plugin";
 }
@@ -163,15 +168,16 @@ function inferLeftNavBehavior(raw: JsonRecord, marketplaceType: string, hosted: 
   if (LEFT_NAV_BEHAVIORS.has(explicit)) {
     return explicit;
   }
-  return marketplaceType === "command_center" ? "workspace" : "none";
+  return marketplaceType === "app" ? "workspace" : "none";
 }
 
 function inferDefaultNavSection(raw: JsonRecord, marketplaceType: string, leftNavBehavior: string, hosted: HostedPluginRecord | null): string {
-  const explicit = safeString(raw.default_nav_section || hosted?.manifest.default_nav_section).trim().toLowerCase();
+  let explicit = safeString(raw.default_nav_section || hosted?.manifest.default_nav_section).trim().toLowerCase();
+  explicit = LEGACY_NAV_ALIASES[explicit] ?? explicit;
   if (DEFAULT_NAV_SECTIONS.has(explicit)) {
     return explicit;
   }
-  return marketplaceType === "command_center" || leftNavBehavior === "workspace" ? "command_centers" : "installed";
+  return marketplaceType === "app" || leftNavBehavior === "workspace" ? "apps" : "installed";
 }
 
 function catalogStoreUrl(): string {
@@ -368,7 +374,7 @@ function normalizeCatalogRow(
     marketplace_type_label: TYPE_LABELS[marketplaceType] || "Plugin",
     left_nav_behavior: leftNavBehavior,
     default_nav_section: defaultNavSection,
-    default_nav_order: safeInt(rawItem.default_nav_order || hostedManifest.default_nav_order, marketplaceType === "command_center" ? 400 : 900),
+    default_nav_order: safeInt(rawItem.default_nav_order || hostedManifest.default_nav_order, marketplaceType === "app" ? 400 : 900),
     entrypoint: safeString(rawItem.entrypoint || hostedManifest.entrypoint).trim() || "hooks.py",
     capabilities: stringList(rawItem.capabilities || hostedManifest.capabilities),
     kind: safeString(rawItem.kind || hostedManifest.kind).trim() || (hosted ? "desktop_plugin" : "extension_pack"),
@@ -432,8 +438,8 @@ export function buildMarketplaceCatalog(channel = "stable"): MarketplaceCatalogP
     const installWeight = Number(Boolean(right.installable)) - Number(Boolean(left.installable));
     if (installWeight) return installWeight;
     const typeWeight =
-      ["command_center", "plugin", "integration", "dependency"].indexOf(left.marketplace_type) -
-      ["command_center", "plugin", "integration", "dependency"].indexOf(right.marketplace_type);
+      ["app", "plugin", "integration", "dependency"].indexOf(left.marketplace_type) -
+      ["app", "plugin", "integration", "dependency"].indexOf(right.marketplace_type);
     if (typeWeight) return typeWeight;
     return left.display_name.localeCompare(right.display_name);
   });

@@ -1,4 +1,9 @@
-"""Code search tools: regex search, definition/reference finder, project structure.
+"""Sandboxed source-tree search tools for live code files.
+
+Registers the ``code.*`` tools used by the server, CLI, and agent loop for
+regex search, definition/reference lookup, and project-structure inspection.
+This is intentionally separate from ``thomas.tools.search_code``, which exposes
+the indexed ``rag.search`` adapter.
 
 Uses ripgrep (rg) subprocess when available for speed and .gitignore awareness,
 with a pure Python fallback for environments without rg.
@@ -15,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.semantic_search import register_semantic_search_tool
 
 _SKIP_DIRS = {
     ".git",
@@ -543,3 +549,6 @@ def register_code_search_tools(registry: Any, sandbox_root: Path) -> None:
     registry.register(FindDefinitionTool(sandbox_root))
     registry.register(FindReferencesTool(sandbox_root))
     registry.register(ProjectStructureTool(sandbox_root))
+    # Semantic (concept) search over the RAG index — lives alongside the lexical
+    # code.* tools so the agent can retrieve code by meaning, not just keywords.
+    register_semantic_search_tool(registry)

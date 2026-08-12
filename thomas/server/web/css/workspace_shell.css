@@ -1,0 +1,122 @@
+/* Design tokens (the --c-* palette and the five theme blocks) live in
+   css/tokens.css - the single source. Link tokens.css BEFORE this file. */
+
+.thomas-eyes-mark {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px; flex: 0 0 auto; border: 0; border-radius: 9px;
+  background: var(--c-accent); box-shadow: 0 0 18px var(--c-accent-soft);
+}
+.thomas-eyes-mark > i, .thomas-eyes-mark > span {
+  width: 5px; height: 6px; display: block; border-radius: 1px; background: var(--c-accent-ink);
+}
+
+/* The five modernized classic-host routes keep their live workspace runtime,
+   but the old host's fixed blue backdrop must never override Chat's theme. */
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) {
+  --module-accent: var(--c-accent-line);
+  --module-accent-soft: var(--c-accent-soft);
+  --module-panel-tint: var(--c-accent-soft);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::before {
+  background: linear-gradient(var(--c-border) 1px, transparent 1px),
+              linear-gradient(90deg, var(--c-border) 1px, transparent 1px);
+  background-size: 52px 52px;
+  opacity: .16;
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::after {
+  background: radial-gradient(circle at 18% 14%, var(--c-accent-soft), transparent 42%),
+              radial-gradient(circle at 84% 72%, var(--c-accent-soft), transparent 44%);
+  opacity: .42;
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) .module-header-copy h2 {
+  color: var(--c-text);
+  font-family: var(--font-head);
+  text-shadow: none;
+}
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) :is(.module-header-copy p, .module-meta-text) { color: var(--c-muted); }
+.module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) .module-meta-pill {
+  border-color: var(--c-accent-line);
+  background: var(--c-surface);
+  color: var(--c-accent);
+}
+html.is-embedded .thomas-standalone-only { display: none !important; }
+html.is-embedded, html.is-embedded body, html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+/* color-scheme is NOT forced here. The embedded document's scheme must equal
+   the embedding iframe element's scheme or Chromium paints the transparent
+   canvas opaque (white on light-pref machines). tokens.css sets the per-theme
+   scheme on :root and workspace_shell.js applyTheme() pins it inline, so both
+   sides of the frame boundary always agree on the active theme's scheme. */
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+) { background: transparent; }
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::before,
+html.tcw-embed .module-workspace:is(
+  [data-mode="app_builder"], [data-mode="channels"],
+  [data-mode="token_economy"], [data-mode="marketplace"]
+)::after { display: none; }
+
+/* Honest state for a workspace mode the runtime cannot mount (unknown mode, or
+   a plugin surface that never registered). Shown by workspace_shell.js while a
+   plugin mode is still loading and after the poll deadline — an embedded
+   workspace must never render as a silent black panel. */
+.workspace-shell-notice {
+  position: fixed; inset: 0; z-index: 400;
+  display: none; align-items: center; justify-content: center;
+  padding: 24px; pointer-events: none;
+}
+.workspace-shell-notice.is-visible { display: flex; }
+.workspace-shell-notice-card {
+  max-width: 420px; text-align: center; pointer-events: auto;
+  padding: 30px 34px; border-radius: var(--r-card, 14px);
+  border: 1px solid var(--c-border, rgba(255, 255, 255, .12));
+  background: color-mix(in srgb, var(--c-surface, #14161d) 78%, transparent);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  color: var(--c-text, #e8e9f1); font-family: var(--font-sans, "Manrope", system-ui, sans-serif);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+}
+.workspace-shell-notice-glyph {
+  width: 38px; height: 38px; margin: 0 auto 14px; border-radius: 10px;
+  background: var(--c-accent-soft, rgba(139, 140, 255, .18));
+  border: 1px solid var(--c-accent-line, rgba(139, 140, 255, .4));
+}
+.workspace-shell-notice[data-phase="loading"] .workspace-shell-notice-glyph {
+  animation: workspace-shell-notice-pulse 1.2s ease-in-out infinite;
+}
+.workspace-shell-notice-title {
+  margin: 0 0 8px; font-size: 16.5px; font-weight: 700;
+  font-family: var(--font-head, "Manrope", system-ui, sans-serif);
+}
+.workspace-shell-notice-body {
+  margin: 0; font-size: 13px; line-height: 1.55; color: var(--c-muted, #9aa0b4);
+}
+@keyframes workspace-shell-notice-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .55; transform: scale(.92); }
+}
+
+/* The global reduced-motion guard lives in tokens.css (linked first everywhere). */

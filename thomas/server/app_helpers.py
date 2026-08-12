@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.runtime_skill_tools import register_runtime_skill_tools
 from thomas.core.config import AppConfig, load_config
 from thomas.server.app_keys import APP_CONFIG
 from thomas.server.tool_extensions import register_all_optional_tools
@@ -14,9 +15,12 @@ from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
 from thomas.tools.filesystem import register_filesystem_tools
 from thomas.tools.git import register_git_tools
+from thomas.tools.image_generation import register_image_generation_tools
 from thomas.tools.registry import ToolRegistry
+from thomas.tools.resilient_web_search import get_resilient_web_search_tool
 from thomas.tools.shell import register_shell_tools
 from thomas.tools.ssh import register_ssh_tools
+from thomas.tools.web_search import get_web_fetch_tool
 
 if TYPE_CHECKING:
     from aiohttp import web
@@ -107,7 +111,12 @@ def _web_dir() -> Path:
 def _build_tools(config: AppConfig) -> ToolRegistry:
     registry = ToolRegistry()
     sandbox = config.tools.sandbox_path
-    register_filesystem_tools(registry, sandbox, config.tools.max_file_size)
+    register_filesystem_tools(
+        registry,
+        sandbox,
+        config.tools.max_file_size,
+        file_access=getattr(config.tools, "file_access", 1),
+    )
     if config.tools.allow_shell:
         register_shell_tools(
             registry,
@@ -137,6 +146,31 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
         register_browser_tools(registry)
     except (ImportError, ModuleNotFoundError):
         pass
+
+    # Web research is a core chat capability, not an optional domain module.
+    # The implementations already fail with actionable ToolResults when an
+    # upstream provider is unavailable, so always expose both tools to chat and
+    # worker runtimes instead of leaving the existing implementation orphaned.
+    registry.register(get_resilient_web_search_tool())
+    registry.register(get_web_fetch_tool())
+
+    # Image generation is a first-class capability, like web research: always
+    # registered, honest call-time error when no image-capable key exists.
+    # The secret reader surfaces keys saved via Settings > Models (SecretStore);
+    # built lazily so a missing/broken store never blocks tool registration.
+    def _image_secret_reader(profile: str) -> str | None:
+        from thomas.server.app_core import _secret_store_root
+        from thomas.server.secrets import SecretStore
+
+        return SecretStore(_secret_store_root(config)).get(profile)
+
+    register_image_generation_tools(
+        registry,
+        config,
+        Path(sandbox),
+        secret_reader=_image_secret_reader,
+    )
+    register_runtime_skill_tools(registry, config, Path(sandbox))
 
     # Register all optional domain module tools
     register_all_optional_tools(registry)

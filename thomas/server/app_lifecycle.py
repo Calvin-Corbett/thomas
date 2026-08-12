@@ -16,7 +16,15 @@ import time as _time
 from typing import Any
 
 from thomas.core.config import AppConfig
-from thomas.server.app_keys import APP_CRASH_COUNT, APP_DIAGNOSTICS, APP_RESTART_REQUESTED, APP_SHUTDOWN_EVENT
+from thomas.server.app_keys import (
+    APP_BOOT_DURATION,
+    APP_CRASH_COUNT,
+    APP_DELIVERABLE_PREVIEW_SERVICE,
+    APP_DIAGNOSTICS,
+    APP_RESTART_REQUESTED,
+    APP_SELF_BASE_URL,
+    APP_SHUTDOWN_EVENT,
+)
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +33,30 @@ class _ServerRestartRequested(Exception):
     """Sentinel: supervisor loop should restart the server cleanly."""
 
     pass
+
+
+async def _log_landing_heartbeat() -> None:
+    """Read the landing heartbeat once, after the port is open, and log it.
+
+    This is the whole trigger. It is deliberately NOT a scheduler: people walk
+    away from machines and hard-power them off, so anything that fires on a
+    clock is exactly the thing that gets missed. Starting Thomas is the
+    trigger, because starting Thomas is what actually happens.
+
+    The reading itself is blocking git work, so it goes to a thread -- the
+    event loop stays free and boot is never held up waiting for it.
+    """
+    try:
+        from thomas.core.landing_health import collect_landing_health
+    except ImportError:
+        log.debug("Landing heartbeat unavailable: thomas.core.landing_health did not import")
+        return
+
+    # collect_landing_health() is contractually incapable of raising: every
+    # failure comes back as severity 'unknown' with a sentence saying so.
+    health = await asyncio.to_thread(collect_landing_health)
+    for line in health.log_lines():
+        log.info(line)
 
 
 async def serve_async(
@@ -40,14 +72,25 @@ async def serve_async(
 
     app = create_app(config)
     app[APP_CRASH_COUNT] = crash_count
+    app[APP_SELF_BASE_URL] = f"http://{host}:{port}"
 
     # Shutdown event -- set by restart endpoint or signal handler
     shutdown_event = asyncio.Event()
     app[APP_SHUTDOWN_EVENT] = shutdown_event
     app[APP_RESTART_REQUESTED] = False
 
-    runner = web.AppRunner(app)
+    # Headroom above aiohttp's 8190-byte default so an oversized Cookie header
+    # is a nuisance rather than a wall. Deliverable previews leave one cookie
+    # each in the 127.0.0.1 jar, and cookies carry no port, so they arrive here
+    # too; past the default this server rejects every request with a 400 BEFORE
+    # any handler or middleware runs, and the drain that clears them can never
+    # execute. Parsing the request is what makes recovery possible at all.
+    # This is a ceiling for a local, loopback-bound UI, not an invitation.
+    runner = web.AppRunner(app, max_field_size=32768)
     await runner.setup()
+    preview_service = app.get(APP_DELIVERABLE_PREVIEW_SERVICE)
+    if preview_service is not None:
+        preview_service.configure(main_origin=f"http://{host}:{port}")
 
     # ── Port binding with retry (handles TIME_WAIT from previous instance) ──
     max_bind_attempts = 5
@@ -64,6 +107,8 @@ async def serve_async(
             if attempt == max_bind_attempts:
                 print(f"[thomas] Port {port} still busy after {max_bind_attempts} attempts. Giving up.")
                 await runner.cleanup()
+                if preview_service is not None:
+                    await preview_service.stop()
                 raise
             delay = attempt * 1.0
             print(
@@ -71,9 +116,32 @@ async def serve_async(
             )
             await asyncio.sleep(delay)
 
+    # Keep the dedicated canvas LLM connection warm so design/canvas requests never
+    # cold-start (an idle gpt-5.5 OAuth stream stalls on its next first token).
+    with contextlib.suppress(Exception):
+        from thomas.server.chat_delegation_canvas import start_canvas_keepalive
+
+        start_canvas_keepalive()
+
+    # Close orphaned delegated executions (workers killed by a restart leave
+    # records stuck "executing" forever) at startup and every few minutes.
+    stale_sweeper: asyncio.Task[None] | None = None
+    with contextlib.suppress(Exception):
+        from thomas.server.stale_execution_sweep import run_stale_execution_sweeper
+
+        stale_sweeper = asyncio.create_task(run_stale_execution_sweeper())
+
+    # Tell the owner, in plain English, whether their work is safely landed or
+    # piling up. Scheduled here rather than run here: create_task only queues
+    # it, so the port is already open and the startup summary still prints
+    # first. It cannot delay boot.
+    landing_heartbeat: asyncio.Task[None] = asyncio.create_task(_log_landing_heartbeat())
+
     # ── Startup summary ──
     diag = app.get(APP_DIAGNOSTICS, {})
-    boot_dur = app.get("APP_BOOT_DURATION", 0)
+    # The plain string "APP_BOOT_DURATION" never matched the web.AppKey the value
+    # is stored under, so this always fell back to 0 and every boot claimed 0.0s.
+    boot_dur = app.get(APP_BOOT_DURATION, 0.0)
     ok_features = [k for k, v in diag.items() if v]
     bad_features = [k for k, v in diag.items() if not v]
     print(f"[thomas] Server booted in {boot_dur:.1f}s")
@@ -90,9 +158,140 @@ async def serve_async(
         while not shutdown_event.is_set():
             await asyncio.sleep(1)
     finally:
+        if stale_sweeper is not None:
+            stale_sweeper.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await stale_sweeper
+        landing_heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await landing_heartbeat
         await runner.cleanup()
+        if preview_service is not None:
+            await preview_service.stop()
         if app.get(APP_RESTART_REQUESTED):
             raise _ServerRestartRequested()
+
+
+def _explicit_cmdline_port(cmdline: str) -> int | None:
+    """Extract an explicit --port value from a command line, if present."""
+    import re
+
+    m = re.search(r"--port[=\s]+(\d{1,5})", str(cmdline or ""))
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except (ValueError, TypeError):
+        return None
+
+
+def _pids_listening_on_port(target_port: int) -> set[int] | None:
+    """PIDs bound to ``target_port`` in LISTEN state; None if unknowable."""
+    try:
+        if os.name == "nt":
+            probe = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    f"Get-NetTCPConnection -State Listen -LocalPort {int(target_port)} "
+                    "-ErrorAction SilentlyContinue | "
+                    "Select-Object -ExpandProperty OwningProcess",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5.0,
+                check=False,
+            )
+            if probe.returncode != 0:
+                return None
+            return {int(line) for line in probe.stdout.split() if line.strip().isdigit()}
+        probe = subprocess.run(
+            ["lsof", "-t", f"-iTCP:{int(target_port)}", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5.0,
+            check=False,
+        )
+        # lsof exits 1 when nothing matches; that is a definitive empty answer.
+        if probe.returncode not in (0, 1):
+            return None
+        return {int(line) for line in probe.stdout.split() if line.strip().isdigit()}
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        log.debug("Port listener probe unavailable: %s", exc)
+        return None
+
+
+def _matches_thomas_server_cmdline(raw: str) -> bool:
+    text = str(raw or "").strip().lower()
+    if not text:
+        return False
+    return (" -m thomas serve" in text) or (" -m thomas.server" in text)
+
+
+def _process_family(pid_to_ppid: dict[int, int | None], current_pid: int) -> set[int]:
+    """Our own process lineage: ancestors (bounded walk) plus direct children.
+
+    On Windows the venv ``Scripts/python.exe`` is a *launcher* that runs the
+    real interpreter as a child with the same command line. The sweep must
+    never treat our own launcher (or any other ancestor/child) as a duplicate
+    server: killing the launcher tears the new server down with it via the
+    launcher's job object — the server self-destructs on every venv launch.
+    """
+    family = {current_pid}
+    cursor: int | None = current_pid
+    for _ in range(32):  # bounded ancestor walk; cycles are possible with PID reuse
+        cursor = pid_to_ppid.get(cursor) if cursor is not None else None
+        if cursor is None or cursor in family or cursor <= 0:
+            break
+        family.add(cursor)
+    for pid, ppid in pid_to_ppid.items():
+        if ppid == current_pid:
+            family.add(pid)
+    return family
+
+
+def _filter_duplicate_server_candidates(
+    rows: list[tuple[int, int | None, str, str]], current_pid: int
+) -> list[tuple[int, str]]:
+    """Reduce a full process listing to candidate duplicate Thomas servers."""
+    pid_to_ppid = {pid: ppid for pid, ppid, _name, _cmd in rows}
+    family = _process_family(pid_to_ppid, current_pid)
+
+    seen: set[int] = set()
+    matches: list[tuple[int, str]] = []
+    for pid, _ppid, name, cmdline in rows:
+        if pid <= 0 or pid in family or pid in seen:
+            continue
+        lowered = str(name or "").lower()
+        if lowered and not lowered.startswith("python"):
+            continue
+        if not _matches_thomas_server_cmdline(cmdline):
+            continue
+        seen.add(pid)
+        matches.append((pid, cmdline))
+    return matches
+
+
+def _is_conflicting_duplicate(pid: int, cmdline: str, port: int, listeners: set[int] | None) -> bool:
+    """Decide whether a name-matched Thomas server process conflicts with us.
+
+    A duplicate is lethal only with positive evidence it holds OUR port:
+    an explicit matching --port flag, or an OS-level listen on the port.
+    Name match alone never kills — other installs/worktrees may run their
+    own servers on other ports.
+    """
+    explicit_port = _explicit_cmdline_port(cmdline)
+    if explicit_port is not None and explicit_port != port:
+        return False  # definitively a different server
+    if explicit_port == port:
+        return True
+    return listeners is not None and pid in listeners
 
 
 def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
@@ -133,13 +332,8 @@ def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
     def _list_duplicate_thomas_server_processes() -> list[tuple[int, str]]:
         """Best-effort process sweep for legacy/lockless server processes."""
         current_pid = os.getpid()
-        matches: list[tuple[int, str]] = []
-
-        def _match_cmdline(raw: str) -> bool:
-            text = str(raw or "").strip().lower()
-            if not text:
-                return False
-            return (" -m thomas serve" in text) or (" -m thomas.server" in text)
+        # (pid, ppid, name, cmdline) for every visible process.
+        rows: list[tuple[int, int | None, str, str]] = []
 
         try:
             if os.name == "nt":
@@ -149,7 +343,9 @@ def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
                         "-NoProfile",
                         "-NonInteractive",
                         "-Command",
-                        "Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress",
+                        "Get-CimInstance Win32_Process | "
+                        "Select-Object ProcessId,ParentProcessId,Name,CommandLine | "
+                        "ConvertTo-Json -Compress",
                     ],
                     capture_output=True,
                     text=True,
@@ -160,25 +356,22 @@ def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
                 )
                 if probe.returncode == 0 and probe.stdout.strip():
                     data = json.loads(probe.stdout)
-                    rows = data if isinstance(data, list) else [data]
-                    for row in rows:
+                    raw_rows = data if isinstance(data, list) else [data]
+                    for row in raw_rows:
                         if not isinstance(row, dict):
                             continue
                         try:
                             pid = int(row.get("ProcessId"))
                         except (ValueError, TypeError):
                             continue
-                        if pid <= 0 or pid == current_pid:
-                            continue
-                        name = str(row.get("Name") or "").lower()
-                        if name and not name.startswith("python"):
-                            continue
-                        cmdline = str(row.get("CommandLine") or "")
-                        if _match_cmdline(cmdline):
-                            matches.append((pid, cmdline))
+                        try:
+                            ppid = int(row.get("ParentProcessId"))
+                        except (ValueError, TypeError):
+                            ppid = None
+                        rows.append((pid, ppid, str(row.get("Name") or ""), str(row.get("CommandLine") or "")))
             else:
                 probe = subprocess.run(
-                    ["ps", "-eo", "pid=,args="],
+                    ["ps", "-eo", "pid=,ppid=,args="],
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
@@ -188,33 +381,21 @@ def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
                 )
                 if probe.returncode == 0:
                     for raw in (probe.stdout or "").splitlines():
-                        line = raw.strip()
-                        if not line:
-                            continue
-                        parts = line.split(maxsplit=1)
-                        if not parts:
+                        parts = raw.strip().split(maxsplit=2)
+                        if len(parts) < 2:
                             continue
                         try:
                             pid = int(parts[0])
+                            ppid = int(parts[1])
                         except (ValueError, TypeError):
                             continue
-                        if pid <= 0 or pid == current_pid:
-                            continue
-                        cmdline = parts[1] if len(parts) > 1 else ""
-                        if _match_cmdline(cmdline):
-                            matches.append((pid, cmdline))
+                        cmdline = parts[2] if len(parts) > 2 else ""
+                        rows.append((pid, ppid, "", cmdline))
         except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
             log.debug("Duplicate process sweep unavailable: %s", exc)
+            return []
 
-        # Deduplicate while preserving order.
-        seen: set[int] = set()
-        unique: list[tuple[int, str]] = []
-        for pid, cmd in matches:
-            if pid in seen:
-                continue
-            seen.add(pid)
-            unique.append((pid, cmd))
-        return unique
+        return _filter_duplicate_server_candidates(rows, current_pid)
 
     lock_dir = pathlib.Path(config.memory.root_path) / ".thomas"
     lock_dir.mkdir(parents=True, exist_ok=True)
@@ -239,10 +420,16 @@ def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
     if lock_pid_to_kill is not None:
         _terminate_pid(lock_pid_to_kill, why="serve.lock owner", known_port=lock_port_to_kill)
 
-    # Extra safeguard: terminate other Thomas server entrypoints, including
-    # legacy `python -m thomas.server` processes that may have no lock file.
+    # Extra safeguard: terminate other Thomas server entrypoints that actually
+    # conflict with THIS launch. A name match alone is not a conflict — other
+    # installs/worktrees may legitimately run their own servers on other ports
+    # — so only kill processes listening on our port or explicitly configured
+    # for it via --port.
+    listeners = _pids_listening_on_port(port)
     for pid, cmdline in _list_duplicate_thomas_server_processes():
-        _terminate_pid(pid, why="duplicate thomas server process", known_port="?")
+        if not _is_conflicting_duplicate(pid, cmdline, port, listeners):
+            continue
+        _terminate_pid(pid, why="duplicate thomas server process", known_port=port)
         log.debug("Stopped duplicate Thomas server PID %s (%s)", pid, cmdline)
 
     # Write our lock

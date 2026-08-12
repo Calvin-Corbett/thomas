@@ -23,13 +23,15 @@ def _all_runtime_js() -> str:
     return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
 
 
-def test_index_has_evolution_nav_and_workspace() -> None:
-    html = _read(WEB / "index.html")
-    assert 'id="navEvolutionBtn"' in html
-    assert 'data-nav-mode="evolution"' in html
-    assert "> Evolution </button>" in html
-    assert 'id="evolutionWorkspace"' in html
-    assert 'class="evolution-workspace hidden"' in html
+def test_chat_shell_has_unified_code_mode_and_workspace() -> None:
+    html = _read(WEB / "chat.html")
+    assert 'data-thomas-mode="code"' in html
+    assert 'id="tc-mode-surface"' in html
+    assert "/static/js/unified_mode_shell.js" in html
+    assert "/static/js/unified_code_mode.js" in html
+    assert "/static/css/unified_code_mode.css" in html
+    assert "/static/css/unified_code_activity.css" in html
+    assert "/static/css/unified_code_results.css" in html
 
 
 def test_dispatcher_treats_evolution_as_first_class_mode() -> None:
@@ -68,20 +70,26 @@ def test_dashboard_runtime_is_registered_in_loader() -> None:
 
 
 def test_evolution_css_present() -> None:
-    css = _read(WEB / "css" / "evolution.css")
-    assert ".evolution-workspace {" in css
-    assert ".evolution-status-pill.is-running {" in css
-    assert ".evo-chip.risk-high {" in css
+    css = "\n".join(
+        _read(WEB / "css" / name)
+        for name in (
+            "unified_code_mode.css",
+            "unified_code_activity.css",
+            "unified_code_results.css",
+        )
+    )
+    assert ".tc-code-panel {" in css
+    assert ".tc-code-technical.is-error > i" in css
+    assert ".tc-code-technical-log {" in css
+    assert ".tc-code-approval {" in css
 
 
-def test_dashboard_has_conversational_command_bar() -> None:
-    text = _all_runtime_js()
-    assert 'id="evoChatForm"' in text
-    assert "function evolutionChatSend(" in text
-    assert "function evolutionChatAppend(" in text
-    assert "'/api/evolve/loop/chat'" in text
-    css = _read(WEB / "css" / "evolution.css")
-    assert ".evo-chat-you {" in css
+def test_unified_code_mode_has_conversational_command_bar() -> None:
+    text = _read(WEB / "js" / "unified_code_mode.js")
+    assert "modes().registerAdapter('code'" in text
+    assert 'id="tc-code-steer-form"' in text
+    assert "'/api/evolve/agent/send'" in text
+    assert "new EventSource(lifecycle().streamUrl(state))" in text
 
 
 def test_dashboard_unwraps_fetchjsonsafe_envelope() -> None:

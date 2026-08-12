@@ -92,6 +92,8 @@ plans/thomas/problems/*
 !plans/thomas/problems/audit-24h-backstop/**
 !plans/thomas/problems/ci-recovery-2026-05-20/
 !plans/thomas/problems/ci-recovery-2026-05-20/**
+!plans/thomas/problems/THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718/
+!plans/thomas/problems/THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718/**
 # Canonical task problem records (reviewed public-safe; no private content).
 !plans/thomas/problems/runtime-protection-fix-2026-05-27/
 !plans/thomas/problems/runtime-protection-fix-2026-05-27/**
@@ -195,3 +197,17 @@ docs/internal/
 .tmp_*
 thomas_vs_*.json
 thomas_vs_*.docx
+
+# Per-user library captures — never tracked (chat/test-derived data, was leaking PII)
+/library/catalog.json
+/library/INDEX.md
+/library/entries/*/
+
+# Worktree ledger snapshot (machine-specific paths; regenerated live by worktree_ledger.py)
+.thomas/WORKTREES.md
+.thomas/worktrees.json
+
+# Local runtime databases (events/meta/notifications). Written by a running
+# Thomas and regenerated on demand -- not source. Left untracked they show up as
+# working-tree dirt every session, which makes "is this repo clean?" ambiguous.
+data/

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from thomas.plugins.p097_plugin_package_bootstrap import (
     PluginBootstrapRequest,
     bootstrap_plugin_package,
 )
+from thomas.plugins.runtime import clear_cache, get_enabled_plugin_instances
 
 
 def test_bootstrap_plugin_package_creates_files(tmp_path: Path) -> None:
@@ -99,9 +101,57 @@ def test_bootstrap_plugin_package_manifest_contents(tmp_path: Path) -> None:
     manifest = json.loads(plugin_json_path.read_text(encoding="utf-8"))
     assert manifest["name"] == "my_plugin"
     assert manifest["version"] == "0.1.0"
-    assert manifest["entrypoint"] == "my_plugin.plugin:register"
+    assert manifest["entrypoint"] == "my_plugin.plugin:get_plugin"
     assert manifest["runtime"] == "python"
-    assert manifest["capabilities"] == []
+    assert manifest["capabilities"] == ["custom_assistant"]
+
+
+def test_custom_assistant_create_install_use_and_share_bundle(tmp_path: Path) -> None:
+    knowledge = tmp_path / "handbook.md"
+    knowledge.write_text("Launch phrase: BLUE-CEDAR-936. Keep releases owner-controlled.", encoding="utf-8")
+    install_root = tmp_path / "installed"
+    result = bootstrap_plugin_package(
+        PluginBootstrapRequest(
+            plugin_name="launch_guide",
+            destination_dir=tmp_path,
+            description="Owner launch guide",
+            assistant_instructions="Use only the attached owner launch handbook.",
+            conversation_starters=("Summarize the launch checklist.",),
+            knowledge_files=(knowledge,),
+            allowed_tools=("files.read",),
+            allowed_apps=("google.drive",),
+            allowed_apis=("releases.status",),
+            create_share_bundle=True,
+            install_after_bootstrap=True,
+            install_root=install_root,
+        )
+    )
+
+    assert result.share_bundle_file is not None
+    assert result.share_bundle_sha256
+    with zipfile.ZipFile(result.share_bundle_file) as archive:
+        names = set(archive.namelist())
+    assert "launch_guide/manifest.json" in names
+    assert "launch_guide/knowledge/handbook.md" in names
+
+    rich = json.loads((Path(result.package_dir) / "manifest.json").read_text(encoding="utf-8"))
+    assert rich["assistant"]["conversation_starters"] == ["Summarize the launch checklist."]
+    assert rich["assistant"]["knowledge_files"] == ["knowledge/handbook.md"]
+    assert rich["permissions"] == {
+        "tools": ["files.read"],
+        "apps": ["google.drive"],
+        "apis": ["releases.status"],
+    }
+
+    clear_cache()
+    instances = get_enabled_plugin_instances(install_root)
+    assert len(instances) == 1
+    used = instances[0].use("What is the phrase?", tool_name="files.read", knowledge_query="BLUE-CEDAR-936")
+    assert used["plugin_id"] == "launch_guide"
+    assert used["knowledge"][0]["file"] == "knowledge/handbook.md"
+    assert "BLUE-CEDAR-936" in used["knowledge"][0]["excerpt"]
+    with pytest.raises(PermissionError, match="not allowed"):
+        instances[0].use("Send it", tool_name="email.send")
 
 
 def test_bootstrap_plugin_package_skip_manifest(tmp_path: Path) -> None:

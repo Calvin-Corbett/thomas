@@ -20,6 +20,14 @@ from thomas.server.app import create_app
 from thomas.server.desktop_plugins import build_plugin_install_deep_link
 
 ROOT = Path(__file__).resolve().parent.parent
+ACTIVE_TEST_PLUGIN_ID = "paper-trading"
+RETIRED_MARKETPLACE_IDS = {
+    "life-manager",
+    "life-manager-foundation",
+    "brownies",
+    "smart-home",
+    "telegram-channel",
+}
 
 
 def _read_text(relative_path: str) -> str:
@@ -176,6 +184,14 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         )
         return create_app(cfg)
 
+    async def _assert_retired_response(self, resp, plugin_id: str) -> dict:
+        self.assertEqual(resp.status, 404, plugin_id)
+        body = await resp.json()
+        self.assertIs(body.get("ok"), False)
+        self.assertIs(body.get("retired"), True)
+        self.assertIn(plugin_id, str(body.get("error") or ""))
+        return body
+
     async def _materialize_hosted_bundles(self, plugin_ids: list[str]) -> dict[str, Path]:
         """
         Download each plugin bundle via the marketplace download route and
@@ -226,25 +242,14 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         body = await resp.json()
         plugins = body.get("plugins") or []
-        self.assertEqual(len(plugins), 1)
-        plugin = plugins[0]
-        self.assertEqual(str(plugin.get("id") or ""), "life-manager-foundation")
-        self.assertEqual(str(plugin.get("category") or ""), "productivity")
-        self.assertEqual(str(plugin.get("marketplace_type") or ""), "dependency")
-        self.assertEqual(str(plugin.get("left_nav_behavior") or ""), "none")
+        self.assertEqual(plugins, [])
 
-    async def test_marketplace_catalog_exposes_life_manager_as_command_center(self):
-        resp = await self.client.get("/api/marketplace/plugins?category=productivity&limit=20")
+    async def test_marketplace_catalog_hides_retired_local_modules(self):
+        resp = await self.client.get("/api/marketplace/plugins?limit=600")
         self.assertEqual(resp.status, 200)
         body = await resp.json()
-        plugins = {str(row.get("id")): row for row in (body.get("plugins") or [])}
-        life_manager = plugins.get("life-manager") or {}
-        dependency = plugins.get("life-manager-foundation") or {}
-        self.assertEqual(life_manager.get("marketplace_type"), "command_center")
-        self.assertEqual(life_manager.get("left_nav_behavior"), "workspace")
-        self.assertEqual(life_manager.get("requires"), ["life-manager-foundation"])
-        self.assertEqual(dependency.get("marketplace_type"), "dependency")
-        self.assertEqual(dependency.get("left_nav_behavior"), "none")
+        plugin_ids = {str(row.get("id") or row.get("plugin_id") or "") for row in (body.get("plugins") or [])}
+        self.assertFalse(RETIRED_MARKETPLACE_IDS & plugin_ids)
 
     async def test_marketplace_plugin_download_route_streams_real_extension_pack(self):
         catalog_resp = await self.client.get("/api/marketplace/plugins?category=alerts&q=slack&limit=20")
@@ -282,64 +287,76 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertIs(body.get("ok"), False)
         self.assertIn("not found", str(body.get("error") or "").lower())
 
-    async def test_marketplace_install_lists_and_serves_life_manager_plugin(self):
-        install_resp = await self.client.post("/api/marketplace/plugins/life-manager/install")
-        self.assertEqual(install_resp.status, 200)
-        install_body = await install_resp.json()
-        plugin = install_body.get("plugin") or {}
-        self.assertEqual(plugin.get("plugin_id"), "life-manager")
-        self.assertEqual(plugin.get("mode_id"), "life_manager")
-        self.assertEqual(plugin.get("marketplace_type"), "command_center")
-        self.assertEqual(plugin.get("left_nav_behavior"), "workspace")
-        self.assertEqual(plugin.get("surface_mode"), "immersive")
-        surface_url = str(plugin.get("surface_url") or "")
-        self.assertTrue(surface_url.endswith("/plugins/life-manager/web/index.html"))
+    async def test_marketplace_blocks_retired_modules_from_install_download_and_listing(self):
+        for plugin_id in sorted(RETIRED_MARKETPLACE_IDS):
+            install_resp = await self.client.post(f"/api/marketplace/plugins/{plugin_id}/install")
+            await self._assert_retired_response(install_resp, plugin_id)
+            download_resp = await self.client.get(f"/api/marketplace/plugins/{plugin_id}/download")
+            await self._assert_retired_response(download_resp, plugin_id)
+            enable_resp = await self.client.post(f"/api/marketplace/plugins/{plugin_id}/enable")
+            await self._assert_retired_response(enable_resp, plugin_id)
+            disable_resp = await self.client.post(f"/api/marketplace/plugins/{plugin_id}/disable")
+            await self._assert_retired_response(disable_resp, plugin_id)
+
+            uninstall_resp = await self.client.post(f"/api/marketplace/plugins/{plugin_id}/uninstall")
+            self.assertEqual(uninstall_resp.status, 200)
+            uninstall_body = await uninstall_resp.json()
+            self.assertIs(uninstall_body.get("ok"), True)
+            self.assertIs(uninstall_body.get("retired"), True)
+
+        deep_link = build_plugin_install_deep_link("life-manager", "http://127.0.0.1:1", channel="stable")
+        deep_link_resp = await self.client.post(
+            "/api/marketplace/install-from-deep-link", json={"deep_link": deep_link}
+        )
+        await self._assert_retired_response(deep_link_resp, "life-manager")
+
+        retired_bundle = Path(self._tmpdir.name) / "life-manager-retired.zip"
+        life_manager_dir = ROOT / "extensions" / "life-manager"
+        with zipfile.ZipFile(retired_bundle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for source_path in life_manager_dir.rglob("*"):
+                if source_path.is_file():
+                    archive.write(
+                        source_path, arcname=str(Path("life-manager") / source_path.relative_to(life_manager_dir))
+                    )
+        import_resp = await self.client.post("/api/marketplace/import", json={"path": str(retired_bundle)})
+        await self._assert_retired_response(import_resp, "life-manager")
 
         listed_resp = await self.client.get("/api/marketplace/installed")
         self.assertEqual(listed_resp.status, 200)
         listed_body = await listed_resp.json()
         installed = listed_body.get("plugins") or []
-        installed_ids = {row.get("plugin_id"): row for row in installed}
-        self.assertEqual(set(installed_ids), {"life-manager", "life-manager-foundation"})
-        self.assertEqual(installed_ids["life-manager-foundation"].get("marketplace_type"), "dependency")
-        self.assertEqual(installed_ids["life-manager-foundation"].get("left_nav_behavior"), "none")
-        self.assertEqual(installed_ids["life-manager"].get("workspace_id"), "life_manager")
-
-        surface_resp = await self.client.get(surface_url)
-        self.assertEqual(surface_resp.status, 200)
-        self.assertIn("text/html", surface_resp.headers.get("Content-Type", ""))
-        surface_html = await surface_resp.text()
-        self.assertIn("Life Manager", surface_html)
+        installed_ids = {str(row.get("plugin_id") or "") for row in installed}
+        self.assertFalse(RETIRED_MARKETPLACE_IDS & installed_ids)
 
     async def test_index_route_injects_runtime_build_fingerprint(self):
         resp = await self.client.get("/")
         self.assertEqual(resp.status, 200)
         body = await resp.text()
-        self.assertIn("/static/js/app.js?v=", body)
+        self.assertIn("/static/js/unified_mode_shell.js?v=", body)
+        self.assertIn("/static/css/unified_modes.css?v=", body)
         self.assertNotIn("__THOMAS_WEB_BUILD__", body)
-        self.assertNotIn("app.js?v=__THOMAS_VERSION__", body)
+        self.assertNotIn("unified_mode_shell.js?v=__THOMAS_VERSION__", body)
 
     async def test_marketplace_import_from_file_installs_signed_bundle_and_dependency(self):
-        download_resp = await self.client.get("/api/marketplace/plugins/life-manager/download")
+        download_resp = await self.client.get(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/download")
         self.assertEqual(download_resp.status, 200)
-        bundle_path = Path(self._tmpdir.name) / "life-manager.zip"
+        bundle_path = Path(self._tmpdir.name) / f"{ACTIVE_TEST_PLUGIN_ID}.zip"
         bundle_path.write_bytes(await download_resp.read())
 
         import_resp = await self.client.post("/api/marketplace/import", json={"path": str(bundle_path)})
         self.assertEqual(import_resp.status, 200)
         import_body = await import_resp.json()
         plugin = import_body.get("plugin") or {}
-        self.assertEqual(plugin.get("plugin_id"), "life-manager")
-        self.assertEqual(plugin.get("publisher_id"), "thomas-official")
+        self.assertEqual(plugin.get("plugin_id"), ACTIVE_TEST_PLUGIN_ID)
 
         listed_resp = await self.client.get("/api/marketplace/installed")
         installed = (await listed_resp.json()).get("plugins") or []
-        self.assertEqual({row.get("plugin_id") for row in installed}, {"life-manager", "life-manager-foundation"})
+        self.assertEqual({row.get("plugin_id") for row in installed}, {ACTIVE_TEST_PLUGIN_ID})
 
     async def test_marketplace_installs_hosted_plugin_from_deep_link_without_duplicates(self):
-        bundle_paths = await self._materialize_hosted_bundles(["life-manager", "life-manager-foundation"])
+        bundle_paths = await self._materialize_hosted_bundles([ACTIVE_TEST_PLUGIN_ID])
         with _hosted_plugin_store(bundle_paths) as store:
-            deep_link = build_plugin_install_deep_link("life-manager", store, channel="stable")
+            deep_link = build_plugin_install_deep_link(ACTIVE_TEST_PLUGIN_ID, store, channel="stable")
 
             install_resp = await self.client.post(
                 "/api/marketplace/install-from-deep-link", json={"deep_link": deep_link}
@@ -348,9 +365,9 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
             install_body = await install_resp.json()
             plugin = install_body.get("plugin") or {}
             request = install_body.get("request") or {}
-            self.assertEqual(request.get("plugin_id"), "life-manager")
+            self.assertEqual(request.get("plugin_id"), ACTIVE_TEST_PLUGIN_ID)
             self.assertEqual(request.get("store"), store)
-            self.assertEqual(plugin.get("plugin_id"), "life-manager")
+            self.assertEqual(plugin.get("plugin_id"), ACTIVE_TEST_PLUGIN_ID)
             self.assertEqual((plugin.get("source") or {}).get("type"), "hosted")
 
             second_resp = await self.client.post(
@@ -362,24 +379,24 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
             self.assertEqual(listed_resp.status, 200)
             listed_body = await listed_resp.json()
             installed = listed_body.get("plugins") or []
-            self.assertEqual({row.get("plugin_id") for row in installed}, {"life-manager", "life-manager-foundation"})
+            self.assertEqual({row.get("plugin_id") for row in installed}, {ACTIVE_TEST_PLUGIN_ID})
 
     async def test_marketplace_install_accepts_store_url_payload_for_hosted_plugins(self):
-        bundle_paths = await self._materialize_hosted_bundles(["life-manager", "life-manager-foundation"])
+        bundle_paths = await self._materialize_hosted_bundles([ACTIVE_TEST_PLUGIN_ID])
         with _hosted_plugin_store(bundle_paths) as store:
             install_resp = await self.client.post(
-                "/api/marketplace/plugins/life-manager/install",
+                f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/install",
                 json={"store_url": store, "channel": "stable"},
             )
             self.assertEqual(install_resp.status, 200)
             install_body = await install_resp.json()
             plugin = install_body.get("plugin") or {}
-            self.assertEqual(plugin.get("plugin_id"), "life-manager")
+            self.assertEqual(plugin.get("plugin_id"), ACTIVE_TEST_PLUGIN_ID)
             self.assertEqual((plugin.get("source") or {}).get("type"), "hosted")
             self.assertEqual((plugin.get("source") or {}).get("store_url"), store)
 
     async def test_marketplace_sync_reads_hosted_catalog_and_marks_available_updates(self):
-        install_resp = await self.client.post("/api/marketplace/plugins/life-manager/install")
+        install_resp = await self.client.post(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/install")
         self.assertEqual(install_resp.status, 200)
 
         payload = {
@@ -389,46 +406,48 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
             "channel": "stable",
             "plugins": [
                 {
-                    "id": "life-manager",
-                    "plugin_id": "life-manager",
-                    "name": "Life Manager",
-                    "display_name": "Life Manager",
+                    "id": ACTIVE_TEST_PLUGIN_ID,
+                    "plugin_id": ACTIVE_TEST_PLUGIN_ID,
+                    "name": "Paper Trading",
+                    "display_name": "Paper Trading",
                     "version": "2.0.0",
-                    "subtitle": "Hosted workspace plugin",
+                    "subtitle": "Hosted paper trading plugin",
                     "description": "Hosted catalog row",
-                    "category": "productivity",
-                    "category_label": "Productivity",
-                    "categories": ["productivity", "automation"],
+                    "category": "finance",
+                    "category_label": "Finance",
+                    "categories": ["finance", "automation"],
                     "tags": ["official", "command_center"],
-                    "requires": ["life-manager-foundation"],
+                    "requires": [],
                     "target": "desktop",
-                    "mode": "life_manager",
-                    "mode_id": "life_manager",
+                    "mode": "paper_trading",
+                    "mode_id": "paper_trading",
                     "marketplace_type": "command_center",
                     "marketplace_type_label": "Command Center",
                     "left_nav_behavior": "workspace",
                     "default_nav_section": "command_centers",
-                    "default_nav_order": 520,
+                    "default_nav_order": 530,
                     "entrypoint": "hooks.py",
-                    "capabilities": ["life_manager.tasks"],
+                    "capabilities": ["paper_trading.market_data"],
                     "kind": "desktop_plugin",
                     "source": "website/hosted-plugin-store",
                     "publisher_id": "thomas-official",
                     "publisher_name": "Thomas",
-                    "icon": "ph-list-checks",
-                    "api_namespace": "life-manager",
+                    "icon": "ph-chart-line-up",
+                    "api_namespace": "paper-trading",
                     "download_available": True,
                     "installable": True,
                     "installed": False,
                     "enabled": False,
-                    "workspace_id": "life_manager",
-                    "download_url": "https://thomas.dev/api/v1/plugins/life-manager/manual-download",
-                    "manual_download_url": "https://thomas.dev/api/v1/plugins/life-manager/manual-download",
-                    "detail_url": "https://thomas.dev/api/v1/plugins/life-manager",
-                    "open_in_thomas_url": "thomas://install-plugin?plugin_id=life-manager&store=https%3A%2F%2Fthomas.dev&channel=stable",
+                    "workspace_id": "paper_trading",
+                    "download_url": f"https://thomas.dev/api/v1/plugins/{ACTIVE_TEST_PLUGIN_ID}/manual-download",
+                    "manual_download_url": f"https://thomas.dev/api/v1/plugins/{ACTIVE_TEST_PLUGIN_ID}/manual-download",
+                    "detail_url": f"https://thomas.dev/api/v1/plugins/{ACTIVE_TEST_PLUGIN_ID}",
+                    "open_in_thomas_url": (
+                        f"thomas://install-plugin?plugin_id={ACTIVE_TEST_PLUGIN_ID}"
+                        "&store=https%3A%2F%2Fthomas.dev&channel=stable"
+                    ),
                     "store_url": "https://thomas.dev",
                     "channel": "stable",
-                    "surface": {"entry_html": "web/index.html", "title": "Life Manager", "surface_mode": "immersive"},
                 }
             ],
         }
@@ -444,15 +463,14 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertEqual(sync_body.get("sync_source"), "hosted_catalog")
         self.assertEqual(sync_body.get("source_label"), store.replace("http://", ""))
         self.assertEqual(sync_body.get("store_url"), store)
-        self.assertEqual(sync_body.get("update_candidates"), ["life-manager"])
+        self.assertEqual(sync_body.get("update_candidates"), [ACTIVE_TEST_PLUGIN_ID])
         plugins = {str(row.get("plugin_id")): row for row in (sync_body.get("plugins") or [])}
         installed_rows = {str(row.get("plugin_id")): row for row in (sync_body.get("installed") or [])}
-        self.assertTrue(plugins["life-manager"].get("installed"))
-        self.assertTrue(plugins["life-manager"].get("enabled"))
-        self.assertTrue(plugins["life-manager"].get("update_available"))
-        self.assertEqual(plugins["life-manager"].get("installed_version"), "1.0.0")
-        self.assertEqual(installed_rows["life-manager"].get("left_nav_behavior"), "workspace")
-        self.assertEqual(installed_rows["life-manager"].get("workspace_id"), "life_manager")
+        self.assertTrue(plugins[ACTIVE_TEST_PLUGIN_ID].get("installed"))
+        self.assertTrue(plugins[ACTIVE_TEST_PLUGIN_ID].get("enabled"))
+        self.assertTrue(plugins[ACTIVE_TEST_PLUGIN_ID].get("update_available"))
+        self.assertEqual(plugins[ACTIVE_TEST_PLUGIN_ID].get("installed_version"), "1.0.0")
+        self.assertEqual(installed_rows[ACTIVE_TEST_PLUGIN_ID].get("left_nav_behavior"), "workspace")
 
     async def test_marketplace_sync_falls_back_to_local_catalog_on_dns_failure(self):
         with patch(
@@ -513,33 +531,21 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         install_body = await install_resp.json()
         self.assertIn("thomas://", str(install_body.get("error") or "").lower())
 
-    async def test_marketplace_enable_disable_and_uninstall_control_life_manager_access(self):
-        install_resp = await self.client.post("/api/marketplace/plugins/life-manager/install")
+    async def test_marketplace_enable_disable_and_uninstall_control_installed_plugin(self):
+        install_resp = await self.client.post(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/install")
         self.assertEqual(install_resp.status, 200)
-        plugin = (await install_resp.json()).get("plugin") or {}
-        surface_url = str(plugin.get("surface_url") or "")
 
-        bootstrap_resp = await self.client.get("/api/plugins/life-manager/bootstrap")
-        self.assertEqual(bootstrap_resp.status, 200)
-        bootstrap_body = await bootstrap_resp.json()
-        self.assertEqual(bootstrap_body.get("state", {}).get("tasks"), [])
-
-        disable_resp = await self.client.post("/api/marketplace/plugins/life-manager/disable")
+        disable_resp = await self.client.post(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/disable")
         self.assertEqual(disable_resp.status, 200)
         disabled_plugin = (await disable_resp.json()).get("plugin") or {}
         self.assertIs(disabled_plugin.get("enabled"), False)
 
-        disabled_bootstrap = await self.client.get("/api/plugins/life-manager/bootstrap")
-        self.assertEqual(disabled_bootstrap.status, 404)
-        disabled_surface = await self.client.get(surface_url)
-        self.assertEqual(disabled_surface.status, 403)
-
-        enable_resp = await self.client.post("/api/marketplace/plugins/life-manager/enable")
+        enable_resp = await self.client.post(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/enable")
         self.assertEqual(enable_resp.status, 200)
         enabled_plugin = (await enable_resp.json()).get("plugin") or {}
         self.assertIs(enabled_plugin.get("enabled"), True)
 
-        uninstall_resp = await self.client.post("/api/marketplace/plugins/life-manager/uninstall")
+        uninstall_resp = await self.client.post(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/uninstall")
         self.assertEqual(uninstall_resp.status, 200)
         uninstall_body = await uninstall_resp.json()
         self.assertIs(uninstall_body.get("removed"), True)
@@ -549,86 +555,37 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         installed = listed_body.get("plugins") or []
         self.assertEqual(installed, [])
 
-        removed_bootstrap = await self.client.get("/api/plugins/life-manager/bootstrap")
-        self.assertEqual(removed_bootstrap.status, 404)
-
     async def test_marketplace_rejects_unsafe_plugin_asset_paths(self):
-        install_resp = await self.client.post("/api/marketplace/plugins/life-manager/install")
+        install_resp = await self.client.post(f"/api/marketplace/plugins/{ACTIVE_TEST_PLUGIN_ID}/install")
         self.assertEqual(install_resp.status, 200)
-        unsafe_resp = await self.client.get("/plugins/life-manager/..%2Fmanifest.json")
+        unsafe_resp = await self.client.get(f"/plugins/{ACTIVE_TEST_PLUGIN_ID}/..%2Fmanifest.json")
         self.assertEqual(unsafe_resp.status, 404)
 
-    async def test_life_manager_bootstrap_and_crud_roundtrip(self):
+    async def test_life_manager_plugin_api_is_unavailable_after_retirement(self):
         install_resp = await self.client.post("/api/marketplace/plugins/life-manager/install")
-        self.assertEqual(install_resp.status, 200)
+        await self._assert_retired_response(install_resp, "life-manager")
 
+        bootstrap_resp = await self.client.get("/api/plugins/life-manager/bootstrap")
+        self.assertEqual(bootstrap_resp.status, 404)
         create_task = await self.client.post(
             "/api/plugins/life-manager/tasks",
             json={"title": "Pay rent", "priority": "high", "target_date": "2026-03-17"},
         )
-        self.assertEqual(create_task.status, 201)
-        task = (await create_task.json()).get("item") or {}
-        task_id = str(task.get("id") or "")
-        self.assertTrue(task_id.startswith("task-"))
-
-        update_task = await self.client.patch(
-            f"/api/plugins/life-manager/tasks/{task_id}",
-            json={"status": "done"},
-        )
-        self.assertEqual(update_task.status, 200)
-        updated_task = (await update_task.json()).get("item") or {}
-        self.assertEqual(updated_task.get("status"), "done")
-
-        create_agenda = await self.client.post(
-            "/api/plugins/life-manager/agenda",
-            json={"title": "Doctor visit", "date": "2026-03-17", "start_time": "09:00", "end_time": "10:00"},
-        )
-        self.assertEqual(create_agenda.status, 201)
-
-        create_habit = await self.client.post(
-            "/api/plugins/life-manager/habits",
-            json={"title": "Drink water", "cadence": "daily", "target_count": 8},
-        )
-        self.assertEqual(create_habit.status, 201)
-
-        create_goal = await self.client.post(
-            "/api/plugins/life-manager/goals",
-            json={"title": "Ship plugin system", "horizon": "quarter", "progress": 40},
-        )
-        self.assertEqual(create_goal.status, 201)
-
-        bootstrap_resp = await self.client.get("/api/plugins/life-manager/bootstrap")
-        self.assertEqual(bootstrap_resp.status, 200)
-        state = (await bootstrap_resp.json()).get("state") or {}
-        self.assertEqual(len(state.get("tasks") or []), 1)
-        self.assertEqual(len(state.get("agenda") or []), 1)
-        self.assertEqual(len(state.get("habits") or []), 1)
-        self.assertEqual(len(state.get("goals") or []), 1)
-        self.assertEqual((state.get("tasks") or [])[0].get("status"), "done")
-
-        delete_task = await self.client.delete(f"/api/plugins/life-manager/tasks/{task_id}")
-        self.assertEqual(delete_task.status, 200)
-        final_bootstrap = await self.client.get("/api/plugins/life-manager/bootstrap")
-        final_state = (await final_bootstrap.json()).get("state") or {}
-        self.assertEqual(final_state.get("tasks"), [])
+        self.assertEqual(create_task.status, 404)
 
 
 def test_marketplace_surface_uses_plugin_catalog_only() -> None:
-    html = _read_text("thomas/server/web/static/plugin_marketplace.html")
-    script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
+    # The live marketplace surface is the classic shell's runtime module; the
+    # old target, static/plugin_marketplace.html, was a dead standalone page no
+    # route or iframe loaded and is deleted. The invariant is the same: the
+    # marketplace reads the marketplace catalog, never the retired companion
+    # app-store endpoints.
+    script = _read_all_runtime_js()
 
-    assert "/api/marketplace/plugins" in script
+    assert "/api/marketplace/" in script
     assert "/api/companion/v1/app-store" not in script
     assert "/api/companion/v1/modules" not in script
-    assert "Thomas Companion" not in html
-    assert "extensions/catalog.json" in html
-    assert "Loading Thomas upgrades..." in script
     assert "No upgrades match this view." in script
-    assert "No upgrade metadata yet." in script
-    assert "ReactDOM" not in html
-    assert "react-dom" not in html.lower()
-    assert "unpkg.com/react" not in html
-    assert "babel" not in html.lower()
 
 
 def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> None:
@@ -649,7 +606,8 @@ def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> 
     assert "DEFAULT_MARKETPLACE_STORE_URL" in script
     assert "Marketplace Source" not in script
     assert "thomas_deep_link" in script
-    assert "Synced from" in script
+    assert "Last sync" in script
+    assert "Synced from" not in script
     assert "__THOMAS_WEB_BUILD__" in _read_text("thomas/server/web/index.html")
 
 
@@ -671,8 +629,6 @@ def test_workspaces_render_in_sidebar_markup() -> None:
 
 def test_marketplace_runtime_uses_store_specific_empty_state_copy() -> None:
     script = _read_all_runtime_js()
-    static_html = _read_text("thomas/server/web/static/plugin_marketplace.html")
-    static_script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
 
     assert "Browse and install Thomas upgrades" in script
     assert "Browse and install Thomas upgrades from the marketplace catalog." in script
@@ -680,14 +636,13 @@ def test_marketplace_runtime_uses_store_specific_empty_state_copy() -> None:
     assert "Marketplace is syncing upgrades." in script
     assert "Loading upgrades..." in script
     assert "No upgrades match this view." in script
-    assert "All Upgrades" in script
+    assert "Verified Store" in script
+    assert "Potential" in script
+    assert "All Upgrades" not in script
     assert "Installable Thomas plugins from the extension catalog." not in script
     assert "No live queue data yet." not in script
     assert "moduleWorkspaceMeta.textContent = 'Extension catalog';" not in script
-    assert "Browse real Thomas upgrades from the marketplace catalog." in static_html
-    assert "Browse real Thomas plugins from the extension catalog." not in static_html
-    assert "Source: marketplace catalog" in static_script
-    assert "extension catalog" not in static_script.lower()
+    assert "extension catalog" not in script.lower()
 
 
 def test_tray_agent_bootstraps_repo_runtime_and_prefers_repo_venv() -> None:

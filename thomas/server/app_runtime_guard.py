@@ -22,6 +22,12 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# One-shot marker: set by _runtime_guard_boot_state, popped by the first
+# _runtime_guard_refresh so that call can reuse the snapshot instead of paying
+# for a second round of git subprocesses. Private, and never serialized -
+# _runtime_guard_payload only reads known keys.
+_BOOT_SOURCE_FRESH = "_boot_source_fresh"
+
 
 def _runtime_guard_iso_now() -> str:
     """Return current UTC time in ISO format."""
@@ -156,6 +162,7 @@ def _runtime_guard_boot_state(config: AppConfig) -> dict[str, Any]:
     return {
         "enabled": True,
         "check_interval_s": interval_s,
+        _BOOT_SOURCE_FRESH: True,
         "boot": {
             "pid": os.getpid(),
             "version": THOMAS_VERSION,
@@ -181,9 +188,18 @@ def _runtime_guard_refresh(app: web.Application) -> dict[str, Any]:
     boot = dict(state.get("boot") or {})
 
     boot_source = dict(boot.get("source") or {})
-    repo_root_raw = str(boot_source.get("repo_root") or "").strip()
-    repo_root = Path(repo_root_raw) if repo_root_raw else None
-    source_snapshot = _runtime_guard_collect_source_snapshot(repo_root)
+    if state.pop(_BOOT_SOURCE_FRESH, False):
+        # create_app calls this immediately after _runtime_guard_boot_state, so
+        # on that first pass the boot snapshot is microseconds old and git cannot
+        # have moved. Re-running rev-parse/rev-parse/status there spent ~280ms of
+        # subprocesses to rediscover a byte-identical answer. The flag is popped,
+        # so every later refresh (the periodic loop below) re-reads git normally.
+        source_snapshot = dict(boot_source)
+        source_snapshot["errors"] = list(boot_source.get("errors") or [])
+    else:
+        repo_root_raw = str(boot_source.get("repo_root") or "").strip()
+        repo_root = Path(repo_root_raw) if repo_root_raw else None
+        source_snapshot = _runtime_guard_collect_source_snapshot(repo_root)
     lock_snapshot = _runtime_guard_read_lock_info(cfg)
 
     reasons: list[str] = []

@@ -1,0 +1,757 @@
+
+.module-special-card header {
+    display: grid;
+    gap: 2px;
+}
+
+.module-special-card h4 {
+    margin: 0;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--c-text);
+}
+
+.module-special-card p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-special-card ul {
+    margin: 0;
+    padding-left: 16px;
+    display: grid;
+    gap: 4px;
+}
+
+.module-special-card li {
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--c-text);
+}
+
+.module-special-card.ok {
+    border-color: color-mix(in srgb, var(--c-success) 32%, transparent);
+}
+
+.module-special-card.warn {
+    border-color: color-mix(in srgb, var(--c-warn) 40%, transparent);
+}
+
+.module-special-card.error {
+    border-color: color-mix(in srgb, var(--c-danger) 42%, transparent);
+}
+
+.module-workbench {
+    border: 1px solid var(--module-accent-soft);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 116% -14%, var(--module-panel-tint), transparent 58%),
+        var(--c-composer-bg);
+    box-shadow: inset 0 0 0 1px var(--c-border);
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+}
+
+.module-wb-header {
+    display: grid;
+    gap: 2px;
+}
+
+.module-wb-header h3 {
+    margin: 0;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--c-text);
+}
+
+.module-wb-header p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-wb-operator-note {
+    border: 1px solid color-mix(in srgb, var(--c-accent) 22%, transparent);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background:
+        radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--c-accent) 20%, transparent), transparent 45%),
+        var(--c-composer-bg);
+    display: grid;
+    gap: 3px;
+}
+
+.module-wb-operator-note strong {
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--c-text);
+}
+
+.module-wb-operator-note p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-wb-shell {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 340px);
+}
+
+.module-wb-shell.module-wb-shell-lab3d {
+    grid-template-columns: 1fr;
+}
+
+.module-wb-shell.module-wb-shell-lab3d-oss {
+    grid-template-columns: 1fr;
+}
+
+.module-wb-shell.module-wb-shell-dev,
+.module-wb-shell.module-wb-shell-game {
+    grid-template-columns: minmax(0, 1.4fr) minmax(260px, 360px);
+}
+
+.module-wb-shell.module-wb-shell-dev-oss,
+.module-wb-shell.module-wb-shell-game-oss {
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 380px);
+}
+
+.module-wb-shell.module-wb-shell-loading {
+    grid-template-columns: 1fr;
+}
+
+.module-wb-shell.module-wb-shell-studio,
+.module-wb-shell.module-wb-shell-studio-oss {
+    grid-template-columns: minmax(250px, 330px) minmax(0, 1.25fr) minmax(280px, 360px);
+}
+
+/* UI Editor: canvas-only surface */
+.module-wb-shell.module-wb-shell-app,
+.module-wb-shell.module-wb-shell-app-oss {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.module-wb-shell.module-wb-shell-app > .module-wb-side-card,
+.module-wb-shell.module-wb-shell-app > .module-wb-inspector-card,
+.module-wb-shell.module-wb-shell-app-oss > .module-wb-side-card,
+.module-wb-shell.module-wb-shell-app-oss > .module-wb-inspector-card {
+    display: none;
+}
+
+.module-wb-shell.module-wb-shell-app .module-wb-stage-head,
+.module-wb-shell.module-wb-shell-app .module-wb-device-switch,
+.module-wb-shell.module-wb-shell-app .module-wb-preview-frame-wrap,
+.module-wb-shell.module-wb-shell-app .module-wb-oss-stack,
+.module-wb-shell.module-wb-shell-app-oss .module-wb-stage-head,
+.module-wb-shell.module-wb-shell-app-oss .module-wb-device-switch,
+.module-wb-shell.module-wb-shell-app-oss .module-wb-preview-frame-wrap,
+.module-wb-shell.module-wb-shell-app-oss .module-wb-oss-stack {
+    display: none;
+}
+
+.module-wb-shell.module-wb-shell-app .module-wb-app-list,
+.module-wb-shell.module-wb-shell-app-oss .module-wb-app-list {
+    max-height: none;
+    min-height: 560px;
+}
+
+.module-workspace[data-mode="app_builder"] .module-workbench .module-wb-operator-note,
+.module-workspace[data-mode="app_builder"] .module-workbench .module-wb-header {
+    display: none !important;
+}
+
+.module-wb-studio-library,
+.module-wb-studio-stage,
+.module-wb-studio-inspector {
+    background:
+        linear-gradient(160deg, var(--c-surface-2), var(--c-surface)),
+        radial-gradient(circle at 12% -20%, var(--c-accent-soft), transparent 58%);
+}
+
+.module-wb-studio-filter-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 130px);
+}
+
+.module-wb-studio-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.module-wb-studio-chip {
+    border: 1px solid var(--c-border-2);
+    border-radius: 999px;
+    background: var(--c-surface);
+    color: var(--text-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.module-wb-studio-chip strong {
+    color: var(--c-text);
+    font-size: 11px;
+}
+
+.module-wb-studio-control-grid {
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c-bg) 56%, transparent);
+    padding: 8px;
+    display: grid;
+    gap: 7px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.module-wb-studio-control-grid .module-wb-field {
+    min-width: 0;
+}
+
+.module-wb-studio-control-grid .module-wb-field.module-wb-field-wide {
+    grid-column: 1 / -1;
+}
+
+.module-wb-studio-stage .module-wb-inspector-actions {
+    align-items: stretch;
+}
+
+.module-wb-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.module-wb-tool-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.module-wb-tool-btn {
+    border: 1px solid var(--c-border-2);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 6px 9px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.module-wb-tool-btn.active,
+.module-wb-tool-btn:hover {
+    border-color: var(--module-accent);
+    background: var(--c-accent-soft);
+    color: var(--c-text);
+}
+
+.module-wb-toolbar-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.module-wb-inline-field {
+    border: 1px solid var(--c-border-2);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 5px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.module-wb-inline-field input {
+    width: 64px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-composer-bg);
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 3px 4px;
+}
+
+.module-wb-main-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+}
+
+.module-wb-main-grid-lab3d {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
+}
+
+.module-wb-stage-card,
+.module-wb-side-card,
+.module-wb-inspector-card {
+    border: 1px solid var(--c-border-2);
+    border-radius: 10px;
+    background: var(--c-surface);
+    padding: 9px;
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+}
+
+.module-wb-stage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.module-wb-stage-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-text);
+}
+
+.module-wb-stage-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.module-wb-hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.module-wb-canvas-lab3d {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid var(--c-border-2);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, rgba(7, 13, 22, 0.96), rgba(10, 16, 27, 0.96));
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.module-wb-3d-stage {
+    width: 100%;
+    min-height: 380px;
+    border: 1px solid var(--c-border-2);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(7, 13, 22, 0.98), rgba(10, 16, 27, 0.95));
+}
+
+.module-wb-loader {
+    border: 1px dashed var(--c-border-2);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c-bg) 56%, transparent);
+    min-height: 200px;
+    display: grid;
+    place-content: center;
+    gap: 6px;
+    text-align: center;
+    padding: 14px;
+}
+
+.module-wb-loader strong {
+    color: var(--c-text);
+    font-size: 14px;
+}
+
+.module-wb-loader p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.module-wb-inspector-card h4,
+.module-wb-side-card h4 {
+    margin: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-text);
+}
+
+.module-wb-field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.module-wb-field {
+    display: grid;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-wb-field-wide {
+    grid-column: 1 / -1;
+}
+
+.module-wb-field-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.module-wb-field input,
+.module-wb-field select,
+.module-wb-field textarea,
+.module-wb-inline-form input,
+.module-wb-inline-form select,
+.module-wb-inline-form textarea {
+    border: 1px solid var(--c-border-2);
+    border-radius: 8px;
+    background: var(--c-composer-bg);
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 6px 8px;
+    font-family: inherit;
+}
+
+.module-wb-field textarea,
+.module-wb-code-editor,
+[data-research-synthesis] {
+    resize: vertical;
+}
+
+.module-wb-inline-form {
+    display: grid;
+    gap: 6px;
+}
+
+.module-wb-project-panel {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    padding: 7px;
+    display: grid;
+    gap: 6px;
+}
+
+.module-wb-project-panel h4 {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-text);
+}
+
+.module-wb-project-form {
+    gap: 6px;
+}
+
+.module-wb-project-form select,
+.module-wb-project-form input {
+    width: 100%;
+}
+
+.module-wb-inspector-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.module-wb-mini-note {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.42;
+}
+
+.module-wb-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.module-wb-metrics > div {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    padding: 7px;
+    display: grid;
+    gap: 2px;
+}
+
+.module-wb-metrics span {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.module-wb-metrics strong {
+    font-size: 12px;
+    color: var(--c-text);
+}
+
+.module-wb-ghost {
+    border: 1px dashed var(--c-border-2);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 8px;
+}
+
+.module-wb-flow-list,
+.module-wb-app-list,
+.module-wb-research-list,
+.module-wb-claims-table,
+.module-wb-asset-list,
+.module-wb-issues,
+.module-wb-log-list {
+    display: grid;
+    gap: 7px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.module-wb-flow-canvas {
+    width: 100%;
+    min-height: 360px;
+    border: 1px solid var(--c-border-2);
+    border-radius: var(--radius-md);
+    background: rgba(9, 16, 26, 0.82);
+}
+
+.module-wb-list-item,
+.module-wb-asset-row {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    padding: 7px 8px;
+    display: grid;
+    gap: 4px;
+    text-align: left;
+}
+
+.module-wb-list-item.selected,
+.module-wb-asset-row.selected {
+    border-color: var(--module-accent);
+    background: var(--c-accent-soft);
+}
+
+.module-wb-list-item strong,
+.module-wb-asset-row strong {
+    font-size: 12px;
+    color: var(--c-text);
+}
+
+.module-wb-list-item span,
+.module-wb-asset-row span {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-wb-inline-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.module-wb-log-item {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    padding: 7px 8px;
+    display: grid;
+    gap: 3px;
+}
+
+.module-wb-log-item span {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.module-wb-log-item p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-wb-log-item.ok {
+    border-color: color-mix(in srgb, var(--c-success) 35%, transparent);
+}
+
+.module-wb-log-item.warn {
+    border-color: color-mix(in srgb, var(--c-warn) 46%, transparent);
+}
+
+.module-wb-log-item.error {
+    border-color: color-mix(in srgb, var(--c-danger) 44%, transparent);
+}
+
+.module-wb-run-report {
+    display: grid;
+    gap: 8px;
+    border-top: 1px solid var(--c-border);
+    padding-top: 8px;
+}
+
+.module-wb-palette {
+    display: grid;
+    gap: 6px;
+}
+
+.module-wb-oss-stack {
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-surface);
+    padding: 9px;
+    display: grid;
+    gap: 8px;
+}
+
+.module-wb-oss-stack h4 {
+    margin: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-text);
+}
+
+.module-wb-oss-list {
+    display: grid;
+    gap: 7px;
+}
+
+.module-wb-oss-item {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    padding: 8px;
+    display: grid;
+    gap: 6px;
+}
+
+.module-wb-oss-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    align-items: baseline;
+}
+
+.module-wb-oss-head strong {
+    font-size: 12px;
+    color: var(--c-text);
+}
+
+.module-wb-oss-head span {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.module-wb-oss-item p {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.42;
+}
+
+.module-wb-palette-btn {
+    border: 1px solid var(--c-border-2);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-primary);
+    text-align: left;
+    padding: 7px 8px;
+    display: grid;
+    gap: 2px;
+    cursor: pointer;
+}
+
+.module-wb-palette-btn strong {
+    font-size: 12px;
+}
+
+.module-wb-palette-btn span {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.module-wb-palette-btn:hover {
+    border-color: var(--module-accent);
+    background: var(--c-accent-soft);
+}
+
+.module-wb-device-switch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.module-wb-range {
+    width: 100%;
+}
+
+.module-wb-file-pick {
+    border: 1px dashed var(--c-border-2);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 8px;
+    display: grid;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.module-wb-file-pick input[type="file"] {
+    font-size: 11px;
+}
+
+.module-wb-forge-card {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-surface);
+    padding: 8px;
+    display: grid;
+    gap: 7px;
+}
+
+.module-wb-forge-card h4 {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-text);
+}
+
+.module-wb-forge-card [data-studio-forge-tool].active {
+    border-color: var(--module-accent);
+    background: var(--c-accent-soft);
+    color: var(--c-text);
+}
+
+.module-wb-color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}

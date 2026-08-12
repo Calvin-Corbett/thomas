@@ -110,8 +110,10 @@
 <label for="settingTheme">Theme</label>
 <select id="settingTheme" class="setup-fluid-select">
 <option value="auto">Nebula Core (Standard)</option>
-<option value="light">Light</option>
 <option value="dark">Dark</option>
+<option value="light">Light</option>
+<option value="aurora">Aurora</option>
+<option value="sandstone">Sandstone</option>
 </select>
 </div>
 <div class="form-group">
@@ -188,7 +190,7 @@
 </div>
 <div class="switch-row">
 <div>
-<strong>My Stuff</strong>
+<strong>Library</strong>
 <p>Personal vault, saved items, and bookmarks.</p>
 </div>
 <label class="toggle-switch">
@@ -684,6 +686,23 @@
 <span class="slider round">
 </span>
 </label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Keep Me Approved (Approval Window)</strong>
+<p>After you approve a protected action with Windows Hello, don't ask again for the time below. Every other safety check still runs.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingAdvBreakglassWindowEnabled">
+<span class="slider round">
+</span>
+</label>
+</div>
+<div class="settings-grid two-col">
+<div class="form-group">
+<label for="settingAdvBreakglassWindowHours">Approval Window (hours)</label>
+<input id="settingAdvBreakglassWindowHours" class="form-control" type="number" min="0.25" max="12" step="0.25" value="3">
+</div>
 </div>
 <div class="switch-row">
 <div>

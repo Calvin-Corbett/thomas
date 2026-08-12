@@ -23,7 +23,7 @@ from thomas.tools.filesystem import (
 
 
 def test_fs_write_file_refused_for_flag_path(sandbox: Path) -> None:
-    tool = WriteFileTool(sandbox)
+    tool = WriteFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "runtime/.runtime_protection_disabled", "content": ""})
     assert result.ok is False
     assert result.error is not None
@@ -33,7 +33,7 @@ def test_fs_write_file_refused_for_flag_path(sandbox: Path) -> None:
 
 
 def test_fs_write_file_refused_for_key_path(sandbox: Path) -> None:
-    tool = WriteFileTool(sandbox)
+    tool = WriteFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "runtime/.runtime_protection_key", "content": "00" * 32})
     assert result.ok is False
     assert result.error is not None
@@ -42,7 +42,7 @@ def test_fs_write_file_refused_for_key_path(sandbox: Path) -> None:
 
 
 def test_fs_write_file_still_works_for_unprotected_runtime_subpath(sandbox: Path) -> None:
-    tool = WriteFileTool(sandbox)
+    tool = WriteFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "runtime/agent_logs/job_42.log", "content": "ok"})
     assert result.ok is True
     assert (sandbox / "runtime" / "agent_logs" / "job_42.log").read_text() == "ok"

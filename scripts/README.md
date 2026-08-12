@@ -82,7 +82,7 @@ Report results or make changes
 |---|---|
 | `audit_secrets.py` | Find exposed secrets |
 | `audit_tool_sizes.py` | Tool size analysis |
-| `forge/gates/chat_control_protocol.py` | Chat control verification |
+| `forge/gates/chat_control_protocol.py` | Structured chat-control verification |
 | `forge/gates/competitor_freshness_guard.py` | Competitive intelligence freshness |
 | `forge/gates/repl_scope.py` | REPL scope checking |
 | `agent_identity.py` | Agent identity utilities |

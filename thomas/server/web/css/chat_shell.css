@@ -1,0 +1,431 @@
+/* The Thomas Chat shell's own stylesheet.
+ *
+ * Lifted verbatim out of the inline <style> in chat.html, which had grown past
+ * the 3000-line hard ceiling in thomas/_architecture.py. Nothing here changed
+ * but its address: the <link> sits exactly where the <style> did, after every
+ * other stylesheet and before <body>, so the cascade is the same one these
+ * rules were written against.
+ *
+ * Offline still holds -- this is served from the same local /static tree as the
+ * rest, which is what the icon-fallback note below has always meant.
+ */
+/* Local, deterministic icon fallback: the chat shell must boot offline. */
+.ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
+.ph::before { content: "\2022"; }
+.ph-pencil-simple-line::before { content: "\270E"; }
+.ph-magnifying-glass::before { content: "\2315"; }
+.ph-plus::before { content: "+"; }
+.ph-gear-six::before { content: "\2699"; }
+.ph-sidebar-simple::before { content: "\25EB"; }
+.ph-caret-down::before { content: "\2304"; }
+.ph-caret-right::before { content: "\203A"; }
+.ph-file::before { content: "\25A1"; }
+.ph-file-code::before { content: "\226A\226B"; font-size: .72em; letter-spacing: -.12em; }
+.ph-chalkboard-simple::before, .ph-desktop::before { content: "\25A3"; }
+.ph-sliders-horizontal::before { content: "\2261"; }
+.ph-microphone::before { content: "\25C9"; }
+.ph-arrow-up::before { content: "\2191"; }
+.ph-arrow-right::before { content: "\2192"; }
+.ph-arrow-clockwise::before { content: "\21BB"; }
+.ph-arrow-square-out::before { content: "\2197"; }
+/* Expand / shrink for the result viewer. Without an entry here a name falls
+   through to the `\2022` bullet at the top of this file, so the button renders
+   as an unlabelled dot -- which is what the viewer's expand control did until
+   this was measured in the live UI (`ph-corners-in` computed to content "•").
+   A name missing from this map is invisible rather than broken, so it has to
+   be checked by looking. */
+/* Added 2026-08-10 with the sidebar rework. Every one of these was rendering
+   as the bare "\2022" bullet — the filter control was literally a dot next to
+   the list heading, which is unreadable as a control. */
+.ph-funnel-simple::before, .ph-funnel::before { content: "\25BD"; }
+.ph-push-pin::before { content: "\2691"; }
+.ph-archive::before { content: "\25A4"; }
+.ph-cursor-click::before { content: "\2316"; }
+.ph-hammer::before { content: "\2692"; }
+.ph-dot::before { content: "\00B7"; }
+/* Found by the contract test that walks every ph- name the shell references.
+   These four were already rendering as dots before the sidebar work. */
+.ph-chat-circle::before { content: "\2261"; }
+.ph-flow-arrow::before { content: "\2933"; }
+.ph-activity::before { content: "\223F"; }
+.ph-tray::before { content: "\25F1"; }
+.ph-arrow-down::before { content: "\2193"; }
+.ph-corners-out::before { content: "\26F6"; }
+.ph-corners-in::before { content: "\2921"; }
+.ph-browser::before { content: "\25A3"; }
+.ph-download-simple::before { content: "\2193"; }
+.ph-check::before { content: "\2713"; }
+.ph-x::before, .ph-stop::before { content: "\00D7"; }
+.ph-hammer::before { content: "\2692"; }
+.ph-crosshair-simple::before { content: "\2295"; }
+.ph-buildings::before { content: "\25A6"; }
+.ph-pencil-ruler::before { content: "\270E"; }
+.ph-cards::before, .ph-grid-four::before { content: "\25A6"; }
+.ph-broadcast::before { content: "\224B"; }
+.ph-coins::before { content: "\25C9"; }
+.ph-storefront::before { content: "\25A3"; }
+.ph-users-three::before { content: "\25C9"; }
+.ph-chart-line-up::before, .ph-chart-bar::before { content: "\2197"; }
+.ph-scribble-loop::before { content: "\223F"; }
+.ph-file-text::before { content: "\25A4"; }
+.ph-code::before { content: "<>"; font-size: .72em; }
+.ph-copy::before { content: "\25A3"; }
+.ph-thumbs-up::before { content: "+"; }
+/* Everything below was USED and never mapped, so each one drew the `\2022`
+   bullet above. Found by diffing every `ph-` class in the Code surface against
+   the names defined here: 17 of them, including `ph-robot` -- Thomas's own
+   avatar, on every message he sends and in the empty state -- and
+   `ph-folder-simple` on the project chip. Nothing failed and no test could see
+   it; the markup was correct and the screen showed dots.
+   Keep this file and the markup in step: an unmapped name is invisible. */
+.ph-robot::before { content: "\2726"; }
+.ph-brain::before { content: "\273A"; }
+.ph-briefcase::before { content: "\25A4"; }
+.ph-cards-three::before { content: "\25A6"; }
+.ph-caret-up::before { content: "\2303"; }
+.ph-chats-circle::before { content: "\2261"; }
+.ph-circle-notch::before { content: "\25D4"; }
+.ph-files::before { content: "\29C9"; }
+.ph-folder-simple::before { content: "\25B1"; }
+.ph-folder-open::before { content: "\25B0"; }
+.ph-image::before { content: "\25A7"; }
+.ph-pen-nib::before { content: "\2712"; }
+.ph-pencil-simple::before { content: "\270F"; }
+.ph-play-circle::before { content: "\25B6"; }
+.ph-plugs-connected::before { content: "\26AD"; }
+.ph-warning-circle::before, .ph-warning::before { content: "\26A0"; }
+.ph-arrow-bend-down-right::before { content: "\21B3"; }
+.ph-terminal-window::before { content: "\232B"; }
+.ph-clipboard-text::before { content: "\25A4"; }
+/* Status and common marks. `ph-check-circle` alone was drawn 18 times in a
+   single Code transcript -- every "Checked tool result" row in the activity
+   log -- as a bullet. The rest are the names the shared surfaces reach for;
+   a roughly-right symbol carries meaning and a bullet carries none. */
+/* Text presentation, not emoji. `\2705` is emoji-presentation-by-default, so the
+   browser paints it with the colour-emoji font and CSS `color` does nothing:
+   `.tc-code-technical > i` asks for `var(--c-accent)` and got a bright green
+   sticker 43 times in one Code transcript, next to three-word grey rows on a
+   muted surface. Measured in situ -- css color rgb(139,140,255), 156 of 570 lit
+   pixels green-dominant. `\2713` takes the colour it is given. */
+.ph-check-circle::before { content: "\2713"; }
+.ph-x-circle::before { content: "\2297"; }
+.ph-circle::before { content: "\25CB"; }
+.ph-dot-outline::before { content: "\25CC"; }
+.ph-dots-three-outline::before { content: "\22EF"; }
+.ph-info::before { content: "\2139"; }
+/* `\26A1` and `\1F4CE` are emoji-presentation too, and were the only other two
+   glyphs in this map that ignored `color` -- found by rendering all 108 at a
+   known colour and reading the pixels back. `\2607` and `\1F587` are the text
+   presentation forms of the same idea. */
+.ph-lightning::before { content: "\2607"; }
+.ph-spinner::before, .ph-hourglass::before { content: "\29D6"; }
+.ph-clock-countdown::before, .ph-clock-counter-clockwise::before { content: "\29D7"; }
+.ph-eye::before { content: "\25C9"; }
+.ph-eye-slash::before { content: "\2298"; }
+.ph-trash::before { content: "\2326"; }
+.ph-list::before, .ph-rows::before { content: "\2261"; }
+.ph-stack::before { content: "\2263"; }
+.ph-git-branch::before { content: "\2442"; }
+.ph-globe::before { content: "\25CD"; }
+.ph-shield::before, .ph-shield-check::before { content: "\26E8"; }
+.ph-shield-warning::before, .ph-siren::before { content: "\26A0"; }
+.ph-key::before { content: "\26BF"; }
+.ph-star::before { content: "\2605"; }
+.ph-sparkle::before { content: "\2726"; }
+.ph-package::before, .ph-cube::before { content: "\25A9"; }
+.ph-database::before, .ph-cylinder::before { content: "\233F"; }
+.ph-table::before { content: "\25A6"; }
+.ph-paperclip::before { content: "\1F587"; }
+.ph-paper-plane-tilt::before { content: "\27A4"; }
+.ph-squares-four::before { content: "\25A6"; }
+.ph-wrench::before { content: "\2692"; }
+.ph-bug::before { content: "\2622"; }
+.ph-gear::before { content: "\2699"; }
+.ph-minus::before { content: "\2212"; }
+.ph-arrow-left::before { content: "\2190"; }
+.ph-caret-left::before { content: "\2039"; }
+.ph-arrow-counter-clockwise::before, .ph-arrow-counterclockwise::before { content: "\21BA"; }
+.ph-arrows-clockwise::before { content: "\21C4"; }
+.ph-user-circle::before { content: "\25CE"; }
+.ph-note::before { content: "\25A4"; }
+.ph-game-controller::before { content: "\235F"; }
+.ph-app-window::before { content: "\1F5D4"; }
+html, body { margin: 0; padding: 0; height: 100%; }
+*, *::before, *::after { box-sizing: border-box; }
+.tc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-2) transparent; }
+.tc-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+.tc-scroll::-webkit-scrollbar-thumb { background: var(--c-border-2); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+.tc-scroll::-webkit-scrollbar-thumb:hover { background: var(--c-muted); background-clip: padding-box; }
+/* UI */
+@keyframes tc-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes tc-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+@keyframes tc-dot { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
+@keyframes tc-hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes tc-pop { from { transform: scale(0.97) translateY(6px); } to { transform: scale(1) translateY(0); } }
+/* Nebula */
+@keyframes tc-twinkle { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.45; } }
+@keyframes tc-neb-drift { 0% { transform: translate3d(0,0,0) scale(1); } 100% { transform: translate3d(-3%,-2%,0) scale(1.08); } }
+@keyframes tc-neb-hue { 0% { filter: blur(10px) hue-rotate(0deg); } 100% { filter: blur(10px) hue-rotate(26deg); } }
+@keyframes tc-stars { 0% { transform: translateY(0); } 100% { transform: translateY(-360px); } }
+@keyframes tc-planet-drift { 0% { transform: translate(0,0); } 50% { transform: translate(-26px,-16px); } 100% { transform: translate(0,0); } }
+@keyframes tc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes tc-fly-right { from { transform: translateX(-16vw); } to { transform: translateX(116vw); } }
+@keyframes tc-fly-left { from { transform: translateX(116vw); } to { transform: translateX(-16vw); } }
+@keyframes tc-bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-16px) rotate(3deg); } }
+/* Aurora */
+@keyframes tc-aurora { 0% { transform: translateX(-6%) skewX(-8deg) scaleY(1); } 50% { transform: translateX(6%) skewX(6deg) scaleY(1.16); } 100% { transform: translateX(-4%) skewX(-6deg) scaleY(1); } }
+@keyframes tc-snow { 0% { background-position: 0 0, 0 0, 0 0; } 100% { background-position: 0 700px, 0 500px, 0 900px; } }
+/* Sandstone */
+@keyframes tc-sun { 0%, 100% { transform: translateY(0) scale(1); opacity: 0.9; } 50% { transform: translateY(-8px) scale(1.03); opacity: 1; } }
+@keyframes tc-sled { from { transform: translateX(-20vw); } to { transform: translateX(120vw); } }
+/* Dark */
+@keyframes tc-scan { 0% { transform: translateY(-10%); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateY(110vh); opacity: 0; } }
+@keyframes tc-node { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(10px,-12px); } }
+/* Light */
+@keyframes tc-cloud { from { transform: translateX(-10vw); } to { transform: translateX(110vw); } }
+@keyframes tc-spark { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 0.9; transform: scale(1.1); } }
+/* Canvas */
+@keyframes tc-slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes tc-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes tc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes tc-shimmer { 0% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+@keyframes tc-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+/* Bot mascot */
+@keyframes bot-flame { 0% { transform: scaleY(1) scaleX(1); } 33% { transform: scaleY(1.3) scaleX(0.82); } 66% { transform: scaleY(0.8) scaleX(1.12); } 100% { transform: scaleY(1) scaleX(1); } }
+@keyframes bot-blink { 0%, 90%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+
+/* Living-world visibility is driven by [data-theme] on the shell. */
+.tc-world { display: none; }
+.tc-shell[data-theme="nebula"]    .tc-world.is-nebula    { display: block; }
+.tc-shell[data-theme="aurora"]    .tc-world.is-aurora    { display: block; }
+.tc-shell[data-theme="sandstone"] .tc-world.is-sandstone { display: block; }
+.tc-shell[data-theme="dark"]      .tc-world.is-dark      { display: block; }
+.tc-shell[data-theme="light"]     .tc-world.is-light     { display: block; }
+
+/* Hover utilities (the design used a DC-only style-hover attribute). */
+.hv-icon:hover   { background: var(--c-hover) !important; color: var(--c-text) !important; border-color: var(--c-border-2) !important; }
+.hv-soft:hover   { background: var(--c-hover) !important; color: var(--c-text) !important; }
+.hv-pill:hover   { border-color: var(--c-border-2) !important; background: var(--c-surface-2) !important; }
+.hv-surface:hover{ background: var(--c-surface-2) !important; }
+.hv-newchat:hover{ background: var(--c-accent-soft) !important; border-color: var(--c-accent-line) !important; }
+.hv-card:hover   { border-color: var(--c-accent-line) !important; background: var(--c-surface-2) !important; transform: translateY(-2px); }
+
+/* Assistant answers keep the open Chat layout, but read like finished work. */
+.tc-markdown { white-space: normal !important; }
+.tc-markdown > *:first-child { margin-top: 0 !important; }
+.tc-markdown > *:last-child { margin-bottom: 0 !important; }
+.tc-markdown h1, .tc-markdown h2, .tc-markdown h3 { color: var(--c-text); font-family: var(--font-head); letter-spacing: -0.018em; }
+.tc-markdown h1 { margin: 0 0 14px; font-size: 23px; line-height: 1.25; }
+.tc-markdown h2 { margin: 24px 0 9px; font-size: 19px; line-height: 1.3; }
+.tc-markdown h3 { margin: 21px 0 8px; font-size: 16px; line-height: 1.35; }
+.tc-markdown p { margin: 0 0 11px; }
+.tc-markdown ul, .tc-markdown ol { margin: 5px 0 13px; padding-left: 22px; }
+.tc-markdown li { margin: 4px 0; padding-left: 2px; }
+.tc-markdown strong { color: var(--c-text); font-weight: 750; }
+.tc-markdown code { border: 1px solid var(--c-border); border-radius: 5px; background: var(--c-surface-2); padding: 1px 5px; font-family: var(--font-mono); font-size: .88em; }
+.tc-markdown pre { margin: 12px 0 15px; overflow-x: auto; border: 1px solid var(--c-border); border-radius: 11px; background: rgba(3,5,13,.62); padding: 13px 15px; color: var(--c-text); font: 13px/1.6 var(--font-mono); white-space: pre; }
+.tc-markdown pre code { border: 0; background: transparent; padding: 0; font: inherit; }
+.tc-markdown hr { margin: 19px 0; border: 0; border-top: 1px solid var(--c-border); }
+.tc-markdown a { color: var(--c-accent); text-underline-offset: 3px; }
+/* GFM tables (mdToHtml wraps each in .tc-md-table). A wide table scrolls
+   inside its own container instead of stretching the bubble; colors ride the
+   --c-* variables so both themes get a readable grid without extra rules.
+   Cell alignment from the delimiter row arrives as an inline text-align,
+   which outranks the default left here. */
+.tc-markdown .tc-md-table { margin: 12px 0 15px; max-width: 100%; overflow-x: auto; }
+.tc-markdown table { border-collapse: collapse; width: max-content; max-width: 100%; font-size: 14.5px; line-height: 1.55; }
+.tc-markdown th, .tc-markdown td { border: 1px solid var(--c-border); padding: 7px 12px; text-align: left; vertical-align: top; }
+.tc-markdown th { background: var(--c-surface-2); color: var(--c-text); font-weight: 750; }
+.tc-markdown td { background: var(--c-surface); }
+
+/* The open conversation's name, centred on the model row.
+   Absolutely positioned inside the top bar (which carries position: relative)
+   so it is NOT a flex item: the sidebar toggle, the model pill and the
+   Canvas/Redesign/theme pills keep the exact positions they had, whatever the
+   name's length. It truncates instead of wrapping, and never grows into the
+   pills — max-width is capped well inside the free space between the two
+   groups, measured at 1920/1440/1280 (see the step-down below).
+   pointer-events: none keeps the row's real controls clickable through it. */
+#tc-chat-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  /* The cap is measured, not guessed. The row's centre is at
+     (280 + 100vw) / 2 and the right-hand pill group starts at
+     100vw - 400px, so a TRULY centred box has (100vw / 2 - 540px) of room on
+     that side — the right runs out first because that group is the wider of
+     the two. Twice that, less a ~30px breathing gap, is `100vw - 1140px`;
+     380px is where a chat name stops needing more. */
+  max-width: min(380px, calc(100vw - 1140px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--c-dim);
+  font-family: var(--font-label, inherit);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  pointer-events: none;
+}
+#tc-chat-title[hidden] { display: none; }
+/* Below this the formula above leaves under ~100px, which is an ellipsis with
+   a word in front of it rather than a name, so the row stands down entirely —
+   the sidebar still shows which conversation is open. Stated plainly: this is
+   the cost of a TRUE centre. The centre of this row is also the centre of the
+   reading column (both land on the same x), which is why the title is pinned
+   to it instead of floating in the free space between the pill groups. */
+@media (max-width: 1240px) { #tc-chat-title { display: none; } }
+
+/* ONE reading column: the thread's messages and the composer card sit on the
+   same left and right edges.
+   Both are .tc-rail boxes, so the rail alone decides the column — neither adds
+   a horizontal inset of its own any more. Before this, the thread carried
+   24px of its own padding and the composer's WRAPPER carried 18px, which put
+   the two columns on different edges: measured at 1920 the message column ran
+   740..1460 and the composer card 734..1502 — 6px out on the left, 42px on the
+   right. */
+#tc-thread { padding: 28px 0 48px; }
+@media (max-width: 1080px) {
+  /* Under the rail's own width the centred boxes would touch the column
+     edges, so both take the SAME inset and still agree with each other.
+     NOT FIXED, MEASURED: this branch is the one place the two can still part.
+     Above 1080 the rail's left edge is a viewport calculation, so the scroll
+     box's width cannot move it and the edges match to 0.00px. Here the rail
+     falls back to auto margins, so the thread centres inside the SCROLL box
+     and the composer inside the full column -- identical while scrollbars are
+     overlays (measured on this machine: 0.00 / 0.00 at 1000x380 with the
+     thread scrolling), but on a browser with classic space-taking scrollbars
+     the composer's right edge sits one scrollbar-width outside the messages
+     (simulated: 0.00 left, -15px right). `scrollbar-gutter: stable` was tried
+     and is a bad trade -- it MAKES a gutter where this machine has none, so a
+     case that measured exact becomes 10px out. The honest fix is to feed the
+     measured gutter to the composer as a custom property, which is a script,
+     not a rule. */
+  #tc-thread, #tc-composer-rail { padding-left: 20px; padding-right: 20px; }
+}
+
+/* Chat content "rail": its left edge is anchored to a VIEWPORT-relative
+   position (not the column's width), so when the Canvas opens and the chat
+   column shrinks from the right, the composer/thread DON'T slide — they only
+   narrow. 524 = 140 (half sidebar) + 384 (half of the 768 content width). */
+.tc-rail { margin-left: max(16px, calc(50vw - 524px)) !important; margin-right: auto !important; }
+@media (max-width: 1080px) {
+  /* Small screens: space "demands it" — re-center content and let the Canvas
+     overlay the chat instead of squeezing it. */
+  .tc-rail { margin-left: auto !important; }
+  #tc-canvas { position: absolute !important; top: 0; right: 0; bottom: 0; z-index: 40; width: min(94vw, 540px) !important; box-shadow: var(--c-shadow); }
+}
+@media (max-width: 760px) {
+  .tc-sidebar { position: absolute !important; inset: 0 auto 0 0; z-index: 80 !important; margin-left: -280px !important; box-shadow: var(--c-shadow); }
+  .tc-shell.is-mobile-sidebar-open .tc-sidebar { margin-left: 0 !important; }
+  #tc-canvas { width: 100vw !important; }
+}
+@keyframes tc-shimmer-loop { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes tc-indeterminate { 0% { transform: translateX(-130%); } 100% { transform: translateX(380%); } }
+/* Canvas live document — Thomas's streamed content rendered as a real page,
+   growing as he writes (the Claude-design "watch it build" effect). */
+.tc-doc-page { flex: 0 0 auto; align-self: stretch; background: #fff; color: #1d2330; border-radius: 10px; padding: 30px 32px; box-shadow: 0 12px 34px rgba(0,0,0,0.28); font-family: var(--font-serif, Georgia, 'Times New Roman', serif); line-height: 1.7; font-size: 15px; }
+.tc-doc-page > *:first-child { margin-top: 0; }
+.tc-doc-page h1 { font-size: 25px; line-height: 1.25; margin: 0 0 12px; font-weight: 700; }
+.tc-doc-page h2 { font-size: 19px; margin: 22px 0 8px; font-weight: 700; }
+.tc-doc-page h3 { font-size: 16px; margin: 18px 0 6px; font-weight: 700; }
+.tc-doc-page p { margin: 0 0 12px; }
+.tc-doc-page ul, .tc-doc-page ol { margin: 0 0 12px; padding-left: 24px; }
+.tc-doc-page li { margin: 3px 0; }
+.tc-doc-page code { background: #eef1f7; border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em; }
+.tc-doc-page strong { font-weight: 700; } .tc-doc-page em { font-style: italic; }
+.tc-doc-page hr { border: 0; border-top: 1px solid #e4e7ef; margin: 18px 0; }
+.tc-doc-page a { color: #2f6bff; }
+/* The document canvas renders through the same mdToHtml, so its tables need
+   grid lines too — fixed light colors here to match the paper page above. */
+.tc-doc-page .tc-md-table { margin: 0 0 12px; max-width: 100%; overflow-x: auto; }
+.tc-doc-page table { border-collapse: collapse; max-width: 100%; }
+.tc-doc-page th, .tc-doc-page td { border: 1px solid #d9dde7; padding: 6px 11px; text-align: left; vertical-align: top; }
+.tc-doc-page th { background: #f2f4f9; font-weight: 700; }
+.tc-doc-cursor { display: inline-block; width: 6px; height: 1.02em; background: #2f6bff; margin-left: 1px; vertical-align: text-bottom; border-radius: 1px; animation: tc-blink 1s step-end infinite; }
+@keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+/* "Queued — will send when this reply finishes": the note under a message
+   typed while Thomas was still answering (js/chat_turn_flow.js attaches it to
+   the user bubble at queue time and removes it the moment it auto-sends). The
+   bubble's flex column right-aligns user content, so the note follows it. */
+.tc-queued-note { font-size: 11.5px; color: var(--c-muted); padding: 2px 4px 0; font-style: italic; }
+
+/* LIVING WORLDS legibility - the honest fix from the chat.html comment block
+   (dim sprites under the content column, no z-index changes). A soft column
+   of the theme's own background paints between the world layer and the text:
+   main has z-index 1 so this negative-z pseudo stays INSIDE its stacking
+   context - above the world sprites, below every child. Sprites crossing the
+   reading column fade; the margins stay alive. */
+#tc-shell > main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent 2%,
+    color-mix(in srgb, var(--c-bg) 55%, transparent) 22%,
+    color-mix(in srgb, var(--c-bg) 55%, transparent) 78%,
+    transparent 98%);
+}
+
+/* Chromium keeps an embedded document's canvas transparent only when the
+   iframe ELEMENT's used color-scheme matches the embedded DOCUMENT root's.
+   Any mismatch paints an opaque canvas (white on light-pref machines - the
+   "white sheet" P0). So both sides carry the ACTIVE THEME's explicit scheme:
+   tokens.css declares it on :root per theme, workspace_shell.js applyTheme()
+   pins it inline in every embedded doc, and this rule pins the frame element.
+   Never reach for a 'normal' scheme as a transparency hack - it means
+   "light only", which mismatches every dark theme. */
+.tc-workspace-frame { color-scheme: dark; }
+html[data-theme="light"] .tc-workspace-frame,
+html[data-theme="sandstone"] .tc-workspace-frame { color-scheme: light; }
+
+/* Build badge - moved verbatim from chat.html's former inline <style>
+   block; the measurement comments below are load-bearing docs. */
+/* Everything lives here rather than inline. An inline `color` outranks any
+   stylesheet rule without !important, so styling the base state inline
+   silently killed both the hover state and the uncommitted-tree state --
+   the attribute was set and nothing changed colour. */
+#tc-build-badge {
+  position: absolute; right: 10px; bottom: 8px; z-index: 40;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .02em;
+  line-height: 1; color: var(--c-muted); cursor: pointer; opacity: .55;
+  transition: opacity .14s ease, color .14s ease, border-color .14s ease;
+}
+#tc-build-badge[hidden] { display: none; }
+#tc-build-badge:hover, #tc-build-badge:focus-visible { opacity: 1; color: var(--c-dim); border-color: var(--c-border-2); }
+#tc-build-badge:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+/* An uncommitted tree is the one state worth interrupting for: what is
+   running is not the commit named beside it. */
+#tc-build-badge[data-dirty="1"] { color: #e8b45c; border-color: rgba(232,180,92,.42); opacity: .82; }
+#tc-build-badge[data-dirty="1"]:hover, #tc-build-badge[data-dirty="1"]:focus-visible { color: #f5cd85; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #tc-build-badge { transition: none; } }
+/* NOT FIXED, MEASURED 2026-07-30. This badge overlaps the "Thomas can make
+   mistakes" line below about 1210px, and 640 is far too low to prevent it.
+   Measured by comparing the PAINTED text extents (a Range over each text
+   node, not the element boxes -- the disclaimer's box spans the whole
+   composer column while its text is centred and much narrower, which
+   reports a 168px overlap at 1280 where the picture shows a 37px gap):
+
+     1220px  clear        1200px  1px        1160px  21px
+     1120px  41px         1100px  46px       900px  133px
+
+   Left alone deliberately. The crossover moves with the badge's own text --
+   "uncommitted" adds roughly 60px, a shorter commit or port takes some
+   back -- so any fixed breakpoint is approximate, and the honest ones are
+   bad trades: 1280 hides a build identity the owner uses on the commonest
+   laptop width, and anything lower still overlaps on a clean tree. The fix
+   that would actually hold is structural -- disclaimer and badge in one
+   flex row so the layout engine keeps them apart -- and that is a footer
+   rewrite, not a number.
+
+   Severity, stated plainly so the next person can weigh it: both elements
+   are low-emphasis and the badge is 55% opaque, so this is untidy rather
+   than misleading. Nothing reads as wrong; it just looks unfinished. */
+@media (max-width: 640px) { #tc-build-badge { display: none; } }

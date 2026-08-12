@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import json
 import tempfile
 import unittest
+from typing import Any
+from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
@@ -8,17 +12,36 @@ from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfi
 from thomas.server.app import create_app
 
 
-def _parse_ndjson(blob: str):
-    out = []
-    for raw in str(blob or "").splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        out.append(json.loads(line))
-    return out
+def _parse_ndjson(blob: str) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in str(blob or "").splitlines() if line.strip()]
 
 
-class TestServerChatControls(AioHTTPTestCase):
+class _FakeBrain:
+    calls: list[dict[str, Any]] = []
+
+    def __init__(self, **_kwargs: Any) -> None:
+        pass
+
+    async def process_message(self, *, conversation, prompt, dispatcher, **kwargs):  # noqa: ANN001
+        self.calls.append({"prompt": prompt, **kwargs})
+        conversation = conversation.append_message("user", prompt)
+        conversation = conversation.append_message("assistant", "MODEL_OWNED_OK")
+        await dispatcher.emit_text("MODEL_OWNED_OK")
+        await dispatcher.emit_done(
+            session_id=str(kwargs.get("session_id") or ""),
+            conversation_version=conversation.version,
+            thinking_summary="canonical_v2",
+            iterations=1,
+            tool_calls=0,
+        )
+        return conversation
+
+
+async def _no_background_delegation(*_args: Any, **_kwargs: Any) -> None:
+    return None
+
+
+class TestServerStructuredChatControls(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
@@ -38,223 +61,67 @@ class TestServerChatControls(AioHTTPTestCase):
         )
         return create_app(cfg)
 
-    async def test_chat_control_updates_settings_via_stream_event(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sess_payload = await sess_resp.json()
-        sid = str(sess_payload.get("session_id") or "")
-        self.assertTrue(sid)
+    async def _post_with_fake_brain(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        _FakeBrain.calls = []
+        with (
+            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2.start_background_delegation", _no_background_delegation),
+        ):
+            response = await self.client.post("/api/chat", json=payload)
+        self.assertEqual(response.status, 200)
+        return _parse_ndjson(await response.text())
 
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "session_id": sid,
+    async def test_ordinary_control_wording_reaches_model_without_hidden_ui_action(self):
+        prompt = "set mode to batch"
+        events = await self._post_with_fake_brain(
+            {
                 "profile": "local",
                 "mode": "fast",
-                "text": "please turn on tool details",
-            },
+                "text": prompt,
+            }
         )
-        self.assertEqual(resp.status, 200)
-        body = await resp.text()
-        events = _parse_ndjson(body)
-        self.assertTrue(events)
 
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch_event = patch_events[0]
-        patch = patch_event.get("patch") or {}
-        settings = patch.get("settings") or {}
-        self.assertIs(settings.get("showToolDetails"), True)
-        self.assertEqual(str(patch_event.get("actor") or ""), "control_parser")
-        self.assertEqual(str(patch_event.get("intent_type") or ""), "ui_control")
-        self.assertFalse(bool(patch_event.get("no_op", True)))
-        self.assertTrue(len(patch_event.get("applied_operations") or []) >= 1)
+        self.assertEqual(_FakeBrain.calls[0].get("prompt"), prompt)
+        self.assertEqual(_FakeBrain.calls[0].get("mode"), "fast")
+        self.assertFalse(any(event.get("type") == "ui_state_patch" for event in events))
+        self.assertFalse(any(event.get("type") == "operator_action" for event in events))
+        self.assertTrue(any(event.get("type") == "text" and event.get("text") == "MODEL_OWNED_OK" for event in events))
 
-        done_events = [e for e in events if e.get("type") == "done"]
-        self.assertEqual(len(done_events), 1)
-        self.assertEqual(done_events[0].get("tool_calls"), 0)
-        done = done_events[0]
-        self.assertIn("run_usage", done)
-        self.assertIn("session_usage", done)
-        control_meta = (done.get("token_report") or {}).get("control") or {}
-        self.assertEqual(str(control_meta.get("actor") or ""), "control_parser")
-        self.assertFalse(bool(control_meta.get("no_op", True)))
-        seqs = [int(e.get("seq")) for e in events]
-        self.assertEqual(seqs, sorted(seqs))
-
-    async def test_chat_control_updates_mode_via_stream_event(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sess_payload = await sess_resp.json()
-        sid = str(sess_payload.get("session_id") or "")
-        self.assertTrue(sid)
-
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "session_id": sid,
+    async def test_structured_mode_and_autonomy_fields_control_runtime(self):
+        events = await self._post_with_fake_brain(
+            {
                 "profile": "local",
-                "mode": "fast",
-                "text": "please set mode to thinking",
-            },
+                "mode": "batch",
+                "autonomy_level": 4,
+                "text": "run the supplied task",
+            }
         )
-        self.assertEqual(resp.status, 200)
-        body = await resp.text()
-        events = _parse_ndjson(body)
-        self.assertTrue(events)
 
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch = patch_events[0].get("patch") or {}
-        self.assertEqual(str(patch.get("mode") or ""), "thinking")
+        self.assertEqual(_FakeBrain.calls[0].get("prompt"), "run the supplied task")
+        self.assertEqual(_FakeBrain.calls[0].get("mode"), "max")
+        self.assertEqual(_FakeBrain.calls[0].get("autonomy_level"), 4)
+        migration = [event for event in events if event.get("type") == "mode_migrated"]
+        self.assertEqual(migration[0].get("from"), "batch")
+        self.assertEqual(migration[0].get("to"), "max")
 
-    async def test_chat_control_accepts_sessionid_and_message_aliases(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
+    async def test_unknown_explicit_model_alias_is_rejected(self):
+        session_response = await self.client.post("/api/session/new")
+        self.assertEqual(session_response.status, 200)
+        session_id = str((await session_response.json()).get("session_id") or "")
+        self.assertTrue(session_id)
 
-        resp = await self.client.post(
+        response = await self.client.post(
             "/api/chat",
             json={
-                "sessionId": sid,
-                "profile": "local",
-                "mode": "fast",
-                "message": "please turn on tool details",
-            },
-        )
-        self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch = patch_events[0].get("patch") or {}
-        settings = patch.get("settings") or {}
-        self.assertIs(settings.get("showToolDetails"), True)
-
-    async def test_chat_control_rejects_unknown_model_alias_profile(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "sessionId": sid,
+                "sessionId": session_id,
                 "model": "not-a-real-profile",
                 "mode": "fast",
-                "message": "please turn on tool details",
+                "message": "hello",
             },
         )
-        self.assertEqual(resp.status, 400)
-        text = await resp.text()
-        self.assertIn("unknown profile", text)
 
-    async def test_session_import_rejects_unknown_model_alias_profile(self):
-        resp = await self.client.post(
-            "/api/session/import",
-            json={
-                "model": "not-a-real-profile",
-                "conversation": [],
-            },
-        )
-        self.assertEqual(resp.status, 400)
-        text = await resp.text()
-        self.assertIn("unknown profile", text)
-
-    async def test_chat_control_updates_batch_mode_via_stream_event(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "mode": "fast",
-                "text": "set mode to batch",
-            },
-        )
-        self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch = patch_events[0].get("patch") or {}
-        self.assertEqual(str(patch.get("mode") or ""), "batch")
-
-    async def test_chat_control_updates_autonomy_level_via_stream_event(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "mode": "fast",
-                "text": "set autonomy level 4 full auto",
-            },
-        )
-        self.assertEqual(resp.status, 200)
-        body = await resp.text()
-        events = _parse_ndjson(body)
-        self.assertTrue(events)
-
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch = patch_events[0].get("patch") or {}
-        settings = patch.get("settings") or {}
-        self.assertEqual(int(settings.get("autonomyLevel") or 0), 4)
-
-    async def test_chat_control_noop_reports_no_changes(self):
-        sess_resp = await self.client.post("/api/session/new")
-        self.assertEqual(sess_resp.status, 200)
-        sid = str((await sess_resp.json()).get("session_id") or "")
-        self.assertTrue(sid)
-
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "session_id": sid,
-                "profile": "local",
-                "mode": "fast",
-                "text": "please set mode to fast",
-            },
-        )
-        self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        self.assertTrue(events)
-
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch_event = patch_events[0]
-        self.assertTrue(bool(patch_event.get("no_op", False)))
-        self.assertEqual(len(patch_event.get("applied_operations") or []), 0)
-
-        text_events = [e for e in events if e.get("type") == "text"]
-        self.assertEqual(len(text_events), 1)
-        self.assertIn("No configuration changes were applied", str(text_events[0].get("text") or ""))
-
-    async def test_chat_control_allows_missing_session_id_for_single_shot_payload(self):
-        resp = await self.client.post(
-            "/api/chat",
-            json={
-                "profile": "local",
-                "mode": "fast",
-                "message": "set mode to batch",
-            },
-        )
-        self.assertEqual(resp.status, 200)
-        events = _parse_ndjson(await resp.text())
-        self.assertTrue(events)
-        patch_events = [e for e in events if e.get("type") == "ui_state_patch"]
-        self.assertEqual(len(patch_events), 1)
-        patch = patch_events[0].get("patch") or {}
-        self.assertEqual(str(patch.get("mode") or ""), "batch")
+        self.assertEqual(response.status, 400)
+        self.assertIn("unknown profile", await response.text())
 
 
 if __name__ == "__main__":

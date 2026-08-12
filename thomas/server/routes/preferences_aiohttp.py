@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 from aiohttp import web
@@ -13,7 +12,7 @@ from pydantic import ValidationError
 
 try:
     from thomas.observability.event_recorder import record_event
-except Exception:  # pragma: no cover - optional observability dependency
+except (AttributeError, ImportError, OSError, RuntimeError):  # pragma: no cover - optional observability dependency
 
     def record_event(*_args, **_kwargs):
         return None
@@ -72,21 +71,10 @@ def _emit_onboarding_patch_telemetry(*, user_id: str, thread_id: str | None, pat
             },
             run_id=run_id,
         )
-    except Exception as exc:
+    except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        # Named, not broad: telemetry must never break the route, but a bug in
+        # the emitter still surfaces.
         log.debug("onboarding preferences telemetry emit failed: %s", exc)
-
-
-def _prefs_settings_js() -> Path:
-    web_root = Path(__file__).resolve().parents[1] / "web"
-    candidates = [
-        web_root / "js" / "settings.js",
-        web_root / "settings.js",
-        web_root / "static" / "settings.js",
-    ]
-    for path in candidates:
-        if path.exists():
-            return path
-    return candidates[0]
 
 
 def register_preferences_routes(
@@ -141,12 +129,5 @@ def register_preferences_routes(
 
         return _prefs_json(updated)
 
-    async def api_preferences_js(request: web.Request) -> web.StreamResponse:
-        path = _prefs_settings_js()
-        if not path.exists():
-            raise web.HTTPNotFound(text="settings.js not found")
-        return web.FileResponse(path)
-
     app.router.add_get("/api/preferences", api_preferences_get)
     app.router.add_patch("/api/preferences", api_preferences_patch)
-    app.router.add_get("/js/settings.js", api_preferences_js)

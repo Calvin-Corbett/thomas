@@ -1,0 +1,810 @@
+/* components.css lines 4795-6392 */
+.module-wb-color-chip {
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--c-border-2);
+    background: var(--chip, #7ab8ff);
+    cursor: pointer;
+    transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.module-wb-color-chip:hover {
+    transform: translateY(-1px);
+}
+
+.module-wb-color-chip.active {
+    border-color: var(--c-text);
+    box-shadow: 0 0 0 1px var(--c-accent-line);
+}
+
+.module-wb-pixel-canvas {
+    width: min(100%, 252px);
+    aspect-ratio: 1 / 1;
+    border: 1px solid var(--c-border-2);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--c-bg) 78%, transparent);
+    image-rendering: pixelated;
+    justify-self: start;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.module-wb-wave-stage {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+    min-height: 120px;
+    padding: 8px;
+}
+
+.module-wb-image-stage {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+    min-height: 140px;
+    padding: 10px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+}
+
+.module-wb-image-stage img {
+    max-width: 100%;
+    max-height: 280px;
+    border-radius: 8px;
+    border: 1px solid var(--c-border);
+    image-rendering: pixelated;
+    object-fit: contain;
+}
+
+.module-wb-timeline {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.module-wb-clip {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-primary);
+    min-width: 110px;
+    padding: 7px;
+    text-align: left;
+    display: grid;
+    gap: 3px;
+    cursor: pointer;
+}
+
+.module-wb-clip.selected {
+    border-color: var(--module-accent);
+    background: var(--c-accent-soft);
+}
+
+.module-wb-clip span {
+    font-size: 11px;
+}
+
+.module-wb-clip strong {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.module-wb-code-editor {
+    min-height: 280px;
+    border: 1px solid var(--c-border-2);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--c-bg) 78%, transparent);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px;
+}
+
+.module-wb-monaco {
+    min-height: 340px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.module-wb-issue {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 8px;
+}
+
+.module-wb-issue.ok {
+    border-color: color-mix(in srgb, var(--c-success) 35%, transparent);
+}
+
+.module-wb-issue.warn {
+    border-color: color-mix(in srgb, var(--c-warn) 46%, transparent);
+}
+
+.module-wb-issue.error {
+    border-color: color-mix(in srgb, var(--c-danger) 44%, transparent);
+    color: var(--c-danger);
+}
+
+.module-wb-shell.module-wb-shell-game-director {
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.module-wb-gs-launcher {
+    background:
+        linear-gradient(155deg, color-mix(in srgb, var(--c-bg) 96%, transparent), color-mix(in srgb, var(--c-bg) 92%, transparent)),
+        radial-gradient(circle at 80% -40%, color-mix(in srgb, var(--c-accent) 20%, transparent), transparent 56%);
+    border-color: var(--c-border-2);
+}
+
+.module-wb-engine-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
+}
+
+.module-wb-engine-tile {
+    border: 1px solid var(--c-border-2);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+    color: var(--text-secondary);
+    padding: 10px;
+    min-height: 116px;
+    text-align: left;
+    display: grid;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.module-wb-engine-tile:hover {
+    border-color: var(--c-accent-line);
+    background: color-mix(in srgb, var(--c-bg) 86%, transparent);
+}
+
+.module-wb-engine-tile.active {
+    border-color: color-mix(in srgb, var(--c-success) 62%, transparent);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--c-bg) 92%, transparent), color-mix(in srgb, var(--c-bg) 90%, transparent));
+}
+
+.module-wb-engine-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--c-accent-line);
+    background: var(--c-accent-soft);
+    color: var(--c-text);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    display: inline-grid;
+    place-items: center;
+}
+
+.module-wb-engine-tile strong {
+    color: var(--c-text);
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.module-wb-engine-tile small {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.module-wb-engine-tag {
+    justify-self: start;
+    border-radius: 999px;
+    border: 1px solid var(--c-border-2);
+    padding: 2px 8px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--c-dim);
+}
+
+.module-wb-gs-director-grid {
+    grid-template-columns: minmax(250px, 310px) minmax(0, 1fr) minmax(250px, 320px);
+    gap: 10px;
+}
+
+.module-wb-gs-pane {
+    min-height: 0;
+}
+
+.module-wb-gs-project-list {
+    display: grid;
+    gap: 7px;
+    max-height: 470px;
+    overflow: auto;
+}
+
+.module-wb-gs-project-row.active {
+    border-color: color-mix(in srgb, var(--c-success) 60%, transparent);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
+}
+
+.module-wb-gs-focus-pane {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+}
+
+.module-wb-gs-focus {
+    display: grid;
+    gap: 7px;
+}
+
+.module-wb-gs-tools {
+    display: grid;
+    gap: 7px;
+}
+
+.module-wb-gs-chatdock {
+    display: grid;
+    gap: 8px;
+    background: linear-gradient(165deg, color-mix(in srgb, var(--c-bg) 96%, transparent), color-mix(in srgb, var(--c-bg) 90%, transparent));
+    border-color: color-mix(in srgb, var(--c-success) 34%, transparent);
+}
+
+.module-wb-gs-chat-thread {
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c-bg) 66%, transparent);
+    padding: 8px;
+    max-height: 230px;
+    overflow: auto;
+    display: grid;
+    gap: 8px;
+}
+
+.module-wb-gs-chat-msg {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-surface);
+    padding: 7px 8px;
+    display: grid;
+    gap: 4px;
+}
+
+.module-wb-gs-chat-msg.user {
+    border-color: var(--c-accent-line);
+    background: color-mix(in srgb, var(--c-accent) 8%, transparent);
+}
+
+.module-wb-gs-chat-msg.assistant {
+    border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+    background: color-mix(in srgb, var(--c-success) 8%, transparent);
+}
+
+.module-wb-gs-chat-msg strong {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--c-text);
+}
+
+.module-wb-gs-chat-msg p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
+}
+
+.module-wb-gs-chat-msg span {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.module-wb-gs-chat-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.module-wb-shell.module-wb-shell-game-oss .module-wb-oss-stack {
+    grid-column: 1 / -1;
+}
+
+.module-wb-gs-terminal-shell {
+    background:
+        linear-gradient(165deg, color-mix(in srgb, var(--c-bg) 98%, transparent), color-mix(in srgb, var(--c-bg) 94%, transparent)),
+        radial-gradient(circle at 18% -10%, color-mix(in srgb, var(--c-accent) 20%, transparent), transparent 52%);
+    border-color: var(--c-border-2);
+}
+
+.module-wb-gs-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 2px 6px;
+}
+
+.module-wb-gs-title,
+.module-wb-gs-status {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.module-wb-gs-title {
+    color: var(--c-success);
+}
+
+.module-wb-gs-status {
+    color: var(--c-dim);
+    text-align: right;
+}
+
+.module-wb-gs-workspace {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    min-height: 0;
+}
+
+.module-wb-gs-left,
+.module-wb-gs-center {
+    min-height: 0;
+}
+
+.module-wb-gs-left {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+}
+
+.module-wb-gs-block {
+    border: 1px solid var(--c-border-2);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+    padding: 8px;
+    display: grid;
+    gap: 7px;
+}
+
+.module-wb-gs-block h4 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--c-dim);
+}
+
+.module-wb-outliner-row {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-surface);
+    color: var(--text-secondary);
+    padding: 7px 8px;
+    display: grid;
+    gap: 3px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.module-wb-outliner-row:hover {
+    border-color: var(--c-accent-line);
+    background: var(--c-accent-soft);
+}
+
+.module-wb-outliner-row.active {
+    border-color: color-mix(in srgb, var(--c-success) 62%, transparent);
+    background: color-mix(in srgb, var(--c-success) 14%, transparent);
+}
+
+.module-wb-outliner-row strong {
+    font-size: 11px;
+    color: var(--c-text);
+}
+
+.module-wb-outliner-row span {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.module-wb-gs-center {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) minmax(130px, 190px);
+    gap: 8px;
+}
+
+.module-wb-gs-toolbar {
+    border: 1px solid var(--c-border-2);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+    padding: 7px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.module-wb-gs-terminal {
+    border: 1px solid color-mix(in srgb, var(--c-success) 32%, transparent);
+    border-radius: 10px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 90%, transparent), color-mix(in srgb, var(--c-bg) 94%, transparent));
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+}
+
+.module-wb-gs-terminal-head {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--c-success);
+}
+
+.module-wb-gs-terminal .module-wb-log-list {
+    max-height: 150px;
+}
+
+.module-wb-gs-right {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 88%, transparent), color-mix(in srgb, var(--c-bg) 82%, transparent));
+}
+
+.module-wb-collapsible {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--c-bg) 54%, transparent);
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+}
+
+.module-wb-collapsible > summary {
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--c-dim);
+    list-style: none;
+}
+
+.module-wb-collapsible > summary::-webkit-details-marker {
+    display: none;
+}
+
+.module-wb-game-stage-layout {
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.module-wb-game-grid-wrap,
+.module-wb-game-preview-wrap,
+.module-wb-game-unreal-wrap {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-surface);
+    padding: 8px;
+    display: none;
+    gap: 7px;
+    min-height: 0;
+}
+
+.module-wb-game-stage-layout[data-game-view="edit"] .module-wb-game-grid-wrap {
+    display: grid;
+}
+
+.module-wb-game-stage-layout[data-game-view="playtest"] .module-wb-game-preview-wrap {
+    display: grid;
+}
+
+.module-wb-game-stage-layout[data-game-view="unreal"] .module-wb-game-unreal-wrap {
+    display: grid;
+}
+
+.module-wb-game-stage-layout[data-game-view="split"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.module-wb-game-stage-layout[data-game-view="split"] .module-wb-game-preview-wrap,
+.module-wb-game-stage-layout[data-game-view="split"] .module-wb-game-unreal-wrap {
+    display: grid;
+}
+
+.module-wb-game-grid {
+    display: grid;
+    gap: 3px;
+    max-height: 520px;
+    overflow: auto;
+}
+
+.module-wb-game-preview {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--c-bg) 72%, transparent);
+    min-height: 260px;
+    overflow: hidden;
+}
+
+.module-wb-game-preview canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.module-wb-unreal-viewport {
+    position: relative;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--c-bg) 74%, transparent);
+    min-height: 260px;
+    overflow: hidden;
+}
+
+.module-wb-unreal-viewport iframe {
+    width: 100%;
+    min-height: 260px;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: color-mix(in srgb, var(--c-bg) 92%, transparent);
+}
+
+.module-wb-unreal-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 86%, transparent), color-mix(in srgb, var(--c-bg) 92%, transparent));
+    padding: 16px;
+    display: grid;
+    align-content: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.module-wb-unreal-overlay strong {
+    font-size: 14px;
+    color: var(--c-text);
+}
+
+.module-wb-unreal-overlay p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.module-wb-game-cell {
+    border: 1px solid var(--c-border);
+    border-radius: 4px;
+    min-width: 0;
+    min-height: 0;
+    aspect-ratio: 1 / 1;
+    background: var(--c-surface);
+    cursor: pointer;
+}
+
+.module-wb-game-cell.tile-1 {
+    background: rgba(126, 189, 255, 0.64);
+}
+
+.module-wb-game-cell.tile-2 {
+    background: rgba(255, 132, 144, 0.64);
+}
+
+.module-wb-game-cell.tile-3 {
+    background: rgba(118, 217, 172, 0.7);
+}
+
+.module-wb-game-cell.tile-4 {
+    background: rgba(255, 215, 126, 0.74);
+}
+
+.module-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+        "queue health"
+        "actions activity"
+        "triage triage";
+    gap: 10px;
+}
+
+#moduleQueuePanel {
+    grid-area: queue;
+}
+
+#moduleHealthPanel {
+    grid-area: health;
+}
+
+#moduleActionsPanel {
+    grid-area: actions;
+}
+
+#moduleActivityPanel {
+    grid-area: activity;
+}
+
+#moduleTriagePanel {
+    grid-area: triage;
+}
+
+.module-workspace[data-layout="hub"] .module-grid {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+.module-workspace[data-layout="ops"] .module-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-areas:
+        "queue health"
+        "queue activity"
+        "actions actions"
+        "triage triage";
+}
+
+.module-workspace[data-layout="tri_pane"] .module-grid {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(300px, 420px);
+    grid-template-areas:
+        "health queue activity"
+        "actions actions actions"
+        "triage triage triage";
+}
+
+.module-workspace[data-layout="board"] .module-grid {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    grid-template-areas:
+        "actions actions"
+        "health queue"
+        "activity queue"
+        "triage triage";
+}
+
+.module-workspace[data-layout="canvas"] .module-grid {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-areas:
+        "actions actions actions"
+        "queue queue health"
+        "activity activity activity"
+        "triage triage triage";
+}
+
+.module-workspace[data-layout="crew"] .module-grid {
+    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-areas:
+        "actions actions actions"
+        "health queue activity"
+        "triage triage triage";
+}
+
+.module-workspace[data-layout="editor_media"] .module-grid,
+.module-workspace[data-layout="editor_code"] .module-grid,
+.module-workspace[data-layout="editor_game"] .module-grid,
+.module-workspace[data-layout="editor_3d"] .module-grid {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(280px, 380px);
+    grid-template-areas:
+        "actions actions actions"
+        "queue queue health"
+        "activity activity activity"
+        "triage triage triage";
+}
+
+.module-workspace[data-layout="research"] .module-grid {
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-areas:
+        "actions actions actions"
+        "health queue activity"
+        "triage triage triage";
+}
+
+.module-workspace[data-layout="catalog"] .module-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-areas:
+        "actions actions"
+        "queue health"
+        "activity activity"
+        "triage triage";
+}
+
+.module-workspace[data-layout="admin"] .module-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+        "actions actions"
+        "queue health"
+        "activity activity"
+        "triage triage";
+}
+
+.module-workspace[data-layout="audit"] .module-grid {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-areas:
+        "actions actions actions"
+        "health queue activity"
+        "triage triage triage";
+}
+
+.module-workspace[data-layout="device"] .module-grid {
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    grid-template-areas:
+        "actions actions"
+        "health queue"
+        "activity queue"
+        "triage triage";
+}
+
+.module-panel {
+    border: 1px solid var(--module-accent-soft);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 118% -20%, var(--module-panel-tint), transparent 62%),
+        color-mix(in srgb, var(--c-bg) 76%, transparent);
+    box-shadow: inset 0 0 0 1px rgba(198, 223, 255, 0.05);
+    min-height: 0;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.module-panel:hover {
+    border-color: var(--module-accent);
+    box-shadow: inset 0 0 0 1px rgba(216, 235, 255, 0.08), 0 12px 26px rgba(4, 9, 15, 0.26);
+    transform: translate3d(0, -1px, 0);
+}
+
+.module-workspace[data-mode="inbox"] .module-item-card,
+.module-workspace[data-mode="people"] .module-item-card,
+.module-workspace[data-mode="timeline"] .module-item-card {
+    border-left: 3px solid rgba(104, 184, 255, 0.52);
+}
+
+.module-workspace[data-mode="operations"] .module-item-card,
+.module-workspace[data-mode="notifications"] .module-item-card,
+.module-workspace[data-mode="finance"] .module-item-card {
+    border-left: 3px solid rgba(255, 194, 113, 0.56);
+}
+
+.module-workspace[data-mode="automations"] .module-item-card,
+.module-workspace[data-mode="agents"] .module-item-card,
+.module-workspace[data-mode="integrations"] .module-item-card,
+.module-workspace[data-mode="app_builder"] .module-item-card {
+    border-left: 3px solid rgba(110, 226, 176, 0.52);
+}
+
+.module-workspace[data-mode="studio"] .module-item-card,
+.module-workspace[data-mode="dev_studio"] .module-item-card,
+.module-workspace[data-mode="game_studio"] .module-item-card,
+.module-workspace[data-mode="lab_3d"] .module-item-card {
+    border-left: 3px solid rgba(200, 152, 255, 0.56);
+}
+
+.module-workspace[data-mode="game_studio"] .module-subnav-row,
+.module-workspace[data-mode="game_studio"] .module-flair-row,
+.module-workspace[data-mode="game_studio"] .module-focus-strip,
+.module-workspace[data-mode="game_studio"] .module-special-grid,
+.module-workspace[data-mode="game_studio"] .module-grid {
+    display: none !important;
+}
+
+.module-workspace[data-mode="game_studio"] .module-kpi-grid {
+    display: none;
+}
+
+.module-workspace[data-mode="app_builder"] .module-header,
+.module-workspace[data-mode="app_builder"] .module-kpi-grid,
+.module-workspace[data-mode="app_builder"] .module-subnav-row,
+.module-workspace[data-mode="app_builder"] .module-flair-row,
+.module-workspace[data-mode="app_builder"] .module-focus-strip,
+.module-workspace[data-mode="app_builder"] .module-special-grid,
+.module-workspace[data-mode="app_builder"] .module-grid {
+    display: none !important;
+}
+
+.module-workspace[data-mode="research_lab"] .module-item-card,

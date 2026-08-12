@@ -452,6 +452,26 @@ def _request_immediate_dispatch(
     return True, payload_dispatch
 
 
+def _inbox_interrupt(
+    *,
+    workboard_path: Path,
+    agent: str,
+) -> tuple[bool, dict[str, object]]:
+    ok, payload = workboard_message.unread_messages(workboard_path, agent=agent)
+    if not ok:
+        return False, {
+            "error": str(payload.get("error") or "failed to read worker inbox"),
+            "unread_count": 0,
+            "messages": [],
+        }
+    messages = [dict(row) for row in list(payload.get("messages") or []) if isinstance(row, dict)]
+    return True, {
+        "unread_count": len(messages),
+        "messages": messages,
+        "msg_ids": [str(row.get("msg_id") or "") for row in messages if str(row.get("msg_id") or "").strip()],
+    }
+
+
 def _worker_loop(
     *,
     workboard_path: Path,
@@ -472,6 +492,7 @@ def _worker_loop(
     send_start_message: bool,
     request_dispatch_on_complete: bool,
     dispatch_lookback_minutes: float,
+    stop_on_unread_message: bool,
     cycles: int,
     max_completions: int,
     log_dir: Path,
@@ -483,14 +504,17 @@ def _worker_loop(
     heartbeat_count = 0
     dispatch_request_count = 0
     dispatch_assigned_count = 0
+    inbox_blocked_count = 0
     attempted_markers: set[str] = set()
     errors: list[str] = []
     last_task_id = ""
     last_summary = ""
+    last_inbox_message_ids: list[str] = []
     idle_heartbeat_interval = max(0.0, float(idle_heartbeat_seconds))
     poll_interval = max(0.0, float(poll_seconds))
     last_heartbeat_at = 0.0
     online_notified = False
+    inbox_pause_notified = False
 
     while True:
         if int(cycles) > 0 and cycle_count >= int(cycles):
@@ -498,6 +522,44 @@ def _worker_loop(
         if int(max_completions) > 0 and completion_count >= int(max_completions):
             break
         cycle_count += 1
+
+        ok_inbox, payload_inbox = _inbox_interrupt(workboard_path=workboard_path, agent=agent)
+        unread_count = int(payload_inbox.get("unread_count") or 0)
+        if not ok_inbox or unread_count:
+            inbox_blocked_count += 1
+            last_inbox_message_ids = [str(item) for item in list(payload_inbox.get("msg_ids") or [])]
+            if not ok_inbox:
+                errors.append(str(payload_inbox.get("error") or "failed to read worker inbox"))
+            if not inbox_pause_notified:
+                summary = (
+                    f"worker paused: `{agent}` has {unread_count} unread workboard message(s)"
+                    if ok_inbox
+                    else f"worker paused: `{agent}` could not verify workboard inbox"
+                )
+                requested_action = (
+                    f"Run `python scripts/crew/workboard/message.py --inbox --agent {agent}`, ack/respond, "
+                    "then restart or let the worker continue."
+                )
+                ok_msg, err_msg = _send_message_safe(
+                    workboard_path=workboard_path,
+                    sender=agent,
+                    recipient=task_manager_agent,
+                    task_id="none",
+                    summary=summary,
+                    kind="coordination",
+                    priority="p0" if unread_count else "p1",
+                    requested_action=requested_action,
+                    decision="pending",
+                )
+                if not ok_msg and err_msg:
+                    errors.append(err_msg)
+                inbox_pause_notified = True
+            if stop_on_unread_message:
+                break
+            if poll_interval > 0:
+                time.sleep(poll_interval)
+            continue
+        inbox_pause_notified = False
 
         ok_tasks, payload_tasks = _load_assigned_tasks(workboard_path, agent=agent)
         if not ok_tasks:
@@ -853,7 +915,7 @@ def _worker_loop(
         if poll_interval > 0:
             time.sleep(poll_interval)
 
-    ok = failure_count == 0
+    ok = failure_count == 0 and inbox_blocked_count == 0
     payload: dict[str, object] = {
         "agent": agent,
         "ok": bool(ok),
@@ -865,6 +927,8 @@ def _worker_loop(
         "heartbeat_count": heartbeat_count,
         "dispatch_request_count": dispatch_request_count,
         "dispatch_assigned_count": dispatch_assigned_count,
+        "inbox_blocked_count": inbox_blocked_count,
+        "last_inbox_message_ids": last_inbox_message_ids,
         "last_task_id": last_task_id,
         "last_summary": last_summary,
         "errors": errors,
@@ -964,6 +1028,15 @@ def run(argv: Iterable[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Trigger immediate idle-agent dispatch pass after successful completion/release (default: true).",
+    )
+    parser.add_argument(
+        "--stop-on-unread-message",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Stop before loading or executing work when this worker has unread workboard messages "
+            "(default: true). Use --no-stop-on-unread-message to pause/poll instead."
+        ),
     )
     parser.add_argument(
         "--dispatch-lookback-minutes",
@@ -1076,6 +1149,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         send_start_message=bool(args.send_start_message),
         request_dispatch_on_complete=bool(args.request_dispatch_on_complete),
         dispatch_lookback_minutes=float(args.dispatch_lookback_minutes),
+        stop_on_unread_message=bool(args.stop_on_unread_message),
         cycles=int(args.cycles),
         max_completions=int(args.max_completions),
         log_dir=log_dir,
@@ -1093,7 +1167,8 @@ def run(argv: Iterable[str] | None = None) -> int:
         print("Workboard worker: PASS" if ok_loop else "Workboard worker: FAIL")
         print(
             f"- agent={payload.get('agent')}; completed={payload.get('completed_count')}; "
-            f"failures={payload.get('failure_count')}; no_command={payload.get('no_command_count')}"
+            f"failures={payload.get('failure_count')}; no_command={payload.get('no_command_count')}; "
+            f"inbox_blocked={payload.get('inbox_blocked_count')}"
         )
         for item in list(payload.get("errors") or []):
             print(f"- error: {item}")

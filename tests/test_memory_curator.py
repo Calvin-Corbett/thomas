@@ -78,7 +78,7 @@ def test_curator_interval_cooldown_skips_second_run(tmp_path, monkeypatch) -> No
         mem.close()
 
 
-def test_curator_promotes_episode_facts_incrementally(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+def test_curator_does_not_infer_episode_facts_from_prose(tmp_path, monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setenv("THOMAS_MEMORY_CURATOR_ENABLED", "1")
     monkeypatch.setenv("THOMAS_MEMORY_CURATOR_MIN_INTERVAL_SECONDS", "0")
 
@@ -89,7 +89,7 @@ def test_curator_promotes_episode_facts_incrementally(tmp_path, monkeypatch) -> 
         mem.add_event("telegram:7", "user_message", "my deployment target is cloudflare workers")
 
         immediate = mem.retrieve("deployment target", thread="telegram:8", budget=1000, mode="auto")
-        assert "cloudflare workers" in immediate.text.lower()
+        assert "cloudflare workers" not in immediate.text.lower()
 
         before = int(mem.stats().get("v2_facts", 0))
         first = mem.run_curator(force=True)
@@ -98,8 +98,9 @@ def test_curator_promotes_episode_facts_incrementally(tmp_path, monkeypatch) -> 
         second = mem.run_curator(force=True)
         after_second = int(mem.stats().get("v2_facts", 0))
 
-        assert before >= 1
+        assert before == 0
         assert first.get("ran") is True
+        assert int(first.get("episodes_scanned", 0)) == 0
         assert int(first.get("facts_promoted", 0)) == 0
         assert after_first == before
         assert int(second.get("facts_promoted", 0)) == 0
@@ -115,13 +116,18 @@ def test_curator_approval_queue_and_apply(tmp_path, monkeypatch) -> None:  # noq
     monkeypatch.setenv("THOMAS_MEMORY_CURATOR_APPROVAL_AUTO_APPLY_CONFIDENCE", "0.95")
 
     cfg = _cfg(tmp_path)
+    lib = ResearchLibrary(default_library_root(cfg))
+    lib.add_entry(
+        title="Zed Editor Notes",
+        category="research",
+        content="Zed is used for coding in this researched workspace.",
+        summary="Zed editor workspace notes.",
+        source="https://example.com/zed-editor-notes",
+        tags=["editor", "coding"],
+    )
     mem = AutonomyMemoryEngine(cfg, enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        fabric = mem._fabric_v2
-        assert fabric is not None
-        fabric.ingest_episode("telegram:11", "user", "I use zed for coding", ts_ms=1700000000000)
-
         before = int(mem.stats().get("v2_facts", 0))
         result = mem.run_curator(force=True)
         assert result.get("ran") is True

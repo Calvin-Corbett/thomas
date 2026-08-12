@@ -8,7 +8,6 @@ self-similarity, and multi-frame super-resolution techniques.
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import convolve2d
 
 from ._exceptions import ImageProcessingError
 from ._types import Image, SuperResConfig
@@ -176,6 +175,8 @@ class SuperResolution:
     @staticmethod
     def _downsample(image: np.ndarray, factor: int) -> np.ndarray:
         """Downsample image by applying Gaussian blur and subsampling."""
+        from scipy.signal import convolve2d
+
         kernel_size = 2 * factor + 1
         sigma = factor / 2
         ax = np.arange(-kernel_size // 2 + 1.0, kernel_size // 2 + 1.0)

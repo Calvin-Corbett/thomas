@@ -7,22 +7,3721 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
-- Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
+### Removed (three scratch files that rode in on a merge)
+
+- **`run_thomas_main_8906.py`, `serve_inkwell_test.py` and `agentic_report.md`
+  were never meant to be in the repository.** One is a throwaway launcher
+  pinned to port 8906, one says *"delete after test"* in its own docstring, and
+  the third is the output of a stress-test run against `example.com`. All three
+  arrived together in a 539-file merge commit in June and nothing referenced
+  them since. Found by asking why the workboard changed-files gate was failing:
+  it listed 35 unclaimed paths, 32 of which were a two-month range being
+  measured at once, and 3 of which were genuinely stray. The gate was mostly
+  noise, but not entirely — worth saying, because the usual response to a noisy
+  check is to stop reading it. Verified the 27 tests that mention
+  `agentic_report.md` still pass: they use it as a filename an agent is asked to
+  create during a run, never as a file read from the repository root.
+
+### Changed (how this project writes about the person who owns it)
+
+- **You found out from a code review that the commit log had been describing
+  you.** 69 times across the landing branch, the messages said "the owner"
+  rather than addressing you; once, one of them stated you are not a programmer;
+  and in two places this file assumed pronouns nobody had ever stated. None of
+  that was a decision anyone made — it was a register that crept in and was
+  never checked, because 58 gates guard the code and none of them read the prose
+  wrapped around it. This file now addresses you directly, and `CLAUDE.md`
+  carries the rule going forward: second person, quote the request rather than
+  judge the requester, never characterize what you do or do not know, and do not
+  infer pronouns. Worth stating plainly, since a merged pull request keeps its
+  commit list on GitHub permanently: the individual messages on PR #66 are
+  already public and stay that way, so this changes what gets written from here,
+  not what was already published.
+
+### Added (a place to see what you own)
+
+- **A System Map, because "I didn't know that was there" is not a personal
+  failing when there was no instrument.** The landing heartbeat below answers
+  *is my work safely landed?* It cannot answer the question that came next:
+  *what else is lying around?* Nothing could. Checking meant knowing a dozen
+  git commands, which for you is the same as it being
+  unknowable. The real answer, measured today: 59 versions of the project on
+  this machine and 178 more on the server, **57 separate working copies**
+  scattered across `C:/t/`, `Documents/Codex` and one inside a Windows temp
+  folder that gets cleared without warning, 70 piles of set-aside work whose
+  oldest is still labelled `On master` -- a branch name this project stopped
+  using -- and 592 saved changes that have never reached `main`, which last
+  moved 64 days ago.
+
+  `thomas/core/system_map.py` reads all of it from git and the filesystem in
+  about three seconds: stdlib only, no network, no LLM, and nothing that
+  writes -- no prune, no drop, no delete. It reports; clearing up stays your
+  decision. Every item gets a status in words that mean something
+  without a glossary (`active` / `idle` / `forgotten`), and every list is
+  sorted **oldest first**, the reverse of every other git tool, because the
+  newest branch is the one you already remember.
+
+  `GET /api/system-map` serves it and `/system-map` draws it, reachable from
+  the sidebar rather than by typing a URL. The drawing is the project's own
+  shape: the shared copy runs through the middle as a spine that turns dashed
+  for the 64 days it stopped moving, and every version hangs off it as a
+  thread -- placed along the spine by when it was last touched, reaching out
+  by how much unlanded work it carries, sagging the longer it has been left
+  alone, and curving back in when its work already landed. Separate copies sit
+  as solids on the ends of their threads; set-aside piles drift near the
+  spine. Nothing floats at a coordinate that means nothing, which is why it is
+  a map and not a constellation. Hovering anything says what it is in a full
+  sentence. It is drawn with a hand-built perspective projection on a plain
+  canvas rather than by pulling three.js off a CDN at runtime, so it works
+  offline, adds no third-party code, and follows all five themes from
+  `tokens.css`.
+
+  Verified on a throwaway server on port 8903, so nothing touched the one you
+  run: `/api/system-map` returns 200 with the real headline, `/system-map`
+  serves 48,304 bytes, and both routes register in a real boot (714 routes
+  total). The drawing was then confirmed in an actual browser -- 24,375 painted
+  pixels, 4.12% of the canvas, zero console errors. That last check needed a
+  real browser specifically: the review pane in this session keeps pages hidden,
+  `requestAnimationFrame` never fires on a hidden page, and the canvas measured
+  0.00% ink. A working feature read as a dead one, and only running it somewhere
+  visible told the difference.
+
+### Added (nothing was watching the total)
+
+- **A landing heartbeat, so "my work is piling up" is something you can see
+  rather than something you find out.** `main` had not moved since 2026-06-09.
+  576 commits accumulated on a working branch over two months. Every painful
+  thing about landing that pile followed from that one fact -- 127 broad
+  exception handlers got through because the gate compared each commit to the
+  one before it and nobody was watching the cumulative total; a merge silently
+  resurrected deleted code, including a permission check with a known bypass,
+  because the two branches had drifted for two months; ten CI checks failed at
+  once because they were built for a normal-sized change; and the result was a
+  1,890-file pull request that no human or AI can review. Not one of those was
+  a bug. They were all the same missing instrument: nothing ever asked "how big
+  is the pile now?"
+
+  `thomas/core/landing_health.py` asks it, in English, in the register of a
+  fuel gauge rather than a nag: *"Everything is on main. You're ready to
+  work."* -- or, for this repo today, *"Too much work is stacked up outside
+  main. This is the point where landing it safely stops being easy."* It reads
+  five facts straight out of git (changes waiting to land, files that differ,
+  how long since main moved, how long since this branch moved, and how many
+  edits are not saved anywhere yet) and turns them into sentences that do not
+  require knowing what a commit is.
+
+  It triggers on **both** size and time, because each covers the other's blind
+  spot. Size catches accumulation -- you have built more than can be landed
+  safely. Time catches abandonment -- three changes untouched for three weeks
+  is a real problem that no size threshold will ever notice. June's pile was
+  both at once.
+
+  It runs on **server startup**, in a background task created after the port is
+  already open, and never on a timer. A scheduler is precisely the wrong shape
+  for this: people walk away from machines and switch them off at the wall, so
+  anything that fires on a clock is the thing that gets missed. Using Thomas is
+  the trigger, because using Thomas is what actually happens. The reading is
+  logged at INFO on every boot and served at `GET /api/landing-health` so the
+  UI can show it without anyone having to read a log.
+
+  The module is built so it can never be the reason something breaks: it makes
+  no LLM calls, never touches the network, holds every git command to a
+  timeout and the whole check to a total budget, and degrades to severity
+  `unknown` with an honest sentence -- never a crash, never an invented number
+  -- when git is missing, the folder is not a project, there is no shared copy
+  configured, or the checkout is in a detached state.
+
+### Fixed (a failed preference read was indistinguishable from having no preference)
+
+- **Choosing a model, then silently getting a different one.** Both functions
+  that read your saved model preference wrapped the whole read in
+  `except Exception: return "", ""`. An empty answer is also exactly what the
+  code returns when you have genuinely never picked a model -- so a corrupted
+  preferences database, a missing server extra, or a stale encryption key
+  (`thomas/preferences/_db.py` raises on a key mismatch) all resolved to *use
+  the default model* with nothing written anywhere. The setting appeared to be
+  ignored, and there was no way to find out why. Both handlers now catch only
+  what that path can actually raise -- `ImportError` from the deferred
+  `core -> server` import, `OSError` and `sqlite3.Error` from the database,
+  `ValueError` from the decryption failure -- and record the reason before
+  falling back, so the failure is discoverable instead of invisible.
+
+### Fixed (the suite could not run, and the gate could not tell)
+
+- **The whole test suite died during collection, before a single test ran.**
+  `tests/prompt_pack/test_p127_gateway_restart_command.py` switched the asyncio
+  event-loop policy at import time. pytest imports every module into one
+  process, so that was not a module-scoped decision -- it was a process-wide
+  one, and `prompt_pack/` is imported before the rest alphabetically. Every
+  Playwright launch collected afterwards then failed with `NotImplementedError`,
+  because a SelectorEventLoop cannot spawn the subprocess its node transport
+  needs. 15,315 tests were collected and then discarded over 8. The policy
+  change is now a module-scoped fixture that restores the previous policy.
+- The browser-availability probe in
+  `tests/test_the_run_report_verdict_tells_the_truth.py` caught only
+  `PlaywrightError`, so the one failure mode it met on Windows escaped and took
+  collection down with it. A probe whose contract is "answer yes or no" must
+  never raise; it now also catches `NotImplementedError` and `OSError`.
+- **The release gate could report records it never read.** With
+  `--no-remote-calls` it printed "pushed, cut, tagged, and published" while
+  checking none of those four. It now tracks each record as read or unread,
+  names only the ones it actually read, and reports the rest as unverified
+  rather than passing. It also confirms the tag exists ON THE REMOTE and points
+  at code this branch contains -- a local-only tag is invisible to everyone
+  else -- and distinguishes an unauthenticated `gh` from a genuinely absent
+  Release instead of reporting both as missing.
+
+### Fixed (the merge from public main was resurrecting deleted code)
+
+- **A permission check with a known bypass came back from the dead.** Merging
+  `origin/main` into `dev` re-added `is_globally_approved` to
+  `thomas/agent/skills_policy.py` -- 80 lines added, none removed -- along with
+  the substring match on "approve risky skills" and the negation regex that had
+  been bolted on to patch it. Both were deleted on purpose in `40505ad9`,
+  because a permission check that reads the user's prose has no correct
+  version: the sentence "I do NOT approve risky skills" contains the phrase and
+  was read as approval. Dev's deletion wins.
+- **The Code API was silently unregistered.** The same merge left two copies of
+  `_register_evolve_loop_routes` in `thomas/server/app_routes_init.py`. Python
+  keeps the later definition, and the survivor was public main's older copy,
+  which does not register the directed Code surface -- so all 22
+  `/api/evolve/agent/*` routes vanished, including send, stream, stop,
+  conversations, changes, artifacts and playtest. Both copies are valid Python,
+  so nothing flagged it: the file parses, ruff passes, and there are no conflict
+  markers. The route count read 677 where it should read 699.
+- The plain-language `evolve chat` surface -- `thomas/forge/anvil/evolve_chat.py`,
+  the `evolve chat` CLI command, and `/api/evolve/loop/chat`, which shells out to
+  the CLI with `--interpret-only` -- was likewise resurrected after `69bbbab0`
+  removed it with the rest of the prompt classifiers. Removed again.
+- Lesson recorded for the next merge from an older branch: **a deletion is the
+  one intent a three-way merge cannot infer.** It sees only that one side lacks
+  lines the other has, and helpfully restores them, in a region with no conflict
+  where no reviewer looks. The guard that caught all of this was a test
+  asserting a file MUST NOT exist, not a human reading 82 files.
+- Two literal NUL bytes in `thomas/server/web/js/unified_code_events.js` (a
+  delimiter written as an escape that became a raw byte) are now the `\0` escape
+  they were meant to be. Identical at runtime, but the raw bytes made grep,
+  ripgrep and diff classify the file as binary and refuse to show its contents.
+
+### Added (the modern shell hosts plugin workspaces)
+
+- **Two workspaces left `/classic`.** A marketplace plugin already declares
+  everything needed to place itself in the left nav -- `mode_id`, `surface_url`,
+  `surface_mode`, `icon`, `left_nav_behavior` and `default_nav_order`. The legacy
+  shell read that contract; the modern one never did. It does now, so a plugin
+  that claims a workspace opens through the modern frame instead of the old
+  application.
+- **Workforce appears for the first time.** It was installed, enabled, and
+  serving a live surface with no entry point anywhere in the product. Paper
+  Trading was a hardcoded sidebar row pointing at `/classic`; that row is gone
+  and it is now driven by the plugin's own declaration.
+- Plugin icons are named in Phosphor terms while the shell draws its own, so
+  names are mapped and anything unrecognised falls back to the marketplace glyph
+  -- an unmapped name must never render an iconless button.
+- A marketplace that cannot be read costs nothing: the built-in workspaces paint
+  first and plugin rows arrive on the second render.
+- Verified live: both open through `tc-direct-frame`, never `/classic`. Paper
+  Trading renders its `$100,000` simulator, Workforce renders its jobs surface.
+- **Found by giving it a door:** Workforce has **zero** registered backend
+  routes. Its frontend calls `/api/freedom-transit/overview`, which 404s, while
+  it declares `api_namespace: "freedom.transit"`. Paper Trading has 14 routes and
+  works. Workforce is half-installed, and nothing said so while it was
+  unreachable.
+
+### Changed (broad exception handlers named instead of catching everything)
+
+- Merging this branch would have added **127 broad `except Exception:` handlers**
+  to `main`. Each had slipped past a ratchet that compares against the previous
+  commit; nothing enforced the cumulative view until a landing PR forced it. The
+  policy in `agent_safety.toml` allows a broad catch only with BOTH logging and
+  re-raise, so these are now narrowed to named types.
+- **Nothing starts raising.** Every one of these is a deliberate degrade -- fail
+  closed, best effort, record-and-continue -- so the tuples are wide rather than
+  clever. The point is to name what is caught, not to change which paths survive.
+  Where a re-raise would have converted a controlled degrade into a crash, it was
+  not added: the spend governor would have abandoned a running child process that
+  is still spending money, and the stress harnesses would have lost the whole
+  scorecard on the first bad sample, because `run_all.main()` has no handler of
+  its own.
+- Six PROBLEM.md records that existed on disk but had **never been committed** --
+  the oldest from 2026-05-29 -- are now tracked. The workboard gate had been
+  passing locally (file present) and failing in CI (file absent from the repo);
+  the gate was right and the thing that writes those records simply never staged
+  them.
+- Left alone deliberately: `thomas/core/model_resolution.py`. Its
+  `thomas.core -> thomas.server` import predates this work and is **allowed by
+  `_architecture.py` while forbidden by `agent_safety.toml`**, so any commit
+  touching that file is blocked by one rule and blessed by the other. Resolving
+  it is an architecture decision, not a cleanup.
+
+### Removed (1,829 lines of front-end code nothing could reach)
+
+- The chat presence layer (the robot that walked around the chat): every entry
+  point was a constant -- `chatWorldEnsureUi()` returned null,
+  `chatAgentPresenceShouldBeVisible()` returned false, `chatTaskRobotAgentMarkup()`
+  returned the empty string. 633 lines.
+- Two abandoned Marketplace designs (`mp-bubble*`, `mp-creator*`, and an older
+  `module-marketplace-item/toolbar/chip*` look) -- 52 classes emitted by nothing.
+  606 lines. The `-shell`/`-search`/`-stream` classes are live and were kept.
+- Builder Mode (112), an Appsmith/Budibase export path (138), Virtual Office
+  dynamic room creation (95), the old sidebar's Rename Agent button (71),
+  orphaned GridStack styling (77), a setup safety screen (43), a superseded
+  per-space draft agent layer (27), `paintPricingLegacy` (15), and three
+  identical marketplace-catalog shims (12).
+- **Kept after being proven reachable**, each having been on the delete list:
+  the Content Hub workspace (no button in any HTML, but `normalizeNavMode()`
+  accepts `content`, so `?nav=content`, a stored nav mode, or
+  `window.setSidebarNavMode('content')` all reach it -- loaded live, it renders
+  with real data); `officeNearestHallId` (used by the saved-data restore path);
+  and three stylesheets an audit called dead that in fact style live Virtual
+  Office agents, live chat messages, and live tool-call cards -- only the
+  never-emitted rules inside them were removed.
+- `tests/test_settings_respect_stored_builder_mode.py` was repointed: it grepped
+  the source for `loadStoredBuilderMode`, a function nothing called, so it passed
+  while testing nothing. It now exercises the handler that actually applies
+  `advanced-mode`, which is what its name claims.
+
+### Security (gateway auth was enforced on 1 of 27 gateway routes)
+
+- **`gateway_auth_policy_middleware` was never installed.** The module that
+  defines it, `p136_gateway_auth_policy_enforcement`, was missing from both the
+  import list and the registration tuple in
+  `thomas/server/routes/gateway/__init__.py` -- it was not merely unregistered,
+  it was never imported. So `app.middlewares` never contained it, and
+  `gateway_auth_mode` was honoured on exactly one route: `/gateway/restart`,
+  which hand-rolls its own check by importing p136 directly.
+- Probed on a live server with `THOMAS_GATEWAY_AUTH_MODE=token` and a
+  deliberately WRONG bearer token: `GET /v1/gateway/state` returned **200 with
+  gateway state**, and `POST /gateway/logs/filter` **reached its handler**. Only
+  `/gateway/restart` returned 401.
+- The misconfiguration was undetectable from outside, because the two endpoints
+  an operator would use to confirm the policy had taken effect are p136's own --
+  so they returned 404 -- while `docs/ops/GATEWAY_SECURITY_RUNBOOK.md` instructs
+  operators to "keep `gateway_auth_mode` enabled for gateway routes".
+- `/v1/gateway` has also been added to the enforced prefixes. Wiring the
+  middleware alone still left four live gateway routes outside the policy,
+  because the matcher only knew `/gateway` and `/ws`.
+- After the fix, same probe: `/v1/gateway/state`, `/gateway/logs/filter` and
+  `/gateway/restart` all return **401**, and `/gateway/auth/policy` still answers
+  because it is deliberately exempt. With auth **disabled** -- the default -- all
+  four reach their handlers exactly as before, so the change is inert until the
+  policy is switched on.
+- **Reported, not silently changed:** `/v1/chat/completions` and `/v1/responses`
+  are also outside gateway auth. They are the OpenAI-compatible surface and the
+  likeliest thing to be exposed remotely, but whether they should answer to this
+  policy or carry their own is a product decision, not an oversight to patch.
+
+### Removed (a second server package that could not be imported)
+
+- `server/` at the repository root -- 12 files, 1,909 lines -- is gone. It was a
+  FastAPI + SQLAlchemy stack duplicating the workspace/permissions system that
+  `thomas/server/` (aiohttp) already provides, and it **could not be imported at
+  all**: `server/workspace/models.py:12` does `from server.db.base import Base`
+  and `server/db/` does not exist in the repository. It had no top-level
+  `__init__.py`, so it was importable only as a namespace package while the
+  working directory happened to be on `sys.path`.
+- `web-ui/` -- 3 TypeScript files, 147 lines, no `package.json`, no `tsconfig`,
+  no build configuration of any kind. It was the only caller of that dead
+  permissions API.
+- `tests/test_workspace_rbac_multi_tenant.py` was **kept, not deleted**. Its two
+  imports now point at `thomas/server/workspace/`, which is byte-identical to
+  the copy that was removed and is the code that actually ships -- so a test of
+  dead code became coverage of live code instead of being lost with its subject.
+- Checked before removal, since a wrong deletion here costs a feature: no
+  reference in any GitHub workflow, `MANIFEST.in`, or the `pyproject.toml`
+  packaging list; the `p127` gateway module CI exercises resolves to
+  `thomas/server/routes/gateway/`, not the stale root copy. Route count
+  unchanged at 702 across the deletion.
+- Still stale and left alone: `docs/MIGRATION_NOTES_workspace_rbac_multi_tenant.md`
+  documents `python -m server.workspace.migrate_schema`, now a dead command.
+
+### Added (the Agent Operations console gets a door)
+
+- Six frontier surfaces -- steer a running agent (CAP-040), live run telemetry
+  (CAP-137), worktree progress (CAP-139), source annotations (CAP-147), mention
+  context (CAP-148), pull request review (CAP-149) -- were finished, styled and
+  registered by the server on **every boot**, with nothing in the product
+  linking to them. The only way in was to hand-type `/static/frontier.html`.
+  `/agent-ops` now serves the console and an **Agent Ops** entry sits under
+  Mission Control. It joins the MODERN workspace route table rather than
+  `/classic`: the page styles itself from `tokens.css` alone and carries none of
+  the legacy component CSS. `frontier.html` hides its own masthead under
+  `?embed=1` so the shell does not show two headers.
+- Worth recording because it nearly went the other way: a legacy audit had this
+  cluster on the **delete** list, since finished code with no caller is
+  indistinguishable from dead code -- both have zero callers. The tell was that
+  the server announces these surfaces at startup, which nothing abandoned does.
+
+### Fixed (an unknown icon name rendered nothing, silently)
+
+- `ThomasIcons.glyph()` returned an empty string for a name it did not know and
+  said nothing, so the control rendered with no icon and looked like a
+  deliberate text-only button. The Agent Ops entry above shipped that way for a
+  few minutes -- `build` is a FACE, not a GLYPH -- and was caught only by
+  comparing its markup against a neighbouring button. It now warns once per
+  unknown name and lists the eleven it knows.
+
+### Fixed (opening a workspace renamed your chats)
+
+- The modern shell hosts the six legacy workspaces by loading the whole old
+  application into an iframe with `embed=1` and hiding its chat surface with
+  CSS. Hidden is not absent: the old onboarding module still booted and called
+  `persistActiveChat`, which PUTs `/api/chats/<id>` with a title derived from
+  the messages it can see. Inside the frame there is no conversation, so that
+  title derived to `Chat <id-prefix>` or `Untitled chat` -- and a real chat was
+  renamed by the act of opening a workspace. A page with no composer and no
+  transcript no longer writes chat state. Verified both directions: embedded
+  makes zero write attempts, standalone still saves with a real derived title.
+
+### Added (Thomas can be installed as an app in his own right)
+
+- `thomas.webmanifest`, `thomas-icon.svg` and a maskable variant, linked from
+  `chat.html`. Without a manifest, `msedge --app=` runs under EDGE's app
+  identity, so Windows groups the window with Edge and pins Edge's icon --
+  which is what you saw on your taskbar. With one, Thomas installs as your
+  own app: own name, own icon, own taskbar slot, `display: standalone` so there
+  is no tab strip or address bar. The maskable icon is full-bleed with the eyes
+  inside the central safe zone, because the OS applies its own corner radius and
+  a pre-rounded block would be clipped twice.
+
+### Fixed (Code mode reported a JSON syntax error instead of the real fault)
+
+- `Code history could not be refreshed: Unexpected non-whitespace character
+  after JSON at position 3` was the entire Code API being unregistered.
+  aiohttp answers an unregistered route with the plain text `404: Not Found`,
+  and `JSON.parse` on that reads `404` as a number then chokes on the colon --
+  at position 3, every time. The message named the parser instead of the
+  problem. `refresh()` now reads the body as text first and, on a 404, says the
+  Code API did not register and that restarting the server reloads its routes.
+  The underlying registration bug is fixed separately in this release; a server
+  started before that fix still needs a restart.
+
+### Fixed (the context trimmer misreported how much it threw away)
+
+- **The model was told it had lost 2 messages when it had lost 23**, and the
+  sentence recording the real number was deleted in the same step.
+  `_build_messages` trims twice -- once for the route's soft history cap, then
+  again for the model's context window -- and the second pass treated the first
+  pass's `[22 earlier messages trimmed to fit context window]` marker as
+  ordinary middle content. It dropped that marker and wrote a fresh one counting
+  only the messages IT had removed. `trim_messages_to_budget` now absorbs a
+  dropped marker's recorded count instead of counting it as a single lost
+  message, so the number stays true whichever order the stages run in. The
+  returned message list is unchanged in length; only the number is corrected.
+  Same shape as the compaction bug fixed in `1d8a26b8`, one layer further down.
+
+### Fixed (guards that had gone blind after their subject moved)
+
+- `test_build_identity` read `chat.html` for the build badge's style rules, which
+  `248c0d93` moved verbatim into `css/chat_shell.css`; it now reads both, and
+  parses 6 real `#tc-build-badge` rules instead of none.
+- `test_ci_runner` pinned five run-report sections after `e40e11e2` added a
+  sixth (`outcome`, which lets the verdict card tell an answered question from a
+  build). That commit updated the identical pinned tuple in `test_run_report.py`
+  and missed this copy. Added the section and kept the check as equality, so a
+  seventh undocumented section still fails.
+- Two escaping guards on the run report were reading `evolve_agent_routes.py`
+  for a Content-Security-Policy that moved to `evolve_agent_artifact_routes.py`
+  during the size split. The header is unchanged and still enforced
+  (`default-src 'none'`, `connect-src 'none'`, sandboxed); the tests were
+  matching an empty file and would have passed while protecting nothing.
+
+### Fixed (the ChatGPT reconnect prompt could never appear)
+
+- **The overlay that asks you to reconnect ChatGPT had never once been shown.**
+  `js/chat_connect_prompt.js` was extracted from `chat.html` with the note that
+  "page state comes in through the factory options so the module owns no globals
+  of its own" -- but one bare global came with it. `shell.appendChild(overlay)`
+  referred to a `const` declared inside `chat.html`'s IIFE and invisible from the
+  module, so every attempt to show the prompt threw `ReferenceError`.
+- Nothing reported it, because the throw happened inside a `try` written to
+  guard the *status lookup*, whose own comment reads "a status lookup failure
+  must not falsely tell a signed-in user to reconnect". A fault in our own
+  rendering was therefore filed as a network problem and swallowed. The try now
+  wraps the fetch alone; the container arrives through the factory like the rest
+  of the page state, with a `document.body` fallback so a missed wiring degrades
+  instead of disappearing.
+- Verified in a live browser rather than by reading the diff: with the status
+  endpoint stubbed to `needs_login`, the call now returns true, the overlay is in
+  the DOM parented to `#tc-shell`, computes `display: flex`, and carries its
+  Connect button. Before the fix that path could not complete.
+
+### Removed (two CDN loaders nothing called)
+
+- `moduleWorkbenchLoadGridStack` and `moduleWorkbenchLoadMonaco` are gone from
+  `js/runtime/027_module_system_command_center_03.js`, taking four third-party
+  CDN URLs with them (`gridstack@12.4.2` css + js, `monaco-editor@0.55.1`
+  loader + `vs` base path). Neither function had a single caller: the GridStack
+  App Builder was removed earlier, and the dev editor uses Ace, keeping only a
+  leftover `data-dev-monaco` class name. Dead code that loads executable
+  third-party script into the app origin is pure liability -- the first future
+  caller would have silently reintroduced a live CDN dependency.
+- Still outstanding, and the reason this is only a partial fix: `index.html` and
+  `companion.html` load `unpkg.com/@phosphor-icons/web` with **no version at
+  all**, and `index.html` loads `marked@12`, a floating major range -- both
+  without an `integrity` attribute, on a page the chat shell embeds
+  same-origin. Vendoring those locally would close the supply-chain hole and
+  make the desktop app work offline.
+
+### Changed (architecture: forge stops reaching into preferences)
+
+- `thomas/forge/anvil/forge_code_settings.py` no longer imports
+  `thomas.preferences`, which forge is not permitted to depend on and which had
+  been failing `test_dependency_direction` in CI. It passed the preference
+  database path explicitly to `resolve_effective_model`, which already falls
+  back to exactly that path itself, so the import bought a forbidden dependency
+  in exchange for an identical value. Verified identical: both call shapes
+  resolve to the same profile and model.
+
+## [0.19.25] - 2026-08-10
+
+### Changed (code: the composer tracks the conversation through every panel)
+
+- Follow-up polish on the mode surfaces: the composer now resizes with the
+  conversation column in every panel state rather than keeping its own
+  width, and the Activity drawer's own chrome no longer nudges the thread.
+  Verified at 1920px across all three modes - Chat thread and composer both
+  x=716/768, Code content column unmoved at x=716 with the drawer open and
+  closed, Work rendering, zero page errors.
+
+
+### Changed (chat: the title stops eating the room, and the columns line up)
+
+- The per-chat title was a full-width bubble spending vertical space on one
+  line of text; it moves into the row that already holds the model pill,
+  centred and truncating, so the conversation gets the room back. The
+  message column and the composer now share one geometry — measured at
+  1920px, both sit at x=716 and 768 wide (they disagreed before).
+- Opening the Activity drawer no longer slides the conversation sideways.
+  The drawer is not wide enough to earn that, so it opens beside a chat that
+  stays exactly where it was: measured with the drawer open, the content
+  column and the composer both hold x=716 / 768 wide, unchanged from closed.
+
+### Added (release: a push is not finished until the record agrees)
+
+- Thomas had a gated way to COMMIT and no gated way to PUSH, so code reached
+  GitHub while the release record stayed behind and nothing objected — the
+  repository ended up telling three stories at once: code at 0.19.25, newest
+  release notes at 0.19.22, latest published Release at 0.16.11.
+  `scripts/forge/gates/release_sync_gate.py` checks the four records a
+  release-engineering team expects to agree — the code is pushed, the
+  version owns a dated CHANGELOG section, an annotated tag exists, and a
+  GitHub Release is published — and names each drift with the command that
+  fixes it. `scripts/crew/brief/push.py` is the sanctioned push path: it
+  pushes, then runs that gate and says plainly whether the push is a
+  finished release or just a branch push. Neither edits the release record;
+  cutting a release is a decision, and the version files are protected.
+
+### Added (app: Thomas opens as himself, not as a browser tab)
+
+- `scripts/thomas_app.py` installs Thomas as a real desktop app: a Desktop
+  and Start Menu shortcut wearing his own face that makes sure the engine is
+  up (starting it hidden if it is not) and opens Thomas in an app-style
+  window — no tabs, no address bar, no search engine, no other site's
+  chrome. The window uses its OWN browser profile directory so it carries
+  Thomas's taskbar identity instead of docking under the everyday browser.
+  `scripts/make_thomas_icon.py` draws the icon from the brand mark the app
+  itself wears — the two eyes in an accent block — at every icon size, so
+  the shortcut and the UI agree.
+
+### Removed (web: the dead module tree and its unreferenced static pages)
+
+- 134 files under `js/modules/` and `js/src/runtime_modules/` plus 30
+  unreferenced pages under `web/static/` are deleted. Nothing loaded them —
+  no `<script>` in chat.html or index.html names any of them — and the
+  runtime the app actually uses lives in `js/runtime/`. They were the
+  residue of the old monolith split and read as live code to anyone
+  searching the tree.
+
+### Changed (work + chat: one composer, and threads that name themselves)
+
+- Work mode converges on a single composer instead of a second input with
+  its own rules, the work dashboard runtime backs it, and the mode shell
+  routes both. `routes/chat_titles_runtime.py` gives a thread a real title
+  from its own content rather than a truncated first message.
+  `task_bot_records.py` / `task_bot_states.py` split the task-bot's records
+  and state machine out of the runtime so each has one job.
+
+### Added (code: Thomas playtests what he builds, and you watch him do it)
+
+- `thomas/server/game_playtest.py` is a real perception→decision→action
+  loop: a headless Chrome driven over the DevTools Protocol (the same
+  browser the smoke check already uses — no new dependency) plays the
+  deliverable while a VISION model looks at each frame and decides the next
+  move. Nothing is scripted to one game; it reads whatever is on screen, so
+  it works for anything that plays by looking and pressing. Live frames
+  stream to the viewer over SSE so you WATCH it play, and the run
+  ends in a verdict — does it work, is it any good, difficulty, bugs — with
+  1-3 recommendation buttons Thomas wrote from what he saw. Clicking one
+  starts the fix; "or tell Thomas…" hands the composer back. A build that
+  produces a playable page is now tested automatically before it is handed
+  over, which is where the "too hard" verdict should have been caught.
+  Speed: `detail: low` frames plus low reasoning effort halve the decision
+  latency (5.6s → ~2.7s), and a DOM-aware smart click recovers the button
+  precision the downscaled frame loses.
+
+### Changed (code: the run reads as a story, not a wall of tool output)
+
+- The Code turn is narration-first: Thomas's own words lead, and the tool
+  receipts hang under the sentence they back up on a rail that BREAKS when
+  he talks. A receipt is one humanized line ("Read a file", never
+  `Result from fs.read_file`) that expands inline — the page scrolls, never
+  a box inside a box — with repeats merged (×N) and long clusters folded.
+  The turn ends in a labelled closing rule with the verdict as stat cells
+  and the deliverable below it, carrying Open in chat / Open in separate
+  window / Download / See every change. A live elapsed clock rides the
+  Activity pill, and "Scroll to the bottom" appears above the composer only
+  when you are away from the newest content.
+
+### Added (ui: point at the interface and ask Thomas to change it)
+
+- The Redesign flow lets you select a real element in Thomas's own UI
+  and hand it to Code as a task: `thomas/tools/ui_redesign.py` resolves the
+  selector to the source that draws it, `routes/ui_redesign_runtime.py`
+  serves the handoff, and `ui_redesign_select.js` / `ui_redesign_target.js`
+  / `ui_redesign.css` own the picking. The created thread opens in place
+  through `window.ThomasCodeMode.openConversation` rather than a page
+  reload. Guarded by client, runtime, and tool contract tests.
+
+### Added (ui: one icon system, and the sidebar says what each task is doing)
+
+- `thomas/server/web/js/thomas_icons.js` gives Thomas one drawn identity
+  instead of a font glyph per surface: FACES (Thomas doing a thing — the
+  build face is a forge hammer caught mid-swing) and GLYPHS, hydrated from
+  `data-thomas-icon`. `sidebar_history.js` + `sidebar_history.css` turn a
+  flat task list into rows that carry their own last-touched time and a
+  live running marker, so the list says WHICH task is working rather than
+  only that something is. `mode_peek.js` + `mode_peek.css` let a mode be
+  previewed without leaving the one you are in.
+
+### Fixed (code: a crashed build is never filed as completed)
+
+- A Code run that crashed mid-build (dead LLM route, protocol error) but had
+  already written a file was recorded `outcome: completed` because "1 file
+  changed" outranked everything - so a design document got presented to the
+  owner as a finished game, twice in one task (2026-08-10). The recorder now
+  reads the engine's OWN terminal verdict from the transcript: a run whose
+  final forge event is an error is `failed` with the root cause surfaced
+  ("the run crashed before finishing — ..."), and any files it wrote are
+  still named so Keep/Revert has a subject. A Claude-CLI success at exit 1
+  (terminal event `is_error: false`) is untouched - the detector keys on the
+  engine's error flag, not the exit code. Pinned by two tests in
+  `test_a_run_is_judged_by_its_work_not_its_exit_code.py`.
+- The mid-run connection-loss message stopped lying about the cause. Every
+  provider used to get `Cannot connect to LLM at {base_url}. Is Ollama
+  running?` - but hosted profiles (ChatGPT/Codex) have no base_url, so a
+  dropped connection surfaced as `at .` with advice to start Ollama, wrong
+  in every part. It now names the actual provider and only mentions Ollama
+  for a genuine localhost endpoint.
+
+### Fixed (chat: the send path comes back from the dead)
+
+- Every chat message since c4a6cf07 (Aug 7) rendered its user bubble and
+  then went silent: the connect-prompt extraction collaterally deleted the
+  `let _pendingCanvasIntent` declaration while `streamReal` still read it,
+  so the send threw a ReferenceError before the fetch ever fired. Found by
+  an organic UI pass (three unanswered bubbles), fixed by restoring the
+  declaration; the sidebar's own history corroborated the outage window -
+  the newest chats all predated the break.
+- Uncaught page errors now feed the issue ledger the way deliberate
+  friction already did (capped at 5 per page load). The self-review
+  reported a clean 24h window while the primary surface was completely
+  dead - a class of failure that deliberate-friction telemetry can never
+  see, and this closes it.
+
+### Added (marketplace: Agent Plugins land as the unverified community tier)
+
+- Thomas now imports Agent Plugins (the agent-plugins.org 1.0.0 open
+  standard Vercel/OpenAI shipped): `thomas/server/agent_plugins_manifest.py`
+  detects and validates bundles (plugin.json schema + name rules, skills/
+  layout, mcp.json transports), `agent_plugins_adapter.py` installs them
+  through the REAL desktop-plugin record pipeline as the unverified
+  community tier (`signature: unverified-community`, `verified: False`),
+  and `agent_plugins_surface.py` writes the about page the record's
+  surface points at. Skills copy into the user skills root with a
+  provenance sidecar (collisions get a plugin-name prefix, never an
+  overwrite); MCP servers register DISABLED with provenance - nothing a
+  community bundle ships runs until you enable it. The signed
+  desktop-plugin path is untouched and always wins detection.
+  `tests/test_agent_plugins_adapter.py` pins the whole contract.
+- `POST /api/marketplace/import` accepts the new bundles from file upload
+  and from a `url` key (GitHub-host allowlist through validate_public_url,
+  30MB cap, redirect re-check - the downloader lives in
+  `marketplace_bundle_download.py`), and the classic Marketplace grew an
+  Install from URL button beside Install From File. Uninstall removes
+  exactly what install added: sidecar-owned skills, provenance-matched
+  MCP rows, the data dir.
+- The xhigh code review caught and fixed before landing: the adapter wrote
+  mcp_servers.json as a bare list where the canonical store is a
+  {servers: [...]} envelope (installing would have wiped existing servers
+  and hidden its own rows from every canonical reader); GitHub Download-ZIP
+  archives failed detection because their explicit directory entries
+  counted as top-level files; ${PLUGIN_ROOT} was never expanded in the MCP
+  command field; a plugin named x.data collided with plugin x's data dir
+  (data now lives under .plugin-data/); reinstalls orphaned skills and MCP
+  rows the new version dropped; the about page escaped angle brackets but
+  not quotes while interpolating the plugin's homepage into an href
+  (attribute-breakout XSS on the app origin); and the import response
+  leaked local file paths by returning the raw record where the signed
+  path returns the normalized shape. The zip-extraction loop is now shared
+  with the signed installer so future hardening protects both paths.
+
+### Fixed (marketplace: community installs are visible and manageable)
+
+- An installed plugin absent from the website catalog now surfaces in the
+  marketplace on BOTH sync paths (the local fallback never merged orphan
+  installed rows), carries `verified` through the record normalizer, the
+  orphan/overlay builders, and the JS app mapping, and renders with an
+  Installed - unverified status chip, a Community install locus line, and
+  working Enable/Disable + Uninstall actions (installed rows no longer
+  hide behind `installable` gates in the card builders).
+- `classify_marketplace_row` no longer scaffold-hides a row whose runtime
+  is actually installed: the scaffold terms ("stub", "placeholder") exist
+  to keep catalog vaporware off the surface, but they were making real
+  installed plugins invisible - and therefore unmanageable - when their
+  descriptions used those words. Explicit availability still wins;
+  `tests/test_marketplace_cleanup_wave.py` pins the exemption.
+- Secondary marketplace actions (Uninstall, Download ZIP) actually
+  dispatch now: the delegated click handler only matched
+  `.module-item-btn`, so every `.marketplace-secondary-btn` - for signed
+  and community plugins alike - rendered as a dead button.
+
+### Added (design unification: the contract now has its own guard)
+
+- `tests/test_design_tokens_single_source.py` pins the workstream's
+  invariants: tokens.css carries the five-theme shell plus the
+  reduced-motion and focus-ring guards, chat_themes.js derives from it,
+  the retired theme classes stay dead, and - with ratios RECOMPUTED from
+  the live token values - the light themes stay WCAG AA. The new guard
+  immediately out-audited the hand audit: it checks contrast against the
+  page background as well as the menu surface, catching three pairs a
+  hair under 4.5; light muted rises to .64 alpha, sandstone muted to .68
+  and its accent deepens to #a84e30 (4.75-5.16 across all checked
+  pairs, both directions).
+
+### Changed (design unification: the agent docs tell the current truth)
+
+- `docs/AGENT_FILE_EDITING_RULES.md` no longer describes deleted files as
+  present: the old monolith and split-file sections became
+  watch-for-resurrection notes, the standalone-script list includes
+  `chat_themes.js` / `chat_connect_prompt.js` / `workspace_shell.js`, and a
+  new CSS section documents tokens.css as the single source with the
+  `component_styles/` / `layout_styles/` layout. The UI checklist stops
+  instructing agents to verify a file that no longer exists. `docs/KNOWN_ISSUES.md` now exists with the four pitfalls
+  this work paid for: iframe color-scheme opacification, heredoc backslash
+  collapse, NUL-byte grep blindness, and the *_parts filename guard.
+
+### Fixed (design unification: the light themes reach WCAG AA)
+
+- A computed contrast audit of the token pairs found the light and
+  sandstone themes failing AA for muted text (2.81 / 2.74 - timestamps and
+  metadata below even large-text threshold) and sitting under 4.5 for
+  accent text. Minimal nudges: light muted alpha .46 to .62 (4.52), light
+  accent #2f6bff to #2b62f3 (5.07), sandstone muted alpha .48 to .66
+  (4.61), sandstone accent #c0603c to #b05233 (4.76 both as text on the
+  sheet AND as the ink-on-accent button pair). Accent-soft/line tints
+  follow their new hues. One edit in tokens.css propagated everywhere via
+  the runtime derivation - zero drift warnings; dark-theme values are
+  untouched.
+
+### Fixed (design unification: keyboard focus is always visible)
+
+- One accent-colored :focus-visible ring in tokens.css covers every page.
+  Before: the chat search field suppressed its outline entirely (inline
+  outline: none - keyboard users lost their place), and most controls fell
+  back to the browser default ring, which reads poorly on the translucent
+  dark surfaces. The rule uses !important precisely because legacy controls
+  suppress outlines inline; pointer clicks are unaffected. Measured by
+  tabbing both shells: every stop shows the 2px accent ring, in the
+  active theme's accent.
+
+### Fixed (design unification: reduced motion is honored everywhere)
+
+- The prefers-reduced-motion guard lived only in workspace_shell.css, which
+  the chat shell never loads - so reduced-motion users still got the full
+  160s nebula drift, twinkling stars, and flying bots. The global guard now
+  lives in tokens.css (linked first on every page; !important is required
+  because the world animations are inline styles) and the duplicate left
+  workspace_shell.css. Measured: with reduced motion requested every
+  animation resolves to .01ms; without it the worlds keep their full
+  durations.
+
+### Fixed (design unification: the robot messenger follows the theme)
+
+- The robot alert bubble (server-restart notices and other robot-delivered
+  messages on /classic) hardcoded a near-black background while its ink
+  followed the theme - a dark slab with invisible text under light and
+  sandstone. It now uses the menu surface token, verified live under the
+  light theme with the real stale-code notice. The restart dialog dropped
+  its undefined `--surface-elevated` var (whose #222 fallback always won)
+  for the same token, and its mojibake comment banner is readable again.
+
+### Fixed (design unification: the classic Settings Suite chrome follows the theme)
+
+- Probing themes x widths found the last dark-anchored chrome: the classic
+  Settings Suite modal kept a hardcoded navy shell and header, so under the
+  light theme its title bar was near-black with invisible text over a light
+  body. Shell and sticky header now use `var(--c-menu-bg)` and a
+  `color-mix` glass of `--c-bg` - verified by screenshot in light (fully
+  light, legible) and nebula (unchanged). Code and Work modes verified
+  clean in light and sandstone at 1920 and 1280.
+
+### Changed (design unification: the classic theme control speaks all five themes)
+
+- The classic settings Theme dropdown offers Nebula Core, Dark, Light,
+  Aurora, and Sandstone instead of flattening the five-theme system to
+  three values; it reflects the LIVE unified theme when the modal opens (a
+  user who picked Aurora in the chat shell sees Aurora, not "auto") and
+  applies the choice through the unified engine immediately. Verified
+  live: an aurora boot shows aurora selected, and choosing Sandstone
+  flips the page on the spot.
+
+### Changed (design unification: the chat shell derives its themes from tokens.css)
+
+- js/chat_themes.js no longer hand-mirrors the token values: at load time it
+  reads the :root and per-theme blocks of tokens.css via CSSOM and builds the
+  THEMES vars payloads from them, so editing tokens.css updates the chat
+  shell (and every embed it relays vars to) automatically - drift between
+  the stylesheet and the switcher is now impossible. The baked values remain
+  as the offline fallback and key template, and a one-line console warning
+  fires if the fallback snapshot ever diverges from the sheet (the detector
+  proved itself immediately by catching three #ffffff-vs-#fff spelling
+  differences, now aligned). Verified live: all five themes switch with
+  values arriving in tokens.css's own serialization, the embed relay carries
+  derived vars, zero warnings, zero page errors.
+
+### Fixed (design unification: 888 hardcoded colors follow the theme)
+
+- The last dark-anchored classic components render legibly under light and
+  sandstone: 888 hardcoded inks and surfaces across 10 CSS files (content
+  panels, tool-call chips, module cards, office workspace chrome,
+  marketplace, Evolve dashboard, settings panel, delegation badges,
+  composer overlays, workbench tools) and the 3 frontier panels (which now
+  hoist their injected styles onto --c-* vars with their old literals as
+  fallbacks) moved onto the canonical tokens. Deliberate exceptions are
+  each justified in the sweep trail: drop shadows stay dark in every theme,
+  the drawing/3D/node-graph canvases and the pixel-robot sprite palette
+  stay fixed art, and the test-pinned tone-stopped chip is byte-identical.
+  Also fixed: the 7 uses of an undefined --accent-primary (fallback always
+  won) and the undefined --bg-primary on the chat search field. The OAuth
+  recovery contract reads the extracted chat_connect_prompt.js. Verified by
+  screenshot: Marketplace and Forge fully light under the light theme.
+
+### Fixed (the Desktop write is judged by the real ladder, and the remedy always arrives)
+
+- Live re-verification caught the remedy fix not firing: the write never
+  reached the file-access ladder — the agent loop's path sanitizer rejected
+  absolute paths outright ("absolute paths are not allowed"), so the remedy
+  producer never ran and the advertised remedy would have been FALSE (raising
+  the level could not pass the sanitizer). Absolute paths in the non-benchmark
+  lane are now judged by `authorize_write` itself: allowed passes through,
+  refused returns the ladder's BLOCKED sentence with the truthful remedy,
+  verbatim. And the chat announcement deterministically appends the remedy to
+  every failed note, so the sentence the user reads carries it even when the
+  model's own words drop it. Tests built from the LIVE recorded shapes
+  (`tests/test_a_desktop_write_refusal_reaches_the_live_chat_reply.py`, 11
+  red-first), 103 neighbors green.
+
+### Changed (design unification: connect prompt extracted, dead theme relics gone)
+
+- The ChatGPT-connect prompt (OAuth nudge overlay) moved verbatim from
+  chat.html into js/chat_connect_prompt.js behind a factory that receives
+  page state; chat.html is down to 2746 lines (254 under the hard ceiling).
+- The write-only `te-space-active` class and the never-consumed
+  `te-theme-dark` fallback are gone, and the global-space injector gates on
+  the unified theme key (the retired `thomas_theme` key had an always-true
+  default, so the space injected regardless of theme). The space belongs to
+  Nebula only, driven by the real `__teSpace` API.
+
+### Changed (design unification: radii and buttons land on the token scale)
+
+- The private near-scale radii (3px Forge chrome, 9px/7px/11px workbench,
+  9px/6px module cards, 9px content panels and settings) land on the token
+  scale (`--radius-sm/md/lg`), `.evo-btn` adopts the shared button profile
+  (token padding, radius, font size, theme surfaces), oversized icon glyphs
+  (15-21px) come down to the 14-16px line, and the competing `.btn-primary`
+  copy in the chat-game modal uses the token paddings. Four orphaned
+  workflow-builder docs under static/ are deleted with the record updated
+  (the UI they documented no longer exists).
+
+### Fixed (design unification: the interface stops speaking developer)
+
+- The onboarding wizard no longer shows exit codes and stderr ("Repair
+  exited with code N") - it says what to do; the diagnostics stay in
+  telemetry. The Missions chip reads "Paused" instead of "Runtime
+  unavailable", failed requests say "Thomas couldn't complete that. Try
+  again." instead of "Request failed (500)", the Evolve terminal frame
+  routes through its own plainCause humanizer instead of quoting the exit
+  code, the Canvas mount failure shows plain words and logs the real error,
+  and workspace chat says "Thomas didn't answer. Send it again." instead of
+  "returned HTTP 500".
+- No control ships a 'loading...' label: the model button says "Checking
+  your model...", plugin imports say "Importing..." / "Opening...",
+  companion app cards say "Finding your apps..." and drop the internal
+  module id from the card face, the worktree panel says "Checking
+  branches...", fleet ack rows drop "(HTTP 502)" (logged instead), the
+  telemetry panel says "Nothing recorded yet." at neutral tone, and the
+  vibe-code game map says "Where your messages arrive." instead of
+  "HTTP/SSE stream entrypoint."
+
+- (landed) Verified-label scoping -- details in the refusal/Verified entry below.
+
+### Fixed (a refusal carries its remedy, and Verified means what was checked)
+
+- A file-access POLICY refusal's remedy ("Raise the file-access level (e.g. to
+  'Your PC') to write here.") now reaches the user-facing result instead of
+  dying inside the dropped tool output — measured live: the Desktop-file ask
+  got a true boundary answer that never mentioned the lever you control.
+  The worker also stops retrying the byte-identical refused call (a policy
+  refusal is deterministic; a different path starts fresh — no gate).
+- Chat deliverable wording scopes its claim to what ran: render-only proof
+  says "Done — renders · not checked against your ask", never a bare
+  "Verified" — measured live: an unwinnable generated game wore "Verified".
+  Announcements, task events, and the LLM announcement prompt all follow; a
+  server-authored `verification_label` rides every normalized delegation row
+  for the UI to render (handoff filed to the UI session). Max/exhaustive runs,
+  which ARE reviewed against the ask, get a label naming that review.
+
+### Changed (design unification: chat.html gains 150 lines of headroom)
+
+- chat.html drops from 2998 to 2850 lines against the hard 3000 ceiling:
+  the four dead canvas-prototype functions (85 lines, zero callers) are
+  deleted; the build-badge <style> block lives in chat_shell.css with its
+  load-bearing measurement comments; and the THEMES / THEME_META data moved
+  to js/chat_themes.js (window.ThomasChatThemes), which documents that its
+  values mirror tokens.css. Verified live: five themes load, the real
+  switcher swaps palette and welcome copy, the build badge stays styled,
+  zero page errors; the full chat DOM test battery passes.
+
+### Changed (design unification: companion and frontier converge)
+
+- Companion speaks the product language: the pre-unification blue/green era
+  paint (Website-Lock stage gradient, green active tab, #58a6ff bubbles,
+  hardcoded pink error colors, white-alpha grid) becomes canonical tokens -
+  accent tabs, chat-language bubbles (`--c-user-bg` / `--c-surface-2`),
+  semantic danger colors, theme-hairline grid, `--r-card` radii. The PWA
+  theme-color meta reports the canonical `#070912`, and the model button no
+  longer ships with a literal 'loading...' label.
+- Frontier (/static/frontier.html) links tokens.css and aliases its
+  instrument-sheet vocabulary (--sheet/--card/--ink/--signal/--live) onto
+  the canonical set with a pre-paint unified-theme snippet, so the CAP
+  panels page follows all five themes instead of its own light/dark pair;
+  the graph-paper signature stays, on per-theme hairlines.
+
+### Fixed (design unification: one theme authority)
+
+- The classic shell ran THREE theme systems at once; now it runs one. The
+  legacy server-preference path (runtime 040) no longer paints its own
+  palette - `applyTheme` keeps only the space-backdrop and composer-icon
+  side effects, derived from the CURRENT unified theme, and follows every
+  `thomas:themechange`; the classic settings dropdown (auto/light/dark)
+  drives the unified engine directly (auto = Nebula). The hardcoded
+  "journal" light stylesheet injected into plugin iframes is deleted -
+  same-origin frames already receive the unified theme.
+- /classic pre-paint script reads the unified `thomas_chat_theme` key and
+  sets the root attributes, so light/sandstone users stop seeing a dark
+  nebula flash on every load; the retired `thomas_theme` key has no
+  remaining writers.
+- Cross-tab theme switching works everywhere workspace_shell.js runs: a
+  storage listener follows the unified key, and applyTheme clears stale
+  inline `--c-*` vars from earlier postMessage payloads so a vars-less
+  follow-up can actually win. The settings page delegates its apply path
+  to the unified engine (it used to set only one of the two root attrs).
+- `--warn-*` / `--danger-*` aliases follow the per-theme `--c-warn` /
+  `--c-danger` semantics instead of dark-only literals, so warning and
+  danger text stays legible on light and sandstone.
+
+### Changed (design unification: evolution.css split by responsibility)
+
+- `evolution.css` (1940 lines, 340 over the 1600 hard cap) is now an @import
+  hub over four responsibility files, cascade-identical contiguous ranges:
+  `evolution_dashboard.css`, `forge_code_shell.css`, `forge_code_activity.css`,
+  `forge_code_review.css` - all under the 600 soft cap. In the same pass: the
+  duplicate `fcSpin` keyframes dropped, the never-defined `--fc-on-accent`
+  became `--c-accent-ink`, the stale `#7fb0ff` focus fallback became
+  `var(--c-accent)`, and the Forge light overrides scoped to
+  `html[data-theme=light]` so the legacy BODY attribute can no longer flip
+  the Forge surface light under a dark page. Tests read the hub + imports.
+
+### Fixed (design unification: classic survives the light themes)
+
+- The classic shell was legible only in the dark themes: the sidebar kept a
+  hardcoded near-black background while its text followed the theme (light /
+  sandstone rendered dark-on-dark), and both chat bubbles kept hardcoded navy
+  slabs on the cream/white backdrops. Sidebar, search field, and both message
+  bubbles now consume the canonical tokens (`--c-sidebar`, `--c-surface`,
+  `--c-composer-bg`, `--c-user-bg`) - verified by screenshot in light,
+  sandstone, and nebula.
+
+- (landed) dead design code deleted, ~4 MB across 174 files, each grep-proven -- details in the design wave-1 entry below.
+
+- (landed) satellite restyle onto tokens -- details in the design wave-1 entry below.
+
+- (landed) tokens single-source + shared winner components -- details in the design wave-1 entry below.
+
+### Fixed (design unification wave 1: one product, in every light)
+
+- P0: iframe workspaces (Mission Control, Library, Channels, Token Economy,
+  Marketplace) rendered as an unreadable WHITE SHEET under a light OS
+  preference — three `color-scheme: normal !important` transparency hacks
+  fought the shell's dark scheme (`normal` means light-ONLY, not
+  follow-the-OS). The theme channel now pins each embedded document's explicit
+  scheme; proven across 14 screenshot combinations of {OS pref} x {theme} x
+  {workspace}.
+- P0: Paper Trading rendered silent black — a navigate/ready race in the
+  classic embed; fixed, and ANY unmountable mode now shows an honest
+  glass-card notice instead of black, ever.
+- tokens.css is the single source: semantic --c-danger/--c-warn/--c-success in
+  every theme, per-theme scrollbar colors (light themes had dark scrollbars),
+  the dead skinny `.t-btn` rewritten to the real Chat profile, and the audited
+  winner components (.status-pill, .empty-state, .t-input, .thomas-modal)
+  shipped as shared classes reachable from every tokens.css consumer.
+- Satellites converge on the tokens: Marketplace loses its marketing-hero
+  costume and hardcoded blue for the workspace header pattern; Token Economy
+  keeps mono for numbers only; the classic composer's 20-hex ramp is now
+  0 hex / 89 var(); evolution console and three injected JS panels rebased.
+- ~4.0 MB of PROVEN-dead design code deleted (20 entries, each with grep
+  proof): the 2.3 MB unloaded app_runtime_primary.mjs, two diverging 65-file
+  archive trees + their extractor, nine dead static page trios, the parallel
+  'Deep Space' theme system, model_settings_dropdown pair, legacy shims, the
+  /landing dead route, js/settings.js finished-code-with-no-caller — with 14
+  test files retargeted to the live tree, never weakened.
+
+### Fixed (design unification: the Forge overlay is opaque)
+
+- The classic Forge/Evolve overlay sat at 98% alpha, so bright chat bubbles
+  behind it ghosted through the header (visible in the wave-0 audit shots,
+  pre-existing). It is now fully opaque `var(--c-bg)` with its green accent
+  tint kept, and its text color is `var(--c-text)`.
+
+### Fixed (design unification wave 4: honest words on every surface)
+
+- Worker prose renders without raw markdown markers on every plain-text
+  surface: the classic Mission Control priority queue and job summaries
+  (runtime 023) and the standalone /mission page strip markers with the same
+  helper chat.html uses - and all three now strip UNPAIRED markers too,
+  because summaries arrive truncated (the closing ** was cut off) and
+  headings appear mid-sentence, which the old paired-only patterns missed.
+  Verified live: the Saturday-dinner delegation row reads clean.
+- /landing no longer serves a broken download of a file that never existed:
+  the route redirects to the app.
+
+### Removed (design unification wave 3: dead design paths)
+
+- Deleted with an approved record (2026-08-06-design-unification-dead-paths):
+  `thomas_chat.html` (the frozen static prototype of the live chat shell -
+  zero filename references), `token_economy_preview.html`,
+  `js/thomas_world.js` + `css/thomas_world.css` (the never-wired living-world
+  re-layer: nothing loads the js and `body.tcw-on` has no setter; the
+  `html.tcw-embed` embed rules are separate, live, and untouched),
+  `js/app_modules.js` (superseded loader), `js/composer_redesign.js`
+  (self-described RETIRED stub), `js/thomas_engine_panel.js` (no caller),
+  and `tests/test_thomas_world_message_occlusion.py` (guarded the dead pair).
+
+### Fixed (design unification wave 3: workspace embeds)
+
+- Every workspace embed rendered as a white sheet: linking tokens.css gave
+  the chat document `color-scheme: dark`, and Chromium opacifies an embedded
+  transparent document whose scheme differs from its embedding element. The
+  `.tc-workspace-frame` element now declares `color-scheme: normal`, matching
+  the child document contract, and the glass stays glass.
+- The workspace frame tint deepened 58% -> 82% of the theme background (still
+  inside the see-through guard's 30-85 design bound) so embedded dashboards
+  read at full contrast over the living world; the JS-created direct frame
+  (mission / settings / my-stuff embeds) was still `background:transparent`
+  from before the original fix and now carries the same glass, with a new
+  guard covering it.
+
+### Fixed (design unification wave 2: the chat shell)
+
+- LIVING WORLDS legibility: a theme-colored reading shade paints between the
+  world sprites and the content column of the unified shell (chat_shell.css,
+  no z-index changes - the fix the chat.html comment block endorses). The
+  900px Code empty state's drifting moon no longer swallows the subtitle;
+  margin sprites stay vivid. Verified by screenshot in Nebula and Aurora.
+- `.sr-only` has ONE definition (tokens.css, which chat.html now links);
+  chat.html's local copy and accessibility.css's base rule are gone, the
+  skip-link :focus reveal stays in accessibility.css. The artifact-card DOM
+  guard follows the rule to its new home.
+- chat.html is plain text again: the three literal NUL bytes used as the
+  model-select value delimiter became backslash-u0000 escapes (identical runtime
+  string), so ripgrep and every text tool stop silently skipping the file.
+
+### Changed (design unification wave 1: one token set)
+
+### Removed (design unification: the banned *_parts CSS directories)
+
+- (follow-up) the rename/deletion tree itself lands: the first restructure
+  commit carried only the import-hub and test edits.
+
+- `css/components_parts/` and `css/layout_parts/` are gone: live files moved
+  (git mv) to `css/component_styles/` and `css/layout_styles/` with every
+  import and test path updated, because the old names match the banned
+  monolith split pattern and blocked any commit staging them. The two rules
+  stranded in `components.css` by that guard went home to their siblings
+  (`tool-calls-chat.css`, `agent-delegation.css`). Deleted outright as dead
+  design code (docs/deletions/2026-08-06-design-unification-dead-paths.json):
+  `layout-app-shell-legacy.css`, `layout-debug-panel-legacy.css`,
+  `layout-workspace-split-a.css` (zero references) and
+  `layout-responsive.css` (never imported since birth; its test assertions
+  are satisfied by `layout-workspace.css`).
+
+- Satellite pages consume the shared set: `workspace_shell.css` keeps shell
+  components only (its palette/theme blocks moved to `tokens.css`),
+  `settings.html` and `mission.html` link tokens.css first, and Token
+  Economy mono cells use `--font-mono`.
+
+- `css/tokens.css` is now THE design-token source: the canonical `--c-*`
+  palette (Nebula Core) plus all five theme blocks moved here from
+  `workspace_shell.css`, and the legacy token names (`--bg-app`,
+  `--text-primary`, `--accent`, …) became aliases onto the canonical set, so
+  every classic-SPA component follows the Thomas Chat design and its themes.
+  `settings.html` and `mission.html` now link tokens.css; `--theme-name`
+  reports "Nebula Core" (the truthful design name) instead of "Website Lock".
+- Classic chrome (`layout_parts/`) consumes canonical tokens: the sidebar,
+  nav, and workspace headers drop the old blue accent (`rgba(88,166,255,*)`,
+  `#9ad8ff`) for `--c-accent*`, the Website-Lock navy gradients for
+  `--c-bg` + `--c-accent-soft` tints, and chrome text uses `--font-label`
+  (Manrope; JetBrains Mono only in the Dark theme, matching the reference).
+  Token Economy mono data cells use `--font-mono` instead of a hardcoded
+  ui-monospace stack.
+- Contract tests (`test_token_economy_modernization_contract`,
+  `test_operator_mission_smoke`) read the five-theme shell from
+  tokens.css + workspace_shell.css — same contract, relocated source.
+
+### Fixed (wave-2 organic sweep: queue affinity, classifier truth, chat queue, Work onboarding, snapshots, reload, transcript shape)
+
+- A queued Code task fires only into its own conversation; new tasks start in
+  parallel instead of queueing with an empty id (the measured deliverable
+  overwrite); Code sidebar gets loading/error states; clean stops stop leaking
+  "(process exit 1)".
+- The shell mutation classifier no longer matches its Windows verbs inside
+  ordinary words (`Format-Table` columns classified a directory listing as a
+  write), and an answer-producing run whose write-capable tools ALL succeeded
+  while git says nothing changed files as the answer with a visible neutral
+  note — never a fabricated exit-1 failure. Same contract applied in all three
+  verdict sites (`dispatch_agent_loop`, `dispatch_claude_cli`,
+  `_confirmed_conversation_reply`).
+- The LIVE composer (chat.html) queues a message sent mid-reply — the wave-1
+  queue had landed in the /classic shell's handler; the unified shell now has
+  its own (`js/chat_turn_flow.js`), with a visible queued note, ordered drains,
+  and a stale-queue guard. Revisiting a chat restores its task activity card
+  for all delegation rows; the client's terminal-state list now matches the
+  server's.
+- Work onboarding is finishable: the store demanded a 3-workflow map the tool
+  legitimately builds with one (minimum now 1); onboarding failures surface as
+  visible transcript errors instead of console-only; the board composer's text
+  is carried into the wizard instead of silently dropped; a message naming
+  exactly one offered workflow selects it; Thomas rows render markdown.
+- Task-born projects get a real snapshot commit after every successful run, so
+  an overwrite is recoverable through Keep/Revert; user-picked projects are
+  never auto-committed; `.thomas/.gitignore` ('*') is planted so a picked
+  project's own `git status` stays clean.
+- F5 lands back on the open Code task (`thomas.lastSurface` in localStorage,
+  reusing the deep-link path), never stealing an explicit deep link.
+- Transcripts persist as one string again (a list-shaped transcript was stored
+  as thousands of single-character entries); both read paths tolerate the
+  legacy array shape.
+
+- (landed) chat live-composer queue + task-card restore -- details in the wave-2 sweep entry above.
+
+- (landed) Work onboarding finishable + wizard keeps your words -- details above.
+
+- (landed) per-run snapshots in task-born projects + .thomas gitignore shield -- details above.
+
+- (landed) reload lands back on the open Code task -- details above.
+
+- (landed) transcripts persist as one string; readers tolerate the legacy array shape -- details above.
+
+- (landed) per-run snapshots in task-born projects + runtime verdict parity -- details above.
+
+- (landed) the Windows shell fix + enforcement-manifest re-bless, owner-authorized in chat -- full entry below under 'the Code workspace shell works on Windows'.
+
+### Fixed (chat replies stream as they are written)
+
+- The 26-46s one-paint wall was ONE line: `buffer_prose = bool(tools)` in the
+  reasoning specialist held every token whenever tools were offered — the
+  NDJSON route and the client already streamed. Prose now streams per sentence
+  with a trailing-sentence holdback (a 400-char cap releases code blocks), so
+  the pinned honesty law — pre-call completion claims never stream — survives
+  structurally. New `js/chat_stream_consumer.js` owns transport and
+  frame-coalesced painting; the old inline reader (including its throw-away
+  "no stream body" failure) is deleted. Persist-at-send/salvage and the
+  queued-message drain are preserved; salvage now captures sentence-granular
+  partials. Proven by a gated integration test that deadlocks if any layer
+  buffers.
+
+### Fixed (the Library lists what Thomas actually made)
+
+- `_generated_deliverable_project` gated on `artifact_kind != 'web'`, so every
+  non-HTML chat deliverable was silently absent — Creations showed 0 over
+  weeks of files. Gate removed; kind-aware cards (Open App/PDF/Image/File);
+  285 real deliverables now eligible on this machine. (The shared
+  `_MAX_PROJECTS=250` cap now binds — flagged for follow-up.)
+
+### Fixed (the preview says when it blocks the internet, and the tab stops blocking it)
+
+- The Code viewer shows "This preview blocks internet access — open in its own
+  tab for live data" on pages that use fetch/XHR/WebSocket/external scripts,
+  and the STANDALONE preview tab now serves `connect-src 'self' https: wss:`
+  (document navigations only; the beside-chat iframe stays fully locked; the
+  security reasoning is documented at the header site). Live-data apps work
+  when opened in their own tab instead of debuting in their error state.
+
+### Fixed (Code workspace folders behave; CLI runs judged like GPT runs)
+
+- A question with nothing selected REUSES its empty task-born folder instead
+  of minting sibling folders forever, and the composed prompt tells the model
+  the folder is brand-new and empty so answers name reality.
+- A New-chat task's generic "Code task <timestamp>" folder is renamed to the
+  message-derived name when the first message arrives (stamped
+  `title_source`; folders with user files and picked projects never rename;
+  a stale replayed project_root no longer 400s the message).
+- The surface snapshot persists synchronously at conversation-open and
+  run-start, closing the 1-in-6 reload-restore race.
+- The claude-CLI translator classifies Bash by COMMAND via the shared rule,
+  correlates results to calls by tool_use_id, stamps access/basis/command on
+  events, and the CLI verdict honors the stamps — read-only CLI runs stop
+  being demoted, and the duplicated read-only name list is deleted.
+
+- (landed) Library gate removal -- details in the wave-4 entries above.
+
+- (landed) preview network notice + standalone-tab connect-src -- details above.
+
+- (landed) folder reuse/rename, restore race, CLI stamping -- details above.
+
+### Added (image generation, with the truth about credentials)
+
+- New `image.generate` tool, registered for the chat agent, the delegation
+  worker, and the Code agent loop: prompt + optional size/count -> real PNG
+  files in the task workspace, surfaced by the existing deliverable cards.
+  Providers: OpenAI `gpt-image-1`, then Gemini; keys discovered at call time
+  from Settings/config/env. Proven live: the ChatGPT-subscription OAuth token
+  CANNOT generate images (401, missing scope `api.model.images.request` --
+  OpenAI scopes subscription tokens to Codex only), so with no API key on the
+  machine the tool answers with the exact remedy (add an OpenAI or Gemini key)
+  instead of a silent absence or a fake image.
+
+### Fixed (a fresh session no longer adopts someone else's live run)
+
+- `adoptOrphanRun` blanket-adopted any live run into every fresh browser
+  session; a new task typed there then queued into the adopted conversation,
+  ran in its project, and overwrote its deliverable (measured twice; wave-3
+  isolation reproduced it from a clean profile). Adoption is now gated on the
+  stored last-surface snapshot: a same-browser reload reattaches exactly as
+  before, a genuinely fresh session stays fresh with the live run one sidebar
+  click away.
+- Shell tool results in the durable transcript now carry the COMMAND they ran
+  (excerpt), so a passing check is auditable instead of being stdout with no
+  provenance.
+
+### Fixed (the Code workspace shell works on Windows and tells the truth about failing)
+
+- Every quoted inline script (`python -c "…"`, `node -e "…"`) reached the
+  interpreter truncated at the first space with a literal leading quote —
+  `["cmd","/c",command]` goes through `subprocess.list2cmdline`, an encoding
+  cmd.exe cannot parse. The command now runs through
+  `powershell -NoProfile -NonInteractive -Command`, whose parser round-trips
+  that encoding exactly, with an exit-code epilogue (PowerShell collapses every
+  failure to 1) and a UTF-8 console prologue. This is why every organic Code
+  run's self-verification died with unexplained exit 1s.
+- A failed tool result no longer discards its own diagnostics:
+  `ToolResult.to_content()` serialized failures as a bare
+  `{"ok": false, "error": "Exit code N"}` and threw the captured stdout/stderr
+  away on the ok=False branch — the recurring dead-half-of-the-branch shape,
+  this time hiding every command's actual complaint from the model. Failures
+  now carry their output, truncated to the same cap as successes (all tools).
+- `> $null` no longer creates a literal `$null` file in the user's project, and
+  `background=true` spawns a detached process with a spool file, pid, and stop
+  instructions — the serve-and-verify pattern works on Windows, proven live
+  end-to-end (server up → HTTP probe → tree-kill → down).
+  Tests:
+  `tests/test_shell_exec_windows_runs_one_real_shell_with_diagnostics.py`
+  (6 red against the old shell, reproducing every defect byte-for-byte).
+
+### Fixed (the builder summarizes from the files and hides its scratch)
+
+- The composed Code prompt (shared by both engines via `bridge_prompts.py`) now
+  requires the final summary to be written AFTER re-reading the changed files
+  and to name only details present in them — a steered run had described three
+  cats by names that appear nowhere in the shipped page.
+- Verification scratch (probe scripts, server logs, one-off harnesses) is
+  directed to `.thomas/scratch/` and deleted before finishing, and
+  `forge_code_git` now actually filters that prefix from user-facing change
+  lists (the claim that it already did was measured false — only
+  `.thomas/evolve/agent/` was filtered), so `.thomas-homepage-server.log`-style
+  debris stops appearing in CHANGED FILES with Keep/Revert.
+  Tests:
+  `tests/test_the_code_prompt_summarizes_from_the_files_and_hides_its_scratch.py`
+  (red before).
+
+### Fixed (chat presentation: tables render, status lines settle, the CTA is a button)
+
+- The chat markdown renderer now renders GFM tables — an explicitly-requested
+  budget table used to arrive as literal pipe text, one `<p>` per row. Header,
+  alignment colons, and escaped pipes are honored; a pipe line with no
+  delimiter row keeps the raw-text fallback. Styled for both themes.
+- A completed delegation's transcript no longer ends on "On it — this is
+  running now, and I'll share the result when it's ready." below the Done pill:
+  once every handoff on a message is terminal, the stored promise renders as an
+  honest settled line ("Done — packing.txt is ready above.", or the
+  failed/cancelled truth).
+- The "Download <file>" call-to-action no longer overflows its 42px icon box —
+  chat.html never linked the stylesheet that defines `.sr-only`, so the
+  visually-hidden label rendered visibly; the rule now exists locally.
+- "Open UTF-8 preview" is now just "Preview".
+  Tests: `tests/test_chat_markdown_renders_a_requested_table_as_a_table.py`,
+  `tests/test_a_finished_delegation_stops_claiming_it_is_running.py`,
+  `tests/test_the_file_card_download_cta_contains_its_label.py` (all red
+  before, node harnesses driving the real extracted functions).
+
+### Fixed (a chat message is never lost, dropped, or falsely absent)
+
+- The user turn is persisted the moment `/api/v2/chat` accepts it, not when the
+  reply completes — an abandoned tab no longer destroys the conversation and
+  the message with it (measured: 476 stored chats, zero containing the sent
+  message). A turn that ends early persists whatever reply text streamed,
+  marked `interrupted`.
+- Pressing Enter while a reply is generating no longer silently drops the
+  message: it queues with a visible note and auto-sends when the current reply
+  finishes (the old path fired a `busy_strategy: "interrupt"` POST only the
+  retired legacy handler ever read).
+- The sidebar never claims "No chats yet." before the history fetch resolves
+  (loading state until confirmed, an honest error state on failure), and the
+  active conversation appears in the list from the moment you send instead of
+  after its first reply persists.
+  Tests: `tests/test_the_user_turn_survives_a_turn_that_never_finishes.py`
+  (real route + real store, red before),
+  `tests/test_a_message_sent_mid_reply_is_queued_not_dropped.py`,
+  `tests/test_the_sidebar_never_claims_no_chats_before_history_loads.py`.
+
+### Fixed (an unselected model is a question, never a silent Claude dispatch)
+
+- Measured live: with the chip reading GPT-5.6 Terra and 4 OpenAI keys ready,
+  a Code run whose client model state had been lost dispatched to an
+  unauthenticated Claude CLI and died in 15 s with the CLI's raw "Not logged in
+  — Please run /login" as the user-facing error. An empty modelId now sends NO
+  model key; the server resolves the actually-configured default (the same
+  resolution that feeds the chip), reports the dial as `configured_default`
+  with the source named, or refuses BEFORE dispatch with "No model selected —
+  pick one in the top bar". Latent bug found by the tests: a claude-prefixed
+  model_id produced dispatch_model `claude:claude:sonnet`.
+- The Claude CLI's login failure now surfaces as a Thomas-actionable sentence
+  ("The Claude engine isn't signed in on this machine — add an Anthropic key in
+  Settings, or pick one of the ready OpenAI models"), with the CLI's words in
+  the details.
+- Host-machine internals stop leaking into the feed: the operator's Claude-Code
+  plugin-hook stderr ("SessionEnd hook […] failed: python3: command not found")
+  is classified structurally as a technical/debug event — visible in Show
+  details, never a top-level narrative UPDATE.
+  Tests: `tests/test_an_unselected_model_never_silently_becomes_claude.py`,
+  `tests/test_host_hook_noise_never_reaches_the_narrative_feed.py` (both red
+  before); stale pass-limit pins in `test_forge_code_settings.py` updated to
+  the cd0203a7 no-rationing truth; gate-cancellation tests in
+  `test_evolve_agent_persistence.py` pin their historical claude family
+  explicitly now that an empty model resolves the configured default.
+
+### Fixed (the verdict card tells one coherent story per kind of run)
+
+- The card face no longer says "Not checked against your ask" directly above
+  "2/2 checks passed · no open risks" — it leads with what WAS verified in one
+  sentence ("Passed 2 automatic checks · your specific ask was not separately
+  verified"). An answer-only run gets "This was an answer, not a build —
+  nothing to verify." instead of a build scorecard; a stopped run gets "Stopped
+  before verification could run" with no requirement-unverified or open-risk
+  language. Risk rows must trace to something the run actually did: the
+  harness's own stand-in sentences for empty errors no longer mint "error
+  surfaced during the run" rows. The report now carries the recorded `outcome`
+  word so the card knows what kind of run it is grading.
+  Tests: `tests/test_a_risk_row_must_trace_to_something_the_run_did.py`,
+  `tests/test_the_verdict_card_matches_the_kind_of_run.py` (both red before),
+  updated wording pins in `test_the_run_report_verdict_tells_the_truth.py` and
+  `test_run_report.py`.
+
+### Fixed (Code surface honesty: stop, failure, and the feed's arithmetic)
+
+- One stop routine: the drawer Stop and the mode-adapter stop had diverged
+  (different wording, different behavior); both now call the same `stopRun`,
+  which also reloads the change list and file tree after a confirmed stop — the
+  FILES panel no longer sticks on "Loading files…" until you switch away.
+- A failed turn whose transcript carries a `final` answer renders the ANSWER
+  with the failure note alongside — never `failureSummary()` instead. This is
+  the rendering half of the explain-run fix: even a run filed as failed may not
+  have its produced text suppressed.
+- Deliberately stopped runs (persisted `outcome: "stopped"`) render neutrally,
+  not through the red failure pipeline.
+- The transcript scrolls to the newest turn when a run's durable result lands
+  in the on-screen conversation, not only on conversation open — a finished
+  follow-up no longer hides its answer below the fold.
+- The live-feed header stops calling recovered self-checks "issues": on an ok
+  run it reads "N failed attempts, recovered" without the warning tint, and the
+  expected first read probe of a brand-new empty project renders as a neutral
+  existence check instead of an alarming red row.
+  Tests: `tests/test_a_failed_run_still_shows_the_answer_it_produced.py`,
+  `tests/test_stopping_a_run_refreshes_the_work_it_leaves_behind.py` (both red
+  before), plus updated pins in `test_chat_mode_contract.py` and
+  `test_the_run_report_escapes_what_thomas_wrote.py`.
+
+### Fixed (an answer is never disqualified by the tool that read the files)
+
+- P0 measured live: an explain-only run ("look at this project and tell me what
+  it does") produced the model's correct answer and Thomas filed the run as
+  FAILED with a fabricated exit 1 — `shell.exec` was not on the inspection-tool
+  name list, so one read-only `dir` disqualified the reply. Shell calls are now
+  classified by their COMMAND (the existing mutation-pattern rule, Windows verbs
+  added), the decision is stamped on every tool event (`access`/`access_basis`)
+  so it is visible instead of implicit, and the false "GPT ran but made NO repo
+  changes (no-op) — nothing to review" wording no longer fires when an answer
+  exists. The recorder honors the stamps too
+  (`_confirmed_conversation_reply` trusts `access` when present, name fallback
+  otherwise), and the outcome word is now PERSISTED on the agent turn so a
+  reloaded transcript renders a deliberate stop as a stop instead of re-deriving
+  "failed" from `ok=False`.
+  Tests: `tests/test_a_read_only_shell_command_does_not_disqualify_an_answer.py`
+  (red before), stamp-parity cases in
+  `tests/test_dispatch_agent_loop_readonly_answers.py`, outcome persistence in
+  `tests/test_a_run_is_judged_by_its_work_not_its_exit_code.py`.
+
+### Fixed (opening one Code task can no longer freeze the whole server)
+
+- py-spy caught it live: `conversation_preview` built its allowlist with
+  `root.rglob("*")` ON the event loop, and its filter only excluded
+  `.git`/`node_modules` entries from the results while the walk still descended
+  into them — a conversation pointed at a big checkout froze every request,
+  including `/`, for the length of a ~1.5M-entry walk, fired automatically by
+  artifact-thumbnail hydration. The walk now prunes excluded directories in
+  place, runs in a worker thread (`_preview_allowlist`), and the preview refuses
+  Thomas's own source root with the same `project_is_thomas_source` refusal the
+  edit path makes. Secondary hot spot from the same investigation:
+  `_web_build_fingerprint` re-stat'ed ~320 frontend files on the loop for every
+  page request (35–100 ms each) — now cached for 2 s per page.
+  Tests: `tests/test_the_preview_walk_prunes_and_stays_off_the_loop.py`
+  (asserts the walk never *enters* a pruned tree, not merely that results are
+  filtered).
+
+### Added (failure-string reachability report — sight, not a gate)
+
+- `scripts/failure_string_reachability_report.py`: scans `thomas/` for
+  hand-written user-facing failure/fallback sentences and reports which ones no
+  test under `tests/` ever produces — the measured shape behind every "Thomas
+  lied": a carefully worded sentence sitting in a branch nothing establishes
+  can occur. First full run: **1,509 sentences, 1,485 untested**. Writes
+  `reports/failure_string_reachability.md` (git-ignored output) and always
+  exits 0 — by design it must never be wired into pre-commit or CI as a
+  blocker. Placed at `scripts/` top level because `.gitignore`'s `reports/`
+  pattern (unanchored, line 188) ignores any nested `reports/` directory —
+  the originally intended `scripts/crew/reports/` would have been invisible
+  to git.
+
+### Fixed (a new Code task no longer moves into the previous task's folder)
+
+- Measured live: task A got its own folder, and task B — started with "New
+  chat", nothing picked — was bound into A's folder, so A's finished run listed
+  B's page under "THOMAS MADE 2 THINGS". The client kept the last root it was
+  handed (`state.projectRoot` follows every open) and sent it back as
+  `project_root`, where it was indistinguishable from a deliberate pick — the
+  shared-drawer defect reborn with task A's folder playing the drawer.
+- Server: `project_for_new_task` stamps its folders
+  (`.thomas/created-for-one-task.json`); `_chosen_project` declines a stamped
+  folder arriving without `project_choice: "picked"` and gives the task its own
+  folder instead. Real picks (folder dialog, project card, typed name) send the
+  flag and are honoured exactly as before; folders the user made themselves
+  carry no stamp and keep their sticky-default behaviour. This also heals
+  browsers whose localStorage already holds a leftover task folder.
+- Client (`unified_code_mode.js`, `unified_code_lifecycle.js`): a new task may
+  only inherit `chosenProjectRoot` — a root somebody actually picked — never
+  the folder of whatever conversation was last on screen; only picks reach
+  localStorage; a declined leftover root is cleared instead of resent forever.
+- Verified live at 1920×1080: two simultaneous Code runs (parallel-run registry
+  intact, no "another Code run is still active"), each bound to its own folder,
+  each run report listing only its own file. Tests:
+  `tests/test_a_new_task_does_not_move_into_the_last_tasks_folder.py` (red
+  before, green after, with both honour-the-pick controls).
+
+### Fixed (a Code run is judged by its work, not its exit code)
+
+- `_drain_and_record` required `rc == 0` before it would believe any evidence, and
+  the Claude CLI exits 1 even when the files landed and work — so successful runs
+  were recorded as failures. Evidence now outranks the exit code: changed files
+  mean `completed` whatever the code says (the code stays visible in the reason,
+  e.g. "2 file(s) changed (build process exited 1)"); a transcript `final` frame —
+  emitted only for a non-error CLI result — lets an answer-only run record
+  `conversation` past a lying exit code. A run that died mid-narration (say frames
+  only, nonzero exit, nothing changed) still records `failed`.
+- An interruption the person asked for is no longer dressed up as the run's error.
+  The STOP and STEER routes stamp the process before killing it
+  (`_mark_stop_requested` / `_mark_steer_requested` in
+  `thomas/server/routes/evolve_agent_runtime.py`), and the recorder files
+  `stopped` — "stopped by you", "stopped for your steering update" — instead of
+  `failed / exited 1`. An aborted launch is deliberately NOT stamped: a run nobody
+  managed to start is not a run somebody chose to stop.
+- Tests: `tests/test_a_run_is_judged_by_its_work_not_its_exit_code.py` (red
+  against the old recorder, green now, with a crashed-run control so the fix
+  cannot be rewritten into "any output counts as success").
+  `tests/test_evolve_agent_routes.py` stops asserting the pass-limit of 3 that
+  `cd0203a7` deliberately removed.
+
+### Fixed (effort changes how hard Thomas thinks, never what he is allowed to know)
+
+- The token-economy dial and the Reasoning-effort dial are the **same setting**
+  (`brisk→cheap`, `diligent→optimal`, `exhaustive→max`). The problem was never that
+  it existed — it was that it rationed **capability** rather than depth.
+- At "brisk", `_RUNTIME_OVERHEAD_POLICIES` switched off `include_project_instructions`.
+  **Choosing a faster reasoning setting made Thomas stop reading the project's own
+  rules** — along with the editing policy, library context, memory profile and skills.
+  That is not a cheaper Thomas; it is a Thomas that forgot the repo it was working in,
+  chosen by someone who thought they were picking a speed.
+- `loop_tool_spec_budgets` gave "brisk" **0.75× the tools** — a cheaper reasoning
+  setting literally removed capabilities from the request. `loop_context_budgets` gave
+  it 0.6× the window.
+- All three are levelled: every effort setting now gets the full context, the full
+  tool set and the most generous window. Effort is native to the model and changes how
+  hard it thinks per step — that is the honest way to spend less. Context the model
+  needs in order to be correct is not a place to economise.
+- Together with `cd0203a7` (no pass rationing), the dial no longer decides how many
+  steps Thomas may take, what he may see, or what tools he may use.
+
+### Fixed (no pass limits — the model stops when it is done, not when a counter says so)
+
+- Passes were rationed by economy level: **3 / 15 / 32**, with 15 the default. That is
+  the inverse of how every comparable agent works — the loop runs until the model
+  stops asking for tools, and an iteration cap exists only as an opt-in safety net,
+  off by default. Cost is capped in dollars, not in steps.
+- Rationing steps does not save money, it wastes it. A run cut off at pass 15 has
+  already paid for 15 passes and produced a half-finished edit, and you then
+  spends more asking it to continue. Reported by you within minutes of using
+  it: *"it told me he ran out of passes, just really unusable."*
+- What remains is a **runaway guard** — 400 passes at every level, far above any real
+  task, so it only ever catches a genuine infinite loop. Repair attempts were the same
+  disease: `{1, 2, 3}` meant the build engine got **two** tries on the default setting
+  before handing over broken work. Now 20 at every level.
+- The economy dial still means something: reasoning effort and token budget. That is
+  where spending belongs — effort is native to the model and makes each step cheaper,
+  rather than rationing how many steps the model may think in.
+- Three tests pinned the rations and are updated to the new contract, including one
+  that now protects the half that still matters: when the guard *does* fire, the run
+  must not claim it finished.
+
+### Fixed (the model can still see what it was asked to do)
+
+- The history budget was a **constant** — 5,200 tokens, handed to a model with a
+  200,000-token window. 2.6% utilisation. A thimble, and the model was asked to
+  remember a conversation out of it.
+- And `preserve_first` was **0**, so the head of the conversation had no protection:
+  the user's original request was evicted before the file dumps that arrived after
+  it. A run could finish a job whose brief it could no longer read.
+- The budget is now a fraction of the real window, floored so nothing gets worse:
+
+  | model window | history before | history after |
+  |---|---|---|
+  | 8,192 | 5,200 | 5,200 (unchanged) |
+  | 128,000 | 5,200 | 42,666 |
+  | 200,000 | 5,200 | 60,000 |
+
+- `_build_messages` already fits everything to the true window afterwards, so this
+  soft cap only needs to stop history crowding out tools and the response — which a
+  test pins at no more than half the window on any model size.
+- `preserve_first` is 2, so the ask (and the compaction summary, which also lives at
+  the head) survives. The small-talk route is untouched.
+
+### Fixed (the model keeps its tools, and is never told a call failed that it never made)
+
+- On coding jobs Thomas capped inspections. After 6 read-only calls it injected
+  *"Stop inspecting and make the requested change now"* **and filtered the tool list
+  down to mutation tools only**. After 6 post-edit reads it removed **every** tool,
+  injected *"Stop re-reading, give your handoff"*, and told the model not to report
+  the limit as a blocker.
+- Reading back what you just edited is the highest-value action an agent has, and
+  this made it impossible exactly when it mattered. Opening a package.json, an
+  index.html, a stylesheet and two sources is already five of the six.
+- Worse: a batched call over the remaining budget was dropped and returned as a tool
+  result with `ok=False` — teaching the model its tool **failed** when the call had
+  simply never been attempted. Thomas lying to the model about its own environment.
+- All three are gone, along with 45 lines of now-unreachable machinery. Pairs with
+  the shell landed in `44422a6d`: a model that can run things but cannot read the
+  output is no better off.
+- Three tests pinned the caps. They are replaced, not deleted, with the opposite
+  contract — no branch may strip the tool list, and no refused call may be reported
+  as failed — so the removal cannot be quietly undone.
+
+### Not fixed, and left honest: exhausting the pass budget still records a failure
+
+- Recording "I used up my own allowance" as a failed run is wrong; the work survives
+  on disk. The one-line version of the fix (drop `state.error`, emit a status) was
+  tried and **made things worse**: with no error set, post-loop completion emits
+  `AGENT_DONE`, so a run that stopped mid-repair would claim it had finished.
+  Claiming completion you did not reach is a worse lie than claiming a failure you
+  did not have, and `test_optimal_effort_exhaustion_is_incomplete_not_done` correctly
+  caught it.
+- The real fix is a third state — done / paused-and-continuable / failed. The reason
+  is recorded at the line rather than left for the next reader to rediscover.
+
+### Fixed (the builder can run what it writes)
+
+- Thomas's builder had `Read/Edit/Write/Glob/Grep` and no shell. The comment above
+  that list names the assumption it was built on: *"The human watcher reviews the
+  resulting diff and runs the tests."* Thomas is used unsupervised, by people who
+  cannot read a diff — **nobody was running those tests.**
+- Shell was gated on `guardrails == "open"` while the default is `"guarded"`, so the
+  only way to let Thomas run the tests for code it had just written was to also pick
+  the setting branded least safe. Everywhere else in software "guarded" means *asks
+  before dangerous things*, not *cannot do things*.
+- Measured cost: Thomas shipped a three-file app whose `app.js` referenced an
+  undeclared `refreshButton` on its last line. It reported it was *"doing a quick
+  source review"* — a **read**. Nothing executed the page. Raising the pass budget
+  from 10 to 25 produced more edits and the same bug, because once a file is written
+  no new information can reach a model that cannot run anything.
+- Shell now runs at `open` and `guarded`; `fortress` still means no shell, and
+  read-only or low autonomy still means no shell in every mode. What bounds it is a
+  **path** boundary — `sandbox_root` is the user's project folder and `ShellTool`
+  resolves any requested cwd through `_safe_path` against it, the same shape Codex
+  CLI uses. It is not a capability boundary, which is the trade every comparable tool
+  makes to let an agent verify its own work.
+- The prompt no longer tells the model *"you do not run shell or git yourself"* — an
+  unused capability is the same as no capability. It now asks for the loop that
+  actually catches bugs: run the project's test or build command, or exercise the
+  thing you changed, and read the output. *"A file that parses is not a file that
+  runs."*
+- Four existing tests pinned `"edit-only builder"` to enforce that the prompt
+  honestly describes the agent's capability. That intent is right and is kept — the
+  fact underneath it changed, so they now assert the prompt matches what the agent
+  can actually do.
+
+### Fixed (Thomas opens the app it built, and says so when it cannot)
+
+- `runtime_executability_warning` is the only check in Thomas that opens a generated
+  app and watches it load. It ran only when `THOMAS_RUNTIME_VERIFY` was switched on,
+  and that variable is set in **exactly one place in this repository — a test file**.
+  So the check had never run for a real user.
+- And `if result.ok or result.skipped: return ""` gave the same answer to "we looked
+  and it was fine" as to "we never looked". Silence, from a step advertised as *I open
+  the app and watch it run*, reads to a person as *someone checked*.
+- Measured against a real fixture rather than a synthetic one: the three-file expense
+  tracker Thomas built on 2026-08-05, whose `app.js` referenced an undeclared
+  `refreshButton` on its last line. The page threw on load and rendered nothing, and
+  Thomas handed it over with no warning. Every static check passed — every file
+  really was present. It now reports *"The app did not run cleanly when opened —
+  uncaught JS error during load/run."*
+- Runs by default; can still be switched off deliberately. A skipped check now says
+  *"I could not open this to check that it runs"* and pointedly does **not** claim the
+  app is broken — nothing was observed either way.
+- **Nothing here can reject a run.** The function returns a sentence to append, and
+  every path inside it returns a sentence. Reporting, never gating.
+
+### Fixed (a run that looped still looks like it looped)
+
+- The progress feed collapses a note whose text repeats an earlier one, keeping the
+  first. Technical rows are exempt because — the code's own words — "collapsing them
+  would hide real repetition rather than noise". That argument does not stop being
+  true for the notes the **owner** reads.
+- Reproduced by driving the real function: five identical "Running the test suite."
+  notes plus a finish went in, two rows came out, and nothing anywhere said it had
+  happened five times. A five-pass loop read as one clean step, and the clean step is
+  the wrong story.
+- The feed still stays short — one row per distinct note — and the row now says how
+  many times it happened: `Running the test suite. ×5`. Annotated on a copy, never on
+  the stored event, because this list is re-rendered on every repaint and mutating it
+  would compound the counter.
+- Guarded three ways, all of which fail on the old code: a repeat shows its count, a
+  note that happened once does **not** grow a counter (or the number means nothing),
+  and the stored events stay untouched.
+- **Twelfth and last of the auto-rejection findings** raised on 2026-08-03.
+
+### Fixed (choosing Thorough actually gives the worker longer to think)
+
+- Two watchdogs guard a delegated worker and they disagreed.
+  `_supervisor_worker_timeout_s` reads the effort dial and grants **360s** for
+  `max`/`exhaustive` — "Thorough" in the UI. `_next_worker_event`, the one that
+  actually cancels the event stream, took no effort argument and always used the
+  **120s** idle constant. The stricter spelling wins, so the dial was inert: pick
+  Thorough, get cut off at two minutes anyway.
+- The cut is not gentle. The timeout path cancels the pending `__anext__()`, which
+  destroys the generator; downstream, `StopAsyncIteration` then reads as *"the worker
+  said nothing"* rather than *"we stopped listening"*. So an interrupted run was
+  reported as a silent one.
+- The call site now passes the same window the supervisor grants. The tests pin
+  **agreement** rather than the number 360, so they do not go stale when either
+  constant moves, and a control asserts the watchdog still fires on a genuinely hung
+  worker — widening a window must not remove the guard.
+
+### Fixed (a finished Code run is recorded as finished, not swept up as dead)
+
+- `_record_code_run_start` opened a run-store row at launch and nothing ever closed
+  it. That was not merely incomplete, it was actively wrong: `reconcile_stale_runs()`
+  sweeps any row idle for ten minutes and `mark_run_dead()` writes `ok = 0`. So every
+  **successful** Code run was being filed as a failure ten minutes later.
+- Caught by looking at the rows the previous commit had just created, not by
+  reasoning about them. The tip-calculator run — a working page, no console errors —
+  sat in the ledger as `ok=0, error="dead_run: stale run janitor reconciliation"`.
+  The prediction in that commit ("an unfinished row is loud, a missing row is
+  silent") was wrong in the way that matters: it was quietly wrong, which is the
+  defect this whole session has been about.
+- `_finalize_code_run` now closes the row from `_drain_and_record`, which is the
+  right hook for two reasons: it computes the outcome from **git truth** (did files
+  actually change), and it runs whether or not a browser is still connected — the SSE
+  `done` frame would miss every run where the tab was closed.
+- Both directions are visible in one table: the pre-fix run reads
+  `ok=0 / dead_run`, the post-fix run reads `ok=1 / error=None`. Verified on a real
+  Code run that built a working dice page (`"Roll the die ?"` → `"Roll the die 3"`).
+
+### Fixed (Code runs are recorded at all — Thomas can finally see the mode that builds things)
+
+- The run store was wired to the **Chat** path only. `start_chat_v2_run` is called
+  from `chat_v2.py` and `workspace_specialist_runtime.py`, and from nowhere on the
+  Code path. So Code runs — the ones that actually produce deliverables — have
+  **never** been recorded. Not since a regression: never.
+- Proven by running Thomas rather than reading it. A real Code task built a working
+  `clock.html` (opened it; 12:45:25 → 12:45:27, no console errors) and the run count
+  in `runs.sqlite3` went **408 → 408**.
+- The damage is not to the user, whose files are fine. It is to everyone reasoning
+  ABOUT Thomas. The newest row in that database was 2026-07-29, which reads as
+  "Thomas has been idle six days" when it actually means "Chat has been idle and Code
+  was never visible". A full day of investigation — this agent plus fourteen
+  subagents across two workflows — drew conclusions from that ledger. Two agents
+  caught each other citing stale data. Nobody caught that the live mode was absent
+  from it entirely. An absence shaped like a presence.
+- One `create_run` call at the Code launch point, behind a helper that cannot raise:
+  a recorder able to take a launch down would be worse than no recorder, and this one
+  is being added precisely because nobody noticed it missing.
+- **Finalisation is deliberately NOT wired.** Rows land with `ended_at` null and
+  `reconcile_stale_runs()` already exists to close them. The "done" frame is where it
+  belongs and is named in the code comment. An unfinished row is loud; a missing row
+  is silent — that is the correct direction to fail while this is half-built.
+- Verified after: 408 → 409, `mode=code`, `model_id=gpt-5.6-terra`.
+
+### Fixed (Code says which executor will run, before you send)
+
+- Code has exactly two executors: any model whose id does not start with `gpt-` is
+  dispatched to the Claude CLI, which exposes **no reasoning-effort control**. Both
+  facts were already known and already reported -- but only in the capability report,
+  **after** the run, as "substituted" and "unsupported". Until then the AI-settings
+  sheet showed a live six-position Reasoning dial and the model you picked, so the
+  only place the truth appeared was the post-mortem.
+- The sheet now says so at the point of decision: pick Gemini, a local qwen, or any
+  non-GPT model in Code and the Reasoning dial carries "Not applied in Code: this
+  model runs on the Claude executor, which has no reasoning-effort control."
+- **Only when true**, which the tests pin in both directions -- silent for `gpt-`
+  models and silent outside Code mode. A warning that always showed would be its own
+  lie.
+- What RUNS is unchanged. Whether to keep offering models Code cannot run is a
+  product decision, flagged in `unified_code_lifecycle.js` and left to you.
+- The node harness for this module gained a real `querySelectorAll` and an
+  `innerHTML` setter that clears children. Without the latter the shared sheet
+  accumulated notes between renders, so "must be silent" could never have passed --
+  the first version of this test was green for the wrong reason.
+
+### Fixed (compaction stops deleting the summary it just wrote)
+
+- Pass 3 drops the oldest messages until the conversation fits. Its own heading says
+  "Drop oldest non-system, **non-summary** messages" -- but it inspected
+  `messages[0]` and then popped `messages[1]` without ever looking at what index 1
+  was. A real conversation is `[system prompt, [context-summary], ...turns]`, so
+  index 1 is exactly the compaction summary.
+- That summary is the single artifact carrying the turns already compacted away.
+  Losing it costs more than losing the forty turns it replaced, because a constraint
+  agreed thirty messages ago lived only there -- and the marker left behind then
+  reported it as one of "N earlier messages", so the loss read as routine trimming.
+- Reproduced first: a conversation whose summary carried "NEVER USE THE STAGING DB"
+  went from 22 messages to 6 with the summary gone and the system prompt intact.
+  The oldest genuinely droppable message is now found by looking.
+- `test_long_multi_pass_run_compacts_context_without_raw_token_abort` is red, and
+  was **already red on HEAD** before this change -- verified by running the test
+  against the unmodified file. It is untouched here and remains open.
+
+### Fixed (a hole in the conversation is visible to the model)
+
+- `get_context_window` keeps the first N and last M messages and drops from the
+  middle until the token budget is met. It did that in total silence, while the
+  compaction pass a few lines above already writes `"...[truncated]"` whenever it
+  shortens a single tool result. Cutting part of a message announced itself; cutting
+  twenty whole messages did not.
+- The cost is seamless amnesia. A constraint set early -- "never touch the staging
+  database" -- can vanish out of the middle of a long session with nothing in what
+  the model receives to suggest the conversation has a gap. Visible amnesia can be
+  asked about; invisible amnesia just looks like Thomas ignoring you.
+- The count of dropped turns is now prepended to the first surviving message, rather
+  than inserted as its own entry -- a mid-list system message would break the
+  user/assistant alternation some providers require. The stored conversation is
+  untouched; the marker exists only in the window handed to the model.
+
+### Fixed (a real conversation stops running on the small-talk history budget)
+
+- `IntentRouter.decide()` returns `PATH_MODEL_OWNED` unconditionally -- it opens with
+  `del text, prior_route` and never branches. There is exactly one route for a
+  natural-language turn, which `loop_streaming.py` already states outright.
+- When the prompt-word classifier was retired, `model_owned` was pasted into the
+  **casual-chat** branch of both history helpers. So every real conversation -- a
+  coding session, a research thread, a twenty-turn debugging chat -- was cut to
+  **2200 tokens and ten messages** of history, while the 5200 written for
+  `coding_task` sat in a branch nothing could reach. Thomas forgot constraints set
+  earlier in the same session, and the code meant to prevent that was dead.
+- `model_owned` now takes the most generous values in the function: **5200 tokens,
+  12 messages**. Both numbers were already there; nothing was invented. The
+  small-talk allowance still exists for actual small talk, pinned as a test.
+
+### Fixed (a recovered search no longer discards the answer it produced)
+
+- `worker_text_is_confirmed_answer` rejected on `if failed_tools: return False` --
+  unconditionally, with no recovery check, while `succeeded_tools` sat unused in the
+  same signature. A research run whose first query 404s, searches again, gets the
+  answer and writes three good paragraphs was thrown away for the 404.
+- The rubber-stamp purpose this module exists for is untouched, because it never
+  rested on the failure list: "I'll get started on that" with nothing run is still
+  refused by the answer-text check and by the empty-`succeeded_tools` check. Both are
+  pinned as tests.
+- Deliberately narrow. A tool that failed and **never** succeeded still rejects;
+  widening to "any success anywhere excuses any failure" would also excuse a worker
+  whose real work failed and which then wrote an answer from nothing. `None`
+  telemetry keeps its documented meaning.
+- Same shape as `f140976f` an hour earlier: recovery was recorded and then never
+  consulted. Two modules, one habit.
+
+### Fixed (a worker that stumbled, retried and delivered is no longer stamped unverified)
+
+- Completion review forgave a failed tool only if its name was in a hardcoded
+  allowlist of four filesystem-read names. Everything else was fatal. Two runs that
+  produced the identical file on disk therefore got opposite verdicts based purely
+  on which tool had stumbled along the way -- reproduced before any change:
+
+  | failed, then succeeded | verdict |
+  |---|---|
+  | `fs.read_file` (allowlisted) | verified |
+  | `shell` | NOT verified |
+  | `web.search` | NOT verified |
+
+- The signal the allowlist was groping for is computed one line earlier: the failed
+  tool also appears in `succeeded_tools`, meaning the worker recovered. That is the
+  same signal whatever the tool is called, so it is now used directly and the dead
+  allowlist is gone.
+- File evidence is untouched and is what actually guards this: every file the worker
+  claimed must still exist and be non-empty, and recovery is only credited when
+  files landed. Five controls pin that the check was loosened, not gutted -- a tool
+  that never succeeded, a claimed-but-missing file, an empty file, a missing
+  summary, and recovery-without-a-deliverable all still fail.
+- Followed superpowers:systematic-debugging (root cause reproduced before proposing
+  a fix) and superpowers:verification-before-completion (the guard was run against
+  the restored allowlist first: 6 of 11 failed).
+
+### Fixed (an attached file is never dropped in silence)
+
+- `docs[:6]` and `images[:4]` deleted the extras before the model saw the message --
+  no marker, no mention, and the composer had already drawn a chip for each one.
+  Attach nine documents, get answered about six, with nothing to suggest the other
+  three existed. The per-document trim in the same function has always printed
+  "... (truncated)" out loud; the whole-file case was simply quieter than the
+  partial-file case.
+- The limit was never really a file count. Nine short notes are cheap and two large
+  exports are not, and the old cap could drop a one-line file while admitting six
+  huge ones. Documents are now measured against a character budget, so nine small
+  attachments all arrive, and anything that genuinely will not fit is **named** in
+  the prompt as not read. A single oversized file still arrives truncated rather
+  than leaving the message with no attachments at all.
+- The image cap stays at four -- vision calls are metered per image, so that ceiling
+  is real rather than arbitrary -- but the extras are now named too.
+- Lifted the assembly out of the route as `_prompt_with_documents` and
+  `_images_for_request`. It sat inside a long async handler needing a live request,
+  a session store and an LLM, so the only test anyone could write against it was a
+  source-text one -- which is exactly how `docs[:6]` sat there unnoticed. Both are
+  pure functions now, and the new guard was run against the old caps first to
+  confirm it fails there.
+
+### Fixed (Thomas keeps its own words about a job it just finished)
+
+- The "your task finished" bubble is written by the model. Two filters ran over it
+  and replaced the **whole note** on a match, and both resolved toward the cheerful
+  claim.
+- `_UNSUPPORTED_GAP_CLAIM_RE` matched ordinary honest English -- "still needs to",
+  "not yet", "isn't complete". It was meant to catch a *fabricated* gap. But a
+  fabricated gap and a real one read identically, and "verified" upstream never
+  meant "everything asked for was produced": `chat_delegation_artifact_verification`
+  opens with `del prompt` and only checks that the files that were made are real.
+  So a run that produced two of three requested files, and said so truthfully, had
+  that sentence deleted and was announced as "I have a verified result ready."
+- The second filter required every artifact filename to appear verbatim, while the
+  same prompt asks for "one or two short sentences". Past about three files those
+  cannot both be satisfied, and a live-repo run lists every changed file -- so good
+  prose was discarded for describing the work instead of reciting filenames.
+- Now only an **absent** note falls back to a template. Filenames are still worth
+  having, so they are appended when the note mentions none; adding a fact is not the
+  same as overruling the sentence.
+- Separately, `_DEVICE_ACTION_RE`'s device group ended in `?`, making it optional --
+  the bare word "toggle" matched on its own. "Add a dark mode toggle to the site"
+  read as a request to touch a physical device, so shipping `app.js` made Thomas
+  announce the work had NOT been done. A device word is now required, and a test
+  pins that the real case ("turn off the kitchen lights") still works.
+- **Not fixed, and pinned as such:** the same pattern ends in a list of bare verbs
+  with no target at all -- play, pause, send, text, email, call, schedule, book,
+  order, pay, transfer. "Build a music player with play/pause" still matches. That
+  needs its own pass against real task titles.
+
+### Fixed (dashboards no longer have the animated world painted through their text)
+
+- `thomas_world.css` says, deliberately, "let the world show through translucent
+  surfaces". That is right for the Chat surface -- airy, centred, lots of gutter. It
+  was wrong for the workspace iframe, which carries dense edge-to-edge dashboards
+  whose cards are `rgba(255,255,255,.04)`: 4% opaque, effectively glass. The frame
+  itself was `background: transparent`, so the world's discrete sprites showed
+  through both layers and landed on top of live text.
+- Seen at 1920x1080 in Token Economy: a hard-edged white sphere sat over the
+  "TOKENS OUT" stat label and covered the "UT", so the card read "TOKENS O". Three
+  independent checks agreed before anything was changed -- the DOM said "TOKENS OUT"
+  the whole time, the card measured 4% opacity, and the cropped pixels showed the
+  sphere over the letters. The characters were painted, then covered.
+- The frame now carries a 58% theme-token tint plus a 22px backdrop blur, so the
+  world survives as colour and glow rather than as objects. A flat opaque backdrop
+  was tried first and rejected: it fixed legibility by deleting the design.
+- Checked in both directions and against the right control -- the workspace renders
+  identically with the backdrop and without it (32k characters, 28 painted elements
+  either way), so the change costs no content. Two blank screenshots along the way
+  were the probe firing before the iframe painted, not damage.
+
+### Fixed (a run that produced nothing no longer narrates its own success)
+
+- `complete_execution` demotes an evidence-free "done" to `failed(no_evidence)` --
+  the hole-closer for "verified without verification". It wrote the reason for that
+  demotion as a *fallback*: `summary or "No verifiable result: ..."`. The only caller
+  that reaches this branch builds its summary with `_build_result_summary`, which has
+  no empty return path -- its last line is `"The worker returned no output."` So the
+  sentence explaining the failure had **never once been shown**.
+- What a person saw instead was the worker's own prose, which in this branch is a
+  claim under dispute by definition. A run stamped `failed` / `blocker=no_evidence`
+  could carry `"I created the report and verified the output."` as its summary.
+- The verdict now leads and the worker's account is attributed rather than dropped:
+  `No verifiable result: ... The worker reported: <claim>`. A run that *did* show
+  evidence keeps its own summary untouched, which the new test pins as the control.
+- The guard that would have caught this pins the *fact that made the fallback dead* --
+  that `_build_result_summary` can never return empty -- not just the behaviour that
+  fact broke. Same shape as the `errorText` fix above; found by grepping for it.
+
+### Fixed (a Code error now says what Thomas was trying to do)
+
+- `errorText(error, fallback)` returned `error.message` whenever there was one, and
+  a server error almost always has one. So the fourteen sentences the callers pass
+  in -- `Could not open that Code task.`, `Could not steer the Code task.`,
+  `Could not revert that change.` and the rest -- were written, handed over, and
+  dropped on the floor. A reader effectively never saw any of them.
+- Found by clicking one: My Stuff mints a deep link to a build deliverable, and
+  following it to a task that no longer exists rendered **not found**, twice, and
+  never once said what had not been found. The author's `Could not open that Code
+  task.` was sitting right there in the call.
+- The action and the cause are now both kept -- `Could not open that Code task: not
+  found` -- and not doubled up when the cause already restates the action, or when
+  the two are identical. An error with no usable message still leaves the caller's
+  sentence exactly as written.
+- Guarded behaviourally, not by source text: `proveTheActionSurvivesTheReason()` in
+  the Code lifecycle harness drives the real function. It was run against the old
+  one-liner first and fails there, so it is a guard rather than a decoration.
+
+### Changed (unified_code_mode.js is back under its ceiling, and the last one was)
+
+- `unified_code_mode.js` was 1808 lines against the 1500-line ceiling in
+  `test_architecture.py::test_frontend_file_sizes` -- the last file still over it.
+  No single function was big enough to fix that (the largest, `render`, is 286 lines
+  against 308 needed), so the split had to take a cluster out of a 73-function shared
+  closure.
+- The cluster it took is the one with a boundary you can state in a sentence:
+  everything that turns a run's event stream into HTML, and nothing that talks to the
+  server or owns the run. It is now `js/unified_code_events.js`, a `create(deps)`
+  factory -- twelve names in, fifteen back. **1808 -> 1396 lines.**
+- `codeResults` and `surface` are passed as accessors rather than values, matching the
+  rule `unified_code_mode.js` already states for its own siblings: captured once, they
+  would freeze whatever was on `window` at create() time and make load order a second
+  ordering rule instead of the only one.
+- Verified in both directions rather than by line count. With the module present the
+  page loads with no console errors, Code mode renders, and driving the moved code
+  directly still tells a failed row from a successful one. With the module moved
+  aside the page dies at the destructure with `Cannot read properties of undefined
+  (reading 'create')` -- so the clean load is evidence and not a coincidence.
+- Five source-slicing assertions across three test files were cutting function bodies
+  at a literal two-space `function` delimiter. Four of them used `[0]`, which does not
+  raise when the delimiter is absent -- `str.split` returns the whole remainder, so
+  each would have quietly begun scanning the rest of the file and a positive assertion
+  could pass for the wrong reason. They now slice at the next function *header*, at any
+  indentation, and fail loudly when the function is in neither module.
+
+### Changed (chat.html is back under its 3000-line ceiling)
+
+- `chat.html` was 3311 lines against the hard ceiling in `test_architecture.py::test_frontend_file_sizes`. The whole shell is one inline IIFE, so every candidate block shares `state`, `esc`, `inputEl` by closure, and 20 test files assert literal text against the page — moving a pinned line turns a refactor into a red suite. Every such literal was mapped onto line numbers first; exactly one test-free region was large enough.
+- The composer's panels moved out byte-for-byte into `js/chat_composer_panels.js` as a `create(deps)` factory: the AI-settings sheet behind "Tools", the project picker, the attachment chips and the mic. `DIAL_FIELDS` and `saveDials` deliberately stayed behind — a test pins the effort vocabulary to `chat.html`, and `setProfile` still calls `saveDials`.
+- **3311 → 2976 lines.** Verified live rather than by line count: the page loads with zero console errors, the settings sheet opens to all six dials with their option lists, and the project picker opens to its action cards.
+- Applied by line number, not `git apply`. The patch was rejected for 355 lines of byte-identical context because the authoring worktree had LF endings and this tree's `chat.html` is CRLF — a transport artefact, not a stale base. Three separate content corruptions came from the same transport and were repaired: `&nbsp;` unescaped into U+00A0, and `&lt;`/`&gt;` unescaped inside two test literals where they were genuine, one of which had silently become `X && !X`.
+
+### Added (a run you stopped reads as stopped, not failed)
+
+- The transcript card had two endings — `delegation_failed` and `delegation_completed` — so a run you **stopped** was filed as a crash. I left that open twice today and said why at the line: telling the truth about a deliberate stop needs a third result type and a renderer that draws it, and calling it "completed" would have been just as false as calling it "failed".
+- `delegation_cancelled` now routes to its own ending with its own word throughout. Driven through the real functions with `state='cancelled'`:
+
+  ```
+  chat text     Task failed: ...    ->  Task stopped: ...
+  strip status  failed              ->  cancelled
+  badge label   Failed              ->  Stopped
+  checkpoint    Needs review.       ->  Stopped on purpose.
+  event type    delegation_failed   ->  delegation_cancelled
+  ```
+- `failed` and `completed` are unchanged, and `blocked` still writes no card at all — the guards either side hold both ends down. A third type nothing renders would be a quieter version of the same lie, so a guard also pins the badge word, the tone, and the CSS rule that draws it.
+- The two style rules sit in `components.css` rather than beside their siblings in `components_parts/`, because that directory name matches the monolith filename guard's `[_-]parts?$` pattern and any commit staging a file from it is refused. Recorded in a comment at both the rule and the test that reads it.
+
+### Fixed (the browser E2E "required done gate" has never gated anything)
+
+- CAP-088 was announced below as "browser validation **is now a required done gate** … integrating with the completion gate", and the module said a missing or failed run "*blocks* completion". **Nothing has ever been blocked by it.** Measured against a control: an AST import-graph probe over `thomas/` + `scripts/` (3139 non-test files) finds **0** production importers of `thomas.browser.e2e_gate`, and **1** for `thomas.agent.completion_gate` — a gate of the same shape (`thomas/agent/loop_completion.py:11`). The probe can see a wired gate, so it could have shown success here.
+- **Not broken — it has no caller, and upstream of that no input.** Against real Chromium it works (a hidden node blocks, a visible one allows), but `enforce_e2e_gate` needs a caller-supplied `E2EFlow` and `E2EFlow(` is built nowhere outside `tests/`. Forcing it on is not a gate either way: steps without assertions return `allow` for a run that asserted nothing; an empty flow, or any machine whose browser-runtime probe reports unavailable, returns `block` for *every* interactive change. A flow producer is a feature, not this fix — so the claim was corrected rather than the code deleted or force-wired, and the module now opens `DORMANT: nothing in production imports this module`.
+- `tests/test_e2e_gate_is_not_wired_in.py` fails in *both* directions — restoring the enforcement sentences while importers is 0 (4 failed, 2 passed), or adding a production importer without deleting the notice (1 failed, 2 passed, 3 skipped). It guards the claim, not the dormancy.
+
+### Fixed (a protected file whose name starts with a dot was guarded by nothing)
+
+- `_normalize_relpath` ended in `.lstrip("./")`. `str.lstrip` takes a *set* of characters, not a prefix, so it ate every leading `.` and `/` — and every consumer turns the result back into a real filesystem path. `.gitignore`, a `[protected] policy_files` entry in `agent_safety.toml`, became `gitignore`: a name that exists in neither the blue nor the green tree.
+- That gave `_promotion_protected_diffs` only one possible answer for it. It compared `blue/gitignore` with `green/gitignore`, found both absent, and took its `continue`. Measured on two trees differing in exactly one protected file:
+
+  ```
+  AGENTS.md  tampered ->  diffs=['AGENTS.md']  promotion BLOCKED
+  .gitignore tampered ->  diffs=[]             promotion ALLOWED
+  ```
+- The revert half reported success while doing nothing: `evolve._restore_green_path_from_blue` copies `blue/<norm>` over `green/<norm>`, so a tampered `.gitignore` was named a violation, listed as reverted, and left exactly as green wrote it (`reverted=['.gitignore']` … `-> STILL TAMPERED`). Both copies of the helper are fixed together — repairing only the gate would leave a run blocked from promoting while its green tree keeps the tampered file.
+- Two more consequences of the same line: `_normalize_delta_relpath` guards with `path.is_absolute() or ".." in path.parts`, but a leading `../` was deleted *before* the test ran, so `../thomas/agriculture/x.py` arrived as the in-tree `thomas/agriculture/x.py` and was promoted as though the caller had named it (an interior `thomas/../x.py` still raised, which is why the guard looked alive); and `_is_promotable_scope(".gitignore")` was `False` even though `.gitignore` is in `_INCLUDE_FILES` and is copied by `sync_blue_to_green`.
+- Verified it does not over-fire: with the repo's real `agent_safety.toml` and all 88 protected files mirrored faithfully into both trees, `_promotion_protected_diffs` returns `[]`. The regression test's controls (`AGENTS.md`, an untampered pair, an ordinary in-tree path) pass on the old code and the new; the four dot-related assertions fail on the old code only.
+
+### Fixed (a shipped promise about honest verification had quietly stopped running)
+
+- The changelog told you Thomas "no longer calls a deliverable verified when it has nothing to do with what you asked", and the module implementing that said the Canvas path "already refuses this" and that it was that check "generalised". **All three sentences were false.** `chat_delegation_artifact_intent` has had zero production importers since `87ae37e5`, and `review_canvas_html` now opens with `del prompt` and states it does not compare prompt words with output words.
+- How it was lost: `6cc89af2` (2026-07-24) shipped the check *with* its call site inside `_hidden_completion_review_passes`. `87ae37e5` (2026-07-27) replaced that entire file with the `organic-routing-no-regex` version — written 2026-07-22, two days before the module existed, so it never had the import. Collateral to "prompt classifiers out"; neither merge message mentions it.
+- **Measured, not inferred.** One request — *make me a graph of current technology adoption trends* — answered once with an arcade game and once with a genuine trend graph: `_hidden_completion_review_passes` returns `True` for **both**. The uncalled `artifact_intent_issues` flags the game and passes the graph, so the difference is detectable; it is simply not consulted.
+- **The wire was deliberately not reconnected, and that is the finding.** Restoring the original call site verbatim flips the arcade case `True → False` and leaves the real graph `True` — and turns `test_hidden_review_accepts_verified_nonempty_artifact` red, because the same merge landed the opposite contract (verification "intentionally does not parse a user's request", pinned with the prompt `"prompt wording is ignored"`). Two owner-authorized decisions collide; an agent picking a winner silently is how the first one vanished. Both are now written at the top of the module, with the measurement, so the choice is made on purpose.
+- Three tests hold the line, each with a control that proves it could have shown the opposite: the completion gate still cannot separate the two deliverables, this module still can, and nothing under `thomas/` imports it (control: the scanner finds the one real importer of its sibling). Wiring it back turns two of them red with a message naming the docstring to update.
+
+### Fixed (a run is credited to the engine that actually ran it)
+
+- Both turn recorders in `evolve_agent_routes` passed `settings.model_id or settings.dispatch_model` — your pick winning over the executor — and `capability_report` reported `status: "applied"` for the entire `claude` family. So a run the **Claude CLI** performed was labelled `qwen2.5-coder:7b`, and the `claude exited 1` failure was attributed to a model that had no part in it.
+- `ForgeCodeSettings.recorded_model()` now reports the executor, and the model dial reads **`substituted`** with a reason naming what ran instead. Genuine Claude requests still read `applied`; an unselected model is not called a substitution; GPT keeps its exact model; and `octopus-7b` is not mistaken for `opus`.
+- Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
+- **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
+
+### Fixed (the model you pick now applies to chats you started before you picked it)
+
+- The reported symptom was "the model default reverts across restarts". **Nothing ever reset the store** — the write always landed and survived every restart. What reverted was the *resolution*.
+- `resolve_chat_runtime_policy` ranked a session's own stored profile above the preference: `payload_profile or saved_profile or preferred_profile or default`. Sessions are **born** with a profile (`sessions_aiohttp` creates rows with the current default) and `chat_v2` then rewrites `meta.profile` from this function's own answer every turn — so the snapshot re-arms itself forever. A chat opened while `local` was the default kept resolving `local` no matter what you set, and the preference could never win back a session it had already lost.
+- The empty `model_id` was the same line's second half: once the stale profile won, `profile == preferred_profile` was false, making `preferred_model_id` unreachable and yielding `""`. That pair — `('local', '')` — is exactly what breaks Code, since `ForgeCodeSettings.from_payload` turns an unspecified model into `claude:sonnet`, the Claude CLI that is not logged in here.
+- Why it looked intermittent: **new** chats always resolved correctly, and the web shell sends its own profile every turn, masking it in the app. It bit API/CLI callers and any chat predating the change.
+- The store was ruled out by measurement, not reading: every `thomas.db` under `%LOCALAPPDATA%\Thomas` scanned (none ever held `Local`), `create_app()` run three times against an isolated DB with the value unchanged, and thread-scoped/user-split PATCH variants all leaving `advanced.model` intact.
+- **The known-failing autonomy case one field over was deliberately left alone** — Calvin recorded it in `399e708d` and declined it on purpose, because raising autonomy for existing sessions is a permissions decision. Its `expectedFailure` is still xfailed after this change, verified.
+
+### Fixed (Thomas tells you again when a deliverable has nothing to do with what you asked)
+
+- The changelog promised this and it stopped being true on 2026-07-27: `6cc89af2` shipped the artifact-intent check **with** its call site, and `87ae37e5` replaced that whole file with a branch version written before the check existed, taking the call with it. Four days of the guarantee being advertised and absent.
+- **Reconnected as a report, not as a gate** — and that is the design, not a compromise. The measurement is a token overlap. A verification probe that rejects a run on that basis grades the model instead of reporting honestly, and restoring the original wiring (where a mismatch scored the completion review 0.0) flips a real recorded case from pass to fail. `verified_success` is deliberately not computed from it; you are simply told, in the run summary, beside the executability warning that already works this way.
+- Measured on the request *"make me a graph of current technology adoption trends"*, answered two ways: an arcade game now yields *"⚠ This may not be what you asked for — game.html does not appear to be about what was asked (matched 0 of the requested subject: adoption, current, graph, technology, trends)"*, and a genuine trend page stays silent.
+- Silence still means "not checkable", never "checked and fine" — four controls pin it: a vague request, no request, no artifacts, no workspace.
+- The wave-2 guard that asserted *nothing* imported this module fired the moment this landed, which is exactly what it was for. It now pins the narrower truth: the only importer is the reporting path, and that call must not touch the verdict.
+
+### Fixed (a generated app's Copy button did nothing, and its Fullscreen key was refused)
+
+- The same silent-capability-removal shape as the artifact sandbox, but **one layer above it**. Sandbox tokens were already correct after the four earlier fixes — an inventory of every artifact CSP and every artifact iframe found no remaining token mismatch. `fullscreen` and the async clipboard are **Permissions Policy** features whose default allowlist is `self`, so the *embedding page* must delegate them with `allow=`.
+- `/deliverable/` 302s an HTML artifact onto its own ephemeral `127.0.0.1:PORT`, which makes every artifact frame **cross-origin** to the shell. Neither interactive frame delegated anything and the server sends no `Permissions-Policy` header — so the same bytes that work perfectly in a browser tab were dead inside Thomas, with no error surfaced.
+- Two of your own deliverables hit it. `colortoy.html`'s Copy button awaits `navigator.clipboard.writeText` with no `catch`, so the `NotAllowedError` aborted the handler before its "Copied!" label and the button simply did nothing. `snake.html` advertises "F fullscreen" on its own start screen, and `requestFullscreen()` was rejected with *"Disallowed by permissions policy"*. The model's code was correct both times.
+- Census across the 414 generated HTML/JS files: `clipboard.writeText` 3, `requestFullscreen` 2, and zero uses of `getDisplayMedia`, geolocation, `window.open` or `target=_blank` — so exactly these two capabilities were delegated and nothing wider.
+- Both the Code viewer stage and Chat's canvas frame now carry `allow="fullscreen; clipboard-write"`. Verified both directions: stripping the attribute fails three guards.
+
+### Fixed (one report said both things about the same file)
+
+- `attention_pointers` and `open_risks` read the same `changed_files` list and disagreed about it. `changed_files` is the git delta of a **shared** project folder, not a record of what this run wrote — Thomas allows several simultaneous Code runs, and `forge_code_store.files_written_by_another_task` exists precisely to spot another task's uncommitted file landing in the delta.
+- `_build_open_risks` already reported those as foreign. `_build_attention_pointers` did not, so a single report carried a risk saying *"this run may not have written it"* and a pointer captioned *"changed in this run"* about the same path.
+- Foreign files now get an honest caption, and this run's own files are listed **first**, so another task's leftovers cannot push the run's real work off the end of a capped list. Separator spelling is normalised on both sides — an unnormalised comparison fails *open*, keeping the false label, which is the worst direction for this guard to fail in.
+- Seven guards, five of which fail against the unfixed code (verified by running them before applying the fix, and again after removing it).
+
+### Fixed (two token-economy tests asserted route paths `69bbbab0` deleted)
+
+- The receipts were never unbalanced — that was my hypothesis and it was wrong, and the `Reasoning failed: Request URL is missing an 'http://' or 'https://' protocol` line in the log was a *consequence*, not the cause. The actual failures are `AssertionError: 'orchestrator' != 'static'` and `!= 'control'`.
+- Both tests pinned `route.path` values emitted by early-return paths that "land model-owned routing, removing the prompt classifiers" retired: `"control"` came from `chat_v2_ui_control.py`, whose docstring now states *"Natural-language UI control interception was removed"*, and `"static"` came from `discord_channels_support.py`, which that merge **deleted whole**.
+- Verified independently: `"path": "static"` and `"path": "control"` each appear in exactly one file at `69bbbab0^` and in **zero** files at HEAD, and `UsageReceiptDispatcher.emit_route` now hard-codes `{"path": "orchestrator"}`. With the early returns gone, both inputs fall through to the orchestrator.
+- This also explains a wave-1 agent whose patch referenced `discord_channels_support.py`: that file existed on its stale worktree base. Not fabrication — a 454-commit-old checkout.
+
+### Fixed (a task you stopped kept its chat watcher alive, then claimed it was still running)
+
+- `task_events.py::watch_task` streams task-bot lifecycle events into the chat and breaks out of its poll loop once the run is over. That "is it over?" test was re-spelled inline as `{"completed", "failed", "abandoned"}` — the vocabulary `task_bot_runtime.TERMINAL_STATES` owns, minus `cancelled`.
+- `git log -S` pins the provenance exactly: `c419f3b4` (2026-07-27, *"stopping a run is not a failure, and it is final"*) added `cancelled` to the runtime, and this copy was never updated. So stopping a run left its watcher polling for ten minutes and then reporting the task as still running.
+- Now derived from `task_bot_runtime.TERMINAL_STATES` rather than copied, so the vocabulary cannot grow past it again. Third instance of this same class today, after Mission Control's room map and the Code surface's terminal status.
+
+### Fixed (a task that was only waiting got a permanent "Task failed" in the transcript)
+
+- One decision — *is this run over, and did it fail* — is spelled out twice in the classic shell's runtime, and the two disagreed about `blocked`. `013_actions_interactions_02.js`'s `_delegationIsTerminalState` correctly excludes it; the Mission-Control poll fallback in `006_easy_setup_onboarding_04.js` gated on `chatTaskIsTerminal`, whose list **includes** it, and then called it failed on the very next line.
+- So a task merely waiting on an approval gate had a permanent "Task failed" card written into the chat transcript, while the live SSE stream and the supervisor both still considered it running. Settled by the state machine rather than taste: `ALLOWED_TRANSITIONS` lets `blocked` return to `queued`/`claimed`/`executing`, and it is absent from `TERMINAL_STATES`.
+- Confirmed live code, not a dead bundle: `index.html` loads `app_runtime_loader.js`, which pulls every module from `/static/js/runtime/`, and that shell "still hosts every workspace and is served at `/classic`". The near-identical copy in `js/app_runtime_primary.mjs` has **no importer anywhere** and was deliberately left alone.
+- **`cancelled` is still grouped with failures, and that is recorded rather than silently settled.** The card is binary — `delegation_failed` or `delegation_completed` — so telling the truth about a deliberate stop needs a third result type and a renderer that draws it. Calling a run you stopped "failed" is wrong; calling it "completed" is also wrong. A test pins the comment so the compromise cannot go quiet.
+
+### Fixed (delegation tests wrote real task records into the checkout, and Mission Control counted them)
+
+- Eleven cases across `test_chat_delegation.py` and `test_chat_delegation_self_recovery.py` passed `repo_root=Path(".")` into `_run_agent_worker`. pytest runs from the checkout, so that argument **was the live repo**. Two of them patched `fail_execution` and `get_execution` but not `task_bot_runtime.update_execution`, and the worker's first act is a real write.
+- The result was permanent files in the working tree — `exec-c.json` (state `requested`), `exec-native.json` (state `executing`), and an `executions-summary.json` claiming `active_count: 2`. Neither state is terminal, so `_summary_row` kept them off the stale list for five minutes and Mission Control counted them as live work.
+- **Confirmed in this checkout**: both files were present, stamped `2026-07-31T16:31:29` from that day's own test runs. They sit under a gitignored path, so they never showed up in `git status` — which is why the failures looked like flakes.
+- Each case now gets a `TemporaryDirectory` repo root. Verified with the reporter's minimal reproduction (two tests, one file each, previously `.F`, now `..`), and with delegation plus all three mission-control files run together: **82 passed**.
+
+### Fixed (the research library had been dead code since `69bbbab0`, while advertising itself as on)
+
+- `retrieve_library()` gated on `route.path not in ("research", "planning", "debug_audit", "coding_task")`, and `_LIBRARY_CAPTURE_ROUTES` held the same four. But since `69bbbab0` removed the prompt classifiers, `routing.decide()` returns `path="model_owned"` **unconditionally** — verified at `routing.py:68`, whose `RouteDecision` is documented as *"Execution metadata that does not classify the user's prose"*.
+- So both gates rejected every real chat turn: library context injection **and** auto-capture were dead, while `THOMAS_LIBRARY_ENABLED`, `THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH` and `RuntimeOverheadPolicy.include_library_context` all defaulted **on**. Gating now comes from the overhead policy, which is the right place once the model owns routing.
+- A second falsehood fixed alongside it: an empty library returned `"[Library context unavailable]"`. Having nothing relevant stored is not the same as being unavailable, and it now returns nothing and logs at debug.
+- **I had guessed wrong about this one.** I predicted it was a stale assertion asserting behaviour `69bbbab0` deliberately removed, and told the agent so. It checked instead of following the hypothesis, and found the opposite: the test was right and the feature had broken. Both directions re-proven by hand — removing `model_owned` from the two allowlists fails three tests, including one named for the symptom.
+
+### Fixed (a Code run that answered your question finished as "Ready")
+
+- One decision — *what state did this run finish in* — was computed in two places in `unified_code_mode.js` and they disagreed. The server builds the outcome once in `_record_run_outcome` and ships that same dict down both routes verbatim: the SSE `done` frame, and the replayed `/send` body you get when a send is retried with the same `request_id` after a lost response.
+- `terminalRunStatus()` read it one way; `acceptStartedRun()` spelled the same decision out inline. For `outcome: "conversation"` — a run that answered rather than edited — the watched path showed **"Completed"** and the replayed path showed **"Ready"**, i.e. idle.
+- Now both call `terminalRunStatus()`, which maps to the client's own controlled vocabulary (`failed` / `noop` / `completed`) instead of echoing the server's wording. That is why `conversation` correctly becomes "Completed", and a guard pins that the vocabulary is never taken from the server string.
+- Verified with a node harness driving one server payload down both client routes against the real module and the real status badge: disagreements before, none after. Both directions re-proven by hand — restoring the inline expression fails both guards.
+- Found by the tenth fixer agent, hunting the same disagreeing-predicate class that produced the green-tick bug earlier today.
+
+### Fixed (two modules that described roles they do not have)
+
+- **`thomas/core/vault_registry.py`** claimed in the present tense that "the rest of the system consults `is_vault_protected` instead of re-deriving the list". Nothing under `thomas/` imports the module at all; the only caller is its own test. The docstring now says what it is — an audit surface for guardrail UI that has not landed — and records that there are no production consumers as of 2026-07-31.
+- Critically, the two lists were compared element by element rather than assumed equivalent: they are **deliberately not identical**. The filesystem guard protects four files this registry does not — `.runtime_protection_disabled`, `.runtime_protection_key`, `.breakglass_window`, `.breakglass_window_key` — which are the bypass mechanism itself. So "unifying" them by pointing the filesystem guard at this module would have been a **security change**, not a documentation one. The docstring now says so explicitly, and `tests/test_guardrails_vault.py` pins the difference in both directions.
+- **`thomas/agent/fleet_reply.py`** called `InboxChannel` "the real default … an in-process inbox the session's own loop drains". Nothing polls it. It is now described as what it is: a passive thread-safe buffer with no drainer, where `register_session` *returns* the only handle that can reach the queue, and a registrar that drops that handle leaves envelopes buffered and unreadable.
+- Both are docstring-only — zero executable lines changed — and both ship with guards. Found by two of ten parallel fixer agents.
+
+### Fixed (an app nobody measured was diagnosed as a loading spinner)
+
+- `runtime_smoke_load` polls a render probe and keeps the best sample, but `best` was **seeded** with `{"visText": 0, "loadingOnly": True, …}`. A seeded sample is indistinguishable from one the probe actually returned, so a page whose every real sample lost the `better` comparison — or where the poll loop exited before its first tick — kept the seed, and the seed says `loadingOnly: True`.
+- The run then reported *"app rendered nothing usable — still showing a loading placeholder"* about a page it had never successfully measured: a diagnosis invented from a default value, pointing the reader at a spinner that may not exist.
+- `best` now starts as `None`, a `probed` flag records whether any sample arrived, and the unmeasured case says *"could not tell what the app rendered — the page never reported back"* in its own words. `probed` defaults to `True`, so every existing construction site is unaffected.
+- Found by one of ten parallel fixer agents. Its diff omitted the regression test it claimed, so the guard was written and both directions proven by hand: re-seeding `best` fails the seeded-sample test, neutering the unmeasured branch fails the wording test, and a rendering app still reads `runtime OK`.
+
+### Fixed (turning off network access silently deleted local skill discovery)
+
+- `skills.list` and `skills.use` had **no policy classification**, and `_tool_denial` denies an unclassified tool as soon as *any* capability toggle is off. So switching on local-only mode — which only flips network/browser/channels — removed both skill tools from the model's toolset. Reading local skill files has nothing to do with network access.
+- They arrived after `test_registered_core_tools_have_explicit_policy_classification` was written, in the 2-line `register_runtime_skill_tools` addition, and nobody added them to the catalog.
+- Classified by explicit name in `_SAFE_READ_TOOLS`, not by a `"skills."` prefix, so a future `skills.install` cannot inherit read-only status by accident. They execute nothing, reach no network, and take no caller-supplied path; `reasoning.py` already groups them with `fs.read_file` under *"Read-only filesystem tools … NEVER write/shell"*.
+- The test's assertion was **also** wrong, and was red from birth: it asserted over all 566 registered tools, 424 of which are marketplace domain tools that have never been classified. Verified independently — it landed in `a5324a3b` and `tool_extensions.py` has had no commits since, so it never guarded anything. It now checks the 30 core tools `_build_tools` registers itself, and **gains** coverage: every one of the 424 unclassified marketplace tools must actually be hidden under a disabled capability, against the real registry rather than one synthetic probe.
+- Being unclassified is never a permission hole — `chat_tool_policy.py:63` denies such a tool whenever any policy is off, so the failure mode is over-blocking, which is precisely the reported symptom.
+- Found by one of ten parallel fixer agents; both directions re-verified by hand before landing.
+
+### Fixed (a codex-shaped request was blamed on the Claude CLI — a regression from earlier today)
+
+- `runs_requested_model` returned `bool(self.model_id)` for the GPT family. But `from_payload` also routes `codex`, `chatgpt` and `openai_codex` there, and none start with `gpt-`, so `model_id` is empty and each reported `status: substituted` with the reason *"'codex' is neither, so the Claude CLI handled this request."* The Claude CLI handled nothing — the in-process ChatGPT path did.
+- The label before that change, `configured_default`, was true. Replacing a true label with a false sentence is exactly what that module exists to prevent, so this was self-inflicted and is now pinned by a test.
+- Whether an exact model was pinned is a separate question, already answered through `exact_gpt`. Verified across all families: codex-shaped → `configured_default`, exact `gpt-` → `applied`, genuine Claude → `applied`, a local qwen → `substituted` naming the Claude CLI truthfully.
+- Found by the same multi-agent audit, which caught it hours after it shipped.
+
+### Fixed (a task you stopped on purpose was shown as work still queued)
+
+- `cancelled` was the **only** state in `task_bot_states.VALID_STATES` with no entry in Mission Control's `_DELEGATION_STATE_ROOM_STATUS`, and the lookup falls back to `("inbox", "queued")`. So pressing Stop produced a board row reading *queued*, counted in the "N active" figure by `mission.script01.js` (whose `ACTIVE_STATES` includes `queued`) and sorted to the top of the live agent list.
+- It also missed the terminal set — an inline literal `{"completed", "verified", "failed", "abandoned"}` sitting three lines beneath the comment *"FREEZE elapsed for finished work: a task that ran for 3 minutes must not display 7h just because it finished 7 hours ago."* Reproduced by running the route in-process against a 3-minute run stopped 7h earlier: `room: inbox | status: queued | ended_at: '' | elapsed_seconds 25379 → 25382` between two polls.
+- Both sets are now **derived** from the writer's vocabulary rather than spelled out a second time. The defect was never a wrong value — it was two vocabularies for one idea, the same shape as an icon and its heading being chosen by two different failure tests. A guard now asserts every `VALID_STATES` member has a room and every `TERMINAL_STATES` member is treated as finished, so the class cannot return.
+- Filed under `("done", "cancelled")`, not `("review", "failed")`: `task_bot_states` says at its own line that *"'cancelled' is its own ending. Stopping a run on purpose is not a failure."*
+- Found by a multi-agent audit; its verifier reproduced the bug in-process **and corrected three of the finder's supporting claims** — `status_rank["cancelled"]` is live for jobs and runs rather than dead, the row is truncated at 20 rather than accumulating forever, and `elapsed_seconds` has no front-end consumer, so the growing timer is a false API field rather than a rendered "7h".
+
+### Fixed (a check the engine SKIPPED was counted, and quoted, as one that passed)
+
+- `passed` is derived from the absence of an error (`event.get("is_error") is not True`), and a skipped browser smoke sets no error — so a check that never ran arrived flagged `passed: True`. Two surfaces believed it:
+  - the **rubric evidence** read `engine checks: 2 passed, 0 failed` on a run where one of the two never happened. The Code UI already excluded skips from its displayed count (`unified_code_results.js`: `wasSkipped`); the rubric is a separate surface and had not been told.
+  - `passing_text` — whose evidence line *names the page* (`BROWSER_SMOKE_SKIPPED: wordfreq.html: …`) — so the "files changed without a matching passing validation" risk was silenced by a check that never ran. Same shape as the transcript-mention bug below: a string that merely *contains* the filename taken as proof something examined it.
+- Both now use one `_was_skipped` predicate, matching the engine's own marker rather than the word "skipped" (which appears in unrelated evidence like "1 files checked, 1 skipped") — the same test the UI uses, so the two surfaces cannot drift.
+- Verified with a control, since a stricter counter is not the same as a truthful one:
+
+  ```
+  smoke skipped   ->  engine checks: 1 passed, 0 failed, 1 skipped   + risk raised
+  smoke really ran->  engine checks: 2 passed, 0 failed              + no risk
+  ```
+- Not reproducible on a machine with Chrome installed, which is why it needed a test rather than an observation.
+
+### Fixed (the agent could silence the "nobody opened this page" risk just by naming the file)
+
+- `_unopened_page_risks` exists to say nobody looked at a changed page. It decided that by searching for the page's basename in a blob built from validation evidence **and every event's `text`** — which includes the agent's own narration. `fs.write_file` always emits *"Wrote 4120 chars to C:/proj/orphan.html"*, so a page the browser smoke never opened counted as opened because the agent said it wrote it. Every page an agent creates is described that way, so the one risk whose job is catching unlooked-at pages could effectively never fire for them.
+- It also re-broke what a comment three lines below claims was already fixed — *"the old global check let one opened page vouch for every other changed page"*.
+- Measured against controls, same validations and changed files, varying only the transcript:
+
+  ```
+  transcript "Wrote 4120 chars to C:/proj/orphan.html"  ->  no risk   (wrong)
+  transcript "Wrote 4120 chars to the second page"      ->  risk      (right)
+  no events at all                                      ->  risk      (right)
+  ```
+- Now only strings carrying a `BROWSER_SMOKE` marker count. Events stay in scope rather than being dropped, because `build_verify` emits the smoke line both as a `tool_result` event and appended to the check's detail, and only one of those is guaranteed to survive truncation. Verified it does not over-fire: a page the smoke genuinely opened still raises nothing.
+- Found by a multi-agent audit hunting the bug *classes* found by hand earlier in the session, then confirmed by direct call with controls.
+
+### Fixed (a page with a blocked resource reported no coverage at all)
+
+- The blocked-external branch returns before the clean one, and the coverage line was computed only in the latter — so a page that also referenced a Google Font reported a bare `boot only` with nothing about how much went untouched. The caveat was worth *least* on the pages that had most wrong with them.
+- Measured on the flashcards deliverable: `interactive_count` 4, `exercised_controls` 1, summary stopped at `boot only`. Now: `…vendor them into the project folder and reference them locally; boot only; 3 control(s) not exercised`.
+
+### Added (verification presses controls, and stays quiet about the ones that do nothing)
+
+- A press probe was built and reverted once before: it fired on 3 of 4 button-carrying apps and was wrong every time — a Minesweeper reset face on a fresh board, a 10% tip preset with no bill, "Add task" with an empty field. All three correctly do nothing until something else happens first.
+- The recorded objection was about the **note**, not the press: *"a note that fires on working apps teaches the reader to skip it, which is how a permanently-red signal ends up hiding a real one."* This version presses and says nothing about anything that did not change. A control that does nothing yet produces no note and no verdict; one that does change the page produces the evidence boot-only verification could never supply.
+- Measured across the same 20 real deliverables, before and after:
+
+  ```
+  driven pages   4 -> 9
+  runs failed    2 -> 2    (both pre-existing and genuine: one page whose
+                            styles.css and script.js are absent, one report
+                            whose sales.csv is absent)
+
+  minesweeper    boot only; 82 not exercised
+              -> pressed:Hidden cell, row 1, colu; 76 of 82 not exercised
+  habit tracker  boot only; 33 not exercised  ->  pressed:+Add habit, ...
+  countdown      clicked:Start  ->  clicked:Start, pressed:Pause
+  palette        boot only      ->  pressed:Randomise, pressed:Coral#D13E53
+  ledger         boot only      ->  pressed:Sort by amount
+  ```
+- **A hazard found by measurement and fixed before shipping:** pressing wordfreq.html's "Download CSV" — an ordinary `createObjectURL` + anchor click — left headless Chrome waiting on the transfer until the smoke timed out, returning `ok: False, "browser smoke timed out"` on a completely correct app. A probe that fails a working deliverable is worse than one that checks nothing. File-handing controls are skipped.
+- The coverage line now subtracts what was actually exercised and reports the remainder **whether or not** anything was driven. Pressing 6 of a Minesweeper's 82 controls and printing only the successes would read as though the board had been checked.
+
+### Fixed (verification skipped every page whose input is a textarea)
+
+- The type-then-press probe's entry filter tested `node.getAttribute("type") || node.type`. A `<textarea>` has no `type` attribute, so that yields the string `"textarea"`, which the regex rejected — excluding every textarea on every page, and making the branch that reads `field.tagName === "TEXTAREA"` unreachable.
+- Measured on `wordfreq.html` (one textarea; Count words / Clear / Download CSV): `entries` was 0, the probe never fired, and the receipt read `interactions: [], notes: []`.
+
+  ```
+  before   wordfreq.html: browser boot clean; boot only; 4 control(s) not exercised
+  after    wordfreq.html: browser boot clean; typed:smoke test, clicked:Count words
+  ```
+- Swept 14 real deliverables to check the *other* direction — that loosening the gate did not start driving pages it should leave alone. Only wordfreq changed; Minesweeper (82 controls), the habit tracker (33) and the tip calculator stayed `boot only`. Newly driven: 1. Wrongly driven: 0.
+- That sweep also measures the remaining gap plainly: **11 of 14 real deliverables are still verified boot-only.** The summary now says so out loud rather than implying coverage it does not have.
+  - The word *still* has since expired. `3f2ee167` (see *Added — verification presses controls*, above) took driven pages from **4 to 9** across 20 deliverables, and Minesweeper, the habit tracker, the countdown, the palette and the ledger all came off `boot only` by name. The gap is narrower than this line says; no new figure is put here for the 14, because that sweep has not been re-run.
+
+### Fixed (three task-ledger tests that pinned behaviour `69bbbab0` deliberately removed)
+
+- All three asserted prompt-classifier behaviour that "land model-owned routing, removing the prompt classifiers" deleted on purpose. Confirmed at the source, not just from the commit message: `record_chat_task_finished` says *"Persist success from the runtime terminal event, never from reply prose"*, and `derive_active_goal` says *"Prompt wording never decides whether a turn is an acknowledgement or a follow-up."*
+- Two are rewritten to assert the **current** contract — prose must not move the ledger, and each turn re-titles the goal from its own text — with the rationale and the commit reference recorded at the assertion. Neither was deleted; the contract they guard is worth stating out loud.
+- **Known gap recorded, not papered over:** a turn where Thomas stops and asks for something is now recorded `complete`, because the structured replacement (a tool the model calls to declare itself blocked) does not exist yet. Re-adding a regex over the reply would recreate exactly what was removed, so the fix belongs on the tool side.
+- The third — Max review staying `in_progress` while background work is pending — is held as `unittest.expectedFailure` and deliberately **not** loosened, because unlike the other two it describes something you want back: *"record_chat_task_pending currently has no caller."* Unexpected success is reported as a failure (verified), so the day someone wires that caller, the test says so instead of sitting silently green.
+- Also observed: `test_chat_route_failure_records_safe_blocked_state_without_leaking_detail` passes in isolation but fails in a full-suite run — order-dependent, not investigated here.
+
+### Fixed (an honesty guard that had been red for eleven days over phrasing)
+
+- `test_forbids_claiming_work_started_and_offers_instead` asserted one literal sentence — *"never tell the user you handed something off unless you actually called the tool"*. It went red on 2026-07-20 when `24ffc614` reworded it to *"never tell the user you're handling something…"*.
+- The rule was never weakened. That commit deliberately removed "handed off to \<worker\>" everywhere so Thomas stops naming a task manager to the user; the honesty rule simply moved to the new voice.
+- The obvious repair — pasting the old sentence back — would have reintroduced exactly the phrasing that was removed on purpose. The assertion now matches the rule structurally (`never tell the user … unless you actually called the tool`), so any voice satisfies it and deleting the rule does not. Verified by removing the sentence from the prompt and watching the test fail.
+
+### Fixed (a row that says something failed no longer shows a success tick)
+
+- Opening a deliverable deep link whose task no longer exists rendered a green `ph-check-circle` directly above the words **"Technical check failed"**, with the row missing the `is-error` class that colours it.
+- Two failure predicates had drifted apart: `eventHtml` asked `is_error === true`, `groupedTechnicalEvents` asked `is_error === true || kind === 'error'`, and `technicalHeading` sided with the second. A live `error` event — the shape `pushLiveEvent({ type: 'error' })` emits, which never sets `is_error` — therefore got failure wording under a success icon. The saved path was already correct, so only the run you were *watching* lied. Both now call one `eventFailed()`.
+- The wording was false too: nothing had been checked, the conversation simply did not exist. Same overloading of "check" already fixed for `tool_result` and `meta`, with `error` left behind.
+- Measured on the element — before: `ph-check-circle`, glyph `✓`, `rgb(139,140,255)`, `is-error` false. After: `ph-warning`, glyph `⚠`, `rgb(255,154,154)`, `is-error` true.
+
+### Found (Code mode runs Claude for every model that isn't GPT)
+
+- Traced to one line, `unified_code_lifecycle.js:16`: `model: modelId.startsWith('gpt-') ? modelId : 'claude:sonnet'`. Anything not starting with `gpt-` is sent as `claude:sonnet`, which selects the **Claude CLI**.
+- Not a quirk of that line — `forge_code_settings.from_payload` has exactly **two** families: `gpt` (in-process ChatGPT via `openai_codex`) and, for everything else, `claude`. So **picking a local qwen, a Gemini or a Mistral in the model menu silently runs Claude.**
+- It reports the wrong thing too. `model_id` still carries what you picked, and that is what lands on the turn (`settings.model_id or settings.dispatch_model`), so a run is labelled with a model that had no part in it. For the observed request, `from_payload` produced `dispatch_model = "claude:qwen2.5-coder:7b"` — the Claude CLI asked to run qwen.
+- **Partly fixed since** (see *Fixed — a run is credited to the engine that actually ran it*, above): the label now names the executor and the report marks the model `substituted`. The other two options remain product decisions — stop offering models Code cannot run, or say which engine will handle the request *before* it is sent. Recorded at both ends — the client line and `from_payload`.
+
+### Found (a run labelled `qwen2.5-coder:7b` was actually run by Claude)
+
+- A Code run failed with `Not logged in — Please run /login` and `claude exited 1`, wrote nothing — while the turn was labelled **`qwen2.5-coder:7b`**, the local profile's configured model, which had no part in it.
+- Mechanism, traced end to end: the chat profile had drifted to `local` with an empty `model_id` → the shell had no model to put in the payload → `from_payload` defaults an unspecified model to **`claude:sonnet`** → `family` is read off that prefix → the run dispatched to the **Claude CLI**, which is not logged in on this machine.
+- So the report names the *profile's* model while `family` decides the *executor*, and nothing reconciles the two. You are told a local qwen model produced a failure that came from Claude.
+- **The labelling half is now fixed** (see *Fixed — a run is credited to the engine that actually ran it*, above): the turn records the dispatched model. The other candidate — refusing to invent a model when the caller sent none, surfacing "no model selected" instead of silently choosing Claude — is still open, because it changes what executes. Recorded at the exact line with the full trace.
+- **The failure reporting itself held up.** On screen you see the actionable cause — `Not logged in · Please run /login`, `claude exited 1` in red, and an honest *"Nothing was checked · 3 open risks"*. Nothing was overstated; the only false note was the model label.
+- Separately: the default model had drifted to `Local` with an empty `model_id`, which is what set this off. Restored to `openai_codex` / `gpt-5.6-sol`.
+
+### Verified (the hardest deliverable yet, and what my own driver missed)
+
+- Asked for a page that **fetches a sibling data file** — a path nothing had exercised, governed by `connect-src 'self'` rather than script/style-src, and impossible on an opaque origin. Thomas wrote both files (`report.html`, `sales.csv`), `STATIC_VERIFY_OK: 2 files checked`.
+- Driven in the viewer stage: `fetch('sales.csv')` returned **200 / 185 bytes**, the chart drew **1654 distinct colours**, and the displayed **$313,500** matches the total computed independently from the CSV's own bytes. That fetch only works because the stage has a real origin.
+- **My driver passed 5/5 while a defect was plainly on screen**: the page leaves "Loading sales data…" overlaid across the finished chart. A model-side slip, not Thomas's — but I checked the total, the canvas pixels, the fetch status and page errors, and not one of them could see a stale label sitting on the bars. Found only by opening the picture.
+
+### Added ("needs key" is a remedy now, not just a verdict)
+
+- The model menu listed **Anthropic, Google, xAI, Meta Llama and Mistral**, marked every one `needs key`, and the unified shell had **no way to supply one**. The only code that can POST a key lives in `model_settings_dropdown.js`, which nothing loads — it targets `#modelSetupModal`, an element the new shell does not have. Five providers were visible, unusable, and unfixable from the UI.
+- `POST /api/secrets/{profile} {api_key}` has always existed. An inline key field now appears under any keyless provider when its family is expanded. Driven end to end against a keyless profile with a dummy value, then cleaned up: field is `type=password` / `autocomplete=off`, `has_key` went **False → True**, and the row then vanished because the profile became usable. No page errors.
+- **Reloads from the server rather than assuming.** The menu re-reads `/api/models` after a save, so a rejected key does not leave a provider looking ready. The refresh deliberately does **not** re-run `boot()`'s selection logic — pasting a Mistral key must not silently move your conversation to Mistral, and a test pins that.
+- The value is cleared from the field the moment it is sent, and the input is a password field: this menu is screenshotted constantly, and a key in a text input ends up in the picture.
+- Five regressions each caught by reverting: not rendering the row, a plain-text field, leaving the key in the DOM, the wrong request field, and switching the active model on save.
+
+### Found (the autonomy preference never applies — recorded, not fixed)
+
+- Chasing that red test found a **real bug**, not a stale assertion. Setting `autonomy.default_level` to `L4` and starting a turn still runs it at **2** — measured both on a session that existed before the preference was set, and on one created fresh afterwards. Both give 2.
+- The parts all work in isolation: `_autonomy_level('L4', default=2)` returns **4**, and the preference round-trips correctly through `PATCH /api/preferences` (`L2 → L4 → L2`). What never runs is the `else` branch in `chat_runtime_policy` — a session appears to carry meta from creation, so `elif saved_meta is not None` always wins.
+- **Masked in the app**, which is why nobody noticed: the shell sends its own `autonomy_level` from the Tools panel (`chat.html:2008`), so the explicit value takes the first branch. It bites API and CLI callers, who have a preference that silently does nothing.
+- **Not fixed on purpose.** Autonomy governs how much Thomas may do without asking. Quietly raising it for existing sessions is not a change to make on a hunch — the fix must decide whether a session's stored level is an explicit choice or just the default it was born with, and that is a product decision.
+- It was one red assertion buried inside a test with a dozen passing checks, hiding all of them. Now its own `expectedFailure` test carrying the full measurement: the file goes green, the finding stays visible, and it turns **red again the moment someone fixes the behaviour**.
+- I was wrong twice on the way and checked each time: it is not reading the real preferences DB (verified by setting the real value to L4 — still 2), and it is not a stale test asserting pre-0.19 behaviour (the fresh-session case fails too, which killed that reading).
+
+### Fixed (a second red test that had stopped testing anything)
+
+- `test_worker_handoff_receives_same_immutable_policy` failed on `assertTrue(captured)` against an empty list. Different cause from the autonomy one, and this time the test genuinely was stale.
+- Delegation is no longer inferred from the message. `chat_v2` wires `_send_task` as a **callback the model invokes** — *"Routing fields are structured MODEL choices, never inferred from prose"* — passed to `process_message` as `send_task` when autonomy ≥ 3. The test posted prose ("build a verified artifact") and waited for a handoff to happen by itself. Under the current architecture no wording can cause one, so it could never pass.
+- It was hiding its own point: the policy assertions below the failure — `allow_shell` false, `allow_file_write` false, memory and quality present in the worker's copy — all pass and are what the test is named for.
+- Restored under the current design: the fake model doesn't call tools on its own, so the test now invokes the `send_task` callback **inside** the patch block (outside it, `start_background_delegation` is the real one and would start actual work). Breaking the wiring — `autonomy_level >= 3` → `>= 99` — turns it red again.
+- `tests/test_server_preferences_runtime.py`: **8 passed, 1 xfailed**, from two permanent reds.
+
+### Added (The model menu says whose account is answering)
+
+- `/api/openai-codex/status?profile=<name>` has always returned `logged_in`, `email` and `plan_type`. The unified shell read **none of it**. The old Model Setup modal showed it through `model_settings_dropdown.js` — 18.8 KB the new shell never loads, because it targets `#modelSetupModal`, an element that no longer exists. So `4 ready` was the only signal a provider was usable, and nothing said whose account was being spent.
+- The menu now heads with the signed-in address and plan — verified on screen at 1920×1080.
+- **Hides rather than guesses.** A failed lookup shows nothing; claiming "signed out" because a fetch was rejected would be a worse lie than silence. And the lookup is cached per profile, since the menu re-renders on every open and every accordion toggle.
+- **The guard needed two corrections of its own, both caught by reverting.** `refreshAccountLine\(\)` also matched the function *definition*, so it passed with the call commented out. And a bare `.catch(` check passed with the handler deleted, because the search window reached into the next function's `.catch(() => {})` — a neighbour's error handling standing in for the one under test. Five separate regressions are now each caught: commenting out the call, dropping the element, reading the wrong field, removing the cache guard, and removing failure handling.
+
+### Added (You can choose which model does research again)
+
+- Thomas already **had** per-specialist models and stopped showing them. The whole path worked — `worker_runtime._resolve_profile` consults the per-role override before the chat default, `GET /api/models` returns `role_profiles` and `role_model_ids`, and `PATCH /api/preferences` writes them. What was missing was any way to set one: `persist_user_model_role_preference` has **no production caller at all**, and nothing in the unified shell ever mentioned `role_profiles`. The feature was reachable only by hand-editing preferences.
+- Six rows at the foot of the model menu — Reasoning, Coding, Research, Tools, Writing, Data — each defaulting to *Same as chat*. Driven end to end through the actual select: choosing **GPT-5.6 Terra** for Research wrote `{research: openai_codex} / {research: gpt-5.6-terra}`, survived a full reload still reading *GPT-5.6 Terra*, and *Same as chat* cleared it back to `{}`.
+- The clear matters as much as the set: the preferences patch treats an empty map as "no change", so only an explicit **null** removes an override. A control that could set but not unset would strand you on a choice.
+- Placed in the model menu rather than behind a new settings surface — the menu is already where a model is chosen, and something you have to discover is how this got buried the first time.
+- The ids are pinned to the six the delegation runner accepts. Anything else is coerced to `reasoning`, so a prettier label here would write an override that silently never matches.
+- Changing the **default** already worked: picking any model PATCHes `active_profile`/`model_id`. Verified by round-trip.
+- **The guard failed its own both-directions check twice before it was right.** `renderSpecialistModels\(wrap\)` also matched the function *definition*, so it passed with the call commented out — the exact "defined but never called" state it exists to detect. Now four separate regressions are each caught: commenting out the call, renaming a specialist id, breaking the clear path, and dropping the state seeding.
+
+### Fixed (A generated app now remembers your work)
+
+- Every entry into a preview went through `__enter/<token>`, which sent `Clear-Site-Data: "cache", "storage"`. The storage clear ran on **every load**, so any deliverable using `localStorage` forgot everything the moment the panel was reopened. **29 of 442** generated files use it — about one deliverable in fifteen.
+- Measured, same origin throughout: navigating straight to the resolved preview URL twice **keeps** the value; the same page through the redirect **loses** it every time. After the change the redirect keeps it too.
+- Dropped only `"storage"`. The cache clear stays — a stale build served after an edit is a correctness problem, not a privacy one.
+- **The trade, stated plainly:** the preview port is reused between grants, so the clear stopped one deliverable reading keys another left on the same origin. What remains is that risk — a later preview landing on a recycled ephemeral port could see the previous deliverable's keys. Both are your own generated apps on loopback.
+- **I got this wrong first and reverted it.** I blamed the CSP `sandbox` directive on a three-way comparison where the two passing cases were navigated *directly* and the failing one went through the redirect — two variables, one conclusion. Removing the directive changed nothing (served CSP clean, `window.origin` real, `Storage.prototype` in place, value still gone) and cost the call-site-independent containment backstop, so it went straight back. The wrong turn is recorded at the line.
+- Also corrected: a comment of mine asserting *"there is no Clear-Site-Data header on any response in the chain"*. There is — my header dump filtered to a fixed list of names and never printed it.
+- An existing contract test pinned the old header exactly; updated with the reason rather than relaxed. 364 deliverable/artifact/smoke tests green.
+
+### Added (Verification types into the app before it presses)
+
+- The reverted press-one-control probe failed because it pressed things that legitimately do nothing until something else happens first. **Supplying the input removes that excuse** — it is what a person does: fill the one field, press the one button, see whether the page responds.
+- Measured on real deliverables **before** shipping this time:
+
+  | deliverable | before | now |
+  |---|---|---|
+  | to-do list | `boot only` | **`typed:smoke test, clicked:Add task`** |
+  | kanban (3 files) | `boot only` | **`typed:smoke test, clicked:Add card`** |
+  | tip calculator | — | not driven (more than one entry field) |
+  | expenses | `nav:List, nav:Summary` | unchanged |
+  | minesweeper | `boot only` | `boot only; 82 not exercised` (no text field) |
+  | habit tracker | `boot only` | `boot only; 29 not exercised` |
+  | swatch | `boot only` | unchanged |
+
+  **Apps wrongly reported dead: 0.**
+- Two runs that previously proved nothing now carry real evidence the app responds. The point is not catching more failures — it is being able to say something **true** about whether the thing works.
+- Deliberately narrow: exactly one text entry plus a non-destructive submit-ish control. A form needing a date format, a chosen category, or two fields is not driven, because guessing there is what produced three wrong answers last time. Destructive labels are excluded by name — verification must not destroy your data to learn that a button works.
+- **Also fixed a permanently-red test I had just authored.** The earlier guard forbade the phrase `"nothing on the page changed"` outright, and went red against this correct successor. A guard that fails on the fix is exactly the failure mode that suite exists to prevent; it now pins the specific reverted wording instead. 280 smoke/verify/artifact tests green.
+
+### Fixed ("boot only" hid how much of the app was never checked)
+
+- `browser boot clean; boot only` reads as *checked*. It means the opposite: the page loaded and nothing on it was ever touched. Measured across **57 recorded runs — 29 (51%) ended that way**, and among them: a 9×9 **Minesweeper (82 controls)**, *"build me the future of calculator apps"*, a tip calculator, and the to-do list.
+- The to-do list is the sharp one. Among its four untouched controls was the **Export CSV button that produced no file at all** — the smoke booted the page, called it clean, and never pressed it.
+- `interactive_count` was already published on every receipt and surfaced **nowhere**, so reporting it invents nothing and costs nothing. A boot-only pass now reads `boot only; 82 control(s) not exercised`.
+- **Coverage, not a verdict.** The page is not accused of anything; the reader is told how thin the evidence is. Gated three ways: only when nothing was driven, only when controls exist, and never on a run that did drive the app — the calculator run keeps its `nav:…` line with no coverage suffix, and `swatch.html` (zero buttons) stays plainly `boot only`.
+- **Pressing a control was built first, and reverted.** Run against the real deliverables it fired on **3 of 4** button-carrying apps and was wrong every time: the Minesweeper reset face on a fresh board, a 10% tip preset with no bill entered, `Add task` with an empty field. Each correctly does nothing until something else happens first. A note that fires on working apps teaches the reader to skip it — the same way a permanently-red test hides a real regression. A guard pins that it stays reverted.
+- 577 smoke/artifact/verify/report tests green.
+
+### Fixed (The Activity drawer showed the same filename twice under one heading)
+
+- The drawer's `Outputs` heading covered two different kinds of thing: the deliverable (preview + artifact row) and the changed files you can Keep or Revert. The deliverable is almost always **also** a changed file, so its name renders twice on essentially every run. Measured on the three-file kanban run, reading down the single labelled column: `index.html` (artifact, with preview), `app.js`, **`index.html`**, `styles.css`. Scanning it, the repeat reads as a rendering fault.
+- The section below (`Files · /`) has its own title and the preview above is visually distinct — the change rows were the **only** group without a label, the same "every sibling but one" shape as `project_delta_since` and `--c-danger`.
+- **Labelled, not de-duplicated**, on purpose: dropping the second row would remove the only Revert control for the deliverable, which is the file you are most likely to want to undo.
+- Drawer section titles go from `['Outputs', 'Files · /']` to `['Outputs', 'Changed files', 'Files · /']`. Verified before and after at 1920×1080; `.tc-code-section-title` has symmetric 8px margins so it sits correctly mid-section with no CSS change. Suppressed when nothing precedes it, so a changes-only run does not stack two headings.
+- **Nearly shipped a shell-killer**: `changesTitle` reads `preview`, a `const` declared much further down the same function, and my first placement was above it — a temporal-dead-zone `ReferenceError` that takes out all of Code mode. Caught before running; the declaration ORDER is now pinned by a test, not just the presence.
+- The guard itself went red once with the code correct: the declaration wraps across two lines and `re.search` needs `re.S`. Third time that brittleness has appeared in my own guards, and the reason the CSP guards now join string literals before scanning.
+
+### Docs (Closed the open question in the sphere-over-text note)
+
+- That note recorded the defect as known and deliberately not guessed at, and stated its blocker honestly: *"A screenshot alone cannot separate 'covered' from 'no contrast'."* It now records a measurement that does.
+- Repaint the transcript in a hue absent from both the page and the sprite (`color:#ff0000`), then compare the fraction of red pixels inside the sprite's own rect against the same-height strip beside it on the same line. Covered reads near zero on the sprite; contrast reads comparable. Measured **0.188 on the sprite against 0.257 beside it** — the glyphs are there, just washed out. Confirms the existing conclusion rather than changing it.
+- Also records the trap that produced a confident wrong answer first: thresholding on "dark" pixels scores the **background** as text, because `--c-bg` is `#070912` — every channel under 90. It reported the control strip as 100% "text" and concluded the opposite.
+- A visual sweep at 1920×1080 and 1100×880 produced three more candidates, **all three disproved by measurement**: the sprite is behind the text (not covering it), the composer ends at y=735 while the drawer ends at y=729 (they never touch), and the drawer is `overflow-y: auto` with the last file reachable by scrolling. No new defect; recorded so the same three are not re-chased.
+
+### Fixed (A multi-file app rendered as unstyled text in Thomas's own panel)
+
+- Thomas builds plenty of apps as `index.html` + `styles.css` + `game.js`. The Code viewer stage — the panel beside the chat, and the main way anyone looks at a result — framed them **without `allow-same-origin`**. The document then has an opaque origin, so `default-src 'self'` matches nothing and every relative subresource is refused.
+- You saw unstyled Times New Roman over a dead 300×150 canvas, while the thumbnail beside it and the same file in a new tab showed the finished app.
+- Isolated on a standalone page that never re-renders, after a 9s settle, so an aborted re-render could not explain it: `window.origin` **`'null'` → real**, `cssRules` **SecurityError → 154**, `fetch('styles.css')` **TypeError → 200**, canvas **300×150 → 1280×800**.
+- Two traps worth recording. Chromium reports those refusals as `net::ERR_ABORTED`, not `csp`, which reads like a cancelled request — that is why it first looked like a rendering race. And **`location.origin` returns the URL's origin even in an opaque document**; only `window.origin` reports `'null'`. My first probe read the wrong one and nearly sent me after the wrong cause.
+- The two decorative previews already carried the token; the interactive stage was the **only** frame without it — the same "every sibling but one" shape as `project_delta_since` and `--c-danger`.
+- Safe because the artifact is served from its own port, a different origin from the shell, so the frame cannot reach Thomas's DOM or cookies; and the response CSP already grants the same token. The guard also pins that the stage is **not** granted `allow-top-navigation`.
+
+### Known gap (deliverable storage does not survive a reload) — measured, not fixed — **closed since, and the cause named below was wrong**
+
+- A generated app that saves your work forgets it when the preview is reopened or refreshed. On `habits.html`: within a load `wrote True, readBack 'kept', length 1`; on the next load `before None`.
+- Ruled out by measurement rather than reasoning: the origin is **stable** across loads (the grant is reused), there is **no** `Clear-Site-Data` header anywhere in the chain, and the injected shim only replaces storage when the real one throws — `Object.getPrototypeOf(localStorage) === Storage.prototype` is **True**, so the real one is in place.
+- Control naming the cause: the identical bytes on a plain http server with no CSP persist normally (load 1 reads `'kept'`); through Thomas the same page reads `None`. The CSP **`sandbox` directive** makes storage ephemeral even though `allow-same-origin` preserves the origin.
+- **Not fixed.** The only lever is dropping `sandbox` from the CSP, which is the deliberate containment backstop — a security trade, not a bug fix. Recorded at the exact line instead.
+- **Fixed in `eaed01c8`, and the two bullets above are wrong** — left standing because the wrong turn is the whole lesson (see *Fixed — A generated app now remembers your work*, above). There **is** a `Clear-Site-Data: "cache", "storage"` header in the chain, on the `__enter/<token>` handler; the header dump behind "none anywhere in the chain" filtered to a fixed list of names and never printed it. And the control was confounded — the two cases that kept their storage were navigated **directly**, the one that lost it went through the `__enter` redirect, so the CSP was never the variable being tested. Removing the `sandbox` directive changed nothing (served CSP clean, `window.origin` real, `Storage.prototype` in place, value still gone) and cost the containment backstop, so it went straight back. Dropping only `"storage"` from that header is what fixed it; the sandbox tokens are unchanged to this day (`deliverable_aiohttp.py`).
+
+### Fixed (Thomas called a dead page "browser boot clean")
+
+- `blocktown-84.html` loads three.js from a CDN. Through Thomas's **own** artifact route: `window.THREE` undefined, the only button *"Deploy to Blocktown"* disabled, red text reading *"The 3D engine could not load. Check your connection and refresh."*, and `requestfailed … :: csp`.
+- Thomas's verifier returned `ok=True`, *"browser boot clean; boot only; 1 external resource(s) not fetched offline"*.
+- The exemption behind that line was added deliberately (`62a1e0fa`) on the premise that *"a page that loads three.js from a CDN could never pass — and blocktown-84 does exactly that. Failing it would say 'your game is broken' about a game that works."* **The premise is false.** The artifact preview CSP lists no remote origin in `script-src`, `style-src`, `img-src`, `font-src` or `connect-src`, so the reference is refused there permanently. The word **"offline"** framed a permanent runtime block as an artifact of the harness's own DNS mapping.
+- Two heuristics had honest reasons to stay quiet, which is why nothing else caught it: the canvas never got a context so paint reads `unverifiable` rather than `blank`, and `body_text_chars > 0` was satisfied partly **by the error message itself**.
+- `ok` stays **True**, and a test pins that. Depending on a CDN inside an offline sandbox is the *model's* mistake; failing the run for it would make this a rejector that grades the model rather than a report that tells the truth. Only the wording changed — and it now names the remedy, so the repair loop stops swapping CDN hosts (the real run swapped jsdelivr → jsdelivr → cdnjs across three passes, none of which could ever have worked).
+- Opposite failure covered: a self-contained page still reads plainly — `habits.html: browser boot clean; boot only`. Restoring the old wording turns 3 of the 5 guards red. 112 existing smoke tests still pass.
+- Found by a multi-agent audit; **verified independently** before acting, including the agent's correction of a wrong conversation id I had supplied (`fc_20260728T220253_2ea097` is a noop; the real owner is `fc_20260728T184945_a97729`).
+
+### Fixed (The run report recorded nothing about what Thomas did)
+
+- `attempts[].key_actions` is the report's account of the agent's own work. Across **105 agent turns it was non-empty ZERO times**, while its siblings on the same record were filled 100% (`goal`, `outcome`, `exit_state`) and 18% (`errors`).
+- Not because nothing happened: the Call of Duty run made three `fs.write_file` calls and three `diff.create` calls and still recorded `[]`.
+- Cause: `_attempt_actions` matched only `fc == "tool"` with a name other than `run`, which **cannot happen**. In the real stream every tool CALL is the engine's own `run` check; the agent's work arrives as *named* `tool_result` events. Across four real runs the correspondence is exact — unnamed results match `run` calls one-for-one — so "named" cleanly separates agent from engine:
+
+  | run | tool calls | tool_result | named | unnamed |
+  |---|---|---|---|---|
+  | to-do | 2 (all `run`) | 6 | 4 | 2 |
+  | habits | 2 (all `run`) | 6 | 4 | 2 |
+  | call of duty | 4 (all `run`) | 62 | 58 | 4 |
+  | study planner | 2 (all `run`) | 27 | 25 | 2 |
+
+- Verified by replaying the **real stored transcripts** back through `build_run_report`, not a fixture: 4, 4, 7, 8, 8, 8 actions naming `fs.write_file`, `code.project_structure`, `fs.list_dir`. Reverting the change returns every one of them to **0**.
+- The existing unit fixture emits `{"fc":"tool","name":"Edit"}` — a shape the engine never produces — and asserts `"Edit"` appears, so it passed the whole time. That is the failure mode the new guard exists to prevent: a fixture encoding what the code expects instead of what production emits. Both now pass.
+- Guard also pins the opposite error: a pass that only ran engine checks must record **no** agent actions, so the filter cannot be loosened until check output counts as work.
+- Known limitation left at the line: for `fs.read_file` the event text is the file content, so the label is an accurate but unreadable source fragment. Not fixed, because the readable alternative is a per-tool formatter that guesses which part of each payload is the subject. Nothing renders this field today.
+
+### Fixed (Every generated Export button produced nothing)
+
+- Asked Thomas for a to-do list with an **Export CSV** button, specifically to test today's sandbox fixes on *fresh* output. It built a correct one. Through Thomas's own artifact route the button did **nothing** — no file, no error, no console message. The identical bytes on a plain local http server downloaded `tasks-2026-07-30.csv` immediately.
+- Same browser, same clicks, same page; only the sandbox differed. `allow-downloads` was not granted. **Fourth instance of one shape**, and the only one caught on output built *after* the earlier fixes shipped.
+- Both directions: token removed → Thomas **NONE**, control **OK**; restored → both **OK**.
+- The same run confirmed the modal fix holds on new output: *Clear completed* asked `"Remove 1 completed task?"` and removed 1 of 3. Persistence held too (3 → 3 across a reload).
+- Census across **442** generated files under `~/.thomas`: modals 9, pointer lock 3, downloads 3, **popups 0**. `allow-popups` stays ungranted, pinned by a test, so widening later needs a measured failure.
+- Also fixed **my own guard being brittle**: the directive outgrew one line, Python implicitly concatenates adjacent string literals, and a scan anchored on the opening quote stopped at the first closing quote — reporting `allow-pointer-lock` missing while it sat plainly on the next line. A guard that goes red on reformatting is how a real regression slips past, so both existing guards now join literals before scanning.
+
+### Fixed (A generated first-person game could shoot but not turn)
+
+- From a game Thomas built today: `if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();` and mouse-look gated on `document.pointerLockElement === canvas`. The artifact CSP sandbox did not grant `allow-pointer-lock`, so that is **never true** — the player can shoot, but cannot look around. Nothing raises; the request is refused silently.
+- **Third instance of one shape**, each found by using the app rather than by a failing test: `'unsafe-eval'` missing made a correct calculator print `Error`; `allow-modals` missing made every confirm-before-delete button dead; `allow-pointer-lock` missing makes every first-person game unplayable. Two of your own deliverables call `requestPointerLock`.
+- Verified with a control, because pointer lock also needs a user gesture and might not engage headless — a bare "BLOCKED" could have meant any of three things. Removing the token again: control (unsandboxed shell) **still LOCKED**, artifact **BLOCKED**, guard red. The control holding constant across both directions is what makes it evidence.
+- `allow-popups` deliberately **not** granted: no deliverable calls `window.open(`, so there is no defect behind it. A test pins that, so widening later has to be justified by a measured failure.
+- The same-origin `/deliverable/` route was **not** updated, and that is recorded as a known gap at the exact line rather than fixed blind: nothing in the unified shell requests it, so there is no surface to verify the change on, and an unverified header change on a security boundary is worse than a written-down inconsistency.
+
+### Fixed (Every generated confirm-before-delete button was silently dead)
+
+- Thomas built a habit tracker whose Reset handler reads `if (!confirm("Clear all habit checkoffs?")) return;`. Clicking Reset did **nothing** — no dialog, no error, no console message.
+- The artifact CSP carried `sandbox allow-scripts allow-forms allow-same-origin` with **no `allow-modals`**, which makes `confirm()` return false and show nothing, so the guard clause took the early exit every time. Because it is a CSP `sandbox` directive it applied to the **top-level** document too: "open in a new tab" gave the same dead button.
+- The control is what makes it evidence: real click **2 checked → 2**, no dialog; with `window.confirm` forced true, the same click **2 → 0**. The page's logic was correct throughout — this was the machinery breaking a correct deliverable.
+- Same shape as the missing `'unsafe-eval'` that made a correct calculator print `Error`: the sandbox silently removing a capability ordinary pages rely on, with no diagnostic. It is very likely a large part of why generated apps "barely work" — every confirm-before-delete in every app Thomas has ever built was dead.
+- The grant is **asymmetric on purpose**. The effective sandbox is the intersection of the CSP ceiling and each iframe's own attribute, so the ceiling was raised but only the viewer stage — the surface you actually use — opts in. Verified live: top level *dialog fires, clears*; viewer stage *dialog fires, clears*; transcript thumbnail *`confirm()` → false, no dialog*. A 168px decorative picture still cannot interrupt you.
+- Removing `allow-modals` again brings Reset straight back to **2 → 2** with no dialog and turns the guard red.
+- **I broke all of Code mode on the way** and caught it by measuring rather than assuming: the explanatory comment quoted a code snippet in backticks, inside a JS template literal, which closed the literal and made the rest a syntax error (`Unexpected token 'if'`). Zero page errors after the fix; the comment now says why it carries no backticks.
+
+### Fixed (The deliverable card drew an empty box beside its download button)
+
+- Two different markups share the class `tc-code-artifact`: the drawer preview is a `<section>` wrapping a `<header>`, and the transcript's "Thomas made this" card is a `<div>` holding three separately-bordered pills. One unscoped rule bordered both.
+- On the transcript card that frame was not just redundant, it was **visibly wrong**: the row carries `max-width: 680px` inside a 720px turn, so the inherited border ran **39px past the last control** and painted an empty outlined box next to the download button. It reads as a fourth control that failed to draw.
+- Scoped the rule to `section.tc-code-artifact`. Verified both ways at 1920×1080: transcript card `borderWidth` **1px → 0px**, drawer preview **keeps** its 1px border, radius and header. Reverting the scoping brings the strip back at 39px and turns 2 of the 3 new guards red.
+- Guard also pins the **markup** the scoping depends on. `section.` protects the transcript card only while that card stays a `<div>`; if the renderer ever emits it as a `<section>`, the border returns and a CSS-only assertion would still pass.
+- Found by looking at a screenshot. No test asked whether the buttons existed and got the wrong answer — they all exist. Same class as an unmapped icon rendering as a dot: correct in the DOM, wrong on screen.
+
+### Fixed (A second wrong number of mine, found by finishing the audit)
+
+- The first audit found one bad claim in two checked. That is a poor enough ratio to finish the job, so every number baked into a **code comment** got verified against the run it cites.
+- Confirmed exact: **27 tool_result events, 25 carrying a name** on the planner turn; **26 checks → 25 results** on the Godot turn; **exactly one** of those 26 was a `meta` note; every failure and warn colour above 4.5:1 in all five themes (lowest **5.01:1**).
+- Wrong: *"its report recorded **ZERO** validations"*. That turn recorded **one**. I had read the header count off Godot turn 1 and the validation count off the *last* turn, then stated them as one fact. The point survives — 26 claimed against **1** real is still the overstatement the fix was for — but the number did not.
+- Corrected in the source comment, the harness comment and two changelog entries. Comment and prose only; 30 contract tests green.
+- **The audit itself made the same mistake twice on the way**, which is the part worth keeping: it took `agents[-1]` and measured the wrong turn, then measured the wrong *conversation* entirely before that. Selecting the wrong element is the single failure mode behind most of this session's bad measurements, and it does not stop being tempting just because the subject is my own work.
+
+### Fixed (A number I asserted, in my own words, that was wrong)
+
+- Auditing my own changelog entries against the live data: **"370 of 476 saved chats record a real model"** is exact. **"across nine of them"** was not — it is **eight**, and the list printed immediately after it names eight (`gpt-5.6-sol`, `codex`, `openai_codex`, `local`, `qwen2.5-coder:7b`, `gpt-5.5`, `gpt-5.6-terra`, `gpt-5.6-luna`). I wrote a total above an enumeration that contradicted it, then propagated it into a code comment in `chat.html` and a test docstring.
+- Corrected in all three places. Comment and prose only — no behaviour change, 30 contract tests still green.
+- Exactly the defect this session has been removing, authored by me: an unverified number stated with confidence, sitting next to the evidence that disproves it. The same audit confirmed the other load-bearing claim — every failure and warn colour is above 4.5:1 in all five themes, lowest **5.01:1** across ten measurements.
+
+### Fixed (A silent failure says how it ended, and that nothing said why)
+
+- Four consecutive runs of the same goal (15:42, 15:44, 15:46, 15:48) each recorded exactly **three** events — Thomas stating its plan, the project structure, `(empty directory)` — then exited 1 with **no error event at all**. Nothing changed, zero validations, one generic risk.
+- Every one of them told you **"The Code task stopped before it finished."** and nothing more, four times over, while `turn.reason` held `exited 1` throughout. The exit code was known and unsaid.
+- Now reads *"The Code task stopped before it finished — exited 1, with no error recorded."* **"No error was recorded" is the part worth saying out loud**: it separates a run that failed silently from one whose reason is being withheld, which is the difference between hunting for a message and knowing there isn't one.
+- **No invented cause** — there genuinely wasn't one, and the guard asserts that too: called without a `reason`, the message must not mention an exit or an error at all. Restoring the old text turns it red.
+- Also worth recording from those four runs: each created its own project folder (`Code task 2026-07-30 1042/1046/1048`) and left it empty. So the 24 empty project folders found earlier are not only abandoned "New code task" clicks — failed runs make them too.
+
+### Documented (A claim I tried to remove, and should not have)
+
+- Swept every user-facing string in Code mode that claims a check or a verification, after finding the word wrong in three separate places. 27 strings; 26 of them correct. The one that looked wrong was the reply fallback: **"Finished the requested changes and passed Thomas's verification"**, shown when `turn.ok` is true — and `ok` is only exit 0 with files changed, which says nothing about what was checked.
+- **It is earned where it actually fires.** The route that occurs is `staleLimitReply`: the model claims it could not act (*"no files were changed and verification has not been claimed"*) while the same transcript carries `BROWSER_SMOKE_OK` and `engine checks passed`, with `ok: true` and a changed file. The model's own reply is simply wrong, engine evidence overrides it, and the substituted claim is true. An existing guard, `proveEvidenceAndRefresh`, pins exactly that — and my change broke it, which is how I found out.
+- The other route — `ok` with no `final` event at all — would claim verification on the strength of `turn.ok` alone. Measured across 56 agent turns: **0 of 41 successful ones lacked a final event**, so it does not happen today.
+- **Reverted, nothing shipped.** Recorded at the line, including the correct fix if that second route ever becomes reachable: condition the wording on real passing evidence rather than dropping it, because dropping it throws away the correction in the case that matters.
+
+### Fixed (A file write stops calling itself a check)
+
+- Every `tool_result` row in the technical log read **"Checked tool result"**. Measured on one turn: **27 of them**, all identical, sitting above a folder listing, three separate `Wrote N chars to <file>` lines, and a source excerpt. **A file write was labelled a check** — the same overloading of the word that had the activity header advertising "26 checks" on a turn with one validation. `check` means an engine check everywhere else in this UI, and the verdict card counts them.
+- The tool's own name was on the event the whole time: **25 of those 27 carried `name`** (`fs.write_file`, `fs.list_dir`, `code.project_structure`, `diff.create`), and the heading discarded it in favour of a word that was wrong. Rows now read `Result from fs.write_file`, so a heading describes what produced it.
+- `meta` events read **"Verified the result"** — for events whose text is literally `Kept index.html.` or `Reverted index.html.`. Keeping a file announced itself as verifying it. They now read `Workspace update`.
+- Found by *looking* at the expanded log rather than by a failing check: six consecutive rows with the same heading above six different things. Nothing was broken, no test failed, and the log simply told you less than the data it was rendering.
+- Guarded three ways — a named result must name its tool, an unnamed one must still not say "Checked", and a `meta` row must not say "Verified". Restoring either old heading turns it red.
+
+### Fixed (A long filename stops running out of the Activity drawer)
+
+- The drawer is ~280px and shows names in four places. Measured with an 86-character unbreakable name, `scrollWidth`/`clientWidth`: change row **491/137 ellipsis**, artifact name **607/386 ellipsis**, file tree **518/247 `text-overflow: clip`**, drawer subtitle **458/458 — grown to 458px inside a 280px panel**. Two truncated properly and two spilled past the edge: the same "every sibling but one" shape as `overflow-wrap` and `--c-danger`.
+- **The subtitle also pushed the drawer's × close button off the panel**, so a long project name made the drawer impossible to close. Functional, not cosmetic — visible in the before/after screenshots.
+- Two distinct causes, and the first attempt only addressed one. `text-overflow` needs a block container: the tree row is `display: flex` and the name was a bare text node, which becomes an anonymous flex item the property never reaches — so the name is now wrapped in a span. And a flex **item** defaults to `min-width: auto` and refuses to shrink below its content, so setting ellipsis on the `small` alone left it measuring **458px with the ellipsis applied**. Both levels were needed.
+- Each of the three changes is independently catchable — removing the wrapper's `min-width`, the span rule, or the span from the *renderer* each turns exactly one test red. That last one matters: CSS aimed at an element nobody emits is a silent no-op, and the guard for it fails without the CSS being touched at all.
+- The guard's own first version failed against a correct fix: `.tc-code-drawer-head small` appears in a shared `display: block` rule as well as its own, and taking the **first** regex match read the wrong block. It now joins every matching rule, as the browser does.
+
+### Fixed (Your own message wraps like Thomas's replies do)
+
+- `.tc-code-turn.is-user` set `white-space: pre-wrap` and nothing else. `pre-wrap` breaks at whitespace and does nothing for a single long token — a hash, an API key, a path with no separators — which is exactly what gets pasted into a build request. Every sibling that renders free text already handled it: `.tc-code-reply`, `.tc-code-event span` and `.tc-code-technical code` all set `overflow-wrap: anywhere`. **Three siblings had the rule; one did not**, so Thomas's messages wrapped and yours did not.
+- Measured with a 145-character unbreakable string: the bubble reported **`scrollWidth` 1171 against `clientWidth` 510** and was clipped mid-token on screen, while the reply beside it wrapped onto two lines from the *same* string — the defect and its control visible in one screenshot.
+- **The first attempt at that measurement proved nothing.** It used a path containing hyphens and slashes, which *are* break opportunities under `overflow-wrap: normal`; it wrapped, reported no overflow, and could not have failed even if the bug were there. The string had to be genuinely unbreakable before the check meant anything.
+- Guarded across all three free-text surfaces, plus a second test asserting the user bubble and the reply wrap *identically* — free text is free text whoever typed it. Removing the rule turns both red.
+
+### Fixed (The page you send from now shows you your own message)
+
+- Found by asking a question never asked this session — *what does this look like while a run is actually going?* Every screenshot until now had been of a finished turn or an empty surface.
+- Measured on a live run at 1920: **`.tc-code-turn.is-user` was 0** while the live turn was already streaming. `turns` comes from `state.conversation`, which is only refreshed from the server, so between pressing Enter and the run finishing **the words you just typed were nowhere on screen**. The same conversation opened in a second tab showed them fine — never missing data, only a missing render.
+- The message is now echoed from `state.pendingUserText` and **suppressed as soon as the server's copy arrives**, decided at render time rather than cleared on a lifecycle event. A clear that fires at the wrong moment leaves either no bubble or two identical ones; this cannot do either, because the pending copy is simply not drawn once `turns` contains it. Compared on trimmed text, which is what the round-trip varies.
+- **Cleared in `clearContextState`**, alongside the other per-conversation state. Without that it would print into whichever transcript you switched to, where nothing would ever match it and it would stay forever — a bug the fix would have introduced.
+- Not set for a steer: `preserveProgress` means the run is continuing, and steering text belongs in the activity feed rather than as a new message bubble.
+- Verified on a real run end to end: **exactly one copy from t+5s through t+25s**, including the moment the server's turn landed. Guarded four ways — it appears at once, does not double when the server copy arrives, survives a whitespace difference, and never leaks into another conversation. Reverting the render insertion fails with *"the message just sent is not on screen"*.
+
+### Fixed (Asking the whole question at once: every state colour, every theme)
+
+- The reds were found one at a time, each after being noticed. That works, but it finds them in the order they happen to catch the eye. Sweeping **every literal colour in the Code stylesheets against all five theme backgrounds** asked it once and returned **six more** — all amber, none previously suspected.
+- Two matter: `.tc-code-run-report.is-warn` — the **"Passed, with things to look at"** verdict — measured **1.68:1 on sandstone**, and the stream-**disconnected** message text `#f7ce91` measured **1.27:1**. So "your run half-worked" and "the connection dropped" were both unreadable on that theme.
+- A `--c-warn` token now mirrors `--c-danger`: dark worlds keep `#e2b25f`; light gets `#a15c00`, sandstone `#8a4b12`. Both tokens confirmed resolving per theme in the live shell. The sweep now returns **1** literal instead of 6.
+- **That one is left deliberately.** `#8f82ff` on `.tc-code-event.is-reason` is 2.65:1 on sandstone, but it is a `border-color` on a left rail — a tint, not text or an icon. Fixing it would be sweeping up a number rather than a defect, and the sweep script says so in its own header: a low ratio on a decorative rule is not automatically a problem.
+- The guard covers both tokens and both literal families now; re-hard-coding the warn icon turns it red.
+
+### Fixed (Every remaining Code failure indicator, and a guard against the next one)
+
+- The first pass covered four signals I had measured. Looking at Sandstone afterwards showed the ⚠ beside *"Worked through 2 tool runs · 27 results · 4 issues"* still pale — so it got measured too, along with its neighbours: **1.96:1 on light, 1.75:1 on sandstone**, worse than the ones already fixed.
+- Five more now use the token: the activity-summary issues icon, the technical error rows, the error event row, the danger action in Outputs, and the failed run-status pill. After: **light 6.31:1, sandstone 5.65:1**, nebula unchanged at 9.78:1. Every Code failure indicator is now above 5.6:1 in all five themes.
+- A second guard catches the *next* one: any of the four dark-theme reds appearing in the Code stylesheets outside a `var(--c-danger, …)` fallback fails the test. Comments are stripped first — several of them quote `#ff9a9a` while explaining this fix, and a naive scan matches its own documentation, which is the third time that trap has cost me a test today. Re-hard-coding one red turns it red.
+
+### Fixed (The mark that says a run failed is now visible in every theme)
+
+- `#ff9a9a` is a **dark-theme** red. It was hard-coded into the failed-verdict rail, the failure icon, the error reply text — and, as of earlier today, the Revert control, where I reused it *because it was already there*. Measured against each world's own surface: **nebula 9.47:1, light 2.03:1, sandstone 1.89:1**. On two of the five themes, the mark that says a run FAILED and the control that permanently discards a file were both close to invisible — the two things in the surface that most need to be seen.
+- Now a themed `--c-danger` token: dark worlds keep `#ff9a9a`; light gets `#b3261e`, sandstone `#a33a28`. After: **light 2.03 → 6.54:1, sandstone 1.89 → 6.11:1, nebula unchanged.** Verified by screenshot on Light — Revert legible, the ⚠ solid, the verdict rail and run summary readable instead of pale salmon.
+- **Two wrong turns on the way, both recorded.** The contrast maths was inverted at first: `color(srgb 1 1 1 / .72)` gives components in 0–1 and `rgb()` in 0–255, so parsing both the same way turned white into near-black — near-black on white reported **1.32:1** and pale pink on white **10.28:1**. Then the token went into `thomas_world.css`, whose `body.tcw-on[data-tcw-world=…]` blocks **this shell never uses** (`body.className` is empty, `data-tcw-world` is null); the real tokens live in the `THEMES` object in `chat.html`. That edit was reverted, not left lying around.
+- Guarded by **computed contrast, not hex strings**: the test reads each theme's own tokens and asserts a ≥4.5:1 ratio, so it still means something after a palette change and would catch a future theme shipping its own unreadable red. Putting `#ff9a9a` back on light turns two of the three red.
+- Scoped to the four Code-mode failure signals that were measured and seen. Ten further hard-coded reds remain in work mode and the technical rows — untouched here rather than swept up unmeasured.
+
+### Documented (A z-index "fix" that destroys every theme, and the wrong diagnosis behind it)
+
+- At 900px on the Code empty state a drifting 30px moon sits under the subtitle, and *"Describe the outcome in the composer below."* reads as *"…the composer belo⬤ Keep using this same"*. Cropped at 3×, it looks unambiguously like the sprite is painted on top.
+- **It is not.** `main` is `position: relative; z-index: 1` and the worlds wrapper is `z-index: 0`, both children of `#tc-shell`, so the text genuinely paints above the sprite. What fails is **contrast**: the subtitle is `--c-dim`, `rgba(238,240,251,.66)`, and light grey on a bright sphere has almost none. The sprites animate, so the same line is legible seconds later — which is why it reads as intermittent rather than broken.
+- Setting the wrapper to `z-index: -1` — which the comment above it invites, since it has always said *"behind everything"* — was tried and **reverted**: a negative z-index puts it behind `#tc-shell`'s opaque `--c-bg` and every theme goes flat black. Verified by screenshot, the entire nebula gone. That trades an intermittent contrast dip for losing the design.
+- Two measurements worth nothing here, both tried and recorded: `elementFromPoint` names the text as topmost but the layer is `pointer-events: none`, which that API skips regardless; and hiding the wrapper removes the sphere *and* the whole background, proving only that the sprite belongs to it.
+- **Nothing shipped.** A real fix is a design decision — dim or exclude sprites beneath running text, or give the empty-state copy its own backdrop — not a z-index. Recorded at the exact line so the next person does not make the change I just made and backed out.
+
+### Fixed (Opening the viewer stops reducing the conversation to a sliver)
+
+- Found immediately after the drawer fix, by checking its mirror image — and **this one was mine**, shipped earlier the same day. The viewer and the space reserved for it were two copies of `min(760px, 62vw)`.
+- `62vw` was the bug. The viewer sits inside the panel, but `vw` measures the **viewport**, and the panel is the viewport minus a 280px sidebar — so the viewer's share of the space it actually occupies *grows* as the window narrows. Transcript width with a file open: **1920 → 720px, 1440 → 352px, 1100 → 90px.** At 1100 the conversation was a ninety-pixel column setting one word per line: *"hides / the / others, / and / marks / itself"*. The document never overflowed at any width, so nothing numeric flagged it.
+- Both now come from **one** custom property — two copies of a width that must agree cannot disagree if there is only one. Defined as `min(760px, max(360px, calc(100vw - 700px)))`: the 280px sidebar plus a 420px floor for the reading column, capped so wide screens are untouched, floored at 360px so the viewer does not shrink to a strip itself — the same mistake in the other direction.
+- Deliberately **not** a percentage: a custom property's `%` resolves against whatever element consumes it, so `calc(100% - 420px)` would mean the panel in one rule and the layout in the other. Viewport units mean the same thing in both places, which is the entire point of sharing the value.
+- After: **1920 unchanged at 720px** (padding still 760px), 1440 → 372px, 1100 → **372px**. Verified by screenshot at 1100 — full sentences across the column, viewer still rendering the page.
+- Both guards proven load-bearing separately: reverting the two *usages* fails the first, reverting the *definition* to a bare `vw` fails the second.
+
+### Fixed (The Activity drawer stops sitting on top of the transcript)
+
+- The drawer is a side panel and the layout reserved **nothing** for it. Measured with the drawer open — transcript right edge against drawer left edge: **1920 → −176px** (clear, and only by luck: the turn is 720px and centred), **1440 → +64px** of content underneath, **1100 → +234px**. `padding-right` computed as **0px at every width**.
+- At 1100 the run summary was cut mid-sentence — *"so this task is unfinish"* — the deliverable card was clipped through its middle, and the verdict card ran under the panel. The document never overflowed, so nothing numeric flagged it; it only shows in the picture.
+- The file viewer on the same edge already had this treatment (`.tc-code-panel.is-viewer-open .tc-code-layout`), which is what made the omission obvious once both were open: two panels, one making room and one not.
+- Fixed with the **same custom property the drawer's own width comes from**, so a resized drawer keeps its clearance instead of drifting out of step. Gated above 720px, because below that the drawer is deliberately `min(420px, 94vw)` with its resize handle hidden — a near-full-width overlay, where reserving that much would leave the transcript nothing. After: −316 / −76 / −20px, all clear, and the turn correctly narrows from 720 to 492px at 1100.
+- The guard's first version **failed against a fix that was already correct**: a `([^{}]+)\{([^}]*)\}` scan treats the `@media` brace as the opener, so it reported the selector as `@media (min-width: 721px)` and put the real rule in the body. Third parser mistake of this kind in one session; it now matches the selector directly and strips comments first.
+
+### Fixed (The same half-fix, caught by hunting the shape instead of the symptom)
+
+- `_verify_and_iterate` reads the changed set **twice**, and `a084e1f7` fixed only the first. The second read happens after a repair pass, so every repair iteration went back to the unfiltered `delta_since` — handing Thomas's own `.thomas/evolve/agent/` transcripts to the verifier **exactly when a run needs fixing**, which is when it is writing the most of them.
+- Found by grepping for every `delta_since(` caller rather than waiting for a symptom, after noticing that the nine fixes so far all share one shape: two expressions that were supposed to mean the same thing and didn't.
+- **The existing two guards passed with the second call site broken** — which is the whole lesson, and the same way a scroll fix once survived reverting. A new test forces a verification failure, drives a repair pass, and inspects the *second* file list. Reverting only that line turns it red while the other two stay green.
+- A **third** instance sits in `ci_runner.py`, feeding the unfiltered list straight into `build_run_report`. Deliberately **not** changed: nothing under `thomas/` or `scripts/` imports that module — only its own test does — so it reports to nobody and editing it would be churn in dead code. Noted at the exact line, with what to change if it is ever wired up.
+
+### Fixed (A third permanently-red test, and a stronger guard than the one it replaces)
+
+- `test_chat_shell_boots_without_parser_blocking_cdn_assets` required the literal `"the chat shell must boot offline"` — a **comment marker** in `chat.html` that was later reworded away. The test went red and stayed red while the behaviour it guards was perfectly intact: the served shell has **zero** references to `fonts.googleapis.com`, `fonts.gstatic.com`, `unpkg.com`, `cdn.jsdelivr.net` or `cdnjs.cloudflare.com`.
+- Confirmed pre-existing before touching it: the string is absent from `chat.html` both at `ec6d3158^` (before this session edited the file) and now.
+- Repinned to the behaviour and made **stricter** than the three hard-coded hosts it replaces — no `<link>` or `<script>` may load from *any* other origin, whichever CDN someone reaches for next. Proven capable of failing with `https://example.com/probe.css`, a host **none** of the three original assertions would have caught.
+- Third one found this way, after `test_marketplace_uses_native_runtime_shell` (red 2026-07-21 → 07-30) and `test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts`. All three pinned one exact spelling of something that legitimately got rewritten.
+- **Not mine and left alone:** four other failures in the wider sweep — `test_chat_runtime_policy` (426 tools without explicit policy classification) and three `test_server_task_ledger_v2_contract` cases. They exercise subsystems no commit in this session touched. 1573 passed.
+  - **All four have since been dealt with**, and the first was not the stale assertion it looked like from here. `test_chat_runtime_policy` in `ab3b7712`: it was red from birth — asserting over all 566 registered tools when 424 of them are unclassified marketplace tools — *and* the two skill tools behind it genuinely had no policy classification, so local skill discovery really was being deleted (see *Fixed — turning off network access silently deleted local skill discovery*, above). The three ledger cases in `43160187`: two rewritten to the contract `69bbbab0` left behind, one held as a deliberate `expectedFailure` (see *Fixed — three task-ledger tests that pinned behaviour `69bbbab0` deliberately removed*). Re-measured on this tree, the two files together are **39 passed, 1 xfailed** — that xfail being the held one.
+
+### Fixed (The activity header stops calling tool output "checks")
+
+- The technical header read **"Worked through 1 tool run · 26 checks · 7 issues"** on a turn whose report recorded **one validation**. `check` is a load-bearing word everywhere else in this UI — the verdict card counts engine checks, and *"1/2 checks passed"* means two real ones — so using it here for arbitrary tool output made the header claim verification that never happened. Same overloading as the old **"1 pass"**, which meant one *edit* pass and read as one test passing.
+- It now says `results`, and `meta` status notes ("Kept index.html", "Reverted styles.css") are no longer counted among them — they fall into `details`, which is what they are. The Godot run now reads **"1 tool run · 25 results · 7 issues"**.
+- That 26→25 also corrected me: only **one** of the 26 was a `meta` event, so the misnaming was the bigger half by a wide margin and folding `meta` in was a smaller, separate inaccuracy. The first version of this comment claimed "nearly all of them were meta" — measured, that was false, and it was rewritten rather than shipped.
+- Guarded: the harness asserts the header never says "N checks", counts the one real tool result, and does not inflate to 3 when two status notes are present.
+
+### Fixed (The verifier stops grading Thomas's own paperwork)
+
+- Thomas writes its Code transcripts into the selected repository under `.thomas/evolve/agent/`. `forge_code_git.project_delta_since` exists to keep those out of a run's changed set — its docstring says they *"must never inflate completion or artifact counts"* — and the run report used it. `_verify_and_iterate` used the unfiltered `delta_since`, so the two disagreed about what the run had changed.
+- Measured on the Call-of-Duty run. Recorded `changed_files` were the three real files, while the check beside them read: `exit 0 parsed .thomas/evolve/agent/conversations/fc_20260730T164534_d8fa2f.json checked game.js parsed index.html checked styles.css STATIC_VERIFY_OK: **4 files checked**`. Three delivered, four reported checked — and the extra was **another conversation's** state file, one of the empty "Untitled build" records. Thomas graded its own paperwork and counted it as coverage.
+- A run that touches only bookkeeping now verifies nothing and returns 0, rather than parsing one JSON file and calling that a passing check. That is the second guard, and the one that matters: an inflated count is misleading, but a check that *cannot fail* reported as a pass is the shape this whole area keeps producing.
+- Same defect shape as the rest of this session — two expressions of "what changed" that were supposed to mean the same thing and didn't. Restoring `delta_since` turns both guards red.
+
+### Fixed (A run stops claiming it overwrote files it never touched)
+
+- The shared-project risk read *"this run replaced work from another code task — alpha.txt, beta.txt, gamma.txt … created by a different task in this shared project, **and overwritten here**"*. The last clause asserts authorship the data cannot support: `changed_files` is the git diff of a **shared folder**, not a record of what this run wrote, so any uncommitted file another task left behind lands in it untouched.
+- Measured: five conversations share `Code task 2026-07-30 1145`. The Godot FPS run held that folder from **17:05 to 17:17 UTC** while two other tasks wrote `alpha.txt` (17:09:44) and `gamma.txt` (17:15:45) into it. The FPS report listed all three as overwritten; their mtimes are still those of the tasks that made them, and the FPS run finished after both. Two Code runs sharing a folder is ordinary — Thomas allows **eight simultaneous runs**, and this is direct evidence they genuinely execute at the same time.
+- **The risk still fires, and should.** Work from another task really is mixed into this run's file list, and that is the thing worth knowing. Only the claim about who wrote it was more than the data knew. It now reads *"this run's changes include work from another code task … showing up in this run's changes; this run may not have written them"*.
+- The existing test pinned the old sentence, so it was rewritten to assert the behaviour — the risk fires and names the file — rather than one spelling, and a new case asserts the words `overwritten here` never come back. Restoring the old wording turns it red.
+
+### Fixed (Revert stops looking exactly like Keep)
+
+- The Activity drawer lists every changed file with `Keep` and `Revert`. Revert **permanently discards** that file's changes — its own approval card says so, and for a new file it deletes the file outright. Measured in the live drawer, the two buttons were identical on **every** visual property: colour `rgb(238,240,251)`, background `rgba(0,0,0,0)`, border `1px solid rgba(255,255,255,0.1)`, weight 400, size 9.5px, padding `3px 6px`. The only difference was the 6px of width the longer word adds. A three-file run rendered six buttons that looked the same and meant opposite things.
+- Revert now takes `#ff9a9a` — **not a new colour**: it is what the failed-verdict rail and icon already use, so the drawer reads as one system rather than growing a second red. Confined to text and border at rest rather than a filled red button, because the drawer is for reviewing work and a shouty control there pulls the eye off the diff. Verified on screen before and after.
+- **The guard took three attempts to become capable of failing**, which is the part worth recording:
+  1. `\bcolor\s*:` also matches `border-color:` — `-` is a word boundary — so it passed on the border alone.
+  2. Matching any rule mentioning the attribute accepted the `:hover` rule, which would leave Revert looking like Keep until the pointer is already on it.
+  3. The parser treated everything between `}` and `{` as the selector, **including comments** — and the comment above the rule quotes the selector while explaining its specificity, so the test matched its own documentation.
+- Each was caught only by deleting the fix and watching the test still pass. It now fails on two assertions when the resting rule is removed.
+- A fourth test pins the source order: `.tc-code-change button:hover` and `.tc-code-change button[data-code-revert]` both score (0,2,1), so at equal specificity the later rule wins. Moving the shared rule below would silently return Revert to looking like Keep at the exact moment someone is about to click it.
+
+### Fixed (A run that was cut off says so, instead of blaming a check)
+
+- A Code run that hits its pass budget was summarised on screen as **"Thomas changed the project, but the final verification still failed after its repair attempts. Open the activity details for the failing check."** It never finished those attempts — it ran out of passes mid-work. The summary sent you to inspect a check when the useful action was to ask Thomas to carry on.
+- `failureSummary` is an ordered chain and the verification branch matched first. Being truncated is the **cause**; the failing check is the **symptom**, so the budget branch now runs ahead of it.
+- **The sentence that says what to do already existed and reached nobody.** `loop_execution.py` records *"Pass budget exhausted after 10 passes while work was still active. The task is incomplete; continue it in the same conversation."* — and it was filed as an open risk headed `error surfaced during the run`, behind a collapsed **Show details**, as one of *two* rows sharing that same generic heading. Confirmed by looking: `document.body.innerText` on the rendered page did not contain the words "Pass budget exhausted" at all.
+- The screen now reads **"Thomas ran out of passes while still working, so this task is unfinished. Ask it to continue in this same conversation."** Verified on the real study-planner run, before and after, by screenshot.
+- **It deliberately does not claim the project is fine.** The planner it was measured on was genuinely half-broken — three of its four sidebar sections never switch. *Unfinished* and *broken* are not exclusive, and only the first is knowable from a truncated run.
+- Both directions, and the second assertion is the one that keeps this honest: a run that genuinely did finish its repair attempts must keep its own message, or this trades one wrong summary for another. Making the new branch unreachable fails with `a truncated run was reported as one that failed its repair attempts`.
+
+### Fixed (A second permanently-red test, same shape as the first)
+
+- `test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts` required the literal `' · unavailable on this connection'` — with a leading middle dot, from when a model row's status was an inline suffix after its name. The picker rows are now two lines, with the status in its own `display:block` span under the name, so the separator was correctly dropped and the literal became unreachable.
+- **Checked on screen before changing the test**, because the other reading — that the UI had genuinely lost its separator and was running words together — would have meant fixing the code instead. The open picker shows *"GPT-5.6 Terra"* over `openai_codex` and *"gpt-4o-mini"* over `needs key`. The layout is right; the assertion was stale.
+- Now pinned to the behaviour — an unavailable model still says so, and the status still reaches the row it describes — rather than to one spelling of the surrounding punctuation. **Verified it did not become a test that cannot fail**: deleting the unavailable notice from the picker turns it red.
+- This is the second one found this way, after `test_marketplace_uses_native_runtime_shell` (red 2026-07-21 to 2026-07-30, killed by a decorator wrapping the call it pinned). Both were red for over a week, both because a test named one exact spelling of something that legitimately got rewritten.
+
+### Fixed (A saved reply reports the model that wrote it)
+
+- Every assistant message in a restored conversation was labelled with **whatever model is selected in the picker right now**. `mapRealMessages` stamped `state.modelLabel || 'GPT-5.6 Sol'` on each one and discarded the model the conversation row actually carries.
+- Measured on the live store: **370 of 476 saved chats record a real model, across eight of them** — 185 `gpt-5.6-sol`, 136 `codex`, 37 `openai_codex`, 5 `local`, 4 `qwen2.5-coder:7b`, plus `gpt-5.5`, `gpt-5.6-terra` and `gpt-5.6-luna`. All 370 were displayed as the current selection. Opening the chat *"Make agame"* — answered by `codex` — with Terra selected put **"GPT-5.6 Terra"** on screen under Thomas's name. Verified by screenshot before and after; it now reads **"codex"** while the picker still correctly shows Terra.
+- The **raw id** is shown rather than a prettied name. It is what was recorded, and inventing a display name for a model that is no longer in the picker is how the wrong label got here.
+- The **106 rows with no recorded model now show nothing at all**, instead of borrowing the current selection. The honest answer to "which model wrote this" is sometimes "not recorded" — the same reason the run report has a *Nothing was checked* state rather than dressing an unknown up as a pass. Checked on screen: the header collapses to just the avatar and "Thomas", with no empty chip or dangling gap.
+- Three live-message paths kept `state.modelLabel || 'GPT-5.6 Sol'` as a fallback, which would reassert the same claim whenever the model list failed to load; they now fall back to no label. The picker's own pre-load placeholder was the literal `GPT-5.6 Sol`, which survives a failed `/api/profiles` fetch and would sit there naming a model nobody selected — it is now neutral.
+- Guarded by a node harness that **executes the real function** rather than matching its spelling, with a `state.modelLabel` deliberately set in scope. Both directions, on both variants: restoring the original bug turns `codexKeepsItsOwnModel` red, and the subtler `answered || state.modelLabel` — which passes that check — is caught by `unknownIsNotInvented`, because a truthy row model hides it.
+
+### Fixed (The smoke clicks the navigation and reports whether anything happened)
+
+- A generated app's most common real failure is the **convincing shell**, and nothing was looking for it. The delivered "calculator for ideas" shipped a five-item workspace sidebar — Calculator, Conversions, Graph studio, History, Saved formulas — where the script never mentions "conversions" or "graph" at all and not one of the five carries a handler. Every check passed it, *correctly by its own terms*: the page boots, raises no errors, and its keypad genuinely works. Verification was `boot only`, so it clicked nothing, and nobody found out until a person clicked a tab.
+- The browser smoke now clicks up to 8 navigation controls (in an `aside`/`nav`/sidebar scope, excluding start/pause/reset wording that the existing probes own) and compares an observable signature before and after each one.
+- **Reported as a note with counts, never a failure.** Which control is navigation is guessed from position and wording, and a tab that is *already* the open one correctly changes nothing when clicked. It is good evidence when things do change and weak evidence when they do not, so it states the numbers rather than reaching a verdict — a check that cannot separate "broken" from "already there" must not be allowed to fail a good page, or people learn to ignore the line.
+- The signature is not canvas-only: it hashes `body.innerText` and every control's text, visibility and disabled state, so a sidebar that swaps a **panel** registers as working. A page with no `<canvas>` degrades to `""` rather than reading as inert.
+- Both directions are tested, and the second test is the one that matters: `test_navigation_that_works_is_not_called_decoration` builds a sidebar whose tabs genuinely switch and asserts the word `decoration` never appears — flagging working navigation would be worse than never printing the line. Neutering the probe turns both red, the failure reading `index.html: browser boot clean; boot only` — the exact string that let the calculator shell through.
+
+### Fixed (Reverting a file removes it from the file list too)
+
+- Reverting a **new** file deletes it, but `changeAction` only re-read the *changes* list — so the drawer's Files section went on offering a file that no longer existed. Measured after an approved revert: the change row cleared, the tree still listed `scratchpad.html`, and the server answered `entries: []` with the artifact route returning **404**. The UI was the only thing that still believed in it.
+- The file list is now re-read after a change action, preserving the current folder so a revert does not also walk the reader back to the project root.
+- **Its failure is reported on its own rather than thrown.** The revert has already succeeded by that point, and letting a stale-list problem reject would report a change that happened as one that did not — the exact class of lie this session has been removing. Tested: a `/tree` that answers 500 still returns a successful revert.
+- **The approval surface itself is sound**, and this was the first look at it. `Revert` raises an `role="alert"` card reading *"Approval required — Revert scratchpad.html? This permanently discards its current changes."* with `Approve once` / `Cancel`. Verified both outcomes rather than just the prompt: **Cancel** dismisses and leaves the file; **Approve once** dismisses and the file is genuinely gone from disk, the tree and the changes list.
+- An existing scenario's fetch stub gained an explicit `/tree` handler, so it exercises the happy path instead of silently landing in its own "unexpected fetch" throw and passing only because the new call catches its own errors.
+
+### Fixed (A stopped run stops calling itself "working")
+
+- After pressing Stop, the turn header read **"Thomas · Code · working"** directly above its own note saying **"Stopped — you interrupted this run."** Measured: status `Stopped`, the turn still carrying `is-live`, the `::after` suffix still `" · working"`. The class drives that suffix and was set for as long as a live turn existed at all — which outlives the run. It now follows `state.running`, the same condition the steer form already used to hide itself on stop, so the two agree instead of contradicting each other.
+- **A raw `DONE / done` row** rendered beside it: the stream's `done` event carries the literal string "done", so the feed grew a line whose text only repeated its own heading. Transient during a normal run, but left sitting in the transcript after a stop, where it reads as debug output.
+  - Dropped when the label adds nothing to the kind — **not** by removing the event kind, so a `done` that ever carries real text still gets its row. Both cases are tested.
+  - Placed in `progressEvents`, the seam both paths share. Putting it in `narrativeActivityHtml` first fixed the saved transcript and left the live feed untouched, because the live feed maps `eventHtml` straight off that list — measured, and the reason the second attempt exists.
+- Reverting either fix independently turns the harness red: `a stopped run still calls itself working`, `the empty DONE row is still rendered`.
+- **Steer and Stop both work.** Apply showed `Confirming…` with the input disabled, a `STEERING` event reached the run, and it continued to completion; Stop moved the run to `Stopped` in under 4 seconds with the composer usable again and no page errors. Neither had been pressed before this session.
+
+### Fixed (A previewed file is a miniature, not a keyhole)
+
+- Clicking a file in the drawer's tree rendered the page **1:1 into a ~247px column**: "Sort by amount" cut to "Sort by", the table header reading `DATE DESCRIPTION AM…`, about a fifth of the page visible and every edge sliced mid-word. It reads as a broken render rather than a preview.
+- **This is the exact bug the artifact thumbnail had and had already fixed.** `.tc-code-artifact-shot` was given a fixed box and a fixed scale; `.tc-code-file-preview` is a different element, so the fix never reached it. Same treatment now applies to both.
+- The document renders at **900px wide, not 1280**: the scale is pinned by the box width (`248/900`), so a *narrower* document renders **larger** in the same frame. At 1280 a page that centres itself vertically sat as a small card adrift in white. 900 is still comfortably desktop, well clear of the narrow breakpoints pages actually use.
+- **The invariant is now a test, for both shots:** document width × scale must equal box width. Get that wrong and it is a keyhole again — the same defect wearing a transform. Setting the file shot to the thumbnail's scale (900 × .19375 = 174px into a 248px box) fails it.
+- Found by clicking a file in the tree for the first time. The previous attempt had failed with `<aside class="tc-code-viewer"> subtree intercepts pointer events` — which was itself the evidence for the viewer bug fixed in the commit before this one.
+
+### Fixed (The viewer opens beside the chat, as its own label promises)
+
+- The artifact card says **"Click to open it beside the chat"** and the viewer's own stylesheet comment says *"beside the conversation"* — but `.tc-code-viewer` is `position: absolute`, so opening it moved nothing. Measured at 1920 wide: the transcript stayed **768px at x=716** while the viewer covered from **x=1160** — **324px of the conversation underneath it**, clipping **300px off every line** of Thomas's reply, mid-word (`…correct running b`, `…orders transactions s`).
+- The layout now reserves the viewer's width when one is open. After: transcript at x=336, right edge 1104, viewer at 1160 — **0px overlap, 0px clipped**. Reserved with padding on the shared row rather than by resizing the transcript, so the drawer keeps its own width.
+- Reserved with the **same expression the viewer uses** for its width (`min(760px, 62vw)`), and a test asserts the two match — a reservation that guesses at the panel's width is a gap waiting to reopen.
+- **Full-bleed is excluded on purpose:** it covers the surface deliberately, and squeezing a layout nobody can see would only make reopening it jump. Verified — the panel drops the class when the viewer goes full.
+- Found by clicking the card for the first time. I had looked at those cards a dozen times this session and never pressed one.
+
+### Fixed (The drawer told you to choose the project it had just named)
+
+- The Activity drawer's Files section printed **"Choose a project beside Tools to browse its files."** whenever the list was empty — and an empty list has **three** different causes, of which it named one. Measured on a new task: for **45 seconds, the whole run**, the drawer header read `Code task 2026-07-30 1018` while the list directly beneath it told you to choose a project. Also on screen before sending anything.
+- The header had always used `state.projectRoot` for exactly this decision (`state.projectRoot ? label : 'Choose a project'`). The list simply never asked. Both now agree.
+- A new `treeLoaded` flag separates the other two causes, which no existing field could: **"Loading files…"** while a fetch is outstanding, **"This folder has no files yet."** once it has returned empty. Saying "no files" while still loading would have been the same guess in a new coat.
+- Re-measured: **0 seconds** of contradiction. Controls verified — with no project chosen the original sentence is still exactly what shows, and with real entries no message renders at all. All four states are pinned in the Node harness; restoring the single hardcoded message fails it with `told the reader to choose a project that is already chosen`.
+- Found by watching the drawer during a live run, a state it had never been looked at in: the "Steer Thomas" form and Stop button only exist while `state.running`.
+
+### Fixed (The starter cards no longer sit above a running task)
+
+- **"What should we make?" and its four starter cards stayed on screen for the entire first run of every new conversation** — measured at **76 seconds, every single sample** — sitting directly above the live "Thomas · working" turn, while the question just asked was nowhere on screen. On the most common path there is: a new user's very first Code task.
+- The empty state was chosen by *"are there saved turns"* and the live turn by *"is a run going"*. On a brand-new conversation both are true at once, so both rendered. They are now decided by the same hoisted flag and cannot disagree.
+- Re-measured after: **0 seconds** with both on screen. Controls verified too — the empty state and its four cards still appear when nothing is running, and still disappear when a conversation with turns is opened. A fix that simply deleted the empty state would have passed the first check and broken the surface it exists to introduce, so the harness asserts both directions.
+- Found by watching a run stream, which I had never done: the live rendering path was one I had changed (markdown) and never looked at. It also confirmed the live path renders markdown correctly — a streaming note produced `<code>` at t+36s and the live reply rendered at t+42s.
+- **Still missing, and not fixed here:** the user's own message is not echoed during that first run (`userBubble=False` throughout). Showing it needs new state plus careful clearing to avoid a duplicate bubble once the conversation reloads — separate scope, deliberately not half-done.
+  - **Fixed since in `d1745d77`** (see *Fixed — The page you send from now shows you your own message*, above). The careful clearing this bullet was holding out for turned out not to be a clear at all: the message is echoed from `state.pendingUserText` and simply **not drawn** once the server's copy is in `turns`, decided at render time, so neither zero bubbles nor two is reachable.
+
+### Fixed (Progress notes showed their markdown too)
+
+- The same defect as the replies, one block up the turn: **39 of 71 real progress notes carry backticks or bold**, and every one printed them raw — `then build a self-contained \`report.html\` with CSV parsing`.
+- Uses the **inline** renderer, not the block one, because these render inside a `<span>`: it emits `<code>`/`<strong>`/`<em>`/`<a>` and nothing block-level, so it drops into the existing markup with no container or stylesheet change. Only 11% of notes carry bullet lines, and a leading `- ` left as a literal dash reads fine in prose. Verified after the change: `<code>` present, **zero** `<p>`/`<ul>`/`<ol>` inside the span, zero raw backticks.
+- **Raw tool output is deliberately excluded and now pinned by a test.** Technical rows carry command output, where a backtick or asterisk is a character rather than formatting; those stay escaped and literal.
+
+### Fixed (Code replies showed their markdown instead of rendering it)
+
+- **`Built it as a standalone **Nova** calculator experience in \`index.html\`.`** — that is what the Code surface printed, asterisks and backticks and all. **16 of 17 real Code replies carry markdown**, so nearly every one read as punctuation noise. The identical prose in Chat rendered properly: Chat runs `mdToHtml`, Code ran `esc`. Same model, same sentence, two treatments.
+- Code now uses **Chat's renderer**, exposed rather than copied — for the same reason there is exactly one `esc` in these files: a second implementation is how one of them stops escaping.
+- **Verified inert, not assumed.** `_mdInline` escapes first (`s = esc(s)`) and only then introduces tags, and its link rule accepts `http(s)` alone. Driven with a reply carrying `<script>`, an `<img onerror>` and a `javascript:` link: **0 script elements, 0 imgs, no anchor minted, `window.__pwned` never set**, and the tags visible as ordinary characters. Markdown still rendered alongside.
+- That escape-first property is now pinned where it lives — moving it after the replacements turns the test red, and it would make Chat and Code injectable from model output at once.
+- Falls back to the plain escaper when no shell is present, which is what the Node contract harness gets; and the export is guarded with `typeof window !== 'undefined'`, because that harness evaluates chat.html's script in a VM with no `window` and an unguarded assignment took it down.
+
+### Changed (The verdict names which requirements went unchecked)
+
+- **A gap I introduced.** The headline now reads "Not checked against your ask" — and the answer to *which* ones sat behind **two closed disclosures**, under a section headed "Rubric mapping" that gives no hint it holds it. Measured on the ledger run: `closedDisclosuresToOpen = 2`, on a card whose entire point was that six things went unverified. A verdict that names a problem without naming its subject is half a message.
+- The card now carries a third, quieter line: `Not checked: Opening balance is 1000.00 · These six transactions, in this order:`. These are the things to try by hand.
+- **Two names, not three** — found by looking at it. Three fitted the box only by starving the last one: against real criteria it rendered `… · So there are 3 visible headers over 4 visib… · A…`, a stub that names nothing and reads as damage. Two clipped at 38 characters keeps both legible and the line stops overflowing entirely (393px in a 548px box).
+- **No trailing "+N more"** either: the line is ellipsised when it overflows, so a suffix is the *first* thing cut — measured at 548px with "+3 more" invisible. The count it would have carried is already spelled out one line above, so the honest total survives and clipping only ever costs detail.
+- Guarded by three tests, including one that fails on the stub regression: every name shown must carry at least 20 readable characters. Reverting to three names turns it red.
+
+### Changed (The browser smoke boots one viewport, and that is now written down)
+
+- **A deliverable's layout can be wrong only at one width, and the smoke would never know.** `web_artifact_smoke` boots every page at `--window-size=1280,900` and nowhere else, so a page that is right at 1280 and wrong at 390 passes exactly like a page that is right everywhere.
+- Found by hand on a real deliverable. `ledger.html` — a running-balance statement — hid its `Description` **header** at narrow widths while leaving the Description **cells** visible: three headers over four columns, each shifted one place left. `AMOUNT` sat over "Salary", `BALANCE` sat over "+$2,400.00", and the real balance column had no header at all. A financial table labelling a description as an amount is worse than one that is merely cramped. At 1280 it was perfectly aligned.
+- **Deliberately not half-fixed.** Booting a second narrow pass is cheap, but the check that would actually catch this — visible header count versus visible column count — belongs in the in-page probe in `web_artifact_smoke_assets.py`, which another agent is editing. Adding the viewport without the assertion would double the smoke's cost and still find nothing. Recorded as a measured comment at the exact line instead.
+- Thomas repaired the deliverable itself in ~20s when shown the symptom; all four headers now align at 1920, 768 and 390, and the ledger's 11-check arithmetic audit still passes.
+- Also checked and **not** a defect: Nova's narrow-width nav strip looked clipped, but it is `overflow-x: auto` and every destination is reachable by scrolling.
+
+### Fixed (The icon guard could not see the icon it was written for)
+
+- **`test_every_icon_the_ui_asks_for_is_drawn.py` skipped every class name assembled at runtime** — `ph-${...}` — on the documented reasoning that the names such a template can produce "are checked on their own merits wherever they appear literally". That reasoning did not hold. Of the **seven** names reachable only through those templates, **five never appeared literally anywhere in the guarded sources**: `ph-check-circle`, `ph-terminal-window`, `ph-info`, `ph-corners-in`, `ph-corners-out`.
+- Among them, `ph-check-circle` — the icon that file's own docstring cites as appearing **18 times in a single transcript's activity log**. The guard written because of check-circle could not see check-circle.
+- **Proved, not argued:** injecting `ph-${ok ? 'totally-not-a-real-glyph' : 'warning'}` into `reportRow` left all three tests green while the live page rendered `content: "•"` on every "Check passed" row of every run report.
+- Fixed at the source rather than by making the scanner cleverer. A cleverer scanner would have to distinguish a value-side literal from a condition-side one in `tone === 'is-bad' ? 'warning-circle' : …` and keep getting that right; instead all six sites now interpolate the **whole** class name (`${ok ? 'ph-check-circle' : 'ph-warning'}`), so every name is a literal the existing scan already covers.
+- A new assertion forbids the un-analysable shape outright, so the hole cannot be reopened. Re-injecting the same bogus name now fails it. Verified on screen afterwards: 14 `ph-check-circle`, 6 `ph-warning`, 1 `ph-info`, 1 `ph-terminal-window`, and **zero** rendering as a bullet.
+
+### Fixed (A run no longer prints the same paragraph twice)
+
+- **A run that emits more than one `final` event showed the earlier one as narrative, word for word beside the `say` that had just streamed the same text.** `finalReplyEvent` takes `.at(-1)`, so only the LAST `final` is recognised and filtered; an earlier one fell straight through. Measured on a real failed run: two adjacent blocks with **byte-identical 476-character labels**, one headed `UPDATE` and one headed `THOMAS`.
+- Deduped on the label, keeping the **first** occurrence — not by dropping every non-last `final`, because the two finals in that run said different things and one of them was the only place its text appeared. Technical rows are exempt: repeated tool output *is* the log, and collapsing it would hide real repetition rather than noise.
+- Swept 14 real conversations after the change: **0 duplicate pairs, 0 conversations left without a reply, none emptied.**
+- Guarded by a new scenario in the existing Node lifecycle harness, which renders a crafted turn through the shipped `turnHtml` and counts occurrences — a real behavioural test, not a source grep. It also asserts two *distinct* steps survive, so the dedupe cannot regress into swallowing content. Reverting the filter fails it with `narrative rendered the same text 2 times, expected once`.
+
+### Fixed (A Code conversation opens at its newest turn, not its oldest)
+
+- **A transcript that overflowed opened at `scrollTop: 0`**, so the run report — the newest thing on the page and the entire answer to "did it work" — sat below the fold and had to be hunted for. Measured on a real conversation: **702px of unscrolled overflow** with the verdict card at y=1419 inside an 868px scroller, identically via the sidebar click and via `/?forge_code=<id>`. After: `scrollTop` 702, `fromBottom` 0, card at y=717 and visible, on all four paths.
+- Short transcripts were already right, because `margin-top: auto` pins them to the bottom — which is exactly why this only bit long conversations and went unnoticed.
+- Scrolls twice: immediately after render, and again once artifact thumbnails hydrate. A preview that resolves late grows the transcript underneath the first jump and would otherwise leave the newest turn just short of the bottom — the same bug, quieter.
+- **The first version of the guard did not catch its own regression.** Deleting the immediate call left the one inside the thumbnail `.then()`, so the test passed *and* the browser still scrolled. The two call sites are now asserted separately, and removing either one turns 2 tests red — verified in both directions, one site at a time.
+- `requestAnimationFrame` is guarded: `unified_code_mode.js` is also loaded by a Node contract test that stubs a DOM without it, and the unguarded call took that test down with a `ReferenceError`.
+
+### Fixed (Finishing a run is not the same as satisfying what was asked)
+
+- **The rubric's first row restated the user's entire goal and stamped it `met`** — on the strength of a zero exit code and a git delta, nothing more. Read by a person, `complete the requested goal: … Start, Pause and Reset buttons that all work → met` asserts those buttons were checked. Nothing checked them, which is exactly why every sub-criterion directly beneath that row is honestly `unverified`.
+- The row now says what it can actually see: **`the run finished without error`**. The goal text moves into the evidence, so nothing is lost — and the requirement rows underneath still carry the ask itself.
+- The comment already in `run_report.py` had named this ("finishing is not the same as satisfying") when the `unverified` rows were made reachable for prose goals. The top row was the one place still overclaiming.
+- Two existing tests asserted the goal appeared in `rubric_mapping[0]["criterion"]`. They were **followed, not weakened** — the property they protect is that the rubric is bound to *this* conversation's goal, and they now assert it against the evidence where it lives. Reverting the change turns 4 of the 5 new tests red.
+
+### Fixed (Three icons were emoji stickers that ignored the theme, and dead navigation now raises a risk)
+
+- **`ph-check-circle` was `\2705`**, an emoji-presentation codepoint. The browser paints those with the colour-emoji font and CSS `color` does nothing — so `.tc-code-technical > i { color: var(--c-accent) }` produced a bright green sticker **43 times in a single Code transcript**, next to three-word grey rows on a muted surface, and again on the run-report card where the state rail was violet and the tick beside it green. Measured in situ: css colour `rgb(139,140,255)`, 156 of 570 lit pixels green-dominant. Now `\2713`, which takes the colour it is given — re-measured at 0 of 568.
+- `ph-lightning` (`\26A1`) and `ph-paperclip` (`\1F4CE`) had the identical problem. Found by rendering all 108 glyphs at a known colour inside the live shell and reading the pixels back; they were the only other two. Now `\2607` and `\1F587`, the text-presentation forms.
+- New guard `tests/test_no_icon_ignores_the_theme_colour.py` — the sibling of the existing "every icon is drawn" test. That one catches a name with no glyph, which renders as a bullet; this one catches a glyph that refuses to be styled. Both are "the stylesheet said something and the screen did something else", and neither appears in the DOM. It also pins its own detector, and refuses to run against an empty parse.
+- **A page whose entire navigation does nothing now raises an open risk.** The browser smoke already clicks navigation controls and compares before/after — verified directly: a page with unattached handlers produces `clicked 3 navigation control(s) and the page never changed; the navigation may be decoration`, and returned **ok**, so the sentence that mattered rode along inside a passing check. That is the Nova calculator exactly. Promoted to a risk, not a failure: unwired navigation is a normal midpoint of a build, and failing the run would send the repair loop after a half-finished feature instead of the goal.
+  - Only the "none of them did anything" phrasing is promoted. The smoke also reports `1 of 5 navigation control(s) changed nothing`, which is the normal reading for whichever destination is already active — flagging that would fire on every correct page.
+
+### Fixed (A file the verifier only decoded is not a file it checked)
+
+- **A syntactically broken TypeScript file verified clean.** `_VERIFY_SRC` in `build_verify.py` has a real arm per extension it understands — `py_compile` for `.py`, `node --check` for `.js`, an HTML parse, a JSON parse — and a fallback arm for everything else that does nothing but `raw.decode('utf-8')`. Whole languages land there: `.ts`, `.go`, `.rs`, `.sh`, `.sql`, `.md`. Measured: a file containing `const x: number = ;;; broken(((` produced `STATIC_VERIFY_OK: 1 files checked` and a passing validation.
+- The per-file lines were always honest — `compiled` / `parsed` / `checked` for the real arms, `read` for the fallback — so only the total lied. It now reads `0 files checked, 1 read only`, which is a statement someone can act on. A mixed change reports `1 files checked, 1 read only`.
+- **Deliberately still exits 0.** Reading a text asset is a weak check, not a failure, and failing the run would break every task that legitimately emits a `.md` alongside its code. The count was what was wrong.
+- Format is unchanged for files that really are checked, so `STATIC_VERIFY_OK: 2 files checked` still holds for an html+js change and the existing assertion in `test_evolve_claude_bridge.py` still passes.
+- `tests/test_a_file_only_read_is_not_a_file_checked.py` names `.ts`/`.go`/`.rs`/`.sh`/`.sql` one by one, so adding a real check for any of them is a deliberate act that turns a test red rather than a silent change in what "checked" means. It also pins the direction that matters most: a broken `.py` still fails the run. Reverting the count turns 7 of its 9 red.
+
+### Fixed (A check the engine skipped is not a check that passed)
+
+- `passed` is derived server-side from the *absence of an error* (`run_report.py`: `"passed": event.get("is_error") is not True`). When no browser is installed, `smoke_html_artifacts` returns `attempted=False` and `build_verify` emits `BROWSER_SMOKE_SKIPPED: …` with `is_error` unset — so a check that never ran reaches the card flagged as passing, and was counted in "2/2 checks passed". The evidence string said `SKIPPED` all along; nothing read it.
+- The card now separates the two: `1/1 check passed · 1 check skipped`. A run whose *only* check was skipped reads **`Nothing was checked`** rather than `Checks passed` — verified by blinding the matcher and watching exactly that false green come back.
+- The tone was never wrong here: `run_report._unopened_page_risks` already raises "a changed page was never opened in a browser" for this case, and distinguishes "the browser check was skipped" from "no browser check ran". Only the count was wrong.
+- **Latent, and said plainly: this is not reproducible on this machine.** Chrome is present, so 0 of 47 real reports carry a skip, and the live cards are unchanged by this. On a fresh install without browsers, every web run would have read "2/2 checks passed" with one of the two never having run.
+- The matcher keys on the engine's own `*_SKIPPED` marker, not the word "skipped", which appears in unrelated real evidence such as `STATIC_VERIFY_OK: 2 files checked, 1 skipped`. That over-firing case is its own test.
+
+### Fixed (A deliverable's link back to the conversation that built it now arrives)
+
+- **Every "Open Source Chat" button in My Stuff was a no-op for nine days.** A deliverable's deep link is minted as `/?forge_code=<cid>`, and nothing on `/` read it. The only consumer shipped inside the split runtime, which is pulled by `index.html` — served at **`/classic`**, not `/`. Measured before the fix: `/?forge_code=<real cid>` landed in **Chat** mode, no conversation selected, zero turns, parameter still sitting in the URL. No error, no hint anything had been asked for.
+  - Correction to the standing assumption: the consumer was **not** retired or orphaned. It is live and works at `/classic?forge_code=<cid>` — confirmed by watching it open the deliverable there. The link simply named a path whose shell cannot read it.
+- The live shell now consumes the parameter on boot: `unified_code_mode.js` switches to Code mode and opens that conversation, and strips the parameter first so a failed load is not replayed on every refresh. Verified end-to-end through the real button — My Stuff → Details → Open Source Chat → lands in Code mode on the countdown task, 2 turns, URL cleaned — and with two different conversation ids, so it is not keyed to one.
+  - `/classic` keeps its own consumer: a separate page that still works when reached directly, not a second copy racing this one on the same surface.
+- **The existing test could never have caught this.** `tests/test_forge_code_deliverables.py:36` asserts `entry["deep_link"] == "/?forge_code=fc_123"` — a string comparison against a dict the function under test just built. It resolves no route and runs no JavaScript, so it would have stayed green if the consumer were deleted, if `/` were rewired, or if the param were renamed. The only green check measured the producer against itself.
+  - New guard `tests/test_deliverable_deep_links_reach_the_live_shell.py` crosses the three places that had drifted: the Python that mints the link, the route that decides which shell answers `/`, and the scripts that shell actually loads. Removing the wiring turns 3 of its 4 tests red.
+  - Two mistakes in writing that guard are recorded in it, because both were the bug it hunts: resolving `/static/js/*` against the wrong directory made it report "no reader" for all 13 scripts, and matching a bare `forge_code` substring matched a *comment* mentioning `forge_code_projects.py`. Unresolvable scripts are now a hard failure rather than a skip.
+
+### Fixed (Three assertions in one file were pinning text nobody writes any more)
+
+- **`test_marketplace_uses_native_runtime_shell` had been red since 2026-07-21** — nine days. It required the literal `moduleRenderMarketplaceSurface(moduleQueueList);`, semicolon straight after the paren. Commit `037bba3c` wrapped that call in `moduleApplyMarketplaceUiContracts(...)`, so the literal became unreachable and the test could never pass again. Nothing had regressed. A permanently-red test is how a real regression gets ignored, because the file is already failing when the real one lands.
+  - Now a regex pinning the *behaviour* — the marketplace branch renders the native surface into `moduleQueueList` — which tolerates a decorator but still fails if the call is removed or retargeted. Proven by injecting that regression into the live runtime and watching it go red, then restoring.
+  - Deliberately **not** fixed by repointing the reader at `app_runtime_primary.mjs`, which still contains the original undecorated literal at line 41599: that would have turned the test green while measuring a bundle no page loads.
+- **`_read_all_runtime_js()` returned `""` when the runtime directory was missing**, and its two callers assert four `not in` conditions against that string. Every one of them passes vacuously against `""`. Renaming or moving `js/runtime/` would have turned assertions green instead of red — the same empty-read-as-clean shape the run report had. It now fails loudly on a missing directory, no files, or an implausibly small corpus (the real one is 3.1M chars). Both guard paths verified by pointing it at an empty tree.
+- **`test_my_stuff_surface_is_wired_into_runtime_shell` was red too**, on two more stale literals: the board heading was recased to `Project board`, and My Stuff stopped POSTing to `/api/v2/chat` when it moved to handing the project to the shell via `data-open-workspace-chat`. Both assertions now follow the capability (a stable `data-ui-id`, and the delegation control) rather than retired copy and a retired endpoint.
+
+### Fixed (A run cannot call itself passed on requirements it never checked)
+
+- **Your "Nova" calculator shipped with a green ✅ `Checks passed`, and almost nothing in it worked.** Driving it by hand: the five left-nav destinations (Conversions, Graph studio, History, Saved formulas, Calculator) do nothing at all, the advertised `Ctrl+K` "calculate in plain English" palette does not exist, both header icon buttons are inert, `Clear` on Recent calculations does nothing, the three "recent calculations" are hard-coded HTML, the `Growth rate` chip returns `Error`, and `200 + 10 %` returns **2.1** because `%` divides the whole expression instead of the last operand. The keypad arithmetic is correct — which is why testing only arithmetic found nothing.
+- **The report was honest; the headline was not.** Its two engine checks did pass, the second with evidence reading `browser boot clean; boot only` — it loaded the page and clicked nothing. Its own `rubric_mapping` carried `status: unverified`, saying no individual requirement had been extracted or checked. But the verdict was computed from `validations` alone, so the one honest signal in the report never reached the face of the card and sat inside a collapsed section instead.
+- The verdict now reads **`Not checked against your ask`** with the muted "we don't know" tone, over `2/2 checks passed · 1 requirement unverified · no open risks`. What *did* pass is still said — this is a truthful verdict, not an alarming one. A failed check still outranks it, and open risks still show regardless of which headline wins.
+- **It discriminates rather than blanket-warns.** Across the 43 real run reports on this machine it moves **7** off a false green, leaves the **5** that genuinely verified their requirements reading `Checks passed`, and does not touch the 24 already reading `Nothing was checked` or the 7 already reading failure. A green verdict stays reachable, which is what makes the new state mean something.
+- Guarded by `tests/test_the_run_report_verdict_tells_the_truth.py`, which executes the shipped `unified_code_results.js` in a real browser and asserts on rendered markup — seeded with the verbatim Nova report — rather than grepping the source for a keyword. Removing the fix turns 2 of its 5 tests red.
+
+### Changed (A conversation sits where you're reading, and the drawer shows the whole page)
+
+- **A conversation shorter than the window was pinned to the top**, stranding the newest message above a gap — measured at 1080p, **175px** of empty surface between the last turn and the composer, with nothing to scroll. A conversation reads bottom-up in time, so the newest thing now sits beside the box you reply in (116px, of which 86 is deliberate padding).
+  - `margin-top: auto` on the turns block, not `justify-content: flex-end` — the latter makes the top of an overflowing transcript unreachable. Once content exceeds the surface the rule has no effect and normal scrolling takes over. Scoped with `:has(.tc-code-turn)` so the empty state stays centred, and browsers without `:has()` keep the old behaviour.
+- **The Activity drawer rendered a preview of what Thomas built at 1:1 inside a ~280px column.** A layout designed for ~1200px wide came out as a zoomed crop of its top-left corner, cut off mid-sentence — it reads as a broken render, not a preview. Same keyhole mistake the result card thumbnail had.
+  - It is now a miniature of the whole page: a fixed 248×155 box with the document rendered at 1280×800 and scaled to `0.19375`. Fixed box and fixed scale rather than percentages, so it is deterministic at any drawer width (the drawer is resizable, 280–520px) instead of drifting with it.
+  - Verified live: the drawer now shows the calculator's sidebar, heading, keypad and side panels together and legibly.
+
+### Changed (The run report says what happened instead of counting things)
+
+- **The line that answers "did the thing I asked for actually work" was a 301×28 grey strip**, styled exactly like the technical log rows around it. It read as a footnote when it is the headline.
+- **It also counted without concluding.** `Run report · 1 pass · 2 checks · 0 open risks` — "1 pass" means one *edit* pass, and reads as one test passing. It now leads with a verdict: **Checks passed** / **Some checks failed** / **Checks failed** / **Passed, with things to look at**, then the numbers underneath as `2/2 checks passed · no open risks`.
+- **"Nothing was checked" is its own state**, and the point of the change. A run with no validations at all must not look like a run that passed — that confusion is the whole reason the report exists. Seen live on your failed calculator run: it now reads `Nothing was checked · 3 open risks` where it used to say `1 pass · 0 checks · 3 open risks` and bury it.
+- Given a card with a coloured state rail (accent / amber / red / muted) and its own mark, so the verdict is legible before a word of it is read. 680×62 instead of 301×28, sitting directly under the result it describes.
+- Verified live on both real conversations: the passing calculator run renders `is-good` with "Checks passed / 2/2 checks passed · no open risks"; the provider-overloaded run renders `is-unknown` with "Nothing was checked / 3 open risks".
+
+### Added (A blank Code surface now shows you where to start)
+
+- **An empty Code surface was one line of encouragement above roughly 700px of nothing.** Measured on a 1920×1080 screen: the hero sat near the top and nothing else occupied the view down to the composer. It told you to "describe the outcome" without showing what a good one looks like.
+- Four starting points now sit under the hero — a small game, a chart from data, a little tool, and work on an existing project — each with the real prompt behind it.
+- **They fill the composer rather than sending.** A starter is a suggestion to edit, and a click that quietly spends a model call on a prompt nobody read is a worse surprise than one extra keystroke. Verified: clicking "A chart from data" loads the full prompt into `#tc-input`, fires its `input` event so the send button enables, and focuses the caret at the end.
+- **Laid out 2×2 rather than `auto-fit`.** With four cards `auto-fit` produced three across and one orphaned underneath, which reads as a wrapping accident rather than a layout; a 2×2 block stays symmetrical under a centred hero at any width, and collapses to one column under 720px.
+- The intro paragraph was styled by `.tc-code-empty > span:last-child`, which the new grid displaced — it now carries its own class, so adding anything below cannot silently unstyle it again.
+- **The icon guard added minutes earlier caught a mistake in this very change**: `ph-app-window` on the third card had no glyph and was rendering as a bullet on screen. Mapped, re-checked live — all four card icons draw (`▶ ↗ 🗔 ⚒`).
+
+### Fixed (Thomas had no face — 17 icons in Code were drawing a dot)
+
+- **Thomas's avatar was a bullet.** `ph-robot` sits on every message he sends and in the Code empty state, and it had no glyph, so it fell through to the `\2022` catch-all at the top of `chat_shell.css`. So did `ph-check-circle`, drawn **18 times in a single transcript** — once per "Checked tool result" row in the activity log.
+- **Thomas's icons are a hand-written glyph map, not the Phosphor webfont** (deliberately — the shell must boot offline). That map opens with a catch-all, so a class the markup uses but the map never defines renders a meaningless dot. The element is there, the class is right, the layout is correct, every test passes. **A missing icon is invisible, not broken.**
+- Found by diffing every `ph-` class the Code surface references against the names the map defines: **17 unmapped**, including `ph-robot`, `ph-files` (the "N files changed" row), `ph-warning-circle`, `ph-play-circle`, `ph-folder-open`, `ph-image`, `ph-circle-notch`, `ph-caret-up`, and `ph-folder-simple` — the project-chip icon added earlier the same day, which had been shipping as a dot.
+- All 17 are mapped, plus ~30 more the shared surfaces reach for (status marks, arrows, files, shields, git). Verified live on a 1920×1080 screen with every panel and `<details>` expanded: **207 icons rendered, zero bullets.** Thomas's mark is now `✦`.
+- `tests/test_every_icon_the_ui_asks_for_is_drawn.py` pins it, and is honest about its limits: it proves no icon is a dot, not that any glyph is a *good* symbol — only looking can do that. It also pins the premise (the catch-all exists, so an unmapped name degrades to a bullet rather than to nothing) and skips classes assembled at runtime like `ph-caret-${up|down}`, whose real halves are checked wherever they appear literally. Confirmed to fail when `ph-robot` is removed.
+
+### Changed (What Thomas built opens beside the conversation, not inside it)
+
+- **The result used to expand in place**, dropping a tall frame into the middle of the transcript. That turned the thing Thomas made into something you scroll past on a very long page rather than something you use, and a full-screen app never fits in a card slot anyway.
+- **The card is now the snapshot and the viewer is the thing.** Clicking the card slides a panel in from the right — `min(760px, 62vw)`, full height of the surface — with the page live inside it. From its header: **⛶ expand** to fill Thomas edge to edge, **↗ open in a new browser tab**, **× close**. The inline stage is gone.
+- **One control was invisible and only looking found it.** Thomas's icons are a curated glyph map in `chat_shell.css`, not the Phosphor font, and a name that is not in that map silently falls through to the `\2022` bullet at the top of the file. `ph-corners-in` / `ph-corners-out` / `ph-browser` were not in it, so the expand button rendered as an unlabelled dot. Measured in the live UI — the `::before` content computed to `"•"` in Arial — and now mapped to `⛶`, `⤡` and `▣`. **A missing icon name is invisible rather than broken, so nothing but a screenshot catches it.**
+- Verified on a 1920×1080 screen at every step, not in a narrow pane: the panel opens at x=1184, 760×871; the inline stage is absent from the DOM; the frame loads the previewable document; expand fills the surface and shows the whole app at once — workspace nav, keypad, calculation context, live insight and recent calculations; all four header glyphs render with no bullets.
+
+### Changed (Code mode: pick any model, see what Thomas built, open it in a tab)
+
+Four things you named while using Code, each measured on a 1920×1080 screen rather than a narrow pane.
+
+- **You could only reach one model.** The picker was one flat row per model across every profile — 19 rows, 15 of them unusable — so the four OpenAI models that *do* work were buried and the menu read as "you have one model". It is now grouped by **family** (OpenAI, Anthropic, Google, xAI, Meta Llama, Mistral, On this PC, Other providers), each collapsed with a `4 ready` / `needs key` count, expanding as an accordion so opening one closes the rest and the menu keeps its height. The family holding the current model is opened once, when the menu is first drawn.
+  - Families are matched on the profile **name**, never on `provider`: `openai_compat` is a wire protocol, not a vendor, and Gemini, Mistral, Groq and xAI all speak it — matching the provider filed every one of them under "OpenAI". Caught by reading the rendered list rather than the code.
+  - The auto-open rule had to be seeded **once**, not per render. Re-applying it every draw meant the accordion closed the other families and this immediately reopened the selected one, leaving two expanded. Verified by driving the real menu: on open only OpenAI is expanded; clicking Anthropic collapses OpenAI; clicking `GPT-5.6 Terra` closes the menu and the button reads **GPT-5.6 Terra**.
+- **The project chip was twice the size of the button beside it.** Measured: 44×173 against Tools' 36×80, because a stacked `SELECTED PROJECT` caption forced a second line, and a generated project is named after the whole request. It is now a single 36px line matching Tools, with a folder icon, a tighter 200px cap with ellipsis, and the caption moved to screen-reader text where it costs no space.
+- **The preview of what Thomas built was a squashed sliver, and that was not a scaling choice.** `.tc-code-artifact iframe` — the rule for the big *inline* preview — forces `width: 100%; height: 230px`, ties `.tc-code-artifact-thumb iframe` on specificity and wins on source order, so the thumbnail rendered a ~1200px-wide layout into a 167×230 portrait strip. Measured: the iframe computed to `167.429 × 230` while the thumbnail rule asked for `1280 × 800`. Scoping the rule through `.tc-code-artifacts` wins the tie, and the card now shows the real page in desktop proportions (168×105).
+- **A result you can only open inside the transcript is awkward to actually use.** Expanding in place drops a tall frame into the middle of the conversation, which is what made the page long to scroll. The card gains an **open-in-new-tab** action beside Download, built from the conversation's own artifact URL because a turn's artifact entry carries only `{file, kind, ext}`. Verified by clicking it: a second tab opens on `Nova — A calculator for ideas`.
+- The row's `max-width` goes 420px → 680px; it was sitting in the left half of a column twice its width.
+
+### Fixed (Thomas verified a page, then served it under rules that broke it)
+
+- **You asked for a calculator. Thomas built one, verification returned `completed`, and `12 + 8` showed `Error` on screen.** Neither the maths nor the markup was wrong. `Function('return (12+8)')()` — the ordinary way a calculator evaluates a typed expression — threw `EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive`, and the page's own `catch` turned that into `Error`.
+- **The checker and the viewer disagreed.** `web_artifact_smoke_assets.py` serves pages to the verifying browser with `script-src ... 'unsafe-eval' 'wasm-unsafe-eval'`, so the calculator genuinely worked while being certified. `deliverable_aiohttp.py` and the `/artifact/` route then served the same file **without** it. A build could pass every check and be broken the instant it was opened, and nothing anywhere was wrong to report — both halves did exactly what they were configured to do.
+- **Diagnosed by injecting an inline `<script>` into the live preview**, which CSP governs. Running the identical call from devtools reported success, because the devtools console is *not* subject to CSP — so the obvious probe confirms the page works and hides the defect. That false reassurance is why this survived.
+- Both viewers now grant `'unsafe-eval' 'wasm-unsafe-eval'`, matching the policy the page was verified under. **It concedes nothing:** both already allow `'unsafe-inline'`, so a hostile page can run any JavaScript it likes by writing it out directly — refusing to evaluate a *string* removes no capability it does not already have, and only breaks honest pages. The directives that actually contain a generated page are untouched: `connect-src 'self'` in the preview and `connect-src 'none'` on the artifact route, plus `object-src 'none'`, `base-uri 'none'`, `form-action`, and the sandbox.
+- Verified end to end after relaunching from your desktop shortcut: `12 + 8 = 20`, `9 × 7 = 63`, `100 ÷ 8 = 12.5`, `45 − 17 = 28`, `2.5 × 4 = 10`, `1234 × 9 = 11,106`, and `7 ÷ 0` correctly reports `Error` because the result is not finite.
+- `tests/test_preview_does_not_break_what_verification_passed.py` states the invariant rather than the constant: **the serving policy may not be stricter than the verifying policy.** It also pins the premise (the smoke really does allow eval) and asserts the containment directives are still refused, so widening one directive cannot quietly widen the rest. Both viewer tests were confirmed failing before the change.
+
+### Fixed (Thomas knew why a run failed and told you to go find out yourself)
+
+- **You asked for a calculator app and was shown "Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error."** The actual reason was already recorded, in plain English: *"Our servers are currently overloaded. Please try again later."* It was thrown away before it reached the screen.
+- **Why.** `failureSummary` in `thomas/server/web/js/unified_code_mode.js` took `errors.at(-1)` and only *then* asked whether it was worth showing. Errors arrive oldest-first and the last one is almost always a wrapper — `agent loop exited 1` follows whatever actually went wrong. So it inspected the wrapper every time, correctly rejected it as unhelpful, and fell back to the generic message, while the real cause sat one entry earlier. The recorded errors on that run were exactly `["Our servers are currently overloaded. Please try again later.", "agent loop exited 1"]`.
+- **The filter now runs before the selection**, so the last *usable* error wins rather than the last error. Three outcomes stay distinct: a usable error is shown verbatim; errors that exist but are all wrappers still fall back to the generic message; and no errors at all keeps its own separate wording.
+- **An overloaded or rate-limited provider is now named as such**: *"The model provider is busy right now — this is not a problem with your project or your request. Send it again in a moment."* The raw upstream text says "Our servers", which reads as **Thomas's** servers unless the message says whose, and sends you looking for a fault in a project that is not there.
+- Verified against your own failed run, re-rendered from the stored conversation with no data changed: the same turn that read "Thomas hit a technical problem…" now reads the provider-busy line. A later failure in the same conversation — OpenAI returning `An error occurred while processing your request. You can retry your request… request ID 03ee2ff9…` — is now shown **verbatim**, request ID included, because it is genuinely actionable.
+- Pinned in `tests/web_node/unified_code_mode_lifecycle.mjs` (`proveTheRealReasonSurvivesTheExitWrapper`), covering all four cases, and confirmed to fail against the old `.at(-1)`-then-filter ordering before landing.
+
+### Changed (Housekeeping in the code that keeps track of background tasks — nothing changes for you)
+
+- **Nothing you can see is different.** Background tasks start, report progress, accept a follow-up instruction, stop when you stop them and finish exactly as before, and Mission Control lists exactly the same tasks from exactly the same files on disk. One internal file had grown past the size limit the project holds itself to, so two self-contained parts of it moved into files of their own. There is nothing to notice and nothing to do.
+- `thomas/core/task_bot_runtime.py` was 933 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. Two seams that were already sitting in the file moved out. `thomas/core/task_bot_states.py` (77 lines) is the list of states a task can be in, which moves between them are allowed, and the tolerance that reads "done" as completed and "in progress" as executing. `thomas/core/task_bot_records.py` (148 lines) is the shape of a saved task record and of one entry in its history, plus the rule that keeps the worker's internal stop-protocol text out of the progress line you read. Neither of them reads a clock or touches disk. What stayed behind is what the file is named for — saving and loading those records, and driving a task through its life — now 750 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim and each comment and docstring travelled with the code it explains — including the long note recording why someone who asked for a one-page 401k guide was shown `why_blocked: ...` instead of an answer, and the note on why a run you stopped is recorded as cancelled rather than failed.
+- Everything that imported the old file still imports it unchanged — the moved names are re-imported there — so no caller and no test needed editing. All 25 names that any caller in the repo reads off that module still resolve, including the two that tests replace to fake the clock and the disk.
+- `tests/test_task_bot_runtime.py`, `tests/test_task_bot_runtime_user_summary.py`, `tests/test_task_bot_salvaged_artifacts.py`, `tests/test_stop_actually_stops.py`, `tests/test_deleting_a_chat_removes_its_tasks.py`, `tests/test_task_events_runtime.py`, `tests/test_task_update_routing.py`, `tests/test_coherence_delegated_lifecycle.py`, `tests/test_chat_dispatcher_runtime.py` and `tests/test_architecture.py` pass untouched (48 tests), as do the downstream suites that drive tasks through chat: `tests/test_server_chat_v2_helpers.py`, `tests/test_chat_delegation.py`, `tests/test_chat_delegation_canvas.py`, `tests/test_chat_delegation_canvas_completion.py`, `tests/test_chat_delegation_self_recovery.py`, `tests/test_chat_delegation_worker_contract.py`, `tests/test_chat_parity_completion_guards.py`, `tests/test_stale_execution_startup_reap.py`, `tests/test_deliverable_ranking.py` and `tests/test_server_observability_routes.py`.
+
+### Changed (Housekeeping in the code that draws your charts and diagrams — nothing changes for you)
+
+- **Nothing you can see is different.** When you ask Thomas for a chart, a diagram, a drawing or a mock-up, it still draws itself on the Canvas exactly as before — the same picture, the same building-in-front-of-you animation, the same file to download at the end. One internal file had grown past the size limit the project holds itself to, so the half of it that turns a design into the finished picture moved into a file of its own. There is nothing to notice and nothing to do.
+- `thomas/server/chat_delegation_canvas.py` was 867 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. The drawing half moved out to `thomas/server/chat_delegation_canvas_render.py` (496 lines): turning the design plan into a finished self-animating page, the pie and donut wedge maths, and the empty stage that elements stream into one at a time so you can watch the picture assemble. What stayed behind is what the file is named for — holding a canvas while it streams, the instructions given to the model, and the entry point that runs the job — now 403 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim, with each comment and docstring still attached to the code it explains — including the long note recording why the finished picture must still show something when scripts are switched off, and why `transition:none` in that fallback is load-bearing rather than tidiness. Rebuilding the original file from the two new ones reproduces it exactly, line for line.
+- Everything that imported the old file still imports it unchanged — the moved names are re-imported there — so no caller and no test needed editing. All 15 canvas test files pass untouched (82 passed, 2 skipped), as do `tests/test_architecture.py` (13 passed) and every delegation test (161 passed, 3 skipped).
+
+### Changed (Housekeeping in the code that saves your chats — nothing changes for you)
+
+- **Nothing you can see is different.** Your chats are saved, listed, reopened and deleted exactly as before, from exactly the same files on disk. One internal file had grown past the size limit the project holds itself to, so the part of it that reads and writes those chat files moved into a file of its own. There is nothing to notice and nothing to do.
+- `thomas/server/app_middleware_handlers.py` was 816 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. The chat store moved out to `thomas/server/app_chat_store.py` (207 lines): naming a chat's file, checking and trimming an incoming chat before it is written, and the save / delete / load-all steps that take the lock. What stayed behind is what the file is named for — the middleware and the security checks that run on every request — now 664 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim, with its comments and docstrings attached to the code they explain. Everything that imported the old file still imports it unchanged. `tests/test_server_chats_api.py`, `tests/test_origin_guard_localhost.py`, `tests/test_server_app_core.py`, `tests/test_server_app_routes_init.py`, `tests/test_server_access_mode.py`, `tests/test_my_stuff_modernization_contract.py`, `tests/test_semantic_intent_ownership_frontend_legacy.py`, `tests/test_chat_mode_contract.py`, `tests/test_workspace_session_history.py` and `tests/test_server_chat_v2_helpers.py` pass untouched (136 tests).
+
+### Changed (Housekeeping in the code that runs Thomas's tools — nothing changes for you)
+
+- **Nothing you can see is different.** Thomas runs its tools exactly as before: the same steps, the same safety checks on files it is about to write, the same wording when it turns a tool call down. One internal file had grown two lines past the size limit the project holds itself to, so part of it moved to a file of its own. There is nothing to notice and nothing to do.
+- `thomas/agent/loop_tool_exec.py` was 802 lines against the 800-line limit checked by `tests/test_architecture.py::test_debt_trending`. The file-path half moved out to `thomas/agent/loop_tool_paths.py` (184 lines): which arguments name a file, whether a tool accepts a file path at all, and whether a given path is safe to write to. What stayed behind is the running of the tool calls themselves — 648 lines.
+- **Nothing was deleted, shortened or reworded.** Every line moved verbatim and each comment and docstring travelled with the code it explains, including the long note on `diff.preview_patch` recording the bug where a preview-only tool was mistaken for a write and became impossible to call by anyone.
+- Everything that imported the old file still imports it unchanged — the moved names are re-imported there — so no caller and no test needed editing. `tests/test_agent_loop_tool_exec.py`, `tests/test_a_tools_schema_decides_what_it_accepts.py`, `tests/test_hook_event_surface.py`, `tests/test_plugin_hooks_wired.py`, `tests/test_agent_loop_monolith_contract.py` and `tests/test_evolve_supervisor.py` pass untouched (77 tests), as do `tests/test_architecture.py` (13) and `tests/test_smoke_integration.py` (39).
+
+### Changed (Housekeeping in the code that talks to the AI providers — nothing changes for you)
+
+- The Claude/Anthropic half of Thomas's model-streaming code was moved into its own file, away from the OpenAI and ChatGPT halves it never shared anything with. Replies still stream the same way from every provider; this is purely tidying, and there is nothing to notice or do differently.
+
+### Fixed (The report said nobody opened a page, directly beneath the browser check that had just opened it)
+
+- **A check that FAILED is the opposite of a check that never happened.** `_unopened_page_risks` matched the evidence against `BROWSER_SMOKE_OK` and `BROWSER_SMOKE_SKIPPED`. A failing run says neither — it says `BROWSER_SMOKE_FAILED` — so it fell through to the silence branch and printed `report.html — no browser check ran for this change` next to the failing browser check that had just examined that exact page. Seen on a real run whose smoke reported `Could not load sales.csv (HTTP 404)`.
+- **It misleads more than a reader.** The whole point of this risk is to say *nobody looked*; the repair loop reads these risks, so claiming a page was never opened points it at opening a page that was already opened, instead of at the defect the opening found.
+- **The suppression is now per page rather than per run**, which fixed a second fault in the same three lines: `if "BROWSER_SMOKE_OK" in evidence: return []` let one opened page vouch for every other changed page, so a run that opened `index.html` and never touched `orphan.html` reported no risk at all. A page counts as opened when a smoke marker names it, matched on a filename boundary so `game.html` is not covered by a line about `mygame.html`.
+- Both directions pinned in `tests/test_run_report_flags_an_unopened_page.py`, and both new tests confirmed to fail against the old condition before landing: a failing check on `report.html` no longer flags it, while a sibling `orphan.html` that nothing opened is still named. The existing skipped / passing / silent / no-pages cases are unchanged.
+
+### Fixed (Broken web output in a `code` task passed because the Python linter politely declined)
+
+- **Honest labelling on a green tick is still a green tick.** `run_ruff_check` already refused to claim it had checked a web workspace — it returned `ruff_not_applicable` with "ruff verified nothing", which is true and well-documented. It also returned `passed=True`, so the run was recorded as verified and moved on. Confirmed against real ruff: a workspace whose only file is `function ( { syntax error` passed.
+- **Reachable for most of what Thomas builds.** `build-feature`, `fix-bug`, `quick-fix`, `refactor-code` and `code-review` all map to family `code` in `thomas/core/task_types.py`. Only `design-ui` maps to `ui`, so a web deliverable met the real web checks only if it happened to be classified as a design task; every other route handed it to a Python linter.
+- `run_ruff_check` now hands a workspace with no Python but with web files to `run_web_preflight` — which lives directly below it in the same module and was already wired for the `ui` family. The checks were never missing; they were simply never reached from here. The result keeps `family="code"`, because the family belongs to the task and only the checker changed.
+- **The no-Python-no-web case is unchanged and still passes**, with its wording corrected to say there is no web output either. A `code` task can legitimately deliver a config file or a shell script, and failing those would be a new false negative in place of the old false positive.
+- Two existing tests asserted the old wording (`ruff_not_applicable`) over a pass. Their intent — "a Python linter must not certify a web app" — is unchanged, so they now assert the stronger property that satisfies it: the broken-JavaScript workspace **fails**, with evidence naming the real defect (`broken.js does not parse, so nothing on the page runs: SyntaxError: Function statements require a function name`) rather than the absence of Python. A second fixture also fails on `game.js was written but nothing loads it` — something ruff is structurally incapable of noticing.
+
+### Fixed (The browser smoke failed a correct page, then passed a broken one)
+
+Both faults surfaced from one organic Code task — *"read sales.csv and draw a bar chart of revenue per region"* — run three times against the live server.
+
+**The false failure.** `_WEB_ASSET_SUFFIXES` carried `.json` but no other data format, so the smoke server answered 404 for a `sales.csv` sitting beside the page. The page then honestly reported itself blank, because it had no data to draw. Thomas's build was **correct**: served where the CSV is reachable it prints `$623,001.25`, which matches the CSV summed independently, and paints 80,236 non-transparent pixels. Verification still returned `BROWSER_SMOKE_FAILED ... Could not load sales.csv (HTTP 404) ... nothing was ever drawn to the canvas`, the run spent its **entire ten-pass fix budget** repairing a page that was already right, and finished `failed`. `.csv`, `.tsv`, `.txt`, `.md` and `.xml` now join `.json`. They are inert — the browser hands them to the page as text and never executes them, which is why `.json` was always safe. Source, secrets, dotfiles and databases stay refused; `tests/test_forge_code_web_smoke.py` asserts `.env`, `.py`, `id_rsa`, `.sqlite3` and `.yaml` are still unreachable, because widening this to "anything in the folder" would turn verification into a way to read a project's private files out of a page Thomas just generated.
+
+**The false pass, found by rerunning the same task.** That run wrote `report.html` and **not** the CSV. Opened, the page reads `GRAND TOTAL Unavailable — Could not load sales.csv (HTTP 404)` and its canvas has **zero** non-transparent pixels. Verification returned `BROWSER_SMOKE_OK: browser boot clean; boot only`, outcome `completed`, rubric `met`. Three checks each had an honest reason to stay silent: a `fetch` 404 is an ordinary response rather than an `error` event, so `resource_errors` (which catches `<script src>`/`<img>` failures) never saw it; the page **caught** its own failure and displayed a tidy message, so nothing was uncaught; and `paintState` deliberately returns `unverifiable` until the page calls `getContext`, so that a decorative canvas on a working page is not called a failed render — but this page failed *before* reaching `getContext`, making a canvas that was genuinely never drawn indistinguishable from decoration.
+
+- The reliable signal was never in the DOM: **the harness's own server returned that 404 and can say so.** `web_artifact_smoke.py` now records same-origin requests for files that are not in the folder and fails with `the page asked for sales.csv, which is not in the project folder`. That is a fact about the deliverable, not an inference about intent, and it closes all three silent paths at once.
+- Browser-initiated requests are excluded (`favicon.ico`, `apple-touch-icon*.png`) — counting those would fail every deliverable that ships no icon, trading the false pass for a false failure. The exclusion list comes from logging the actual request stream during a smoke run, where Chromium asked for the page, the page's own `fetch`, and the favicon.
+- **Verified live end to end, not by test alone.** The same task rerun with both changes: pass 1 wrote only `report.html` and was failed by the new check naming `sales.csv`; Thomas read that failure and **created the CSV**; pass 2 returned `BROWSER_SMOKE_OK` and `completed`. The finished page prints `$153,953.75`, matching its own generated CSV summed independently, across 4 regions, with 84,670 painted pixels.
+
+### Fixed (The CLI dispatched follow-up turns with no prior conversation at all)
+
+- **`thomas evolve dispatch --conversation-id <id>` loaded a conversation's prior turns from the repo root, and the turns are in the project.** Measured against every conversation on this workspace that has real turns: `history_turns(repo_root, cid)` found **0 turns for 110 of 113**. The three it found are the only ones that ever lived at the catalog root. So the `--conversation-id` flag — whose entire stated purpose is "loads its prior turns as multi-turn history" — silently dispatched a one-shot.
+- **The empty result was pre-approved by the code's own comment**: "Loading is best-effort: no id / unknown id => no history". That is a fair description of an unknown id and a wrong one for a known id whose turns are simply somewhere else, and there is no way to tell the two apart from an empty list. A follow-up like "explain what you just did" reached the model with nothing to explain.
+- `resolve_conversation_root` (new, in `thomas/forge/anvil/forge_code_projects.py`) checks the registry binding and then walks the same roots the Code history endpoint walks, using the conversation file's own presence as the test. An id nothing holds falls back to the binding unchanged, so a caller's not-found handling still runs instead of being replaced by a silent substitution. This is the fourth reader found reading per-project data from the catalog root, after `conversation_get` (`521a67eb`), `deliverables_list` (`479fd60b`) and `send`'s continue branch (`0e40442b`).
+- Verified live through the real CLI, both directions, using a real conversation (`fc_20260728T232852_b8f91e`, the countdown-timer build). After: the previewed prompt carries a **`## Conversation so far`** section holding the original request and Thomas's own reply. With the line reverted to the repo root: that section is absent entirely and the goal text appears nowhere. Restored, it comes back.
+- `tests/test_forge_code_projects.py` pins all three behaviours: an unregistered conversation resolves to the project it is really in, a correctly bound one is *not* sent wandering and an unknown id still returns the binding, and the private path join is asserted equal to `forge_code_store._conversation_path` — because if the store ever moves its files, this resolver would just stop finding things, which reads as "no conversations" rather than as a break.
+
+### Changed (The Code client is three files, and the comments went with the code they explain)
+
+- **`thomas/server/web/js/unified_code_mode.js` was 1635 lines against a 1500-line hard ceiling** (`frontend_limits` in `thomas/_architecture.py` — 1500, not the 2000 the docstring on `test_frontend_file_sizes` still claims). It grew 132 lines on 2026-07-28, almost all of it comments recording real bugs; one of them is the note that led to finding 65 of 108 saved tasks could not be opened. Nothing was deleted or summarised. Every comment moved with the function it describes.
+- Two siblings, split on seams the stylesheets already draw. **`unified_code_results.js`** (263 lines) owns what a run produced — the run report, the artifact cards, the preview documents behind them, and the asset inliner — matching `unified_code_results.css`. **`unified_code_projects.js`** (143 lines) owns what a project folder is *called* and the chip that says it, the piece with the longest investigation history in the file, touching no run, stream, or conversation load. `unified_code_mode.js` is now **1318** lines and keeps the state machine, the stream, rendering, and the adapter.
+- **One state, one escaper, one render — injected, not copied.** The siblings are classic scripts, not ES modules, so `unified_code_mode.js` calls `configure()` on each at load time with the collaborators it owns. Duplicating `esc` into the results module would have been the cheaper split and exactly the failure AGENTS.md warns about; `tests/test_the_run_report_escapes_what_thomas_wrote.py` now asserts there is exactly **one** `const esc =` across both files, so a second copy fails rather than quietly drifts.
+- **The split was wrong once, and node caught it.** The first accessor was named `results()`, and `finishRun` already holds a local `const results = await Promise.allSettled(...)` — so `void results().presentNewestResult()` threw `TypeError: results is not a function` at the end of every run. Found by `test_code_adapter_lifecycle_behavior_in_node`, which executes the real files rather than reading them. Renamed to `codeResults()`.
+- `chat.html` loads both siblings before the adapter; `tests/test_chat_mode_contract.py` pins that order for all three siblings, and its node harnesses now load them the way the browser does.
+- **Verified in a live browser at 127.0.0.1:8899, not by reading the diff.** No console errors from the client. `window.ThomasCodeResults` and `window.ThomasCodeProjects` both present with their full exports. The Code sidebar renders **112** tasks; six were opened across the range (rows 0, 4, 20, 55, 90, 111) and each loaded its turns with the chip naming its own project and the tooltip matching that project's path — `Build a single-page tip calculator in indexhtml 3` → its `~/.thomas/projects/...` path, `Shared scratch folder` → `~/.thomas/code_scratch`, `Thomas` → the source checkout. The moved rendering was exercised too: the `blocktown-84.html` task shows its artifact card with a live thumbnail served from the real preview origin, its download control, and `Run report · 4 passes · 7 checks · 4 open risks`.
+
+### Fixed (chat.html was the second file over the same ceiling, and it is under it now)
+
+- `test_frontend_file_sizes` was failing on **two** files, not one. `thomas/server/web/chat.html` was 3026 lines against a 3000 hard ceiling — it crossed on 2026-07-28 in `77108885`, the same day `unified_code_mode.js` crossed its own — and the two `<script>` tags the split needs pushed it to 3028. Splitting the JS alone would have left the gate red.
+- The page's one inline `<style>` (149 lines: icon fallbacks, scrollbars, keyframes, living-world visibility, hover utilities, markdown rules, the content rail and the canvas document page) is now `thomas/server/web/css/chat_shell.css`. Nothing changed but its address: the `<link>` sits exactly where the `<style>` did — after every other stylesheet, last before `<body>` — so the cascade is the one those rules were written against. chat.html is **2878** lines.
+- Two contract assertions followed the rules to the stylesheet instead of being dropped: the markdown-heading styling behind `tc-markdown`, and the `.ph-caret-right` / `.ph-file-code` fallbacks that keep Code's file tree readable with no icon font. The page is additionally asserted to load `chat_shell.css`, so those rules cannot satisfy a text search while being absent from the document.
+- Verified in the live browser: `chat_shell.css` is present in `document.styleSheets`, last in order, and an attached `<i class="ph ph-caret-right">` computes `display: inline-grid`, `place-items: center`, `::before` content `›`.
+
+### Added (The store-read behind `persistence_confirmed` is now pinned by a test)
+
+- **`91442cea` replaced a self-certifying flag with a real store read, and nothing protected it.** Measured rather than assumed: reverting line 612 of `thomas/server/routes/evolve_agent_runtime.py` back to `persistence_confirmed = True` left **all 52 tests across the four evolve-agent modules passing**. The fix was correct and one careless edit from being undone in silence — which is the same failure this flag exists to prevent, relocated into the test suite.
+- The nearest existing test (`test_recorder_store_failure_is_reported_by_status_stop_and_sse`) makes `append_agent_turn` return `None`, so it exercises the `persisted is None` branch and never reaches the confirmation at all. No test covered the shape that actually distinguishes the two implementations.
+- `test_a_store_that_claims_a_write_it_did_not_make_is_not_confirmed` reproduces it: `append_agent_turn` **returns a well-formed conversation** — reporting success, carrying the exact `role`/`ts`/`run_id` identity the confirmation matches on — while nothing reaches disk. Only going back to the disk can tell the two apart. The self-certifying version calls it saved; the store read does not, and the run is reported `ok: False`. The same test then restores the real `append_agent_turn` and asserts a genuine write **is** confirmed through the identical code path, so the check cannot pass by refusing everything.
+- Verified in both directions before landing: passes against current code, and fails with `AssertionError: a turn that never reached the store was reported as saved` against the reverted line. No production code changed.
+
+### Fixed (My Stuff showed none of the things Thomas built)
+
+- **`/api/evolve/agent/deliverables` returned an empty list on a workspace holding 16 real builds.** `register_from_run` writes `deliverables.json` into the **project** a run worked in, and since every Code task now gets a folder of its own, that is almost never the catalog root. `deliverables_list` read the catalog root alone. Measured live before the change: endpoint `0`, disk `16` across 4 project roots — `~/.thomas/code_scratch` (13), `code_scratch_b` (1), and two projects built minutes earlier whose pages both open and work.
+- **Nothing reported this, because an empty list is what "you have not built anything" looks like.** `_read` returns `[]` for a missing file and the route wraps it in `{"ok": true}`. The Library rendered a shorter list and no error. Same shape as the conversation-open defect fixed in `521a67eb`: one reader walks the project roots, another asks only the catalog, and the two quietly disagree.
+- `list_deliverables_across` (new, in `thomas/forge/anvil/forge_code_deliverables.py`) merges the catalog root with the roots `conversation_roots` already reports, which is exactly what `conversations_list` walks. `available` is resolved **per entry against the root it was read from** — judging a project's file from the catalog root would mark every live artifact dangling and grey out the whole Library. Entries are deduplicated by id because those roots genuinely overlap.
+- Verified live on 127.0.0.1:8901 in the real UI, not just the API: the endpoint goes `0` → `16` with all 16 `available: true`, and the Library's "All Stuff" count goes **125 → 141**. The recovered items are your actual builds — the Trey rogue-lite, star-catcher, 3D Pac-Man, the CSS museum and aquarium pages — none of which had been reachable from Library.
+- **Not fixed, and recorded at the line instead of guessed at:** the `deep_link` every deliverable carries (`/?forge_code=<cid>`) goes nowhere. Its only consumer lives in `web/js/runtime/039_module_rendering_dispatch_02.js`, loaded by `app_runtime_loader.js`, and `/` now serves the unified chat shell whose 13 script tags do not include that loader. Loading the URL live: the param is never stripped (that consumer strips it first thing, so it never ran), `forgeShowSide` and `forgeCodeOpenConversation` are `undefined`, `data-surface-mode` stays `chat`. The consumer also drives the retired Evolution shell rather than the Chat/Code/Work switcher. The honest fix is shell boot-order work; a guessed one would be wrong in a new way.
+  - **Fixed since in `c53207cc`** (see *Fixed — A deliverable's link back to the conversation that built it now arrives*, above): `unified_code_mode.js` consumes the parameter on boot, strips it first so a failed load is not replayed on every refresh, and switches to Code mode on that conversation. One correction to the bullet above — the runtime consumer was **not** retired. It is live and works at `/classic?forge_code=<cid>`; the link named a path whose shell cannot read it, which is a different defect from a dead consumer.
+
+### Fixed (A run report could not report an unverified requirement unless you typed your goal as a checklist)
+
+- **`rubric_mapping` marked the whole goal `met` on evidence that examined none of it.** The report already had an honest mechanism: extracted sub-criteria are reported `unverified`, with a comment saying they are never individually re-verified so they must not be inferred as met. That mechanism is gated behind `_CRITERION_RE`, which only matches **bullet lines** (`- like this`, `1. like this`). A goal typed as prose — how people actually type them — extracted nothing, so the entire rubric was one `met` entry whose criterion text restates the goal in full.
+- **The failure is reachability, not wording.** With no bullets in the goal the `unverified` status could not be produced *at all*, so a rubric with nothing unverified was guaranteed rather than earned — an empty result read as a clean one.
+- **Caught on a real run, not by reading code.** Goal: `Build a single-page countdown timer in index.html ... has Start, Pause and Reset buttons that all work.` The run reported `criterion: complete the requested goal: <that whole sentence>` / `status: met` / `evidence: outcome=completed; 1 file(s) changed; engine checks: 2 passed, 0 failed`. One of those two checks was the browser smoke, whose own evidence read `paused via a pause-like control and found no Resume; the pause may not have engaged`. The smoke test is honest — its source calls that "an observation, not a verdict" — but the rubric above it turned two passing checks and one changed file into `met` for a sentence about three buttons working.
+- `_build_rubric_mapping` in `thomas/forge/anvil/run_report.py` now appends one entry when no sub-criteria could be extracted: `the specific requirements stated in this goal` / `unverified`, explaining that the goal was not written as a checklist so nothing in it was checked on its own, and that the outcome above is about the run as a whole. **No requirement is invented from the prose** — splitting a sentence into criteria would put words in the goal's mouth and be wrong in a new way. A goal that *does* have bullets is untouched: each bullet already carries its own `unverified` line, and a second vaguer one would be noise.
+- **The first version of this fix overclaimed in exactly the way it was written to prevent**, and a live failed run caught it: its evidence said `the line above reports that the run finished and its engine checks passed` — a canned sentence about the success case. On a run rejected for an unsupported model id (exit 1, `not_met` above it) that sentence was simply false. It now says only that the outcome above is about the run as a whole, and `test_the_prose_catch_all_does_not_claim_the_run_passed` asserts the words `passed` and `finished` never appear in it.
+- Verified live on 127.0.0.1:8901 in both directions. Failing run: `not_met` plus the `unverified` line, no claim of a pass. Succeeding run (`outcome=completed`, `index.html` changed, 2 checks passed): `met` plus the `unverified` line — and the browser smoke for that run recorded `boot only`, so nothing clicked the preset buttons the goal asked for. Driving the delivered page by hand afterwards showed it is in fact correct (80 at 15% gives 12.00 and 92.00; the 10/15/20 presets all switch), which is the point: the build was good, and nothing in the pipeline had established that.
+
+### Changed (Three Discord tests stopped needing a live model to state their guarantee)
+
+- **`tests/test_discord_channels.py` was still asserting on prose that no code produces.** The three failing tests matched `Discord bridge status:`, `Recent Discord conversations:`, and an `owner-only` refusal — all of them formatted by `thomas/server/routes/discord_channels_support.py`, which was deleted whole (374 lines) in `0eedd8cc refactor(chat): retire Discord prose command interception`. That commit updated `tests/test_server_chats_api.py` and `tests/test_server_done_usage_contract.py`, the two modules that named `resolve_discord_chat_command`, and missed this one. The tests then failed by reaching for a model — `Request URL is missing an 'http://' or 'https://' protocol` — so a test box with no model endpoint reported a network fault under the name of a routing guarantee, and `done` carried no `text` key at all because `emit_done` only ever had one when the retired interception passed it.
+- **What was retired, and what was not.** Chat has no structured capability that starts, stops, or restarts the bridge; the only ways in are the `/api/channels/discord/*` routes and the `channels` workspace action `channels.discord.set_enabled`. So the deterministic status/history replies are genuinely gone, but the guarantee *underneath* the owner-only test is not: prose must not become a lifecycle side effect. That is direction 2 of the regression pair `CONTRIBUTING_AI.md` requires under Semantic Intent Ownership.
+- `test_local_chat_can_report_discord_status_without_agent_loop` is **retired**. Its subject was the without-agent-loop path itself, and `/api/channels/discord` status is already covered by `test_discord_channels_routes_return_status_and_history` in the same module.
+- `test_non_owner_discord_request_cannot_start_bridge` becomes `test_discord_shaped_prose_in_chat_never_starts_the_bridge`, **parametrised over owner and non-owner** because the guarantee is structural rather than an owner check — a version that only covered non-owners would claim less than the code does. The model is stubbed at `OrchestratorBrain.process_message` rather than left to fail: with no provider the turn dies before deciding anything and the no-side-effect assertion passes for the wrong reason, so the test now asserts the stubbed reply reached the stream before asserting `pid`, `enabled`, and `last_started_at` are untouched.
+- `test_owner_discord_request_can_reference_recent_history` becomes `test_owner_scoped_discord_history_is_readable_without_a_model`, asserting the half that survived on the structured surface: a recorded turn is retrievable by search and by session and still carries the `scope_key`, `display_name`, and `owner` flag it was filed under — the attribution that makes it safe to hand to a model as one owner's context. It needs no model and cannot fail for a network reason.
+- Result: `tests/test_discord_channels.py` is 10 passed, hermetic, with no assertion loosened to get there.
+
+### Fixed (Code could still be told to work inside Thomas's own source folder)
+
+- **`send` calls this a HARD SAFETY NET, applies it on two of its three branches, and skipped the one every "continue this task" goes through.** The two guarded branches are the ones that *choose* a folder: a conversation id with nothing behind it, and a brand-new conversation. The third takes the project root straight from the stored conversation and never checked it. So the net stopped a new task from being aimed at the checkout and did nothing about a task already aimed there.
+- **Reachable now, not in theory.** Measured against the running server: of 164 Code conversations, **20 resolve to the product repository root**, three of them with real turns. One is `create notes.txt with three short bullet points about safe driving` — and `notes.txt` is sitting untracked in the repository root, which is where that task put it. Asking the changes endpoint what it would offer for that conversation returns `notes.txt`. Revert is `git checkout -- <file>`, and `revert_file` deletes a file that git reports as untracked, so continuing one of those tasks edited the product source and its Revert button removed files from it.
+- `thomas/server/routes/evolve_agent_routes.py` now applies the same check on that branch. It **refuses** rather than substituting a different folder, unlike the new-task branches: those are picking a folder and may be handed another one, whereas this conversation already has a folder and the check immediately above it returns 409 `project_change_requires_new_conversation` precisely to stop that folder moving. Silently relocating the run here would have broken that rule while enforcing this one. The refusal is 409 `project_is_thomas_source` and names the folder.
+- Verified against a live server on 127.0.0.1:8901 with the real conversation, not a fixture: `POST /api/evolve/agent/send` for `fc_20260721T162916_3cf46e` returns 409 `project_is_thomas_source`, `started` absent, no `run_id`. Before the change the same request launched a Code agent with `cwd` set to the Thomas checkout.
+- `tests/test_code_never_runs_in_thomas_own_source.py` pins both directions. The guard test fails against the old code with `AssertionError: Code launched against <...>\thomas-source` — confirmed before the fix was written, not after. The companion test drives the identical continue-an-existing-conversation branch for an ordinary project and asserts the run still launches with that project as its working directory, so the guard cannot be satisfied by refusing everything.
+
+### Fixed (60% of the Code history could not be opened, and the chip reported it as someone else's project)
+
+- **The Code sidebar listed 108 tasks; 65 of them answered HTTP 404 when clicked.** Measured against the live server, not a fixture: every one of the 108 rows was fetched by id, and 65 failed. All 65 live in `~/.thomas/code_scratch`. The cause is that two endpoints disagreed about where a conversation is. `conversations_list` never asks the registry — it walks the known roots and reads the conversation files it finds, so it sees everything. `conversation_get`, and everything else addressed by id, resolved through `conversation_project()`, which reads the project registry and falls back to the catalog root when there is no row. 65 of these conversations have no row: they were written straight into the drawer by paths that never called `bind_conversation`. So the list offered them and the open sent them to the product repository root, where those files are not.
+- `_load_conversation` in `thomas/server/routes/evolve_agent_routes.py` now looks where the list looked: the registry binding first, then the same `conversation_roots` walk. `_project_for_conversation` is defined in terms of it, so rename, delete, changes, tree and file-preview resolve identically — previously all of those acted on the catalog root, which meant renaming and deleting those 65 tasks silently did nothing, and sending a message into one started a **brand-new project** that could not see its own history. Re-measured after the change: 108 of 108 open, and the project root the open returns matches the one the list reported, for every row.
+- **The chip was reporting that failure honestly.** Two independent browser checks had disagreed about the same feature; both were right. Clicking 16 sidebar tasks and reading the chip after each: 14 opens 404'd, so no load ever happened and the chip went on describing whatever was open before — twice "A new folder for this task" (nothing had opened yet), twelve times **another conversation's project name**. Whichever row you clicked first decided which wrong answer you saw. Two previous passes hunted this inside `projectDisplayLabel()`; the cause was never in that function, and both were reverted.
+- **A second, independent defect: `state.projectLabel` was one loose value, not a property of a project.** It was set when a project was picked and never cleared, so it printed that one name over every conversation opened afterwards. Proven rather than argued: the stored label was seeded with a marker string, and two conversations in two *different* projects both displayed the marker while their own tooltips showed their real, differing paths — the chip's name and its path contradicting each other on screen. Names are now filed per folder (`rememberProjectName`/`knownProjectName` in `thomas/server/web/js/unified_code_mode.js`, keyed on a normalised path so `C:\x` and `c:/x/` are one project), so a name can only appear over the folder it belongs to.
+- **Where the names come from, so the chip and the picker call a folder the same thing.** Entering Code mode loads `/api/local/projects` — the catalogue behind the project picker's cards — which is the only place the request that produced `~/.thomas/workspaces/exec-25fb7d1499a6` ("Make a small snake game i can play right…") is recorded. Failure is silent by design: every name has a folder basename behind it, so an unreachable catalogue costs specificity, not correctness.
+- **What an open conversation in the shared drawer is now called.** 95 of the 108 live there. `code_scratch` is a folder name that tells you nothing, and "A new folder for this task" is a promise about a folder that will never be made — that phrase is still correct for an unstarted task, and still shown for one, because the server does drop the drawer and give a new task its own folder. An open conversation reads **"Shared scratch folder"**: its work is already there, alongside everyone else's.
+- **The chip is also repainted the moment a conversation's identity is known**, instead of after the changes and file-tree fetches that `render()` waits on. Sampling 900 ms after a click caught 4 of 36 conversations still showing the pre-load repaint from `clearContextState` — the unbound phrase over a task whose folder was already resolved and sitting in state.
+- Verified in a real browser at 127.0.0.1:8899 across **all 108** sidebar tasks, not a sample: each was clicked and its chip label and tooltip read, asserting the tooltip equals that row's own `project_root` and the label is neither unbound nor leaked from another project. 108 correct, 0 wrong. Names observed: `Shared scratch folder` (95), the project's own folder name for `~/.thomas/projects/...` tasks, the catalogue's request title for `exec-` workspaces, `Thomas` for tasks against the source checkout. Picking a project from the picker still names it, and a fresh Code entry with the drawer stored and nothing open still reads "A new folder for this task".
+- `tests/test_evolve_agent_routes.py` gains `test_unregistered_conversation_opens_from_the_project_the_list_found_it_in`, which writes a conversation into a known project with no registry row and pins list, open, rename and delete to the same answer. Confirmed to fail with a 404 against the old resolution before being confirmed to pass against the new one.
+
+### Fixed (The project chip stops naming a folder the next task will not use)
+
+- **The composer's chip read `SELECTED PROJECT / code_scratch` before a Code task had started, and the task was not going there.** That label was true while every unbound task landed in the one shared drawer. It stopped being true when a new task began getting its own folder, and the client kept showing it anyway: the root is persisted in `localStorage` and restored on load, so a browser that had ever used the drawer went on advertising it indefinitely. The server has already decided otherwise — `_chosen_project` in `thomas/server/routes/evolve_agent_routes.py` discards an incoming `project_root` that is the shared drawer, on both new-task entry points, and hands the task a folder of its own.
+- `projectDisplayLabel()` in `thomas/server/web/js/unified_code_mode.js` now mirrors that server rule instead of guessing: with no conversation bound and the drawer as the current root, the chip reads **"A new folder for this task"**. The condition is the same one the server applies, so the two cannot disagree. The path test matches the drawer and anything beneath it, as `is_shared_scratch` does — a basename test would miss `code_scratch/game`. The button's tooltip follows the label rather than continuing to spell out the drawer's path underneath it.
+- **The earlier attempt at this was reverted as "fixes the new task, breaks the opened one", and the reason turned out to be neither of the two suspects.** Both were checked in the running UI rather than reasoned about: after clicking a task in the sidebar, `state.activeId` *is* set, and `updateProjectButton()` *is* re-run. A `MutationObserver` on the chip recorded what actually happens on one sidebar click — three writes, the last of which is correct, and a middle one reading `code_scratch`. That middle write is `clearContextState()`, which called `finishBusy()` (and so repainted the chip) while `activeId` had already been abandoned but not yet cleared. It is a transient the following `render()` overwrites, which is why it only shows up when the chip is read inside that gap or on a load whose render never arrives. `clearContextState` now clears `activeId` and `conversation` *before* `finishBusy` repaints, so the transient is drawn from the state it claims to describe.
+- Verified in the live UI at 127.0.0.1:8899, from a browser whose saved root was `~/.thomas/code_scratch`, in all three directions. Fresh, nothing started: `A new folder for this task`, tooltip `Choose what Thomas works on`. Opening `build a haunted arcade landing page` from the sidebar: `build a haunted arcade landing page 2`, tooltip its real `~/.thomas/projects/...` path. Opening a task that genuinely *is* bound to the drawer (`blocktown-84.html is broken...`): `code_scratch` — the case the guard must not swallow. Choosing a project from the chip's own picker: the project's own name, tooltip its own path.
+- Not fixed here, still true: `adoptStartedConversation` does not repaint the chip, so between a send and the run's completion the label is stale. It no longer names the wrong project — it holds "A new folder for this task" while the run is in a new folder — and it corrects itself when the run finishes.
+
+### Fixed (A new Code task gets its own folder instead of the one everybody shares)
+
+- **Every Code task started without a chosen project was pointed at the same directory.** Measured on the live workspace: 106 tasks bound to `~/.thomas/code_scratch`, 117 conversation files sitting in it, and `index.html` written by FIVE different conversations, each silently replacing the last. Four of your builds are gone. The only surviving trace of one was `haunted-arcade.css`, an orphaned stylesheet whose page no longer exists. Making the overwrite visible (`files_written_by_another_task`) reported the collision; it could not prevent it.
+- `thomas/forge/anvil/forge_code_projects.py` gains `project_for_new_task(task)`, which names a folder after what was actually asked for and creates it under `~/.thomas/projects/<name>`, git-initialised so the work can be reverted. `thomas/server/routes/evolve_agent_routes.py` uses it wherever a NEW conversation arrives with no project, replacing the shared-scratch fallback in both entry points (`/api/evolve/agent/send` with no conversation, and `/api/evolve/agent/conversations/new`). Verified in the live UI at 127.0.0.1:8899: a task typed as `build a haunted arcade landing page` landed in `~/.thomas/projects/build a haunted arcade landing page`, and the scratch drawer gained nothing.
+- **Nothing existing moves.** A conversation that is already bound is resolved from the registry before any of this is reached; opening your real `make me a rogue lite game...` task still reports `code_scratch`, checked in the browser. A deliberately chosen project still wins, and a catalog root that genuinely is a separate repository is still honoured — only the absence of a choice stopped meaning "the shared drawer".
+- **The saved scratch root coming back is not a choice.** The Code UI persists whichever root it was handed and sends it again on the next new task, so `code_scratch` is already in browsers — the live UI's project chip read exactly that. Arriving as an explicit `project_root` it is indistinguishable from a pick, but it cannot be one: the picker offered 123 projects and the drawer was not among them. `is_shared_scratch()` now recognises it and a new task falls through to its own folder.
+- Two supporting repairs, both load-bearing rather than tidying. **Names can no longer collide or fail:** the folder is claimed with `mkdir(exist_ok=False)` in a retry loop instead of `exists()`-then-create, so two tasks named alike starting at the same instant take different numbers rather than one erroring — Code runs are parallel by design. And a task named after a Windows device (`con`, `nul`, `com1`) is given a usable folder, because a directory called `CON` can be created and then cannot be used at all: `git init` inside it fails with `.git: Invalid argument` and it cannot even be a subprocess working directory.
+- **One folder per task made project resolution a cost.** `validate_project_root` spawned `git rev-parse --show-toplevel` once per known project on every Code history listing — 0.3-0.7s per spawn here, 18.6s for the 14 existing roots, and that number was about to grow with every task. A directory that holds `.git` **is** its own toplevel, which is exactly what git would have answered, so it is answered from the filesystem; git is still asked whenever there is no `.git`, the only case where the answer can be a parent repository. The same 14 roots now resolve in 0.34s.
+- New `tests/test_code_task_project_isolation.py` pins both directions: two tasks with identical wording get different folders, an existing conversation keeps its binding, a chosen project still wins, a name containing a slash or drive letter or `..` cannot decide where the folder is created, and the lost race takes the next number.
+- **The end-to-end proof, run against the live workspace rather than a fixture.** Two tasks were typed into the real Code UI with identical wording, from a browser whose saved project was the scratch drawer. They produced `~/.thomas/projects/build a haunted arcade landing page` and `~/.thomas/projects/build a haunted arcade landing page 2` — the collision the numbering exists for. Thomas then wrote a 21 KB `index.html` into the first of those, while `~/.thomas/code_scratch/index.html` was left exactly as it was (2,215 bytes, last written the previous day). That file is the one five tasks had been overwriting; this is the first build that did not touch it.
+- Not fixed here, and visible: the composer's project chip still reads the previously saved project immediately after a send, because `adoptStartedConversation` in `thomas/server/web/js/unified_code_mode.js` updates the state but never refreshes the button. It corrects itself when the conversation is reopened. Harmless before this change, actively misleading after it — the chip now names a folder the task is not using. (The before-a-task-starts half of this is fixed above; the after-a-send half stands.)
+
+### Fixed (The task type for building a UI now actually checks the UI)
+
+- **`design-ui` had no verifier.** The Exhaustive pipeline dispatches verification on task family, and `DEFAULT_CHECKERS` in `thomas/marketplace/orchestrator/verification.py` held one entry: `code`, which runs ruff. Family `ui` was absent, so every UI task fell through to the structural check — which passes as soon as one file exists in the workspace. A page whose only script is a syntax error passed. A stylesheet nothing links passed. A script included twice, so the page dies on a redeclared `const`, passed. The one task type whose entire purpose is building a UI was the one with no web verification at all.
+- The checks that catch all three had existed for months in `thomas/forge/anvil/build_verify.py`, reachable only from the Forge/Code path, because `_architecture.py` forbids `marketplace` importing `forge`. They now live in **`thomas/tools/web_preflight.py`** — a layer both already depend on — and both call it: parse every script with `node --check`, report assets nothing loads, report a page that loads the same local script twice, and refuse an unconditional top-level throw. Nothing generated is executed; `node --check` parses without running.
+- Behaviour was preserved on the Forge side by leaving the old private names in `build_verify` as aliases of the moved functions, so the ~10 test modules importing them from there are unchanged and there is one implementation, not two that drift. `build_verify.py` drops from 769 to 283 lines.
+- A `ui` task that legitimately delivers prose (a written spec, no web files) still gets the structural check rather than a new false negative, and says which checker answered. What `ui` still does NOT do is boot the page in a headless browser to confirm the canvas was drawn to — that check needs the Forge smoke runner and has not been hoisted. The module docstring now says so instead of claiming the gap is closed.
+
+### Fixed (A dead chat endpoint now says so instead of 404ing quietly)
+
+- **When Chat V2 failed to register, nothing served `POST /api/chat` at all.** `_register_chat_v2_routes` in `thomas/server/app_routes_init.py` is the only registrar of the endpoint — `register_chat_routes` in `routes/chat_aiohttp_handlers.py` is exported by a shim but called from nowhere in `thomas/`, and its own docstring says production passes `register_primary_chat=False`. So any `ImportError`/`RuntimeError` from the V2 bundle left the server booting happily with the primary surface unclaimed: the browser got a bare 404 that reads like a client bug, `/api/health` still answered `ok`, and the only trace was one `log.warning` in a console nobody had open. Measured directly: with the sentinel removed, a sabotaged boot returns `404` on `/api/chat` while `/api/health` reports `status: ok`.
+- The failure is now loud on every surface that reports it. The chat routes are claimed by a sentinel that answers **503** with `{"code": "chat_v2_registration_failed", "detail": ...}` naming the original exception; `/api/health` reports `chat` in `degraded`; an entry is filed in the issue ledger so `/api/issues` and `/api/self-review` pick it up; and the log line is an `ERROR`, not a warning. The same treatment covers the previously-silent early return when the API access guard is missing.
+
+### Changed (The swarm chat tests now pin the retirement instead of contradicting it)
+
+- **Retired the 6 tests in `tests/test_server_swarm_mode_telemetry.py` and `tests/test_server_swarm_event_contract.py`.** They sabotaged Chat V2 registration with `RuntimeError('legacy-chat-required')` and then expected a legacy V1 chat route to answer; it cannot, and they had been failing with 404. The legacy fallback was removed deliberately, not accidentally: nothing in `thomas/` calls `register_chat_routes`; the swarm engine they exercise is gone entirely (`chat_modes.maybe_handle_swarm_mode` imports `thomas.server.routes.chat_swarm`, a module that does not exist); and Chat V2 already folded the mode into a token-economy alias (`_LEGACY_MODE_MIGRATIONS` maps `swarm` -> `max`). The identical sabotage pattern in `test_server_session_run_guard_modes.py` was resolved the same way in commit 7bf78836.
+- Rather than deleting the files (the deletion guard requires a human-approved record, and none was sought), both were rewritten in place to pin the absence they used to contradict: the swarm engine module cannot be imported and its bridge declines, `swarm`/`batch` remain token-economy aliases, nothing calls `register_chat_routes`, and the set of files registering `POST /api/chat` is fixed. Anyone re-wiring a parallel chat engine trips these first.
+- New `tests/test_server_chat_endpoint_registration.py` pins the live endpoint in both directions: a healthy boot serves real Chat V2 (an empty message is rejected with 400, not 404 or 503) and reports `features.chat` true, while a failed boot answers 503 on both `/api/chat` and `/api/v2/chat` and reports `chat` as degraded.
+
+### Fixed (A Code run no longer certifies its own saving)
+
+- **`persistence_confirmed` was set because execution reached the line, not because anything read the store back.** In `thomas/server/routes/evolve_agent_runtime.py`, the success path of `_drain_and_record` assigned the flag `True` unconditionally while every other branch returned it `False` with a `persistence_state`. The confirmation was circular: `_await_recording` awaits the recorder and then asks `_recording_status`, which decides by reading `persistence_confirmed` off that same result dict — so the check asked the result whether it had saved, and on the success path the result always said yes. No amount of tightening the status check or waiting longer could ever have caught a lost write.
+- The flag is now **observed**: `_agent_turn_is_in_store` re-reads the conversation from disk and looks for the exact agent turn that was just written, matched on the microsecond timestamp and this run's id. A run whose turn cannot be found reports `persistence_confirmed: false`, `outcome: persistence_failed` and `ok: false`, exactly like the existing store-failure branch, so status, stop and the SSE done frame agree. Matching one turn rather than comparing whole conversations keeps a legitimate concurrent write (a rename, a later turn) from reading as a lost write — too strict here would make good runs report failure, which is worse than the bug.
+- Correction to the note that stood at that line: it cited `tests/test_evolve_agent_persistence.py` as proof the flag could be true against an empty store. Measured, it is not. That request sent no `project_root`, so the run was recorded into the scratch project while the assertion read the catalog root — the turn was written, the test looked elsewhere. No case of this flag lying has actually been reproduced; the self-certifying assignment was wrong on its own terms and is now gone.
+
+### Changed
+
+- Chat can no longer infer autopilot or preflight behavior from prompt wording; those actions require structured runtime state.
+- Chat reply-versus-dispatch decisions now come from Thomas's structured model call; persona titles remain display text and cannot decide whether work starts.
+- Whole-request task contracts now come from Thomas's structured execution plan instead of a prompt-derived local task-definition classifier.
+- Removed phrase-based chat controls and model switching so ordinary messages reach Thomas; settings now use explicit UI/API fields or model-owned structured capabilities.
+- Delegation, worker handoff, Canvas review, artifact verification, and exhaustive execution now exchange structured status and evidence instead of reclassifying worker prose.
+- Chat task cards and task-ledger state now come from structured runtime/delegation events rather than local prompt-word matching.
+- Disconnected constraint, conversation, intelligence, cost-routing, and NLU keyword classifiers have been retired so they cannot quietly regain ownership of prompt meaning.
+- Agent execution now follows structured tool, autonomy, and stream events without a second local layer inferring intent from the user's wording.
+- Memory no longer promotes facts or profile hints by pattern-matching ordinary chat prose; only the explicit structured Remember action writes global memory, while library curation and exact-repeat deduplication remain available.
+- Work and Max now execute the workflow, task type, specialist list, fan-out, and intent-review fields Thomas selected explicitly; missing metadata uses a neutral one-worker path instead of guessing from task wording.
+- The browser now reacts only to structured runtime events and explicit controls: follow-up suggestions stay universal, task and office activity comes from delegation metadata, onboarding accepts visible choices, and game/work surfaces no longer guess intent from prompt keywords.
+- Natural-language semantic routing is now owned exclusively by Thomas's GPT-5.6 frontier-model turn. Regex/keyword classifiers no longer decide reply versus dispatch, Canvas versus task, specialist, fanout, project workspace, task update, UI control, Discord action, web prelaunch, workflow, model switching, or skill selection. Post-model prompt/prose classifiers no longer reinterpret or auto-reject the structured choice, and local suspicious-word matching no longer blocks a turn before the frontier model sees it. The dispatcher remains available through structured `send_task` calls, Code exposes capabilities without prompt-word filtering, and structured `skills.list` / `skills.use` let the model choose trusted skills organically. Source contracts prevent deterministic prose routing from being reintroduced.
+- Concurrent Code runs are no longer hard-capped at 3: the ceiling is now live-configurable via `THOMAS_MAX_CONCURRENT_CODE_RUNS` (default 8, safety ceiling 64) so you can run many different Code projects at once. Same-project (same-conversation) runs are still serialized to protect that project's state; only distinct projects run in parallel. The "all N slots are busy" message now tells you how to raise the limit.
+- `OrchestratorBrain.process_message` no longer accepts `dispatch_actionable` or `background_ack_only`. Both were leftovers of the deleted prompt-word routing: the routing logic was removed but the parameters stayed, so the signature advertised control it did not provide — passing `dispatch_actionable=False` never prevented a dispatch, it was silently discarded. Honouring them was not an open choice, because each selects a semantic route before the model is consulted, which "Semantic Intent Ownership" forbids. No caller in `thomas/` passed either. They now raise `TypeError` instead of lying. `is_first_message` is deliberately kept: it is caller state rather than a route control, and `thomas/server/routes/chat_v2.py` passes it on every live turn.
+- Retired `test_background_status_reply_uses_active_task_state_directly`, which required that removed control and asserted a status question be answered from a canned template without calling the model. Its expectation (2026-03-27) predated and contradicted its own sibling test (2026-06-14, "no canned/instant replies"), which is kept.
+
+### Fixed (A new project gets its own folder)
+
+- **"New project" used to put every project in the same folder.** The button sent no project at all, which the server reads as "nothing chosen" and answers with a single shared scratch directory — 26 files deep, holding your pacman, star-catcher, museum, blocktown and freedom-transit builds, plus one `index.html` that each new build overwrote. This is why Thomas was reading games you made months ago: they were sitting in its working directory.
+- New project now asks for a name and creates its own folder with its own history. Two projects with the same name get separate folders rather than merging. A name containing a slash, a drive letter or `..` cannot decide where the project is created.
+
+### Fixed (You can open your own code — 4 of 122 projects → 122 of 122)
+
+- **Picking one of your own project folders in Code mode used to do nothing.** The menu closed, the selected-project chip never changed, and the only explanation went to a log file. The reason was a hard rule that a project must already have version history — and the refusal even said that for your own folders "Thomas asks first". Nothing anywhere asked; that prompt had never been built. **117 of 121 projects in the library were unopenable.**
+- Thomas now asks, on screen, the moment you pick such a folder: **Set up history** so its edits can be undone, or **Work without undo**. Choosing to work without undo never creates anything in your folder.
+- **A second, hidden wall sat behind the first.** Git refuses to read a repository whose folder belongs to a different Windows account — "detected dubious ownership" — and an entire external projects drive carried an account ID from a previous Windows installation. Projects there could not be inspected, could not be given history, and could not be opened, with no message explaining why. Thomas now names that exact folder as trusted for the single git command it runs, which touches no global git settings and is never a blanket "trust everything".
+
+### Changed (Thomas decides what you meant — not a keyword list)
+
+- **Thomas no longer guesses your intent by matching words in your sentence.** Whether a request became a chart, went to a specialist, started a background task, picked a skill, triggered autopilot, or got flagged as risky was decided by regular expressions reading your prose. Those are gone. The model reads the conversation, sees the capabilities it is allowed to use, and decides by calling one — the same way it already decides everything else. Deterministic code still checks the result: it validates the request, checks paths, enforces permissions and can refuse. It simply no longer invents the request.
+- This is why unrelated things kept breaking. A word in your topic could steer the whole system: asking for a chart of the **halt**ing problem or a history of the **stop**watch could be read as an instruction to stop. Prompts were matched against stopword lists to rank which skill to run. And a request saying *"I do NOT approve risky skills"* was read as approval, because the sentence contains the phrase "approve risky skills" — that had to be patched with a second regular expression to detect the negation.
+- The work removes about 24,000 lines. A test suite now enforces the rule, so a future change cannot quietly reintroduce a classifier.
+- **Known losses, deliberate.** Charts no longer ship `chart.pdf`, `chart-data.csv` and `chart-data.xlsx` alongside the page — that export only ever ran because a pattern matched your wording. The replacement is Thomas choosing to export by calling an export tool. And the **Exhaustive** setting no longer runs the extra crew and fresh graders; that flag read the effort dial rather than your words and was removed as collateral, so it needs restoring on its own.
+- **Fixed while landing this:** a task could be marked **verified** on the strength of the worker's sentence alone. A worker that replied "Created game.html with the snake game", wrote nothing and ran no tool, produced a green verified card with no files attached — worse than an honest failure, which at least gets retried. A run that produced no files must now also have actually done something: at least one tool call that succeeded, and none that failed.
+
+### Fixed (What Code shows you are the real page, running)
+
+- **A preview could not load anything the page fetches at runtime.** Results were rendered from an HTML string with no origin and no base URL, so only `<script src>` tags written literally in the file could be rewritten to work. Thomas's game loaded its renderer dynamically, which meant the preview asked *the Thomas server* for `trey-depth-renderer.js`, got a 404 fifty-one times, and the game quietly fell back to its old flat-canvas drawing. On screen this was indistinguishable from Thomas having written a broken renderer.
+- Code results now open from a real isolated loopback origin — the same mechanism Chat already uses for deliverables — so relative paths, dynamic imports and `fetch` behave exactly as they will for you. Browser console errors on the Code surface went from **108 to none** — the two that remained in the first measurement were caused by the diagnostic itself, not by the page. Only web assets are served, and the requested path is checked to stay inside the project, so previewing a page cannot hand out source or secrets sitting next to it.
+- **Every result card printed its own screen-reader label as visible text.** The download button's hidden-label class was never defined in the Code stylesheet, so "Download trey-badlands.html" rendered at full size across each card and broke the layout. The label is now carried by the button itself.
+- **A generated app was not allowed to embed its own pages.** Thomas built the roguelite as a shell page framing the game page. The shell loaded and the game inside it was refused, because the security policy named only the Thomas UI as a permitted framer and the inner page's chain of ancestors also includes the preview itself. The result on screen was a grey box with a broken-document icon — indistinguishable from Thomas having written a broken game. An app may now frame its own pages; nothing else gained access, because each preview has its own origin.
+- **The list of files a preview was allowed to serve came out empty for every project.** The filter that skips `.git` and `node_modules` was applied to each file's full path, and projects live under a `.thomas` folder, so every file in every project matched the exclusion. This did not fail loudly: the preview fell back to serving only the single file requested, so a page loaded and nothing it referenced did, and — because the list then differed per file — **each file opened its own short-lived origin and destroyed the one before it.** Opening the game blanked the thumbnail of the page beside it.
+- **A preview was torn down while it was on screen.** Any change to a project — a build finishing, a conversation being reloaded — rebuilt the preview from scratch and killed the address every open frame was loaded from. Chrome then drew its network-error page, which in a small frame is a grey box with a broken-document icon and no text. A project now keeps one address for as long as you are looking at it, and new files become available on it without a restart.
+- **Four results loading at once reloaded each other.** Each finished thumbnail redrew the whole conversation, which recreated every preview frame and restarted its loading from the beginning. With several results in a turn none of them ever finished. They now load as a batch and the conversation is drawn once.
+- **The result of all of this:** Thomas's roguelite now plays inside the conversation that built it, and the browser console on the Code surface is clean — down from 108 errors.
+
+### Fixed (A canvas in the page is not a drawing on the canvas)
+
+- **Thomas checked whether a generated game had rendered by looking for a `<canvas>` tag.** A game that draws nothing has exactly the same markup as a game that draws perfectly, so the check passed the builds it exists to catch. It is the same shape as calling a task done because a file exists.
+- The verifier now **reads the pixels back** and compares them against an untouched canvas of the same size. A canvas that was drawn through and came back empty fails the build, and says so by name — "the canvas was never drawn to" — instead of the old, misleading "page rendered no text or canvas" about an element that is plainly right there.
+- **Two cases are deliberately allowed through, because rejecting working work is the same mistake pointed the other way.** A WebGL canvas reads back empty even while it draws every frame, unless the app asked to preserve its buffer. And a canvas nobody ever requested a drawing context on is leftover markup, not the app's surface — Thomas's own shell page carries one at the default 300×150 while working perfectly by framing the game elsewhere. Both are recorded in the run's evidence rather than silently ignored. A script that crashes before it can draw is still caught, because that raises an error and errors already fail this check.
+- Checked against Thomas's real output before landing: the roguelite and the pacman build pass with their canvases confirmed painted, the museum page passes on text, and the shell page passes as leftover markup.
+
+### Fixed (Code that loads itself at runtime was verified by nothing)
+
+- **A change to a file the page loads dynamically ran no browser check at all.** Thomas only browser-tests HTML a change touched, plus HTML found to reference a changed file — and that search read the markup. Anything assembled while the page runs (`createElement('script')`, a computed path, a dynamic `import()`) is invisible to a tag reader, so "no page uses this" and "no page *says* it uses this" looked identical, and the second silently meant no verification.
+- This was not hypothetical. Thomas had split his game's renderer into its own file and loaded it dynamically — **every later edit to that renderer shipped unverified.** It now correctly resolves to the game page, including when the page loads a module that loads the renderer, rather than naming it directly.
+- The wider search only runs for files no page was found to reference, so a file with a real owner stays matched precisely and a page that merely mentions it in a comment is not dragged in.
+
+### Added (A check that did not run no longer reads like a check that passed)
+
+- **The run report could say "0 open risks" about a page nobody had ever opened.** Every other risk it lists describes something that went wrong; nothing described something that never *happened*. If the browser check was skipped — Chrome not installed, or nothing found to own a changed file — the report simply omitted it, and a green run could hand back a page no one, human or machine, had ever seen.
+- A changed page with no passing browser check is now listed as an open risk, by name, saying whether the check was skipped or never ran at all. Scoped to changed pages so it stays a fact rather than a guess: a project's build scripts are not pages, and flagging those would teach people to ignore the line.
+
+### Fixed (A tool that could never be called)
+
+- **`diff.preview_patch` failed every single time it was used, for anyone.** Whether a tool writes to disk was decided by looking for words in its *name* — "write", "create", "patch" — and previewing a patch contains one. So a read-only preview was treated as a write and rejected for not supplying a file path. It has no file path: its only argument is the diff text, and the paths live inside that. Every attempt cost a turn and printed a technical failure into the run.
+- A tool's declared parameters now decide what it accepts. A name is a label; the schema is the contract. Tools that publish no schema are still required to supply a path, so the guard stays closed by default.
+- Found by watching Thomas build a page and print `Invalid file path argument for write tool diff.preview_patch` into his own activity feed — the last of the name-matching classifiers, still deciding something it had no business deciding.
+
+### Added (Edit UI now works in Code, like everywhere else)
+
+- **Code mode was the one surface that never joined UI Edit Mode.** Settings registers 62 editable regions, Chat 19, Library 27 — Code registered **zero**. Pressing `Ctrl+Shift` over Code gave you an editor with nothing in it to edit, and the container Code draws into had no identity either, so you could move the box holding Code but nothing inside it.
+- Code's conversation, activity drawer, Outputs, project files and steering form are now live editable regions with owner-readable names and declared minimum sizes. **Stop, Checkpoint and Approve are marked protected** — a control that kills a running build or commits your work should not be a drag target.
+- **"AI edit this region" no longer throws you out of Code.** It always switched to Chat and typed the prompt there, so asking Code to change part of itself lost your place and handed the request to the dispatcher instead of to the surface that actually builds. In Code it now stays in Code.
+- Verified in the browser rather than by counting attributes: the region picker lists Code's regions by name, the conversation region selects and moves by keyboard, and **the layout survives Code rebuilding its entire surface**, which it does on every redraw.
+
+### Fixed (Thomas stopped talking to pages he generated)
+
+- Thomas broadcast his internal theme and UI-edit messages to **every** frame on the page. That was invisible while Code results had no origin of their own; now that each generated app gets an isolated one, every broadcast was refused by the browser and logged — once per preview, per message. The refusal was correct, so Thomas now skips those frames rather than widening who he shouts at: a page he generated is untrusted content and has no business receiving his internal state.
+
+### Fixed (A page that loads one script twice runs it twice)
+
+- **Thomas built a working starfield and then included its script twice** — once with `defer` in the head, once at the end of the body. The file ran twice, so its first `const` was declared twice, and the page died on `Identifier 'canvas' has already been declared`.
+- **Both files were individually perfect**, which is why nothing caught it: a parse check passes each one, because neither is wrong — only the pair is. The browser did catch it, but the message names the *script* while the fault is in the *HTML*, so Thomas spent his entire repair budget rewriting the JavaScript. Sixty-one checks, six issues, no convergence, all in the wrong file.
+- A page loading the same local script more than once is now reported before the build finishes, and the message names the page to fix rather than the script that reported the error. Remote sources are ignored — a CDN listed twice may be a deliberate fallback and is not Thomas's to correct.
+- Checked against 14 real pages in the working project: one flagged, and it was the broken one.
+- The check also covers the page that **owns** a changed script, not only pages the run edited. That is the realistic shape: a page is written once and thereafter only its script is touched, so the duplicate sits in a file no later run changes and a check looking only at changed pages would never see it again.
+
+### Fixed (Thomas was told nothing loads anything — so he loaded it twice)
+
+- **The check that finds unreferenced files reported that nothing loads anything, in every project, for everyone.** The filter skipping `.git`, `node_modules` and `.thomas` was applied to each file's full path — and Thomas keeps every project he makes under `~/.thomas/`, so `.thomas` matched as a parent folder of every file. Every file was skipped, so nothing could ever be found referencing anything.
+- **This is what caused the duplicate-script bug above.** Told his script was unreferenced, Thomas added a script tag. Told again, he added a second one. The page then ran the file twice, died on `Identifier 'canvas' has already been declared`, and he spent 25 passes on it before giving up. The duplicate-include check catches the wreckage; this is the thing that was causing it.
+- Both directions verified against the real project: a referenced file is no longer called an orphan, a genuinely unreferenced file still is, and a mention inside the project's own transcripts doesn't count as a page loading it.
+- Same mistake, same day, as the preview allowlist — a hidden-folder filter applied to the full path instead of the path within the project.
+- **The other three instances are now fixed too.** The visual editor and the design-system scanner would both have found no files at all in a project stored under `~/.thomas`, and the artifact-evidence reader would have returned an empty list — meaning a run that produced real files could not prove it. A single test now covers all four sites, and it was checked against the old code to confirm it actually fails when the mistake comes back, rather than being a test that can only pass.
+
+### Fixed (A run that delivered nothing had its story graded instead)
+
+- **Exhaustive's adversarial graders were reading the worker's account instead of the work — every time.** Each grader's prompt is built from the artifacts found in the workspace; when that list was empty they were told "this is answer-only, do not call tools." Every Exhaustive workspace lives under `~/.thomas/`, and the path bug above emptied that list for exactly those folders. So the panel whose own instructions say *grade the deliverables, not the worker narrative* was doing the opposite, always.
+- Underneath that sat a second fault, which the path fix alone would not have closed: an empty list meant two opposite things — "this task produces no files" and "this task was required to produce files and produced none" — and both got the same answer-only instruction. Missing work is the most damning evidence there is, and it was reaching the grader as silence.
+- A grader is now told plainly when required deliverables are absent, and which ones: *"this task was required to produce X and the workspace contains none of it — grade what was delivered, which is nothing, however convincing the account of it reads."* Tasks that genuinely produce no files are still graded answer-only.
+
+### Fixed (Verification stopped reporting evidence it never gathered)
+
+- **For every kind of task except code, verification passed because the worker had said something.** The check discarded the workspace on its first line and returned true for any non-empty reply — then reported `"deliverable present"` under a check named `"present"`, wording that reads like a file was found when nothing had been looked at. The module's own description promises "executable proof rather than LLM judgment"; the lint check directly above it already does the honest thing and marks itself *skipped* when it cannot run.
+- It now looks, and says what it found: the files in the workspace by name, or plainly that it inspected nothing. **Work answered in prose still passes** — for a question answered in writing the text really is the deliverable, and failing those would be wrong. What changed is that the two are no longer called the same thing, so a person reading the run, and the grading panel, can tell them apart. A task that was *required* to produce files and didn't is caught by the artifact gate, which is a separate stage.
+
+### Fixed (A Python linter was certifying games it cannot read)
+
+- **`ruff` over a folder of HTML and JavaScript prints "No Python files found", says "All checks passed!", and exits 0.** So a web project — which is most of what Thomas builds — came back verified, with the evidence reading `"ruff clean"`. Confirmed against real ruff: a deliberately broken JavaScript file passes this check. It now reports that it verified nothing, and web output is named as unchecked on this path.
+- **Two comments were promising safety that does not exist**, and have been corrected: one said production injects richer checkers such as pytest — nothing in the codebase passes `checkers=` at all — and another said the live wiring also runs tests. No tests are run there. A note asserting a guarantee that isn't there is worse than no note, because the next reader stops looking. I believed both of them myself an hour before checking.
+- The module now states plainly what it does not cover, and points at the Forge/Code path, which is where web output actually gets parsed, checked for unreferenced and duplicated assets, and booted in a real browser.
+
+### Added (You are told when a build replaced someone else's work)
+
+- **Measured on the real workspace: 106 separate code tasks all write into one folder, and `index.html` was written by five of them.** Each silently replaced the last. Four builds are gone with no record anywhere — the only surviving trace was a 6KB stylesheet whose page no longer existed, and nothing reported even that, because the check that finds unreferenced files was broken until today.
+- A run that overwrites a file created by a **different** code task now says so, by name, in the run report. It does not block the write, and it does not change where projects live — that decision is still open. It answers a question the report simply could not ask before.
+  - **That decision was taken in `b56c7075`**: a new task arriving with no chosen project gets its own folder under `~/.thomas/projects/<name>` instead of the shared drawer (see *Fixed — A new Code task gets its own folder instead of the one everybody shares*, above). The overwrite report is what made the case — it is where the five conversations writing one `index.html` were counted.
+- Deliberately quiet about your own work: a file this task has written before is never flagged, because iterating on your own output is how building works. Checked against the real project — the roguelite task also wrote `index.html`, so it stays silent there, while a *new* task writing `index.html` is told the file belongs to someone else. That is the exact case that destroyed four builds.
+
+### Added (Build identity — which Thomas am I looking at)
+
+- **A small chip in the bottom-right corner of the chat now names the port, the version and the commit** the running server was built from — `:8899 · v0.19.23 · 54507302`. This repository routinely has more than a dozen worktrees checked out at once, several reporting the same version string, and the launcher only printed the version to a console that is closed by the time anyone is looking at the browser. The commit is the part that actually tells two instances apart.
+- Clicking the chip copies the line, which is the quickest way to answer "what build are you on".
+- When the working tree has uncommitted edits the chip turns amber and says `uncommitted`, because a build made from a modified tree is not the commit printed beside it.
+- `/api/health` reports the same identity under `build`. Resolving it cannot slow down or break the health check: it is cached after the first call, times out if git hangs, and falls back to the version alone when there is no repository.
+
+### Added (Branch custodian — sprawl is detected and consolidated instead of accumulating)
+
+- Thomas tracked *worktrees* but never counted **branches**, so a repository could sit under the worktree ceiling while dozens of branches piled up invisibly — and the remedy the alarm printed, `thomas consolidate`, was never implemented, so following the instructions exactly led to a dead end. The branch custodian closes that loop: it classifies every branch against trunk as **contained** (nothing outside trunk — safe to delete), **superseded** (diverged, but every change already exists in trunk), **unique work** (carries content trunk lacks), or **active** (recently touched), then proposes the safe action for each. Dry run by default.
+- Branches carrying unique work are **never** deleted automatically — they are flagged with the exact list of files at stake, so the decision is visible instead of silent. Any branch git cannot fully read is treated as unique work rather than as safe, so an unreadable branch can never be retired by mistake.
+- Reports in plain language ("80 branches; 1 safe to retire automatically; 71 carry unique work and need your call") rather than requiring someone to read git plumbing.
+- `thomas consolidate` now exists as a real command — it had been printed as the recommended remedy for months without being implemented, so anyone following the instructions hit a dead end.
+- **Consolidation holds** are the circuit breaker. When branches cross the ceiling, `thomas consolidate --audit` places a hold and **new branch creation is refused** with a message naming the remedy; the trunk stays usable so the consolidation work itself is never blocked by the hold it is clearing. Once sprawl drops back under the ceiling the hold lifts itself. Nobody has to remember to check.
+- Session start now reports branch state to every agent alongside the worktree inventory, including any active hold. This is what stops an agent arriving with no context from cheerfully creating branch 82 on top of a pile nobody is tracking.
+- A corrupt hold file fails **open** rather than wedging the repository, and releasing a hold is unconditional.
+- **It now runs itself.** A maintenance sweep starts with the server (beside the runtime guard and run-store janitor) and re-checks for sprawl on a cadence — every six hours by default, tunable via `THOMAS_CONSOLIDATION_AUDIT_INTERVAL_S`, disable with `THOMAS_CONSOLIDATION_AUDIT_ENABLED=0`. Nobody has to remember to run anything. A failing sweep is logged and the loop keeps its cadence; maintenance can never take the server down, and it cancels cleanly on shutdown.
+
+### Fixed
+
+- **Cancelling a Canvas task now actually stops it.** Cancellation was never implemented on that path at all — pressing cancel set a flag that no code read, so the run carried on, the task sat in "executing" for as long as the server stayed up, and the chat could only keep repeating its last status. That is why asking "how's it going" four times got "still planning the design" four times, and why cancelling changed nothing. Cancelling now takes effect within a few seconds, and a task you stopped is recorded as cancelled rather than as a failure.
+
+- **Canvas works again — it was hanging up on the model roughly three seconds into every request.** Asking for a graph reliably produced "Canvas generation failed before a verified result was produced". The cause was the cancellation poll added alongside the fix above: it waited for the next piece of the model's reply in three-second slices so that pressing cancel would be noticed promptly, but the wait it used *cancels what it is waiting on* when a slice expires. That tore down the request mid-flight. The next slice then found a dead connection and read it as "the model finished and said nothing" — so a reasoning model, which routinely thinks for five to thirty seconds before its first word, was cut off every single time, several seconds before it could speak. The request reached the API and came back healthy; Thomas hung up on it. Cancellation is still noticed within seconds, and the deadline is unchanged.
+
+- **A canvas diagram no longer opens as a blank white page when its script cannot run.** Every generated diagram ships hidden — all elements at zero opacity behind an opaque cover — and relies on JavaScript to reveal them. Anywhere the script does not run (scripting disabled, a strict content policy, a sandboxed frame, a document preview pane) the result was a blank page with nothing to indicate anything had gone wrong, which for the reader is indistinguishable from a broken product. The diagram now falls back to its finished, static state, using the same escape hatch that already existed for readers who ask for reduced motion.
+
+- **Numbers on a chart no longer read zero when the count-up animation cannot run.** Each animated figure shipped as a literal `0` and was counted up by script; without the script the chart displayed a full set of confident zeroes. Figures now ship at their real value and are zeroed by the script before the first frame, so the animation is unchanged and a static render tells the truth.
+
+- **Thomas no longer attaches a spreadsheet of numbers it made up.** When a chart plan drew its bars without stating their values, the export fell back to the bars' *pixel sizes* and shipped those as the data — a request for the most spoken languages came back as eight rows reading `Series 1, 24` … `Series 8, 24`: eight bars, twenty-four pixels each, attached as "verified backing data". If even that failed, a single invented row (`Series 1, 1`) was written instead. Both are gone. When the values genuinely are not there, Thomas delivers the chart you can see and says plainly that there is no separate data file, rather than manufacturing one.
+
+- **Thomas no longer reports bugs that only its own review process created.** When Thomas reviews its recent behaviour it reads shortened extracts of past conversations — and the shortening left no trace, so a complete 1,200-character answer about retirement accounts, clipped at 300, was read as a reply that had stopped mid-sentence. It was written up as a real failure, quoting the cut as proof. Shortened extracts now say so, and the review is told what that mark means. Re-running the review afterwards, the invented failure was gone and every remaining item was real.
+
+- **Thomas's own failure report now describes Thomas, not its test suite.** The report behind "what broke today" is also what Thomas reads when reviewing its own behaviour — and running the tests appended to it, because the suite drives the same code with stand-in prompts. Roughly two thirds of a week's entries were fixtures with names like "do the thing", so the report was largely reporting that the tests had run. The suite no longer writes to it. Tests that deliberately exercise the report still do, against their own scratch copy.
+
+- **Restarting Thomas no longer leaves a dead task spinning for twenty minutes.** A restart kills whatever was running, but the record stayed marked "executing" until it had been quiet for fifteen minutes and the next sweep came round — up to twenty-five minutes of watching a task that died the instant you restarted, which is exactly when someone is sitting there watching. Anything last touched before Thomas started up belonged to a process that no longer exists, so it is now closed immediately on boot and says it was interrupted by a restart. Work started by the running server is never affected.
+
+- **A typo in your request no longer costs you the whole result.** "make me a graph pofmrvenue from am deup company" built a clean revenue chart, was judged not to match the request, was rebuilt, built a clean chart again, and both were thrown away — because Thomas checked whether enough of your own words reappeared in the picture, and a misspelled word can never appear in a correct drawing. You saw "Canvas generation failed" and got nothing. That check now records a concern instead of destroying the work: a result that might be about the wrong thing is visible at a glance and corrected in one sentence, while a failure leaves nothing to correct. Genuine defects — an empty render, a placeholder, a chart whose labels sit against the wrong numbers — still stop delivery. The same request now returns a labelled revenue chart, captioned as fictional.
+
+- **Asking Thomas to change something he just made now works.** "Change tuesday to 9 and add sat 7" failed outright, reporting that nothing had been produced. Earlier files are copied into the new task's workspace only when the request looks like a follow-up, and that test was tuned for a different question — whether to replay the prior conversation to the worker, where guessing wrong makes it build the wrong thing. An edit that happens not to say "it" or "that" failed the test, so nothing was copied, and Thomas went looking for a chart in an empty folder. Copying files is now judged on its own terms: they come along unless the request is a clearly self-contained new build. Whether Thomas is *told to edit them* still uses the stricter test, so a new request is never pointed at old files.
+
+- **Follow-up requests like "rerun the chart" no longer fail.** When you continue a task, Thomas hands the next run a note listing what the previous one left in the workspace, so it edits those files instead of asking you to upload them again. That note names files — and the check that confirms Thomas produced what you asked for was reading those names as *your* request. "Rerun the chart" was then failed for a missing `chart-data.xlsx` that nobody had asked for and the rerun had no reason to produce. This was the most common cause of failed work in the logs.
+
+- **A chart's data now comes from the chart's own design, not from measuring the picture.** Thomas used to recover a chart's numbers by reading the finished drawing — matching each printed figure to the nearest label by position. That held up until the next chart was drawn a little differently: values on the bars, values beside them, a pie legend written as one line, a pie legend split across two. Each arrangement needed its own rule, each new rule stopped covering an older one, and whenever none matched, a perfectly good chart arrived with no data file. The design now simply states the figures it charted, and that is what you download. A household energy chart that had failed to produce data three different ways now exports its four sources exactly as drawn.
+
+- **Thomas no longer answers a real question with a made-up shape.** Asked how people commute to work, it returned a single bar reading 100%, captioned "illustrative distribution" — the shape of a chart with none of the information. It is now told to chart the real breakdown as best it knows it and to name its source; if the figures are estimates it says so in the caption rather than inventing a stand-in. The same request now returns the actual six modes, captioned with the population and year.
+
+- **Charts whose values are written on the bars now come with their data.** Most chart designs print the figure as a label — `68.7%` above `Drive alone` — rather than declaring it as a separate value, and Thomas only knew how to read the latter. A commute chart showing six real percentages arrived with no data file at all. Those printed figures are now read as what they are: the number the chart displays. Axis markings (`1,500`, `1,000`, `500`, `0`) are excluded, because a real value has a category name beneath it and an axis marking does not.
+
+- **A one-bar chart no longer arrives with a one-row spreadsheet.** When the model hedges — a request for how people commute came back as a single 100% bar captioned "illustrative distribution" — attaching a data file dressed that hedge up as a finding. The chart still arrives; the spreadsheet does not.
+
+- **Chart tables now read in the same order as the chart.** Rows followed the order the design happened to be written in, not the order the bars appear. A "most spoken languages" chart drew English first and tallest, but listed English (1,528) *below* Arabic (335) in its data file — every label correctly matched to its own value, and the table still read as wrong.
+
+- **Horizontal bar charts get their category names.** Labels were only ever looked for directly beneath a value, which is where a column chart keeps them; in a horizontal chart the name sits to the left and the value slides sideways with the bar, so every one of them exported as `Series 1`, `Series 2`, `Series 3`.
+
+- **A chart of banana varieties now names the bananas.** Charts exported with `Series 1`, `Series 2`, `Series 3` instead of the actual categories, because the design plan stores a bar's *value* and its *axis name* as two separate items and the export only ever read the values. Each value is now matched to the name printed beneath it. The numbers themselves are untouched — they still come from the plan's stated values and are never inferred from the drawing.
+
+- **A model reply that arrives empty is no longer reported as a mysterious failure.** When the model completed a response carrying no content, that came back as an empty result which each layer then described in its own words, ending at "Canvas generation failed before a verified result was produced" — with nothing anywhere saying the model had returned nothing. It now says exactly that, and names the most likely cause.
+
+- **Thomas can no longer be locked out of itself by its own app previews.** Each preview of a generated app leaves a capability cookie for an hour, and cookies ignore port numbers — so those cookies were also sent to Thomas, where they mean nothing. Around 115 of them exceed the HTTP header limit, at which point every request fails before it reaches any code, the whole UI stops loading, and the only ways out are waiting an hour or clearing cookies by hand. This was reproduced, not theorised: browsing the project library was enough to trigger it. Thomas now expires any preview cookie that reaches it, which both prevents the build-up and recovers a browser that has already filled up, and it tolerates a bloated header rather than refusing to start.
+
+- Hardening from an adversarial review of this session's own changes: only the Canvas build frame may tell the page it is ready (any frame could, including the library previews, and a forged signal could silently blank part of a Canvas render); closing the library now unloads its previews rather than leaving them running behind a shut panel; a summary that merely mentions a worker-protocol word keeps its sentence, where before "Added a give_up flag to the retry loop" was truncated to "Added a"; and one deeply nested JSON file in one project can no longer take down the whole project list.
+
+- **A task that fails no longer throws away what it made.** The sweep that collects a run's files ran only when the run succeeded, so cancelling one — or letting it time out — discarded the evidence along with it. That is why a finished PDF could sit in a workspace while you were told nothing was produced. Files left behind are now recorded on the failure and reported alongside it. They are deliberately not recorded as proof: proof means "this is the verified answer", and these mean "this is what was on disk when it stopped".
+
+- **Asking Code a question no longer comes back as a failure.** A run that changed no files was only accepted as an answer if it had used no tools at all — but answering "what does this project do?" requires reading files, so a correct answer was reported as a failed run with a fabricated exit code, and the answer itself was hidden behind the error. Reading is no longer treated as a failed edit. The guard it must not weaken is intact: if the agent tried to write and nothing changed, that is still a failure, and when the tools cannot be identified the stricter old rule still applies.
+
+- Opening a project Thomas prepared is now undoable. Preparing a folder ran `git init` and stopped, which left no commit to compare against — so change tracking showed nothing and Revert had nowhere to return to. A baseline commit is recorded when the folder is prepared, so the first edit can always be undone.
+
+- ~~**Thomas no longer calls a deliverable "verified" when it has nothing to do with what you asked.**~~ **WITHDRAWN — this shipped and then stopped running three days later, and the entry is left struck through rather than deleted because it was a promise about honesty that stopped being true.** Success was inferred from a side effect — a non-empty file existed — so the wrong artifact passed as easily as the right one. That is how a request for a graph of current trends was closed as verified by a one-button arcade game. The subject check that fixed it (`chat_delegation_artifact_intent`) was written and is still here and still works, but `87ae37e5` replaced the file holding its one call site with a version written two days before that check existed, so the call went away with the prompt classifiers. **Measured again on 2026-07-31: one request, answered once with an arcade game and once with a real trend graph, is reported "verified" both times.** Re-connecting it is not a loose wire — the same merge landed the opposite rule, that verification must not read your request at all — so it is written down at the top of that module instead of being quietly reversed.
+
+- **You can now pick what Thomas works on by looking at it.** The control beside Tools showed a single folder name — usually something like `exec-065aad17f4f8` — and its only trick was a native folder dialog. It is now a "Selected project" chip that opens your library above the composer, with every project shown as a live, running preview of the actual app. You recognise the snake game because you can see the snake game. Browse my PC and New project sit alongside. Clicking a card opens it. At most twelve previews run at once, so scrolling never starves the preview service, and each one is scaled to fill its tile exactly rather than sitting in a white box.
+
+- **The apps Thomas builds for you can finally be opened again.** Everything Thomas makes lands in a folder under `~/.thomas/workspaces`, and Code refused to open any folder without version history — which none of them had. So all 913 of them were unopenable, and picking one returned "project_root must be inside a git repository". Thomas now prepares its own folders on demand. Folders that belong to *you* are still never touched without asking: they are refused with an explanation instead, and no `.git` appears in your files behind your back.
+
+- **Not choosing a project no longer means "edit my own source code".** A Code conversation that arrived without a project — including one whose request body simply failed to parse — silently bound Thomas's own checkout and reported success. Anything the worker then wrote went into the product tree next to the code that wrote it, which is how a file of driving tips ended up in the repository root. The fallback is now a scratch project. Working on Thomas itself is still available; it just has to be asked for.
+
+- **Your library shows what you asked for, not the filename.** Generated apps were titled from the file on disk, so 88 of 113 were called "index" and the list was unusable. Cards now carry the request that produced them — "Make a small snake game i can play" — and no longer leak worker prose such as "why_blocked: The required monolith guard script is absent" onto the card.
+
+- **Errors say what happened and what to do.** Project-selection failures returned raw validator strings naming internal arguments ("project_root must be inside a git repository") straight to the screen. They now read as sentences, with the internal text kept alongside for logs.
+
+- GPT-5.6 ChatGPT OAuth now recovers from a rotated Codex login: after an expired Thomas token receives a 400/401 refresh rejection, Thomas can atomically adopt a different, currently usable token pair from the same user's local Codex login and resume once. Ready Thomas credentials are never replaced, unusable local credentials are rejected, and transport failures do not trigger credential substitution.
+
+- **Two chat requests for the same session no longer run at the same time.** Chat V2 never adopted the session-run guard the older chat handler used, so a rapid follow-up could execute a turn while the previous one was still running and the two could interleave conversation state. Turns for a session are now serialised — the follow-up waits for the turn in front of it and then runs normally, so nothing is dropped. Different sessions are unaffected and still run in parallel; if the lock registry is ever unavailable the turn proceeds rather than blocking chat. Found by migrating a test suite that had been failing (and being dismissed) since the Chat V2 migration: it was sabotaging Chat V2 to reach a legacy route that no longer exists, and mocking a class Chat V2 never instantiates.
+- Cleared a stale workboard task/problem mapping pointing at a `PROBLEM.md` that no longer existed. QuickBuilder mode had masked it; it blocked commits once gate enforcement was restored.
+- Opening Thomas at `http://localhost:<port>` no longer leaves the app silently read-only. The same-origin guard parsed the Origin host as an IP address, so the *name* "localhost" failed the check and every mutating request (save, send, approve, delete) was rejected with 403 while page loads and reads kept working — the UI looked healthy and then quietly refused to do anything. "localhost" and "*.localhost" are now recognised as loopback origins, per RFC 6761. Genuinely cross-origin callers are still rejected, including lookalikes such as `notlocalhost` and `localhost.evil.com`.
+
+### Added (Agent Operations surfaces — the frontier capability cores are now usable in the browser)
+
+- New **Agent Operations** page at `/static/frontier.html` puts six capability surfaces behind one console, each wired to its already-tested backend core over a real HTTP route:
+  - **Steer a running agent** (CAP-040) — send a free-text steer to a live fleet session and watch the delivery acknowledgement land (`delivered` → `acked`, or `failed` with the reason).
+  - **Live run telemetry** (CAP-137) — always-visible turns, tokens, rate, and completion projection; an unknown projection reads "unknown" instead of a fabricated ETA.
+  - **Worktree progress** (CAP-139) — per-worktree status, task-graph timing with the critical path called out, and a cost rollup.
+  - **Source annotations** (CAP-147) — author annotations anchored to a line range, open a conversation from one, and emit the resulting unified diff.
+  - **Mention context** (CAP-148) — resolve `@file` / `@thread` / `@session` mentions into typed context objects under a token budget, showing what was included and what was dropped.
+  - **Pull request review** (CAP-149) — risk-ranked hunks, threaded comments, an approval gate that stays blocked while a high-risk hunk has an unresolved blocking comment, and fix handoff.
+- Surfaces register through a single `frontier_surfaces` entry point, so one failing surface never takes the others down.
+
+### Added (Frontier capability program — external integrations, real code behind injectable adapters)
+
+- Legacy code map (CAP-142): a symbols + edges map over a codebase with hash-gated O(changed) incremental ingest, a reverse-dependency impact set for a changed symbol, and a precision/recall accuracy report against a golden set.
+- Cross-language migration harness (CAP-143): replay a corpus against a source and candidate implementation comparing return and raise behavior, drive a counterexample-fed fix loop to convergence, quarantine persistently-divergent inputs, and emit a frozen equivalence suite.
+- Interactive mockup mode (CAP-112): a mockup workflow with approval state (only approved can be implemented), a clickable prototype flow across screens, and an implementation commit that links mockup↔code bidirectionally.
+- Visual click-to-edit (CAP-113): convert a structured visual edit into a reviewable unified source diff (not an opaque live mutation), batching edits into one coherent diff set.
+- Large-context needle citation (CAP-011): a scalable needle corpus with a naive-truncation control proving the needle is unreachable by truncation, and a reader that returns the correct file citation.
+- Orchestration scale benchmark (CAP-032): run 20-25 concurrent agents (barrier-proven) with a merge-quality oracle (clean-merge/conflict/gate-pass rates) and a structured scale report.
+- Managed DB provisioning (CAP-117): provision a database for a generated app (real SQLite default, Postgres-DSN builder for the credential-gated lane) with a vendored, standalone per-app migration runner — ordered, idempotent (re-run is a no-op), transactional (a failing migration rolls back with no partial record).
+- Ownership-scoped auth provisioning (CAP-118): generate default-deny ownership rules for a generated app plus auto-emitted cross-account denial tests that pass against the correct policy and fail against a deliberately permissive one (so the tests have teeth).
+- Prompt→full-app scaffold (CAP-116): from an app spec, generate a coherent zero-wiring app — backend handlers and a persistence layer already connected — and the generated persistence is executed against real SQLite in tests to prove it works, not just emits text.
+- Governed marketplace distribution (CAP-026): distribute plugins/extensions/skills to a team or org scope with an approval gate (pending until approved; rejected never distributes) and revocation (withdrawn from members, future installs blocked), all audited.
+- Monorepo-scale index (CAP-145): a sub-linear inverted index (query work scales with matches, not corpus size) plus AST build-graph partitioning (a changed file's minimal impacted set), with a 1x/2x/5x/10x benchmark computing a sub-linear scaling exponent.
+- App-builder payments (CAP-119): a generated app's payment/entitlement wiring where entitlements are granted only on a signature-verified webhook (reusing Thomas's existing Stripe verifier) — a forged, wrong-secret, or tampered event grants nothing; cancellations revoke.
+- SSO (CAP-123): an OIDC + PKCE engine (authorize-URL + code/verifier exchange, ID-token issuer/audience/expiry/nonce validation) enforced through a single hook the auth choke point imports, so every surface enforces identically.
+- SCIM provisioning (CAP-124): SCIM 2.0 user/group create/get/list/PUT/PATCH/delete matching the Okta/Entra dialect, with directory sync that reconciles a provider push (deactivating removed users rather than hard-deleting) — filling the gap that Thomas had no user model.
+- Governed connector suite (CAP-073): a governed set of productivity/deploy connectors on the BYO-connector contract, with allow/deny policy and a composed cross-app workflow that chains actions across connectors and surfaces mid-workflow failures.
+- Design-system awareness (CAP-115): discover a target project's components and design tokens and recommend reusing them (mapping an off-system value to the nearest on-system token) instead of inventing new ones.
+- CI-native execution (CAP-065): Thomas can run inside a CI job — parse a failure into structured findings, drive the reason→edit→verify loop to create a fix (pass/fail from a real subprocess exit code), and report a machine-readable result plus GitHub-Actions `::error`/`::notice` annotations and `$GITHUB_OUTPUT` vars. The fix step degrades honestly to inspection-only when no model is wired.
+- Real-browser E2E gate *mechanism* (CAP-088): click-type-assert browser validation for interactive changes — asserting on *computed* visibility (not innerText on hidden nodes), failing closed when no browser is present, and emitting the completion gate's own `allow`/`block` decision shape. **Not wired in:** nothing in production imports it, so it is not yet a required done gate and has never blocked a run. See the Fixed entry above.
+- Fleet TUI (CAP-099): a terminal fleet dashboard with navigate, peek, attach, reply, and a live task graph — rendered as a pure, snapshot-testable frame.
+- Embedding SDK (CAP-131): a full-harness SDK (`thomas/sdk/`) with a stable client API and an embeddable Agent View, proven end-to-end with a simulated third-party host over an injectable transport.
+- Post-deploy monitoring loop (CAP-121): deployed-app health and error signals feed back to the agent as structured findings, each trace-linked so a deployed error points back to the originating change/run.
+
+
+- Authenticated GitHub source-host integration (CAP-070): real PR create/update, review-comment reply with a follow-up fix reference, and a check re-run + reaction flow — behind an injectable transport (stdlib urllib default) so it's fully tested offline against a fake and runs live with a `GITHUB_TOKEN`. Plugs straight into the governed-PR gateway seam.
+- Linear ticket sync (CAP-071): ticket assignment intake plus bidirectional ticket↔PR status sync through one canonical state map, idempotent and conflict-aware (divergent changes record a conflict, not a silent clobber). Real Linear GraphQL behind an injectable provider; tested against a fake. (A Jira provider drops in behind the same `TicketProvider` Protocol.)
+- Chat-platform operation (CAP-072): chat-native dispatch, steering, approvals, Block-Kit diff review, and request-to-merge (with validation-evidence proof) — the five verbs mapped onto Thomas's existing delegation/approval/merge seams, over an injectable chat transport.
+- BYO-connector framework (CAP-074): a first-class custom-connector contract plus a conformance harness that certifies a candidate connector (methods, metadata, capability envelopes, error/health) before it can be used — fully hermetic.
+- Team MCP distribution (CAP-069): admin distributes an approved MCP server set with per-group policy (denied servers withheld with a reason), cross-surface refresh that installs new and prunes removed servers, and an append-only audit history.
+
+### Added (Frontier capability program — closing the 2026-07-21 audit gaps)
+
+- Cross-vendor agent roster (CAP-034): register external agent runtimes alongside internal ones and compare them on a shared scorecard — the same task set scored on identical metrics (success/latency/tokens/cost/quality) with a deterministic ranking.
+- Spec-as-source-of-truth (CAP-122): promote prompts into a versioned app spec, regenerate deterministically (same spec → identical artifact), and get a behavioral diff that names what capability changed between regenerations, not just a text diff.
+- Agent outcome metrics (CAP-129): per-agent outcome tracking (accepted/rejected, time-to-complete, edits-after) plus a counterfactual productivity estimate versus a no-agent baseline, as dashboard-ready data.
+- Program management (CAP-144): build a two-week program plan (phases, dependencies, milestones) with an automated day-7 midpoint risk/phase report and phase-transition reports.
+- Multi-root workspaces (CAP-016): name a set of repos as one workspace with cross-repo search, coordinated all-or-nothing cross-repo edits, and a coordinated PR plan that links one change across N repos.
+- Agent interop protocol (CAP-033): native ACP — advertise/discover agents by capability, invoke with structured request/result, cancel an in-flight invocation (the callee observes it), and exchange typed validated envelopes.
+- Org shared knowledge (CAP-110): org-scoped knowledge shared across different users, with a reviewed promotion gate (personal→org stays pending until an authorized reviewer approves; rejected proposals stay personal).
+- Automation templates & reports (CAP-080): versioned automation templates with recoverable edit history, and exception reports from failed runs routed to the automation's configured channel and nowhere else.
+- Audit log with causal chains (CAP-126): every auditable action records complete actor attribution (human or agent, plus the human it acts on behalf of), and human→agent→agent causal chains reconstruct in order — with a stable export that round-trips.
+- Metering, budgets & downshift (CAP-128): per-agent spend attribution with linear end-of-period projection, 80%/100% budget alerts on actual or projected spend, and policy-driven downshift that recommends a cheaper tier for an over-budget agent.
+- Change security scanning (CAP-083): every generated change is scanned (hardcoded secrets, eval/exec, shell=True, unsafe deserialization, SQL string-building) and confirmed findings become regeneration directives (file:line + fix) fed back into generation — the change is blocked until addressed.
+- Cross-tool format compatibility (CAP-133): lossless import/export round-trip with external skill (SKILL.md) and instruction (CLAUDE.md/.cursorrules) formats, surfacing a diff when a round-trip isn't lossless instead of silently dropping content.
+- Fleet management API (CAP-135): programmatic CRUD over agents, automations, schedules, and policies — validated (missing-field and duplicate-id rejected, nonexistent update/delete errors cleanly), durable, and isolated across the four kinds.
+- Specialist role fan-out (CAP-030): standing expert roles (security/performance/correctness/tests) run in parallel and their outputs provably change the result — a materiality report shows what each role added and whether it flipped the decision versus a baseline without them.
+- Per-release token efficiency (CAP-095): retry rate and first-pass success are recorded per release against the token ledger, so you can see tokens-per-success trend release over release.
+- Fast-inference tier (CAP-096): a per-task fast tier gated on latency and edit-quality — tasks over the latency budget aren't fast-tiered, and a fast output below the quality bar falls back to standard, with a benchmark report per task.
+- RBAC (CAP-125): custom scoped roles enforced identically for humans and agents — a human and an agent with the same role get the same decision, with explicit-deny-overrides-allow, default-deny, scope constraints, and multi-role union.
+- Agent identity & signed attestation (CAP-127): each agent gets a managed identity with a scoped policy and a signing secret (never exposed), and every action can be signed and verified — tampering with the action or identity, or a forged secret, fails verification.
+- Context-aware code review (CAP-081): reviews changed modules together and flags cross-module invariant violations — a stale caller left behind by a signature change, an imported-but-undefined symbol, a forbidden dependency edge — each finding standards-cited (rule id + why) with both locations involved.
+- Checkpoints & rollback (CAP-086): checkpoint repository, environment, and conversation state together, then selectively undo just one kind (roll back the repo without touching the conversation, or vice versa) — repo snapshots survive even a git reset.
+- Requirement-linked test generation (CAP-087): generate edge and failure tests each linked to a requirement id, then validate the suite by mutation testing (it must kill injected mutants) — a weak suite scores low, so the metric actually discriminates.
+- Cost-tiered routing (CAP-094): an auditable classifier routes low-risk status/summary work to a cheap model profile and risky/complex work to standard/premium, recording why for every decision; ambiguous work falls back to a safe default, never cheap-by-accident.
+- Tool-call activity trace (CAP-138): every tool call is stored with full inputs/outputs (not truncated), duration, and session — queryable by session/tool/trace/time-window, and trace links follow across sessions so a chain spanning two sessions reads back as one.
+- Accountable repo navigation probe (CAP-001): locate a symbol with no location hint even three directories deep, returning a bounded read rationale — every file read is charged against a file/byte budget and recorded with a one-line reason, so navigation is accountable rather than a blind full-repo read.
+- Constraint retention through compaction (CAP-012): durable constraints stated early are pinned and exempt from compaction, so a rule from turn 1 survives a 200-turn compaction verbatim and still governs — and vetoes — a final action that would violate it.
+- Cross-surface session identity (CAP-018): one canonical server-side session identity spans CLI, web, and companion — all resolve to the same session and state, an update on one surface hands off automatically to the others, and the identity survives a restart.
+- Recursive agent generation (CAP-036): a generated agent can recursively create and verify another rubric-bound agent (proven two levels deep), each child validated and checked against its own rubric before acceptance, with a depth bound that stops cleanly.
+- Always-on automation supervisor (CAP-077): keeps persistent automations alive with a restart SLA (slow restarts flagged as breaches), a missed-work report for what didn't run during downtime, and role memory that accumulates across restarts instead of resetting.
+- Failure recovery & loop-breaking (CAP-005): a failed attempt forces a different, never-repeated strategy; contradictory or cycling attempts are detected and escalate (contradiction / cycle / strategies-exhausted) instead of looping forever; and escalation produces a structured failure summary of every attempt and why it's blocked.
+- Six-way fan-out with conflict-aware synthesis (CAP-029): one prompt fans out to N independent workers (default 6), each with its own evidence, and synthesis reports consensus when they agree but explicitly surfaces conflicts (which workers disagree, on what, with each side's evidence) rather than silently majority-picking.
+- Integration coordinator (CAP-056): orders branches for integration respecting declared dependencies (rejecting cycles), groups branches with disjoint files and no dependency edge into parallel-safe stages, and serializes overlapping-file branches with the overlap named.
+- Multi-repo groups (CAP-057): named groups of repos with pinned revisions and per-member read/write boundaries — writes to a read-only member are denied, access to a non-member repo is denied, and floating (unpinned) members are flagged.
+- One-command backgrounding (CAP-059): background an inflight run and later reattach — status surfaces state, progress, and a deterministic ETA; reattach restores the run's cursor and foregrounds it; finished/unknown runs signal cleanly.
+- Deterministic multi-file rename (CAP-002): rename a symbol coherently across imports, source, tests, and docs in one all-or-nothing pass — word-boundary safe (won't clobber `old_name_extra`), deterministic, and it rolls every file back byte-identical if any write fails.
+- Isolated subagent contexts (CAP-027): each spawned subagent gets its own budget-bounded context (default 50k tokens) with no reference path to its parent or siblings, so one subagent's context can never leak into another's; parents collect only each child's published summary.
+- Automatic per-session worktree (CAP-054): eligible sessions automatically get exactly one git worktree (idempotent reuse, ineligible sessions get none) with safe cleanup that removes a clean worktree but preserves a dirty one with a clear signal — never silently discarding work.
+- Secret-reference dependency management (CAP-008): package indexes can reference a secret by name, resolved from a provider only at use time and never written to the lockfile, serialized, or logged; lockfile updates are atomic (temp-file + replace) and store the reference, not the secret, with a leak-check helper.
+- Issue→PR delegation (CAP-066): an assigned issue is normalized and handed to a builder, then driven through the governed PR flow to produce a PR that is linked back to the issue and carries validation evidence — and only when validation passes (a failing build produces no PR, never silently closing the issue).
+- MCP registry & discovery (CAP-068): a searchable catalog of well-known MCP servers with one-step install that writes straight into the store the MCP client reads (so an installed server is immediately usable) and task-triggered suggestions (a database task suggests the sqlite server, a commit/diff task suggests git).
+- Portable skill packs (CAP-023): skills can be exported to versioned, content-hashed portable packs and imported back losslessly with schema-version and tamper checks, plus default relevance selection that ranks skills to a query.
+- Governed branch→PR flow (CAP-009): a flow that refuses to operate on protected branches, runs validation and refuses to open a PR if it fails, and embeds the validation evidence (each check + status + snippet) directly in the PR body — with push/PR-create behind an injectable gateway (dry-run by default).
+- Plan re-approval on surprise (CAP-050): given an approved plan (allowed tools, risk ceiling, path scope, constraints), execution deterministically demands re-approval when it discovers a materially surprising action — out-of-scope tool, risk escalation, out-of-scope write, or a newly-destructive operation — each with a specific reason.
+- Incremental repo indexing (CAP-015): filesystem changes update only the affected file's index entry (no full rebuild, unchanged files are a no-op), and a query immediately reflects an edit — the new content is retrievable and the removed term is gone right after the change.
+- Repository-defined agents (CAP-025): define your own agents/roles as markdown files in `.thomas/agents/` (or `.claude/agents/`) with explicit tools, model, and instructions — discovered live, validated (unknown tool names and missing fields are caught with precise errors), and exposed as ready-to-run agent definitions.
+- Cheap-model status summaries (CAP-041): periodic low-cost status summaries of an in-flight run with change-only cadence (nothing new since last time → no summary, no spend) and per-summary token + cost accounting that sums across the session.
+- Long-horizon objective persistence (CAP-010): objectives are snapshotted append-only (goal, constraints, acceptance criteria, progress, revision), a deterministic drift audit flags when work has diverged from the objective, and a restarted process resumes byte-for-byte from the exact persisted objective + progress.
+- Goal→subtask dependency graph (CAP-053): decompose a goal into a validated DAG of subtasks where each node carries its own rubric and verifier — dependency-respecting order, cycle rejection, per-node verification, and a goal-met roll-up that only passes when all required nodes verify.
+- Root instruction contract for delegated workers (CAP-019): delegated/subagent workers now apply the SAME resolved root/project instruction contract as the main agent, with a stable contract signature so every surface can prove it used the same instructions — closing the gap where project rules were honored on the main surface but dropped for delegated work.
+- Usage telemetry (CAP-014): a thread-safe accumulator exposes token usage split across prompt / completion / tool / compaction / retrieval with per-category subtotals and a grand total, plus a reconcile() that asserts the categories sum to within 5% of an independently measured total. Adapts the existing per-turn token report into the five categories.
+- Summary-only return channel (CAP-028): callers can define a summary schema (or use the built-in default) and get back only a validated summary object — status / key findings / artifacts / next step — instead of the full working transcript, with the same schema-validation and bounded self-repair as structured output.
+- Semantic code search tool (CAP-007): `code.semantic_search` is registered in the live toolset and retrieves by meaning from the RAG index (a concept query finds the right file even with zero keyword overlap), with a lexical fallback when the embedding backend isn't installed.
+- Token-ceiling constraint envelopes (CAP-048): a run can be given a token ceiling (`THOMAS_TOKEN_CEILING`) with periodic checkpoint summaries and a deterministic stop reason (ceiling-reached / completed), with state that survives a restart. Off by default — zero behavior change unless configured.
+- Full hooks event surface (CAP-024): the hook system now covers the complete lifecycle — run start/end, model call, tool pre/post, approval requested, completion, and failure — with documented event names and payloads, so deterministic event scripts can observe every stage.
+- Independent condition verifier (CAP-047): completion claims that carry runnable evidence are now re-checked by re-running those commands in a fresh, isolated subprocess (allowlisted to read-only/test commands) — a diverging rerun rejects the claim with expected-vs-actual evidence and overrides an approving in-path review, so a plausible-but-false "it passed" no longer slips through. Claims with no runnable evidence are treated as unverified.
+- Priority task queue (CAP-058): the swarm scheduler gained priority tiers, time-based aging so low-priority work can't starve, and preemption of the lowest-priority preemptible task when higher-priority work is ready — with tests proving priority order, bounded-wait anti-starvation, preemption, and unchanged FIFO behavior when no priorities are set.
+- Repository-defined slash commands (CAP-022): define your own parameterized `/commands` as markdown files in `.thomas/commands/` (or `.claude/commands/` for compatibility) — frontmatter for description/argument-hint, `$ARGUMENTS` and `$1..$9` substitution, live discovery without restart, listed in `/help` alongside built-ins. Built-ins always win name collisions; malformed files degrade to a warning.
+- Structured post-run reports (CAP-141): a Code run now produces a structured report — attempts, validations run, open risks (derived honestly from the run's own data), ranked attention pointers, and a mapping of outcomes onto the run's goal/acceptance criteria — rendered as collapsible sections in the completed-run view.
+- Executable MCP client (CAP-067): Thomas now speaks the Model Context Protocol as a client — a stdio JSON-RPC 2.0 client spawns a configured MCP server, runs the initialize handshake with capability negotiation, discovers its tools (`tools/list`) and calls them (`tools/call`) in the same session, with timeout/error mapping and clean shutdown. Discovered tools register into the live tool registry name-spaced `mcp.<server>.<tool>` so the agent loop can use them, and `mcp tools`/`mcp call` expose it from the CLI. (stdio transport; sse/http rejected with a clear error.)
+- Hierarchical + cross-tool instruction files (CAP-020/021): the agent now resolves instruction files from the working directory up to the project root and merges them with deterministic precedence (nearest directory wins; within a directory THOMAS.md > .thomas.md > CLAUDE.md > AGENTS.md > .cursorrules). CLAUDE.md, AGENTS.md, and .cursorrules are live-read as first-class formats — repos without a THOMAS.md get their existing agent instructions honored. Merges are lossless and origin-labelled, an explicit `<!-- thomas:override -->` marker suppresses lower-precedence sources, and the merge is bounded by a context-window-aware budget that degrades in stages (ambient instruction files drop before deliberately injected steering).
+- Transactional diff apply (CAP-006): patches now preflight every hunk against current file content before ANY write — one conflicting hunk blocks the entire apply with the conflict named by stable id; raw-byte snapshots make mid-apply failures restore every touched file (created files unlinked); and `diff.apply_patch` accepts a per-hunk selection while the new `diff.preview_patch` safe-read tool exposes stable hunk ids with clean/conflict status. The old silent partial-apply hazard is gone.
+- Completion gate (CAP-004): a run whose validation failed can no longer end in a bare AGENT_DONE — the loop demands a fix or an explicit structured give-up (GIVE_UP marker + what-failed / what-was-tried / why-blocked diagnosis), blocks completion otherwise, and surfaces diagnosed give-ups distinctly from success (gave_up flag + diagnosis on the done event).
+- Caller-schema structured output (CAP-079): `LLMClient.chat_structured()` accepts a caller-supplied JSON Schema, validates the schema itself before any model call, validates output (jsonschema backend with documented stdlib fallback), feeds specific validation errors back for bounded self-repair, and returns the validated object with a full per-attempt trace.
+- Configurable mid-run check-ins (CAP-051): time/step/token thresholds each independently trigger check-in events at tool-step boundaries, with a resumable acknowledgement gate — a paused run persists its gate state, survives restart, and resumes exactly once acknowledged. No config, no overhead.
+- Delegation lifecycle notifications (CAP-045): completed/failed/approval-needed delegation events now emit Smart Notification Center notifications automatically (completion / blocked / approval_needed kinds) with `/?session=<id>` deep links, deduped per (event, execution_id) through the existing dispatcher (persistence + SSE + push). Notification failures are fail-silent — they can never break delegation itself.
+- Parsed dangerous-command policy (CAP-084): destructive-command detection upgraded from substring markers to tokenized argv analysis (thomas/agent/command_analysis.py) — argv[0] basename resolution, full chain-segment evaluation (&&, ||, ;, |, &, newlines), sudo/env/nohup/xargs unwrapping, cmd /c + powershell -Command (incl. -EncodedCommand) + bash -c payload re-parsing, and a marker fallback on unparseable input so it is never less strict than before. Quoted-string false positives (grep 'rm -rf') no longer escalate; obfuscated deletes ("rm" -rf, r''m) now do.
+- Headless/CI contract for one-shot chat (CAP-078): deterministic exit codes (0 success / 1 agent error / 2 usage-config / 3 timeout-interrupt) and an optional machine-readable JSONL run log (--run-log / THOMAS_RUN_LOG) with timestamp, prompt, model, outcome, exit code, duration, error, and artifacts per execution. Fixes AGENT_ERROR runs previously leaking exit 0.
+
+### Added (Codex parity: parallel Code runs)
+
+- Thomas Code now runs MULTIPLE tasks in parallel across different conversations/projects (Codex-cloud style). Server: a per-conversation run registry (up to 3 concurrent; still strictly serialized within one conversation) with per-slot status (`?conversation_id=`/`?run_id=` plus a `runs[]` list), per-run stream resolution, and stop/steer targeting exactly the requested run; the legacy single-slot keys mirror the most recent run so existing consumers and tests keep working (dead MODEL/SNAPSHOT keys removed). Client: switching conversations mid-run PARKS the run instead of blocking ("Finish or stop the current Code task" is gone) — the backend keeps working and reopening the conversation reattaches with its run id + event cursor; queued sends are stamped with their conversation at enqueue so they can never fire into the wrong project; steer/stop readiness polls per-conversation status. Verified live end-to-end: two runs in two projects executing simultaneously (registry showed both running, both artifacts written in parallel and completed), switch-away parked run A, both conversations reattached with "Reattached — this task kept running." Full route/persistence test suites: no regressions (3 pre-existing environment failures unchanged).
+
+
+### Audits
+
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `93d3d3bdf8ce`).
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `4523c83bdd3a`).
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `e8c333b400a6`).
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `fba1528ee5f0`).
+- Module `thomas/server` audited by `claude` on 2026-07-22 (status: pass, sig: `09181e63c95a`).
+## [0.19.22] - 2026-07-20
+
+### Verified (Codex parity: chat attachments to workers, task queue)
+
+- Chat attachments reach delegated workers: a doc attached in Chat with a planted codeword produced a worker-built file quoting it (attach -> dispatch -> worker read -> deliverable). This already worked; now it's proven.
+- Code task queue: sending a second task mid-run shows "Queued (1 waiting)" and auto-starts it when the active run finishes — both deliverables landed. Serial-per-instance by design; parallel Code runs across separate projects (Codex-cloud style) is the one remaining structural difference, scoped as its own refactor of the global run slot (status/stream/steer/stop are single-slot today).
+
+### Verified (Codex parity: run-the-tests execution)
+
+- Code runs really execute tests: with guardrails "open" + autonomy 3, a run that created add.py + test_add.py had its tests EXECUTED by the build engine's verify loop — transcript shows `pytest test_add.py` -> "3 passed in 0.03s" -> engine checks passed. The dispatched agent stays edit-only by design (it declined to fabricate a test-output file — "no real test output was available to record"); the engine performs the real execution and feeds failures back for fix passes. This closes the last enumerated Codex-parity gap (steering, stop, reload-resume, task queue, checkpoint/PR, attachments in/out, artifact previews, evidence-gated status, test execution).
+
+### Fixed (self-review P0: evidence-gated status)
+
+- Status questions are answered from live task evidence, never from narrative memory: the operator must ground "is it done / how's it going / how much longer" strictly in the background-work digest (which now lists up to 6 tasks, was 3), never give an ETA for background work, and never claim a restart/retry without actually calling the tool in that turn. Verified live: mid-conversation "how much longer is that going to take?" — where the task had actually failed — returned "It isn't still running — the attempt failed after timing out, so there's no remaining time estimate. I can retry it.", matching the execution record exactly. The old behavior invented "20-45 minutes" ETAs for work that had already died.
+
+## [0.19.21] - 2026-07-20
+
+### Fixed (last item on the self-review's FIX FIRST list)
+
+- Job-scope isolation: Work onboarding chat could inherit the app's ENTIRE prior conversation history (bare app-id chat context), which is how an email-triage job got described as SOTI MobiControl device work. Every onboarding flow now mints its own session and always uses the per-flow `app:onboarding:session` context. Verified live with a fetch intercept: a fresh onboarding in the workspace sends the namespaced context and the conversation stays on the new job's topic.
+
+## [0.19.20] - 2026-07-20
+
+### Fixed (from the self-review's FIX FIRST list)
+
+- Silent stalls are over: a stale-execution sweep (startup + every 10 min) closes any non-terminal delegated task whose heartbeat has been quiet 15+ minutes — workers killed by a restart no longer leave records "executing" forever. First run closed 8 orphans, the oldest stuck 22 DAYS, each with an honest "interrupted (likely a restart)" message and an issue-ledger line.
+- Doomed dispatches prevented: "send that"-style commands with no destination (the ledger showed two no_evidence failures) now get ONE inline clarifying question — verified live: "okay send that" cold returns "Which item should I send, and where should I send it?" instead of starting a worker that can only fail.
+
+## [0.19.19] - 2026-07-20
 
 ### Added
 
+- Self-review — the automated product owner. `GET /api/self-review?hours=N` has Thomas read his OWN recent conversations, the issue/friction ledger, and task outcomes, then write a prioritized markdown report (TOP FRICTION with evidence quotes, FAILURES with root causes, FIX FIRST) saved to runtime/logs/self_review.md. The first run independently surfaced real problems nobody had reported: "send that" follow-ups failing with no evidence, a job scope contaminated across contexts, file tasks failing with nothing delivered, and tasks stuck executing silently.
+- Friction telemetry: edit-and-resend, task cancels, and near-identical message retries now feed the issue ledger from the chat UI — the "this didn't land" signals, not just hard errors.
+
+## [0.19.18] - 2026-07-20
+
+### Fixed
+
+- Jump-in steer box is typeable: the live poll re-rendered the agent card every few seconds and wiped the input mid-keystroke. Renders now hold while the steer box has focus and resume on blur/send. Verified against a live running task: value and focus survived multiple poll cycles.
+- Snag loop capped: a worker failing the same step repeatedly no longer prints "hit a snag — trying another way" forever. After 6 consecutive tool failures the attempt is handed to the recovery machinery (replan or honest failure), and repeat snags read "Still stuck on this step (try N) — rethinking the approach" instead of the same line on loop.
+
+### Added
+
+- Issue ledger — failures as a report, not chat archaeology ("is there a system tracking every time it says issues so you can watch it like a report?" — yes, now). Every worker tool snag, final worker failure, and user-visible Work/Code UI error appends a structured line to runtime/logs/issues.jsonl (bounded, fail-silent). `GET /api/issues?hours=24` returns totals by kind/surface plus recent entries; `POST /api/issues` accepts client reports. This is now the first place to look each improvement pass.
+
+## [0.19.17] - 2026-07-20
+
+### Added (Codex parity)
+
+- Checkpoint: after a Code run, a "Checkpoint — commit these changes" button in Outputs commits the kept changes on a new `thomas-code/<slug>-<ts>` branch (user's work only — Thomas's internal `.thomas/` metadata is excluded) and reports the branch + short SHA; when the project has a remote, the note says the branch is PR-ready. New `forge_code_git.checkpoint()` + `POST /api/evolve/agent/checkpoint`. Verified live twice: via API (real branch + commit, clean tree after) and via the button after an organic run ("Checkpointed 3 file(s) as a310ddc on thomas-code/make-wishlist-…").
+
+## [0.19.16] - 2026-07-20
+
+### Added (Codex parity)
+
+- Code task queue: sending a new task while a run is going now QUEUES it ("Queued (1 waiting): …") and auto-starts it the moment the current run's result is durable — including after a manual Stop. Previously the send threw "A Code task is already running." Verified live: queued a second page build mid-run; it started itself when the first finished and both artifacts landed.
+- Composer send/stop disambiguation: with text typed, the button is always Send (queues while busy); clicking with an EMPTY composer while a run is going is Stop. Previously any click during a Code run stopped it — typing a follow-up task and hitting Send killed your run.
+
+### Verified (Codex parity)
+
+- Shell execution in Code runs works end-to-end behind the dials (guardrails "open" + autonomy 3): a run created is_prime.py + 5 pytest tests and actually EXECUTED them — transcript shows `pytest test_is_prime.py` → `exit 0 … 5 passed`.
+
+## [0.19.15] - 2026-07-20
+
+### Added (Codex parity)
+
+- Stop button for Code runs: a running run now shows Stop next to the steer input (`POST /api/evolve/agent/stop` existed server-side but the UI never exposed it). Stopping is non-destructive — changed files stay in Outputs with Keep/Revert. Verified live, including stopping a run the page had just reattached to.
+- Code runs survive a page reload: entering Code mode reattaches to a backend run still in progress (status now exposes the session's conversation_id; the client adopts the run id, restores the Working timer, steer input, and Stop, and reopens the live stream) instead of showing a dead surface while the agent keeps working. Verified live: reload mid-run -> "Reattached — Thomas kept working through the reload" with the timer running.
+
+## [0.19.14] - 2026-07-20
+
+### Fixed
+
+- Code mid-run steering actually works now (Codex parity). Steering stopped the run, then ALWAYS aborted with "Steering status check failed" before restarting: the readiness poll treated the killed run's own `ok:false` (returncode 1 — expected for a steering stop) as a status-endpoint failure. The poll now distinguishes run outcome from endpoint health. Verified live end-to-end: a recipe-page run steered mid-flight to "desserts only, title SWEET TOOTH" restarted cleanly and the final artifact carried the steer (title present, dessert content only).
+
+## [0.19.13] - 2026-07-20
+
+### Added
+
+- Work job chat can now READ the job's built-in spreadsheets and metrics: the dashboard's sheets (bounded: 6 sheets, 60 rows, 16 cols) and metric tiles ride the job's private context, so "which location has the highest single-day sales?" is answered from the user's own Daily Sales Log instead of "no sales entries have been recorded." Verified live: Thomas answered with the exact row values from the sheet ($2,020, Farmers Market, July 17) after a UI edit was saved.
+
+### Verified (organic pass, in browser)
+
+- Chat casual ask answered inline in ~4s, no dispatch, one proactive add-on; Edit-and-resend on a sent message prefills, forks the thread at that point, and re-answers the edited ask.
+
+## [0.19.12] - 2026-07-20
+
+### Fixed
+
+- Work: opening a job while its AI dashboard design was still being written could crash the view with "Cannot read properties of null (reading 'id')" — the dashboard renderers now tolerate partial/in-flight designs (null or id-less rows are skipped, never fatal), and Work action errors now log the full stack to the console instead of surfacing message-only dead ends.
+- Work: dashboard action buttons gave no visible feedback on click (the run was accepted silently). Clicking an action now shows a receipt on the dashboard — 'Started "Update daily inventory" — the result lands in Activity.' — that clears itself after a few seconds.
+
+### Changed
+
+- Work onboarding pacing: configuration no longer interrogates indefinitely. After two configure answers Thomas proposes sensible defaults and points at the "Create job & continue this flow" button instead of asking another question; the button itself was already there, but nothing ever told the user.
+
+### Verified (organic pass, in browser)
+
+- Fresh food-truck job: goal discovery -> 5-workflow map -> configure -> create; AI-designed dashboard with 3 tabs, 5 workflow-bound action buttons, 4 metrics, chart/progress/status widgets, and two editable built-in spreadsheets whose edits persist server-side (add row -> save -> confirmed in the store).
+- Chat multi-task: one message asking for two deliverables ran two workers ("Working on 2 things"), produced two separate "here it is" replies each carrying its own artifact — the game popped open on the Canvas, the CSV stayed a preview chip, nothing duplicated on the work card.
+
+## [0.19.11] - 2026-07-20
+
+### Added
+
+- Thomas Code file input (parity with chat's Add-files): the composer's attach button now works in Code mode — photos ride as data URLs and documents as extracted text on the run request, the server stages them into `<project>/_attachments/` (name-sanitized, bounded: 12 files, 8MB/image, 20MB total), and the run goal tells the agent where they landed. Staging happens BEFORE the git snapshot so attachments are inputs in the baseline, never misreported as run outputs. Verified live twice on the real GPT path: an attached note's unique codeword was quoted back in the agent's output file — via direct API and via the actual UI attach → Send flow.
+
+## [0.19.10] - 2026-07-20
+
+### Added
+
+- Thomas Code output artifacts preview inline: the Code OUTPUTS panel now previews PDF (embedded viewer) and SVG (image) results, matching chat — previously only html/image rendered and everything else was a bare link. (Input attachments — PDFs/photos into a Code run — are the next dedicated slice.)
+- Expandable, interactive agent view: clicking an agent activity card now shows its real STEP-BY-STEP timeline (humanized, timestamped — "Getting started", "Writing the file…", "Saved the file — moving on", "Reading files…") instead of one line with nothing on expand. New `GET .../delegations/{id}/detail` surfaces the durable transition history (internal lifecycle jargon rewritten to plain language, consecutive duplicates collapsed); the timeline refreshes live while the agent works. Plus a "JUMP IN" steer box on running agents (`POST .../delegations/{id}/steer`) so you can send a course correction mid-run, wired to the existing steer/instruction queue. Verified live end-to-end in the browser.
+
+## [0.19.9] - 2026-07-20
+
+### Changed
+
+- The result is presented IN the "here it is" reply, once. Previously the artifact showed as a preview chip on the earlier "on it" work card while a second Thomas bubble only referenced it by name. Now the completion bubble carries the artifact itself (openable + downloadable), the "on it" card no longer duplicates it, and a playable/renderable result (game, chart, HTML) pops open on the Canvas the moment Thomas says it's ready. The announcement endpoint returns each artifact with a real preview URL + kind (via the delegation normalizer). Verified live: an HTML game landed on the done reply, popped open on the canvas, and did not duplicate on the work card.
+
+## [0.19.8] - 2026-07-20
+
+### Fixed
+
+- Running chats keep their live state across navigation: leaving a chat while a task runs and returning to it now restores the live agent bubble exactly as it was and resumes polling to completion, instead of dropping the bubble and acting done ("I went back to my thermostat thing and it's gone"). The background worker never stopped server-side; only the visual was being lost. Verified live: sent a build, opened a new chat, came back — the "On it" bubble was restored with fresh progress and reconciled through to the finished, downloadable result.
+
+### Changed
+
+- Thomas-first voice: the crew is invisible plumbing, not a "task manager" the user is routed to. The activity card header now reads "On it — working on this" / "Working on N things" / "Done" instead of "Handed off to <worker>" (the worker name stays in the expanded step detail); the start receipt says "On it — I'm getting this done" instead of "Handed that to the task manager"; and the completion note is generated with the recent conversation as context so Thomas drops the result back into the SAME thread naturally, never mentioning a worker.
+
+## [0.19.7] - 2026-07-20
+
+### Changed
+
+- "Thomas can do anything" — workers build the capability instead of dead-ending. When a request needs an integration/device/service Thomas has no built-in tool for (smart home, calendar, email send, a specific API), the worker no longer replies "not configured" and stops, and never fakes the action: it BUILDS a real working bridge (control panel, integration script, or protocol client — e.g. a Home Assistant REST client for smart home) plus a SETUP section naming the one thing the user connects to go live (their hub URL + token). Verified live: a cold "turn my living room lights off" (no smart-home tool exists) produced a working Home Assistant light/turn_off script guarded on the user's own credentials.
+
+### Fixed
+
+- Device-action honesty: when an action request ("turn off the lights", "lock the door", "send…") is fulfilled by a BUILT script/bridge rather than the action actually happening, the completion announcement now says a control was built and what to connect — instead of falsely claiming the physical action occurred ("your lights are off"). Real deliverables are still confirmed normally; only real-world side-effects gated on user credentials get the bridge framing.
+
+## [0.19.6] - 2026-07-20
+
+### Added
+
+- Edit-and-resend: every sent message has an Edit button that forks the conversation at that point — the server truncates the stored history (new `POST /api/v2/chat/session/{id}/truncate`, live LLM evicted so removed turns can't leak back), and the old text lands in the composer ready to change and send.
+- Proactiveness: after finishing anything, Thomas offers the one obvious next step (document it, schedule it, remember it, start the follow-on) and suggests turning recurring chores into Work jobs — one offer, no nagging.
+
+### Fixed
+
+- Reloading the page restores the conversation you were in instead of opening a blank chat ("it didn't even save my chat" — it was saved; it was never restored). Deliberate New chat still starts clean.
+- Self-change asks route to the live product: "change your sidebar color", "update your own UI", "fix your chat composer" now classify into the live-repo lane instead of a sandbox worker that can't touch Thomas.
+
+## [0.19.5] - 2026-07-19
+
+### Fixed
+
+- Multi-task dispatches verify per-worker: artifact checks now scope to each worker's own brief instead of reading requirements out of the shared full-request context — previously EVERY multi-part ask's workers were failed for "missing" files that were never their job (all files existed; all three runs reported Failed).
+- Failed-run announcements are precise about partial results: when a vetoed run still produced files, Thomas says the result exists but a step failed so he can't fully vouch for it (offering a re-check), instead of claiming the work wasn't done. The strict never-mask-a-failed-write review stays untouched.
+- Follow-up asks now continue the previous deliverable: "add a 6th row to it" seeds the new worker's workspace with the session's latest finished files (bounded copy) and tells it to modify them in place — previously the fresh empty workspace made the worker ask the user to UPLOAD the file it had just delivered; the follow-up detector also learned referential prepositions ("to it", "on it", "into that").
+- Reply and presentation polish from the organic test battery: (1) trivial text asks (a short poem, a checklist, arithmetic, quick explanations) are answered inline instead of being dispatched to a worker — mixed asks split into inline answers + artifact dispatches, ending the triple-repeat flow where a card, an announcement, and a final reply all restated the same content; (2) activity cards strip raw markdown markers (a worker's `**360**` no longer leaks literally); (3) per-message "· observed" provenance jargon replaced with a plain model label + tooltip, with an explicit "fallback used" note only when a fallback model actually served the reply; (4) worker progress lines humanized ("Reading files…", "Saved the file — moving on.") instead of tool telemetry ("Finished fs.read_file; continuing.").
+- Disabled the ThomasJanitorHourly scheduled task: its hourly "pin the main checkout to dev" hygiene force-checked-out dev under an active feature-branch session twice (19:01 and 21:01), discarding uncommitted work — its live-session detection does not recognize agent sessions. Re-enable only after it learns to leave non-dev checkouts with recent commits alone.
+
+## [0.19.4] - 2026-07-19
+
+### Changed
+
+- Job workspace redesigned as a full-width app (Calvin: "dashboard still looks like crap" — it did): the dashboard IS the main surface now. One tab bar runs the whole job — the AI's tabs (Overview/Data/Operations/...) plus permanent Chat and Setup tabs — replacing the cramped right-rail dashboard and the chat-dominated center. Metrics render as hero tiles, widgets in a responsive grid, spreadsheets full-width; connectors/automations/skills/activity/manual-items moved to the Setup tab; the job conversation (with its composer) lives in the Chat tab and typing anywhere flips to it. Also raised the work panel above the decorative background layer (the theme's floating planet was rendering over metric tiles and the composer).
+
+## [0.19.3] - 2026-07-19
+
+### Added
+
+- Tabbed dashboards + built-in spreadsheets (Calvin direction): the AI now designs each job dashboard as a small APP — 2-4 tabs (Overview / Data / Operations / whatever fits the job) with every metric, widget, section, and inbox assigned to a tab, ending the one-long-scroll layout. Data-heavy jobs get a Data tab with real SPREADSHEETS: AI-designed columns and starter rows, rendered as editable tables inside Work (contenteditable cells, Add Row, Save; persisted on the job dashboard, bounded 12 cols x 60 rows x 4 sheets). Verified live: the SOTI job designed Overview/Data/Operations with a 9-column Device Inventory sheet and a Compliance Exceptions sheet; a cell edit saved and persisted through reload.
+
+## [0.19.2] - 2026-07-19
+
+### Added
+
+- Dashboard visual widgets: the AI design endpoint now emits (and the Work tab renders) job-specific `bar_chart`, `progress` meter, and `status_list` widgets — not just text tiles. A dispatcher gets a weekly-ratecons bar chart + booking-progress meter; an MDM admin gets a compliance meter + color-coded device-status list. Bounded/validated server-side; persisted on the job dashboard. Addresses "dashboards look the same, no custom widgets/graphs".
+
+### Fixed
+
+- CRITICAL: Code mode could write into Thomas's OWN source repo. When the server runs from the repo with a repo-relative data dir, the scratch project resolved *inside* the repo working tree, so `git rev-parse --show-toplevel` walked up to the repo root and Code edits landed in the product source (a stale client `localStorage` root made it worse). Scratch is now anchored in `~/.thomas/code_scratch` (outside any checkout), the new-conversation route hard-rejects the Thomas source repo and substitutes scratch, and the client migration (v2) re-clears the poisoned stored root. Verified: a Code build now writes to the scratch project, not the repo.
+
+## [0.19.1] - 2026-07-19
+
+### Fixed
+
+- Work mode was missing its chat composer: the job view rendered a transcript but no input box, and `send()` was never wired to anything — you could not talk to Thomas inside a job. Added a composer (Enter sends, Shift+Enter newline, autogrow, send button) to both the job and onboarding views. Verified live.
+- Work-mode user message bubbles were centered mid-column instead of right-aligned: the base `.tc-work-message` used `margin: 0 auto` and the `is-user` rule only reset `margin-left`, leaving both sides `auto`. User bubbles now right-align, Thomas left.
+- Multi-deliverable chat asks joined by "and"/"also" (e.g. "make a game and also a graph") produced one worker that built only the first item. The operator prompt now instructs one `send_task` per distinct deliverable; a single multi-attribute deliverable stays one task. (Complements the per-worker brief fix in 0.19.0.)
+
+## [0.19.1] - 2026-07-21
+
+### Added
+
+- Added one shared Thomas UI Edit Mode contract and runtime for modernized workspaces: stable semantic component identities, live move/eight-way resize, keyboard editing, snapping/guides, lock, undo/redo/reset/export, protected-control policies, and isolated desktop/tablet/mobile persistence. Normal Thomas Chat remains visually unchanged and editor chrome appears only while Edit Mode is invoked.
+
+- Added focused workspace contracts for Canvas, Channels, Marketplace, My Stuff, Token Economy, and Virtual Office so their live controls, backend wiring, and semantic edit identities are covered independently of the shared shell.
+
+- Added explicit Edit Mode draft/commit recovery: **Done & Save** commits, **Cancel** and **Escape** restore the last saved layout, **Previous** restores bounded saved history, and covered or stacked regions remain selectable through the semantic region picker. AI Edit stages the selected component identity and owner prompt with the active surface's Thomas identity.
+
+- Added Canvas creation modes for Design, Draw, and a live Three.js 3D fabrication workspace with GLTF/STL export controls.
+
+- Added one shared workspace Chat drawer and direct resident-specialist runtime. Each workspace receives isolated history plus a bounded server-owned action vocabulary; workspace turns cannot enter General Chat's task-manager, delegation, or autopilot paths, and guarded mutations require authoritative readback before success is reported.
+
+- Generative per-job dashboards (Work mode, pillar 3): a new `dashboard/design` endpoint has an LLM read one job's real context (onboarding, workflows, automations, connectors) and design a bespoke dashboard — headline, metrics, guidance sections, inboxes, and ACTION BUTTONS bound only to the job's own workflows (`work_dashboard_runtime.py`, dashboard schema extended with headline/actions/inboxes). Buttons run through the existing Mission delegation path (`dashboard/actions/{id}/run`); the Work tab renders the design with "Design my dashboard"/"Redesign with AI" controls. Verified live: the SOTI MobiControl job received a compliance-sweep dashboard whose button dispatched a real Mission run with honest failure reporting.
+
+### Fixed
+
+- Made the shared workspace shell and UI Edit Mode preserve the live Chat top bar, resident Chat action, breakpoint-safe layouts, and real control handlers across every modernized route; retired the two owner-approved legacy Virtual Office bundle copies after moving CLI roster discovery to the canonical native office source.
+
+- Kept the literal Thomas Chat model/Canvas/theme bar mounted above every workspace, removed welcome-robot and composer bleed behind embedded tools, and bounded route switching to one persistent classic runtime plus one direct-route frame so repeated navigation does not continually rebuild the expensive workspace runtime.
+- Removed eight unreachable duplicate Virtual Office standalone bundles after confirming the native current workspace owns the live route, preventing the retired couch-heavy renderer from returning through legacy paths.
+- Guardrails default ON (product decision D6 executed): `/api/health` reports `ok` instead of permanently `degraded`, and Work-mode autonomy handoffs stop dead-ending on "guardrails are unavailable". Opt out via `THOMAS_GUARDRAILS=0` or `policy.toml`. Verified live: chat execution unaffected with guardrails enabled.
+- `release_update` gate: the per-commit helper lane now accepts branch-wide release proof (version bumped + changelog updated relative to the merge-base with the canonical branch) instead of demanding the three release files dirty in every product-surface commit — the structural catch-22 that stranded agent work since 2026-06-26. Direct canonical-branch commits still require release files in the change set; enforcement manifest re-blessed for the edited gate.
+
+### Changed
+
+- Recorded the final local-only corrective proof and workboard handoff: eight routes, five themes, resident specialists, UI Edit Mode persistence, and repeated-route stability are complete for owner testing but remain unapproved for integration.
+
+- Finished your corrective route pass: Library is now a dense full-width tool, Marketplace separates proof-backed installs from Potential, Channels opens as a live signal workspace instead of an icon wall, Token Economy and Mission Control inherit the exact Chat world, and Settings no longer paints a competing embedded background.
+
+- Completed the eight-workspace modernization against locked Thomas Chat tokens and identity: Mission Control, Virtual Office, Canvas, Library (internal `my_stuff`), Channels, Token Economy, Marketplace, and Settings now share Chat's exact five-theme contract and 30px eyes mark. Mission Control, Library, and Settings use bounded direct routes; the remaining classic loader fetches 96 split runtime files in parallel with declared-order execution; loaded workspaces remain mounted when returning to Chat; and UI Editor is now owner-facing Canvas.
+
+- Renamed owner-facing My Stuff to **Library** and replaced its landing-page hero with a dense full-workspace app, project, creation, and file tool. Reworked Token Economy into a compact 70/30 operational console. Marketplace now uses proof-gated Verified Store and local Potential views with bounded carousels, mixed feature heroes, category-specific icon treatment, and no manufactured install actions.
+
+- Replaced Channels' generic 36-integration icon wall with an operational Discord-to-Thomas-to-Owner signal surface. The real Discord lifecycle and voice controls remain primary, while 35 unconfigured connections stay collapsed in a searchable planned catalog.
+
+- Merged `dev` (land.py lane, gate-surface green, evolve monolith split) into the unified 0.19.0 branch; version resolves to 0.19.0, both monolith splits coexist (`evolve_charter`/`evolve_arch_sync`/`evolve_prompts` from dev + `evolve_charter_store`/`evolve_architecture_health` from the branch), enforcement manifest regenerated for the merged scripts, and the dropped dev-side debt annotations restored. `reasoning.py` slimmed under the soft limit by extracting `reasoning_task_briefs.py` (single source for raw-ask vs per-worker briefs).
+- Fresh chats default to Agent autonomy (dial 3) with a one-time migration for stored dial state, so an out-of-box ask executes instead of replying "raise autonomy and resend"; guardrails stay Guarded. (Thomas-Agent: claude)
+- Raised Code execution budgets to cheap 600s/balanced 1800s/max 3600s with fix iterations 1/2/3, single-sourced in `forge_code_settings.EXECUTION_TIMEOUTS_S`, so real builds stop dying at the wall mid-run.
+- Code's running action feed now shows every progress note inline (collapse engages only past the 120-event ring), matching your Codex-style presentation spec; the mode-contract Node test asserts the new behavior.
+- Test suites aligned with the repaired contracts: full-feed lifecycle assertions, CSS module-split references, new execution-budget dials, plus codex's announcement-retry and markdown-renderer Node harnesses.
+
+### Fixed
+
+- Multi-task chat asks: when one turn dispatches several `send_task` calls, each worker now receives its own brief (raw ask attached as context) instead of every worker rebuilding the full request — the cause of duplicate deliverable storms.
+- Agent loop lifecycle slice (codex WIP, integrated): tool-protocol module extracted (`thomas/agent/loop_tool_protocol.py`), completion/execution hardening for incomplete provider streams, token-economy pass scaling, and preference runtime repairs (`_db.py`/`_prefs.py`, file-write default honesty).
+- New Code conversations with no chosen project bind to a dedicated scratch git repository under the user data dir (`projects/scratch`) instead of Thomas's own source tree; a one-time client migration clears the auto-stored repo path.
+- Verified-deliverable cards no longer show a contradictory failure-flavored worker hedge above the engine's "verified" banner; when artifact checks pass with no executability warnings, the engine's verdict owns the summary line.
+- Server delegation slice (codex WIP, integrated): isolated-preview security middleware (`app_middleware_security.py`), deliverable postprocess module, artifact-verification and result-policy hardening, chat announcement retry, and evolve-agent route/http support repairs.
+- The consolidated activity card no longer appears duplicated while a single worker runs (the expanded step log echoed the header's handoff milestone).
+- Retired the Canvas "keepalive" that ran REAL model inference ("Reply with the single word: ok") against the ChatGPT backend every 18 seconds from boot — ~4,800 wasted subscription calls per day — while holding the canvas LLM lock ahead of real work (`chat_delegation_canvas_client.py`); the cached client warms on first use instead.
+- Removed 13 leftover QA scheduler fixtures (every-minute CHECK-MONITOR/SKIP-STALE crons and seven parity-schedule tasks) from persisted state; resurrected at every boot since 2026-07-13, each firing was executed through the model.
+- `run-ui.ps1` launcher now defaults the idle self-improvement engines (code-issue, self-upgrade, UI-workflow, local-agent, workspace-sync) OFF for detached servers unless explicitly re-enabled via environment, pending reliable interactive use.
+
+### Fixed
+
+- Ran generated Chat and Code web apps on capability-gated preview-only loopback origins so root-relative CSS, ES modules, data requests, and workers execute without sharing Thomas's API origin; scoped Code dependencies to recorded build files and added live browser proof.
+- Stopped optional skill and redundant read-enrichment failures from overriding verified requested artifacts, while keeping explicit skill requests, writes, and shell actions fail closed.
+- Removed the guessed provider TPM default and made real provider rate-limit responses pause and resume in the same task; hardened artifact evidence against stale duplicate basenames and unrelated same-tool successes, and bounded/expired preview origins with service-worker and stale-storage defenses.
+- Replaced implicit raw-token task ceilings with advisory usage telemetry and effort-bounded passes, preserved explicit opt-in spending caps, kept active Chat/Code/Work tasks alive across mode switches, made text-only worker verification distinguish plans from claimed side effects and file deliverables, and rendered verified Chat Markdown as structured, injection-safe results.
+- Separated Code's exact current intent from its policy/history wrapper for routing, memory, and tool selection while retaining full model context and full-context suspicious-prompt authorization with fail-closed gate errors.
+- Kept active Code and established Work turns running across presentation-only Chat, Code, and Work switches, restored hidden Code completions into durable history, and replaced Code's permanent project/result columns with a chat-first activity drawer.
+- Recast Code as the familiar Thomas Chat conversation with quiet project and result rails, concise in-process milestones, mobile controls, and one collapsed technical record; hardened the same multi-turn path against missing-file loops, incomplete model streams, stale-history ordering, edit-permission gaps, false clean Git evidence, and blocking workspace-sync locks.
+- Completed the local 0.19.0 unified Chat checkpoint with canonical model and token receipts, resumable run lifecycles, task-ledger state, bounded exhaustive review, safer Canvas completion, and consistent early-return behavior across standard, UI-control, and Discord conversations.
+- Hardened the shared agent/runtime foundation with bounded tool history, scoped token budgets, durable model receipts, fail-closed execution evidence, safer streaming, and browser-backed artifact verification.
+- Rebuilt Work around confirmed goals and durable per-job workflow maps, with resumable onboarding, explicit flow selection, Mission-backed manual/scheduled/event execution, duplicate-run protection, shared job chat, All Work navigation, and live conversational progress; redesigned Code as a Thomas conversation with project-aware actions and collapsed technical evidence.
+- Made the scoped agent commit helper honor required SSH signing, restored direct publish-preflight invocation, and reconciled reviewed enforcement hashes through the guarded protected-release route.
+- Guarded private deliverable previews and downloads with the configured server access policy, including remote-mode bearer authentication before handler execution, and made Chat V2 read-route registration fail closed when its access guard is unavailable.
+- Connected every persistent Chat V2 turn to the public task ledger with causal in-progress, complete, blocked, safe-failure, and Max-review-pending transitions while keeping temporary chats non-retained and observability failures non-fatal.
+- Normalized usage receipts across standard, UI-control, Discord, and exhaustive-Max completions so every terminal event preserves durable cumulative session totals instead of resetting or omitting them.
+- Made Work and Mission daily/weekly automations resolve IANA timezones reliably on Windows, including daylight-saving transitions, and corrected the default weekday schedule to Monday through Friday.
+- Kept core Chat/Work session routes available when an optional chat helper cannot import, so Work onboarding no longer fails with a misleading 404.
+- Made Code-mode HTML verification honest and browser-backed: changed pages now receive an offline isolated Chrome/Edge boot-and-interaction smoke with runtime, console, resource, keyboard, and pointer evidence, while unavailable browser checks are reported as static-only instead of being mislabeled as fully verified.
+- Scoped the local UI launcher restart to its requested port so running another Thomas checkout no longer stops unrelated local servers.
+- Replaced canned multi-turn parity checks with a persisted context-revision contract and isolated every run in an immutable profile-attributed proof bundle; targeted family reruns can no longer overwrite canonical evidence or masquerade as full parity.
+- Hardened live Chat artifact execution so separate requested deliverables are graded through separate workers, verified artifacts can recover from redundant read failures, chart markers do not trigger false data-pair checks, and explicitly named SVG files route to the file-capable worker instead of Canvas.
+- Added secret-safe observed-model receipts, evaluator/worktree hashes, atomic canonical publication, and bounded workspace-side-effect restoration to the 14-family organic parity audit.
+- Completed the audited local 0.18.0 checkpoint across Chat, Code, and Work support services, including memory retrieval, plugins, orchestration, CLI evolution, desktop launch helpers, and bridge integration.
+- Checkpointed the shared agent, specialist, scheduler, tool, voice, evolution, and server bootstrap runtime used by all three unified modes.
+- Checkpointed the integrated virtual office with agent chat and command lifecycle, deterministic placement and navigation, persisted layouts, route-aware maps, polished assets, and compact default workspaces.
+- Checkpointed the unified Chat, Code, and Work selector shell with mode-scoped history, Code projects, Work job tiles, model settings, shared runtime state, and dedicated mode styling.
+- Checkpointed Work mode with job-scoped chat, connectors, reusable accounts, per-job skill pools, automations, onboarding missions, validation, storage, and autonomy workflows.
+- Checkpointed the model catalog and ChatGPT OAuth runtime so selectable variants, capabilities, streaming tool-result pairing, and the existing signed-in connection share one provider contract.
+- Checkpointed Forge inside the unified Code experience, including project history, settings, streamed runs, verification, file-tree access, and evolution safety controls.
+- Completed the 0.18.0 Chat and Canvas support checkpoint with artifact verification, task separation, result policies, Canvas review rules, voice failure handling, and local-project workspace controls.
+- Checkpointed the unified Chat and Canvas runtime with isolated delegation workspaces, streamed visual construction, durable artifacts, file and memory controls, and fail-closed voice upload handling. This is an integration checkpoint, not a completed parity claim.
+- Refreshed the signed-in ChatGPT model catalog from live provider evidence so GPT-5.6 Luna is selectable alongside Sol and Terra instead of remaining disabled by a stale `Model not found` result.
+- Made the live server honor `THOMAS_SECRET_ROOT`, matching the OAuth helper and isolated verification runtimes so a clean worktree can reuse the user's existing encrypted ChatGPT connection instead of prompting for another sign-in.
+- Preserved `openai_codex` as the Easy Setup profile on first launch and suppressed the API-key warning for that OAuth-backed profile.
+
+## [0.18.0] - 2026-07-13
+
+### Added
+
+- Added a fail-closed current-ChatGPT parity gate covering 14 capability families and 74 live checks, plus an independent ten-point headed-browser evidence scorecard that cannot mask a base-rubric failure.
+- Added persistent project context, one-project chat binding, pinned chat and file libraries, stale-file exclusion, and revocable read-only project sharing.
+- Added temporary-chat privacy isolation and deletion receipts that purge thread memory, together with offline Windows speech recognition and synthesis, barge-in metadata, and honest voice availability reporting.
+- Added installable custom-assistant packages with bounded knowledge files, explicit tool/app/API permissions, share bundles, and deterministic validation and cleanup.
+
+### Fixed
+
+- Fixed ChatGPT/Codex OAuth multimodal turns by translating Thomas' chat-style image blocks into the Responses API `input_text` and `input_image` request schema.
+- Preserved attached images through Thomas's conversational and actionable specialist routes, including an instruction-hierarchy guard that treats text embedded in images as untrusted visual evidence.
+- Made scheduler catch-up runs use unique missed timestamps and persisted skip-misfire schedule advancement even when no task fired, preventing duplicate recovery work and repeated stale windows after restart.
+- Added idempotency keys for email sends and tamper-evident signed action receipts, so retries cannot duplicate a provider action and altered or unsigned completion claims fail verification.
+- Reused the active `openai_codex` ChatGPT OAuth connection in the model settings UI instead of querying the empty legacy `chatgpt` credential slot and falsely prompting an already signed-in user to connect again. Status, login, logout, and provider detection now stay scoped to the selected model profile.
+- Kept attached document bodies out of generated-artifact requirement inference, so input files can contain dirty rows, source literals, and filenames without Thomas incorrectly demanding that every input value or attachment be copied into the cleaned output.
+- Made memory deletion forget the pinned value across profile hints, episodes, facts, pins, retrieval traces, and cached packs instead of merely hiding the pin while fresh chats could still recall it.
+
+## [0.17.4] - 2026-07-13
+
+### Added
+
+- Added the GPT-5.6 Sol, Terra, and Luna family to Thomas's model catalog and the root chat selector. Sol is now the local ChatGPT default; Luna remains visible but disabled with the signed-in connection's verified `Model not found` explanation instead of failing silently.
+- Added the complete GPT-5.6 reasoning-effort ladder (`none`, `low`, `medium`, `high`, `xhigh`, and `max`) to model metadata and the live AI-settings menu.
+
+### Fixed
+
+- Preserved `xhigh` and `max` exactly in ChatGPT Responses requests instead of collapsing `xhigh` to `high`, and made the chat Memory toggle actually disable long-term memory for that turn.
+
+## [0.17.3] - 2026-07-13
+
+### Fixed
+
+- Added ChatGPT OAuth recovery to the actual root `chat.html` client. When its active ChatGPT profile returns Thomas's disconnected response, the live page now opens a native connection prompt, explains why a separate local authorization is needed, and starts Thomas's real OAuth endpoint so an existing ChatGPT browser session can approve access.
+
+## [0.17.2] - 2026-07-13
+
+### Fixed
+
+- Detect Thomas-authored ChatGPT OAuth connection failures at the end of a chat response and open Easy Setup directly on the ChatGPT path, with a persistent recovery action in the conversation. The prompt now explains that an existing ChatGPT or Codex app session does not automatically populate Thomas's separate local OAuth store, while profile scoping and exact failure matching avoid treating ordinary conversation text as an authentication error.
+
+## [0.17.1] - 2026-07-13
+
+### Fixed (ChatGPT parity adversarial loop, 2026-07-12)
+
+- Registered `web.search` and `web.fetch` in the shared server/worker registry, added a bounded Bing fallback when the primary search provider returns no rows, and exposed source-backed research as a read-only inline chat action. Provider-style text calls such as `{"name":"web_search"}` are suppressed and executed, so current-information requests return cited answers instead of raw JSON, opaque refusal, or a no-evidence background task.
+- Made explicit browser-to-artifact background recipes deterministic and fail closed: exact named tools are always exposed, read-only browser steps run on the server event loop, workspace-scoped write/read receipts produce the requested artifact, and completion rejects typo names, placeholders, or content that does not match captured browser evidence. The live ChatGPT-parity gate now verifies progress, receipts, grounded Markdown/PDF artifacts, and download integrity.
+- Made multi-artifact completion fail closed per requested file: quoted markers, CSV rows, and HTML element IDs must exist in the correct artifact; missing-file recovery immediately writes and reads back every exact filename; and terminal receipts replace stale "please wait" narration with evidence-derived completion text. Delegated tasks that explicitly mandate named tools now expose only that per-run tool contract, preventing small local models from replacing real calls with prose when unrelated schemas overload the prompt; validated JSON text tool calls are recovered before presentation sanitization can erase their name and arguments, clearly filename-associated fenced artifacts fall back to workspace-confined write/read calls, and explicit missing marker tokens can be inserted evidence-only before the full verifier reruns. The live canvas/artifact parity gate now opens the document, spreadsheet, slide deck, and site, then clicks both HTML artifacts in Thomas's real browser runtime and preserves screenshots.
+
+## [0.17.0] - 2026-07-12
+
+### Added (Thomas Coherence Passage, 2026-07-12)
+
+- Added the canonical governed-operator contract and tracked migration plan: Thomas is the persistent user-owned framework, models are replaceable engines, conversation is the single control relationship, bounded reversible actions may run inline under permission and proof, and heavy or elevated work remains delegated.
+- Added one canonical action receipt for inline and delegated work so V2 status, completion narration, and clients share session identity, proof, approval, interruptibility, and honest success/failure state.
+- Migrated the main web runtime, virtual-office agent chat, Infinite Companion, and Discord bridge directly to `/api/v2/chat`; removed the inert frontend V2 switch and its fallback to the duplicate V1 execution path.
+- Retired the live V1 conversation engine: `/api/chat` is now a deprecated compatibility URL owned by the V2 handler, while the legacy route bundle retains only auxiliary plan/slash endpoints. Conversational UI controls now run in V2 with reversible receipts, and direct `batch`/`swarm` requests migrate explicitly to `max` without constructing the retired provider-batch runtime.
+- Isolated production startup from the compatibility-only V1 engine modules: plan-state and slash-command helpers now register through an engine-free auxiliary bundle, while delegated steering, cancellation requests, artifact proof, and completion report-once state rebuild through the durable task ledger and canonical receipt.
+- Fixed chat startup selecting the first catalog entry when the saved profile used display casing such as `Local`; Thomas now resolves saved profile names case-insensitively and falls back to the first actually usable profile instead of silently choosing a keyless provider.
+
+- Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
+
+### Added (Landing Lane, 2026-07-15)
+
+- **`scripts/crew/land.py`** — the one sanctioned unit-finish command: rebases onto fresh dev, pre-flights the exact CI checks (commit signatures first — the historical silent killer — then enforcement-integrity, plan-structure, task-problems, leak guard), detects protected-file diffs early and routes them to the `commit_guarded` owner-tap flow, pushes, opens the PR, arms auto-merge, watches the gate battery with fix-it cards on failure, and syncs/cleans up after the merge. Agents should never end a unit any other way.
+- **Coordination Protocol V2** (docs/AGENT_COORDINATION.md): message-and-proceed replaces stop-and-wait; waiting is reserved for owner taps, active-claim conflicts, destructive ops, and genuine questions; stale-able blockers must be re-verified live before waiting on them.
+
+### Fixed (CI gates green, 2026-07-15)
+
+- **Architecture suite green again (13/13).** Declared the real `server↔forge` dependency (Code-tab routes drive Forge Anvil; `dispatch_agent_loop` reads the shared codex-oauth secret store) as an explicit known cycle with a TODO to hoist the secret store into `thomas/core`; debt-annotated the seven files that outgrew the new-file limit; split `thomas/forge/anvil/evolve.py` (1796 → 1335 lines, over the absolute MONOLITH_CEILING) into `evolve_charter.py`, `evolve_arch_sync.py`, and `evolve_prompts.py` with `evolve.py` re-exporting everything so all existing imports keep working; exempted four pre-existing over-ceiling legacy JS files pending their planned split/deletion in the product-ready push.
+- **Publish preflight/snapshot run again.** `scripts/forge/publish/preflight.py` and `snapshot.py` crashed with `ModuleNotFoundError` under their documented direct invocation (CI + pre-push hook) since 2026-06-28, failing the whole publish lane closed. Both now bootstrap `sys.path`; `tests/test_publish_script_invocation.py` runs them via subprocess exactly as CI does (direct and `-m`) so this crash class can't return silently.
+- **Public-repo leak guard passes.** Scrubbed a blocklisted competitor term from four `plans/` files (feature rankings, research queue, workboard, mission plan).
+
+### Fixed (chat end-to-end sweep, 2026-06-28)
+
+- **Honest chat replies.** At conversation-only autonomy (L1/L2) the chat agent has no hand-off tool, but the prompt still pushed it to "say 'on it' and hand it off" — so it fabricated hand-offs ("I've handed off the task") when nothing was dispatched. The reasoning layer now clamps that language when the tool is unavailable: Thomas OFFERS and says to raise the autonomy level instead of faking an action.
+- **Tool calls emitted as text now actually run.** gpt-5.x/codex sometimes writes a tool call as plain text in the content channel (`send_task {…}`, `[update_task] {…}`, `{"name":"fs_write_file",…}`) instead of invoking it, so nothing happened — a chat hand-off that didn't dispatch, or a worker that reported "done" with no file. Both the chat layer (`reasoning.py`) and the worker agent loop (`loop_execution.py`) now detect such literals, suppress the raw JSON, and execute the tool for real. Worker deliverables went from ~1/6 to ~6/8 real files in a fixed batch.
+- **Steer / cancel a running task.** The model was blind to its own running tasks — the active-task digest was gated behind a status-intent regex and listed only worker progress, not the task subject. The digest is now always injected when tasks exist and leads with each task's subject; the resolver accepts a loose ref (ordinal or subject words) so "cancel the jazz report" actually cancels it.
+- **Canvas is for visual deliverables only.** Documents, lists, code, and — worst of all — Thomas's own planning/thinking were being rendered into the Canvas as if they were artifacts. Canvas-intent now keys off genuine visual intent only; Thomas's streamed text stays in the chat (and the collapsible thinking card); non-visual file deliverables show as a click-to-preview chip and never auto-open (or re-open, or reload) the Canvas.
+- **Generated games/apps actually run.** Deliverables are served in an opaque-origin sandbox (no `allow-same-origin`, a deliberate security control) which makes `localStorage` throw — the uncaught error aborted any app using it (high scores, saves), so a Snake game rendered but instantly "game over"ed. Served HTML now gets a tiny in-memory `localStorage`/`sessionStorage` shim that activates only when the real API is unavailable, so apps run without weakening the sandbox.
+- **Chat history in the sidebar.** Recent read only the legacy `.thomas/chats` store while the live `/api/v2/chat` flow saves to `.thomas/sessions_v2`, so new chats never appeared and there were no dates. `GET /api/chats` now merges both stores; the sidebar shows real chats with dates, refreshes live after each turn, and persists across reload.
+- **No fake demo chats / blocked fonts.** Removed the seeded placeholder demo chats from the chat UI (sidebar populates only from real history), and allowed Google Fonts in the Content-Security-Policy so the typography renders.
+
+### Added
+
+- **`docs/THOMAS_VERIFICATION_STANDARD.md`** — the bar for proving a Thomas change works: real browser + real input via Playwright against the live instance, criteria stated first and verified functionally per deliverable type (a game must be driven and observed to react; a file fetched and its content checked; chat history must persist across reload). A screenshot is a supplement, never the proof.
+
+## [0.16.13] - 2026-06-26
+
+### Added
+
+- Benchmarks: added a local offline SWE-bench style fixture and scorer for deterministic issue-to-patch evaluation.
 - Praxis cage containment (PROBLEM 1): `scripts/cage/build_sandbox_config.py` generates a network-isolated Windows Sandbox `.wsb` that maps only the repo + cage inbox/outbox (so a caged worker physically cannot clone to a remote, reach other repos, or escape its allowed paths), with a guard that refuses over-broad host mappings; `scripts/cage/launch_sandbox.ps1` launcher; `scripts/forge/gates/cage_egress_guard.py` advisory tripwire for clone/remote/submodule/`.git`/out-of-allowlist signals in a change. Tests in `tests/test_cage_sandbox_config.py`. Enabling Windows Sandbox is a one-time elevated step (see `docs/CAGE_SETUP.md`).
 - Cage coordination delivery enforcement (PROBLEM 2): the commit-master `submit` (`scripts/forge/commit_master.py`) refuses while the submitting agent has *relevant* unread coordination messages — a must-read kind (blocker/scope_change) or a message whose subject paths overlap the files being submitted (scope-aware policy, Calvin-chosen 2026-06-02). Reuses `message.unread_messages` so it composes with the repo-wide block-on-any inbox gate and the session-start surfacing. Tests in `tests/test_cage_inbox_enforcement.py`.
 - **QuickBuilder mode** (2026-06-03): a human-activated build-fast mode (`python scripts/quickbuilder_toggle.py on`, Windows-Hello gated, HMAC-signed flag) that relaxes the *workflow/coordination/location* gates (worktree-branch-guard, worktree-rules, workboard claims/agent-claim/changed-files/task-problems, plan-structure, merge-readiness) and removes the breakglass cooldown + per-agent 24h quota, while keeping the **entire code-engineering and security spine enforced** — tests, ruff, enforcement-integrity, the secret-scan, exception-handler, type-safety, monolith, protected-files, and the workboard **inbox** (coordination still surfaces) can never be suppressed (fail-safe allowlist in `scripts/forge/gates/_quickbuilder_guard.py`). Protected-file edits still require the human tap; only the cooldown is waived. Forged/unsigned flags are rejected, so an agent cannot self-activate. Docs: `docs/QUICKBUILDER.md`; tests: `tests/test_quickbuilder.py`.
 - **`scripts/dev_land.py`** (2026-06-03): one-command, Windows-Hello-approved owner-override to land a PR into a protected branch — the "approve, don't block" flow. Branch protection stays ON for everyone; an admin approves a specific PR with a credential tap, and the tool lifts `enforce_admins`, merges with `--admin` (past stale/infra checks), and **always restores** protection (even on error). A headless agent can't produce the tap, so it can't land a PR.
+- **Evolve loop — blast-radius verification** (2026-06-07): a promotion now also runs the changed module's own importing test files (discovered via `_blast_radius_tests`), not just `py_compile` + the architecture ladder — so "verified" means the change's behavioral tests pass, not merely that it parses and layering holds. New suite `tests/test_evolve_blast_radius.py`.
 
 ### Security
 
+- Evolve promotion now rejects manual non-Python deltas unless the session contains a dedicated passing non-Python verifier, so critical-risk acknowledgement and generic verifier-panel passes cannot promote docs/config/UI changes by accident.
 - Enforcement-gate fail-closed hardening (2026-06-03): closed a set of fail-open holes in the Praxis gate spine. `enforcement_integrity` now verifies the **union** of the protected-script list and the manifest keys and **fails closed** when a protected script has no known-good hash (previously a "missing from manifest" script passed as advisory) — so the active pre-push secret-scan hook (`scripts/forge/publish/preflight.py`) and the public-repo leak guard, now both manifest-covered, cannot be silently rewritten; it also still self-checks when `agent_safety.toml` is absent. The commit-master clean-room env now strips `THOMAS_AGENT_ROLE`, `THOMAS_CORE_OVERHEAD_UNLOCK`, and `THOMAS_LEAK_BLOCKLIST_FILE` (a worker could otherwise skip the core-overhead guard via a bare role env, or redirect the leak blocklist at a missing file). The leak guard no longer honors the `THOMAS_LEAK_BLOCKLIST_FILE` override (fixed path only). And `commit_scope_gate`, `protected_files_gate`, `type_safety_gate`, and `validate_agent_changes` now fail closed when `git diff` errors, instead of treating it as an empty (clean) change set that passes. The pre-commit skip-policy audit log now resolves the real git dir (following the `gitdir:` pointer) so an authorized breakglass skip is recorded correctly from a linked worktree — previously it could not write under the worktree `.git` pointer file. Regression tests in `tests/test_enforcement_bypass_resistance.py`, `tests/test_commit_master.py`, `tests/test_public_repo_leak_guard.py`.
 - Latent-surface hardening (2026-06-03): the `http.client` tool (`thomas/tools/http_client.py`) now routes every request through the canonical `url_safety` SSRF guard and no longer auto-follows redirects (a public URL could 3xx into a cloud-metadata/internal target); `thomas/marketplace/secrets/core.py` replaced base64 "encryption" with real authenticated Fernet encryption (the in-memory vault now stores true ciphertext that fails closed on tampering); and `thomas/chat_logger.py` runs chat events through the secret/PII `Redactor` before writing the JSONL transcript. Tests in `tests/test_latent_hardening_20260603.py`.
 
 ### Fixed
 
+- Dev integration: consolidated the dirty worker lanes into a guardrail-compliant baseline, including split-module compatibility shims, composer controls cleanup, deletion ledger coverage, and narrowed exception handlers required by the safety gates.
+- Evolve: green-mirror verification now runs in a clean environment (the agent's `THOMAS_SPEND_PATH` / `THOMAS_MEMORY_ROOT` runtime overrides are stripped for the verify subprocess) so environment-sensitive tests no longer false-fail an otherwise-good promotion.
+- Evolve: session listing now logs malformed or unreadable session metadata instead of silently swallowing it under a blanket catch-all.
+- Evolve: refreshed the default green-mirror verification ladder and migrate known legacy default charter commands on load so stale persisted defaults do not override the engine's current verification policy.
 - Reliability: narrowed file/path/JSON fallback handlers in runtime skill policy code and added `logger.exception()` coverage plus explicit broad-catch rationale comments for best-effort chat dispatch, session persistence, browser CLI, and message CLI compatibility boundaries.
 
 ## [0.16.11] - 2026-05-29
@@ -3355,3 +7054,4 @@ Security and reliability patch release for runtime protection, gate architecture
 ### Added
 
 - Initial Thomas CLI, REPL, tool calling, and memory engine bundle.
+

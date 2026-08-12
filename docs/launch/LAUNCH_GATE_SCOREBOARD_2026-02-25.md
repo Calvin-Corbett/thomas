@@ -3,6 +3,8 @@
 Last updated: 2026-02-25
 Scope: Thomas V1 launch-readiness gate snapshot
 
+Historical note: retired launch checks below preserve the 2026-02-25 result only. Current docs reliability runs through `scripts/doc.py` and the active gates listed there, not the deleted February 2026 competitive-scope or Reference CLI parity scripts.
+
 ## Evidence Inputs
 
 1. Fresh comparison run artifact:
@@ -10,8 +12,8 @@ Scope: Thomas V1 launch-readiness gate snapshot
    - `output/launch/full_suite_compare_2026-02-25.md`
    - `computed_at_utc`: `2026-02-25T16:31:07Z`
 2. Gate command results:
-   - `python scripts/check_competitive_scope_gate.py` -> PASS
-   - `python scripts/check_reference_cli_metric_parity_gate.py` -> FAIL
+   - Retired competitive-scope launch check -> PASS
+   - Retired Reference CLI parity launch check -> FAIL
    - `python scripts/check_model_onboarding_gate.py` -> FAIL
    - `python scripts/check_surface_parity.py` -> FAIL
    - `python scripts/check_release_update_gate.py` -> PASS
@@ -66,8 +68,8 @@ Durability gate:
 
 | Gate | Result | Notes |
 |---|---|---|
-| `check_competitive_scope_gate.py` | PASS | Scope contract and baseline commit (`d17a1f3`) present |
-| `check_reference_cli_metric_parity_gate.py` | FAIL | `cli.depth.update`: Thomas `0` vs Reference CLI `2` |
+| Retired competitive-scope launch check | PASS (historical) | Scope contract and baseline commit (`d17a1f3`) were present in the 2026-02-25 snapshot |
+| Retired Reference CLI parity launch check | FAIL (historical) | `cli.depth.update`: Thomas `0` vs Reference CLI `2` in the 2026-02-25 snapshot |
 | `check_model_onboarding_gate.py` | FAIL | Missing `docs/MODEL_ONBOARDING_LOG.md` for model-surface changes |
 | `check_surface_parity.py` | FAIL | Missing `thomas/server/web/js/chat.js` expected by gate |
 | `check_release_update_gate.py` | PASS | Version/changelog and surface checks passed |
@@ -86,7 +88,7 @@ Durability gate:
 
 1. Close `p95` latency and variance gaps versus Reference CLI (`benchmark.raw_elapsed_seconds_p95`, stability stddev metrics).
 2. Add token telemetry capture so cost-per-success gates are measurable.
-3. Resolve parity gate failure for `cli.depth.update`.
+3. Resolve the historical Reference CLI `cli.depth.update` gap if this launch program is revived; current docs reliability no longer invokes the retired parity script.
 4. Resolve model onboarding gate (`docs/MODEL_ONBOARDING_LOG.md` + related model-surface workflow).
 5. Fix `check_surface_parity.py` expectation mismatch (`chat.js`) or update gate to current frontend architecture.
 6. Clear fatal lint baseline (`auto_checks.py --quick` currently blocked by 44 `F821` issues).

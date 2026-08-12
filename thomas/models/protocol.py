@@ -111,7 +111,7 @@ def is_loopback_base_url(base_url: str) -> bool:
 def profile_prefers_always_tools(cfg: ModelConfig) -> bool:
     """Whether this profile should keep tools exposed in auto policy."""
     provider = str(cfg.provider or "").strip().lower()
-    if provider in ("anthropic", "codex"):
+    if provider in ("anthropic", "openai_codex", "openai-codex"):
         return True
     if provider == "openai_compat":
         return not is_loopback_base_url(cfg.base_url)
@@ -125,11 +125,11 @@ async def run_tool_smoke_async(
 ) -> ToolSmokeResult:
     """Run a synthetic tool-call probe against one profile."""
     provider = str(cfg.provider or "").strip().lower()
-    if provider == "codex":
+    if provider in {"openai_codex", "openai-codex"} and not str(getattr(cfg, "api_key", "") or "").strip():
         return ToolSmokeResult(
             ok=True,
             status="skipped",
-            error="Codex tool execution is handled by the app-server bridge.",
+            error="ChatGPT OAuth tool smoke is skipped until the access token is injected.",
         )
 
     llm_cfg = replace(

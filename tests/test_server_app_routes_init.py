@@ -123,6 +123,7 @@ def _build_test_app(
     static_dir = web_dir / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
     (static_dir / "hello.txt").write_text("hello static", encoding="utf-8")
+    (static_dir / "my_stuff.html").write_text("my stuff static", encoding="utf-8")
 
     stored_chats: dict[str, dict[str, object]] = {}
     app = web.Application()
@@ -165,14 +166,12 @@ def _build_test_app(
         "_task_ledger_update": None,
         "_model_cfg_with_secrets": None,
         "_failover_cfgs_with_secrets": None,
-        "_resolve_natural_model_switch_request": None,
         "_chat_file_for": None,
         "_read_chat_from_disk": None,
         "_build_tools": None,
         "index": _simple_page,
         "settings": _simple_page,
         "companion": _simple_page,
-        "landing": _simple_page,
     }
 
     async def _webhook(_request: web.Request) -> web.Response:
@@ -223,19 +222,14 @@ async def test_task_ledger_routes_enrich_snapshot_and_validate_history_limit(
     )
     app, _ = _build_test_app(tmp_path, monkeypatch, ledger=ledger, sessions={"sess-1": session})
 
-    import thomas.marketplace.observability.task_ledger as task_ledger_mod
-
-    monkeypatch.setattr(task_ledger_mod, "derive_active_goal", lambda user_text, current_goal="": "Finish invoice")
-    monkeypatch.setattr(task_ledger_mod, "extract_missing_inputs", lambda progress_text: ["customer_email"])
-
     client = await _start_client(app)
     try:
         response = await client.get("/api/task-ledger/current?session_id=sess-1")
         assert response.status == 200
         payload = await response.json()
-        assert payload["snapshot"]["active_goal"] == "Finish invoice"
-        assert payload["snapshot"]["status"] == "blocked"
-        assert payload["snapshot"]["missing_inputs"] == ["customer_email"]
+        assert payload["snapshot"]["active_goal"] == ""
+        assert payload["snapshot"]["status"] == "in_progress"
+        assert payload["snapshot"]["missing_inputs"] == []
 
         invalid = await client.get("/api/task-ledger/history?limit=oops")
         assert invalid.status == 400
@@ -370,10 +364,20 @@ async def test_static_compat_rejects_traversal_and_page_aliases(
     app, _ = _build_test_app(tmp_path, monkeypatch)
     client = await _start_client(app)
     try:
-        for route in ("/", "/mission", "/settings", "/companion", "/landing"):
+        for route in ("/", "/mission", "/settings", "/companion"):
             response = await client.get(route)
             assert response.status == 200
             assert await response.text() == "ok"
+
+        # /landing was a dead deep-link that only ever redirected; the route is
+        # gone and must stay gone rather than silently serving a broken page.
+        landing_response = await client.get("/landing")
+        assert landing_response.status == 404
+
+        for route in ("/my-stuff", "/my-stuff/", "/my_stuff", "/my_stuff/"):
+            response = await client.get(route)
+            assert response.status == 200
+            assert await response.text() == "my stuff static"
 
         static_file = await client.get("/static/hello.txt")
         assert static_file.status == 200
@@ -417,19 +421,13 @@ def test_optional_route_registration_wires_runtime_dependencies(
 
         return _inner
 
-    chat_deps: dict[str, object] = {}
-
-    class _ChatRouteDeps:
-        def __init__(self, **kwargs):  # noqa: ANN003
-            chat_deps.update(kwargs)
-
     monkeypatch.setitem(
         sys.modules, "thomas.server.routes.gateway", SimpleNamespace(register_gateway_routes=_record("gateway"))
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.chat_aiohttp",
-        SimpleNamespace(ChatRouteDeps=_ChatRouteDeps, register_chat_routes=_record("chat")),
+        "thomas.server.routes.chat_auxiliary",
+        SimpleNamespace(register_chat_auxiliary_routes=_record("chat_aux")),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -498,11 +496,6 @@ def test_optional_route_registration_wires_runtime_dependencies(
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.codex_aiohttp",
-        SimpleNamespace(register_codex_routes=_record("codex")),
-    )
-    monkeypatch.setitem(
-        sys.modules,
         "thomas.server.routes.mission",
         SimpleNamespace(register_mission_routes=_record("mission")),
     )
@@ -533,10 +526,6 @@ def test_optional_route_registration_wires_runtime_dependencies(
     async def _read_chat_from_disk(chat_id: str) -> dict[str, object]:
         return {"id": chat_id}
 
-    async def _resolve_model_switch_request(text: str, user_id: str = "", session_id: str = "") -> str | None:
-        _ = user_id, session_id
-        return "local" if text else None
-
     locals_dict = {
         "_require_api_access": lambda request: None,
         "_require_loopback": lambda request: None,
@@ -552,14 +541,12 @@ def test_optional_route_registration_wires_runtime_dependencies(
         "_task_ledger_update": lambda session_id, goal=None, status="in_progress": None,
         "_model_cfg_with_secrets": lambda cfg, profile, model_cfg: {"profile": profile, "model": model_cfg.model},
         "_failover_cfgs_with_secrets": lambda cfg, profile: [{"profile": "backup"}],
-        "_resolve_natural_model_switch_request": _resolve_model_switch_request,
         "_chat_file_for": lambda chat_id: tmp_path / f"{chat_id}.json",
         "_read_chat_from_disk": _read_chat_from_disk,
         "_build_tools": lambda runtime_cfg: [{"name": "shell"}],
         "index": lambda request: web.Response(text="index"),
         "settings": lambda request: web.Response(text="settings"),
         "companion": lambda request: web.Response(text="companion"),
-        "landing": lambda request: web.Response(text="landing"),
     }
 
     cfg = AppConfig(
@@ -577,17 +564,14 @@ def test_optional_route_registration_wires_runtime_dependencies(
         locals_dict=locals_dict,
     )
 
-    assert {"gateway", "sessions", "chat", "models", "setup", "third_party", "preferences", "onboarding"}.issubset(
+    assert {"gateway", "sessions", "chat_aux", "models", "setup", "third_party", "preferences", "onboarding"}.issubset(
         called.keys()
     )
     assert {"memory_routes", "search", "secrets", "local_projects", "marketplace", "plugin_hosting"}.issubset(
         called.keys()
     )
-    assert {"life_manager", "codex", "mission", "observability", "chat_v2"}.issubset(called.keys())
-    assert callable(chat_deps["read_json"])
-    assert callable(chat_deps["task_ledger_update"])
-    assert callable(chat_deps["resolve_natural_model_switch"])
-    assert chat_deps["build_tools"](cfg) == [{"name": "shell"}]
+    assert {"life_manager", "mission", "observability", "chat_v2"}.issubset(called.keys())
+    assert callable(called["chat_aux"]["kwargs"]["require_api_access"])
 
 
 @pytest.mark.asyncio
@@ -674,14 +658,12 @@ async def test_route_edges_cover_missing_ledger_engine_tool_registry_and_unknown
             "_task_ledger_update": None,
             "_model_cfg_with_secrets": None,
             "_failover_cfgs_with_secrets": None,
-            "_resolve_natural_model_switch_request": None,
             "_chat_file_for": None,
             "_read_chat_from_disk": None,
             "_build_tools": None,
             "index": _simple_page,
             "settings": _simple_page,
             "companion": _simple_page,
-            "landing": _simple_page,
         },
     )
 
@@ -797,14 +779,12 @@ def test_route_registration_skips_when_runtime_guards_missing(
                 "_task_ledger_update": None,
                 "_model_cfg_with_secrets": None,
                 "_failover_cfgs_with_secrets": None,
-                "_resolve_natural_model_switch_request": None,
                 "_chat_file_for": None,
                 "_read_chat_from_disk": None,
                 "_build_tools": None,
                 "index": _simple_page,
                 "settings": _simple_page,
                 "companion": _simple_page,
-                "landing": _simple_page,
             },
         )
 
@@ -818,7 +798,6 @@ def test_route_registration_skips_when_runtime_guards_missing(
     assert "Secrets route registration skipped: missing runtime dependencies" in text
     assert "Local project route registration skipped: missing runtime dependencies" in text
     assert "Marketplace route registration skipped: missing runtime dependencies" in text
-    assert "Codex route registration skipped: missing runtime dependencies" in text
     assert "Mission routes unavailable: missing API access guard" in text
 
 
@@ -850,19 +829,16 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
 
         return _inner
 
-    class _ChatRouteDeps:
-        def __init__(self, **kwargs):  # noqa: ANN003
-            self.kwargs = kwargs
-
+    session_calls: list[object] = []
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.chat_aiohttp",
-        SimpleNamespace(ChatRouteDeps=_ChatRouteDeps, register_chat_routes=_boom("chat", KeyError("chat"))),
+        "thomas.server.routes.chat_auxiliary",
+        SimpleNamespace(register_chat_auxiliary_routes=_boom("chat-aux", KeyError("chat-aux"))),
     )
     monkeypatch.setitem(
         sys.modules,
         "thomas.server.routes.sessions_aiohttp",
-        SimpleNamespace(register_sessions_routes=lambda *args, **kwargs: None),
+        SimpleNamespace(register_sessions_routes=lambda *args, **kwargs: session_calls.append((args, kwargs))),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -926,11 +902,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.server.routes.codex_aiohttp",
-        SimpleNamespace(register_codex_routes=_boom("codex", KeyError("codex"))),
-    )
-    monkeypatch.setitem(
-        sys.modules,
         "thomas.server.routes.mission",
         SimpleNamespace(register_mission_routes=_boom("mission", KeyError("mission"))),
     )
@@ -960,10 +931,6 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
 
     async def _read_chat_from_disk(chat_id: str) -> dict[str, object]:
         return {"id": chat_id}
-
-    async def _resolve_model_switch_request(text: str, user_id: str = "", session_id: str = "") -> str | None:
-        _ = text, user_id, session_id
-        return None
 
     async def _simple_page(_request: web.Request) -> web.Response:
         return web.Response(text="ok")
@@ -1000,19 +967,19 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
                     "model": model_cfg.model,
                 },
                 "_failover_cfgs_with_secrets": lambda cfg_ref, profile: [{"profile": "backup"}],
-                "_resolve_natural_model_switch_request": _resolve_model_switch_request,
                 "_chat_file_for": lambda chat_id: tmp_path / f"{chat_id}.json",
                 "_read_chat_from_disk": _read_chat_from_disk,
                 "_build_tools": lambda runtime_cfg: [{"name": "shell"}],
                 "index": _simple_page,
                 "settings": _simple_page,
                 "companion": _simple_page,
-                "landing": _simple_page,
             },
         )
 
     text = caplog.text
-    assert "Chat/session routes unavailable:" in text
+    assert session_calls, "session lifecycle must register even when optional chat helpers fail"
+    assert "Chat auxiliary routes unavailable:" in text
+    assert "Session routes unavailable:" not in text
     assert "Models routes unavailable:" in text
     assert "Setup routes unavailable:" in text
     assert "Third-party access routes unavailable:" in text
@@ -1021,7 +988,17 @@ def test_route_registration_logs_module_failures(tmp_path: Path, monkeypatch: py
     assert "Secrets routes unavailable:" in text
     assert "Local project routes unavailable:" in text
     assert "Marketplace routes unavailable:" in text
-    assert "Codex routes unavailable:" in text
     assert "Mission routes unavailable:" in text
     assert "Observability routes unavailable:" in text
-    assert "Chat V2 routes unavailable:" in text
+    # Chat V2 owns POST /api/chat and nothing else registers it, so this failure
+    # used to leave the server running with no chat endpoint at all -- a bare 404
+    # and one log line. It is now an ERROR, and the route is claimed by a 503
+    # sentinel so the failure reports itself where the caller meets it.
+    assert "Chat V2 route registration FAILED" in text
+    assert "503 chat_v2_registration_failed" in text
+    chat_routes = [
+        resource
+        for resource in app.router.resources()
+        if str(resource.canonical or "") in {"/api/chat", "/api/v2/chat"}
+    ]
+    assert len(chat_routes) == 2, "the chat endpoints must stay claimed when Chat V2 cannot register"

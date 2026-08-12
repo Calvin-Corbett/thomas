@@ -268,9 +268,10 @@ class AutonomyStore:
         retry_policy: RetryPolicy | None = None,
         parent_id: str | None = None,
         session_id: str | None = None,
+        job_id: str | None = None,
     ) -> Job:
         now = _utcnow()
-        job_id = uuid.uuid4().hex
+        resolved_job_id = uuid.UUID(str(job_id)).hex if job_id else uuid.uuid4().hex
         rp = retry_policy or RetryPolicy()
 
         with self._lock:
@@ -285,7 +286,7 @@ class AutonomyStore:
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """,
                 (
-                    job_id,
+                    resolved_job_id,
                     name,
                     kind,
                     "queued",
@@ -306,8 +307,13 @@ class AutonomyStore:
             )
             cur.close()
 
-        self.add_audit(job_id, "job.created", "system", {"kind": kind, "name": name, "risk_class": risk_class})
-        return self.get_job(job_id)
+        self.add_audit(
+            resolved_job_id,
+            "job.created",
+            "system",
+            {"kind": kind, "name": name, "risk_class": risk_class},
+        )
+        return self.get_job(resolved_job_id)
 
     def get_job(self, job_id: str) -> Job:
         with self._lock:

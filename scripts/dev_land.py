@@ -92,13 +92,53 @@ def _approve_with_windows_credential(repo: str, pr: str, base: str) -> bool:
     return False
 
 
+def _git(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], cwd=_REPO_ROOT, capture_output=True, text=True)
+
+
+def _teardown_local_refs(repo: str, pr: str) -> None:
+    """Reap the just-landed PR's LOCAL branch + worktree — the anti-sprawl teardown.
+
+    A landed branch left behind locally is the #1 source of branch/worktree sprawl
+    (squash-merge orphans it so `git branch -d` never reaps it). The work is now on
+    the base + the remote, so removing the local refs loses nothing. Best-effort:
+    never fail the land over cleanup.
+    """
+    head = _gh(["pr", "view", pr, "--repo", repo, "--json", "headRefName", "--jq", ".headRefName"], check=False)
+    branch = (head.stdout or "").strip()
+    if not branch:
+        return
+    # Remove a worktree checked out on this branch (only if it has no uncommitted work).
+    wt_path = ""
+    cur = ""
+    for line in _git(["worktree", "list", "--porcelain"]).stdout.splitlines():
+        if line.startswith("worktree "):
+            cur = line[len("worktree ") :].strip()
+        elif line.strip() == f"branch refs/heads/{branch}":
+            wt_path = cur
+            break
+    if wt_path:
+        rm = _git(["worktree", "remove", wt_path])  # refuses (non-zero) if dirty -> we keep it
+        print(f"  worktree {wt_path}: {'removed' if rm.returncode == 0 else 'kept (uncommitted work)'}")
+    # Delete the local branch (it landed; recoverable from the remote if ever needed).
+    if _git(["rev-parse", "--verify", branch]).returncode == 0:
+        dl = _git(["branch", "-D", branch])
+        print(f"  local branch {branch}: {'deleted' if dl.returncode == 0 else 'kept'}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pr", help="PR number to land")
     parser.add_argument("--repo", default="Calvin-Corbett/thomas-dev")
     parser.add_argument("--base", default="dev")
     parser.add_argument("--merge", choices=["squash", "merge", "rebase"], default="squash")
-    parser.add_argument("--delete-branch", action="store_true")
+    parser.add_argument("--delete-branch", action="store_true", help="also delete the REMOTE branch")
+    parser.add_argument(
+        "--keep-local",
+        action="store_true",
+        help="do NOT reap the local source branch + worktree after landing (default: reap them, "
+        "since a landed branch left behind is the #1 source of branch/worktree sprawl)",
+    )
     args = parser.parse_args()
 
     if not _is_admin(args.repo):
@@ -125,6 +165,8 @@ def main() -> int:
             print(f"  MERGE FAILED: {(proc.stderr or proc.stdout).strip()}")
             return 1
         print(f"  PR #{args.pr} merged into {args.base}.")
+        if not args.keep_local:
+            _teardown_local_refs(args.repo, str(args.pr))
         return 0
     finally:
         if lifted:

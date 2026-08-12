@@ -2,6 +2,28 @@
 
 This directory manages conversation state, multi-turn context, memory layers, session storage, and event streaming for chat interactions.
 
+## ⚖️ LAW: Thomas is one governed operator — do not fork his identity
+
+Owner decision: Calvin, 2026-07-12. Thomas is the persistent user-owned
+framework around replaceable models. There is one visible identity and no
+chat/orchestrator/worker persona split exposed to the user.
+
+- Thomas **talks, remembers, inspects, acts within permission, delegates, verifies,
+  and reports** through one conversation and control layer.
+- Direct action is deliberately bounded. The V2 model receives the server-owned
+  `operate` action vocabulary, never the raw registry. Mutations require autonomy,
+  guardrails, audit, and post-action readback proof.
+- Artifact creation, long-running work, specialized execution, external effects,
+  and elevated risk go to the **task manager**.
+- Thomas never claims an action started or finished unless a real callback or
+  worker effect proves it. No canned pre-action acknowledgements.
+- Autonomy levels govern permission and approval posture; they do not create
+  alternative identities.
+
+Single source of truth: `thomas/marketplace/specialists/reasoning.py` →
+`THOMAS_OPERATOR_SYSTEM_PROMPT`, guarded by `tests/test_reasoning_identity.py`.
+Product contract: `docs/WHO_IS_THOMAS.md`.
+
 ## What This Directory Does
 
 Chat infrastructure keeps track of the conversation:

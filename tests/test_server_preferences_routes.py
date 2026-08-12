@@ -114,11 +114,12 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         self.assertIs((await resp.json())["memory"]["thread_enabled"], True)
 
-    async def test_settings_js_route_is_available(self):
+    async def test_settings_js_route_is_gone(self):
+        # /js/settings.js served a helper no page ever loaded (finished code
+        # with no caller). The file and its route were deleted together; the
+        # route must stay gone rather than quietly serving dead code again.
         resp = await self.client.get("/js/settings.js")
-        self.assertEqual(resp.status, 200)
-        text = await resp.text()
-        self.assertIn("/api/preferences", text)
+        self.assertEqual(resp.status, 404)
 
     async def test_api_key_storage_works_via_aiohttp_route(self):
         resp = await self.client.patch("/api/preferences", json={"api_keys": {"openai": "sk-test-123456"}})

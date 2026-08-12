@@ -168,10 +168,27 @@ def register_setup_routes(
 
         profile_rows: list[dict[str, Any]] = []
         cloud_key_count = 0
+        openai_codex_ready = False
+        openai_codex_exists = False
         for name, m in cfg.models.items():
-            has_key = m.provider == "codex" or bool(secrets_store.get(name) or m.api_key)
             provider = str(m.provider or "")
-            if provider not in {"ollama", "local", "codex"} and has_key:
+            provider_key = provider.strip().lower().replace("-", "_")
+            if provider_key == "openai_codex":
+                openai_codex_exists = True
+                try:
+                    from thomas.server.openai_codex_oauth import has_openai_codex_token
+
+                    has_key = bool(m.api_key or has_openai_codex_token(secrets_store, name))
+                # Reading a stored OAuth token: ImportError if the OAuth module is
+                # absent, OSError for the secret file, ValueError/TypeError/KeyError
+                # for a token blob that will not parse. Fall back to the plain key.
+                except (ImportError, OSError, ValueError, TypeError, KeyError):
+                    log.debug("openai_codex token probe failed for profile %s", name, exc_info=True)
+                    has_key = bool(m.api_key)
+                openai_codex_ready = openai_codex_ready or bool(has_key)
+            else:
+                has_key = provider_key == "codex" or bool(secrets_store.get(name) or m.api_key)
+            if provider_key not in {"ollama", "local", "codex", "openai_codex"} and has_key:
                 cloud_key_count += 1
             profile_rows.append(
                 {
@@ -193,7 +210,13 @@ def register_setup_routes(
             ollama_running=bool(ollama_running),
         )
 
-        if codex_cmd:
+        if openai_codex_ready:
+            recommended_path = "codex"
+            reason = "Native ChatGPT OAuth is already connected."
+        elif openai_codex_exists:
+            recommended_path = "codex"
+            reason = "Native ChatGPT OAuth is available and does not require Codex CLI."
+        elif codex_cmd:
             recommended_path = "codex"
             reason = "Codex CLI is installed on this machine."
         else:

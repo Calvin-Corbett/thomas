@@ -13,6 +13,7 @@ Key goals:
 from __future__ import annotations
 
 import filecmp
+import hashlib
 import logging
 import os
 import shutil
@@ -22,6 +23,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+import tomllib
 
 log = logging.getLogger(__name__)
 
@@ -32,12 +36,13 @@ _INCLUDE_FILES = (
     "README.md",
     "CHANGELOG.md",
     "thomas.toml",
+    "pytest.ini",
     "run-ui.cmd",
     "run-repl.cmd",
     ".gitignore",
     "SOUL.md",
 )
-_GREEN_SUPPORT_DIRS = ("extensions",)
+_GREEN_SUPPORT_DIRS = ("extensions", "evolve_supervisor", "evolve_corpus")
 _GREEN_SUPPORT_FILES = (
     "AGENTS.md",
     "GUARDRAILS.md",
@@ -61,6 +66,36 @@ _IGNORE_NAMES = {
     ".ruff_cache",
     ".DS_Store",
 }
+
+SUPERVISOR_OWNED_PATHS = {
+    "thomas/forge/anvil/doppelganger.py",
+    "thomas/forge/anvil/evolve.py",
+    "thomas/forge/anvil/evolve_autonomy.py",
+    "thomas/forge/anvil/evolve_loop.py",
+}
+RUNTIME_PROTECTED_PREFIXES = (
+    "thomas/tools/",
+    "thomas/agent/",
+    "thomas/core/",
+    "thomas/server/",
+    "scripts/",
+)
+RUNTIME_PROTECTED_FILES = {
+    "agent_safety.toml",
+    "AGENTS.md",
+    "GUARDRAILS.md",
+    ".pre-commit-config.yaml",
+    "pyproject.toml",
+    "thomas.toml",
+    "thomas.prod.toml",
+    "runtime/.runtime_protection_disabled",
+    "runtime/.runtime_protection_key",
+    "runtime/.breakglass_window",
+    "runtime/.breakglass_window_key",
+}
+TEST_INFRA_ROOTS = ("tests",)
+TEST_INFRA_FILES = {"pytest.ini"}
+LOOP_PACKAGE_ROOT = "thomas/forge/anvil"
 
 
 @dataclass(frozen=True)
@@ -182,6 +217,257 @@ def _sync_tree(src: Path, dst: Path) -> None:
                 pass
 
 
+def _normalize_relpath(value: str | Path) -> str:
+    """One spelling for a repo-relative path, dropping a leading ``./`` only.
+
+    This used to end in ``.lstrip("./")``. ``str.lstrip`` takes a SET of
+    characters, not a prefix, so it ate every leading ``.`` and ``/`` -- and
+    every consumer below turns the result back into a real filesystem path.
+
+    That made three checks answer only one way, whatever the input:
+
+    * ``.gitignore`` -- a ``[protected] policy_files`` entry in
+      ``agent_safety.toml`` -- became ``gitignore``, a name that exists in
+      neither tree. ``_promotion_protected_diffs`` then compared
+      ``blue/gitignore`` with ``green/gitignore``, found both absent, and took
+      its ``continue``. Measured on a pair whose only difference was that file::
+
+          AGENTS.md  tampered -> ['AGENTS.md']  promotion BLOCKED
+          .gitignore tampered -> []             promotion ALLOWED
+
+      Same gate, same call, same kind of edit; the dot decided the verdict.
+    * ``_restore_green_path_from_blue`` (evolve.py) copies ``blue/<norm>`` over
+      ``green/<norm>``, so reverting a tampered ``.gitignore`` wrote nothing and
+      still reported the path as reverted::
+
+          AGENTS.md  violations=['AGENTS.md']  reverted=['AGENTS.md']  -> RESTORED
+          .gitignore violations=['.gitignore'] reverted=['.gitignore'] -> STILL TAMPERED
+    * ``_normalize_delta_relpath`` guards with
+      ``path.is_absolute() or ".." in path.parts``. A leading ``/`` or ``../``
+      was deleted here first, so for exactly the shape that guard exists to
+      catch it could never fire: ``../thomas/agriculture/x.py`` arrived as the
+      in-tree ``thomas/agriculture/x.py`` and was promoted as though the caller
+      had named it. An interior ``thomas/../x.py`` still raised, which is why
+      the guard looked alive.
+
+    A leading ``./`` is the one thing worth removing, and ``removeprefix`` takes
+    it off without touching a filename that legitimately starts with a dot.
+    """
+
+    return str(value or "").replace("\\", "/").removeprefix("./")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_promotion_protected_paths(paths: DoppelgangerPaths) -> set[str]:
+    relpaths = set(SUPERVISOR_OWNED_PATHS) | set(RUNTIME_PROTECTED_FILES) | set(RUNTIME_PROTECTED_PREFIXES)
+    config_path = paths.blue_root / "agent_safety.toml"
+    if not config_path.exists():
+        return relpaths
+    try:
+        payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return relpaths
+    protected = payload.get("protected")
+    if not isinstance(protected, dict):
+        return relpaths
+    for key in ("policy_files", "guardrails_files", "enforcement_files", "enforcement_scripts"):
+        rows = protected.get(key) or []
+        if not isinstance(rows, list):
+            continue
+        for item in rows:
+            rel = _normalize_relpath(str(item or "")).strip()
+            if rel:
+                relpaths.add(rel)
+    return relpaths
+
+
+def _is_protected_relpath(rel: str, protected_paths: set[str]) -> bool:
+    normalized = _normalize_relpath(rel).strip()
+    if normalized in protected_paths:
+        return True
+    return any(item.endswith("/") and normalized.startswith(item.rstrip("/") + "/") for item in protected_paths if item)
+
+
+def _iter_existing_files_under(root: Path, rel_prefix: str) -> set[str]:
+    prefix = _normalize_relpath(rel_prefix).rstrip("/")
+    base = root / prefix
+    if not base.exists():
+        return set()
+    if base.is_file():
+        return {prefix}
+    return {
+        f"{prefix}/{candidate.relative_to(base).as_posix()}"
+        for candidate in _iter_src_files(base)
+        if candidate.is_file()
+    }
+
+
+def _promotion_test_infra_paths(paths: DoppelgangerPaths) -> set[str]:
+    relpaths = set(TEST_INFRA_FILES)
+    for dirname in TEST_INFRA_ROOTS:
+        for root in (paths.blue_root, paths.green_root):
+            base = root / dirname
+            if not base.exists():
+                continue
+            for candidate in _iter_src_files(base):
+                if candidate.is_file():
+                    relpaths.add(f"{dirname}/{candidate.relative_to(base).as_posix()}")
+    return relpaths
+
+
+def _promotion_loop_package_python_paths(paths: DoppelgangerPaths) -> set[str]:
+    relpaths: set[str] = set()
+    for root in (paths.blue_root, paths.green_root):
+        base = root / LOOP_PACKAGE_ROOT
+        if not base.exists():
+            continue
+        for candidate in _iter_src_files(base):
+            if not candidate.is_file() or candidate.suffix != ".py":
+                continue
+            relpaths.add(f"{LOOP_PACKAGE_ROOT}/{candidate.relative_to(base).as_posix()}")
+    return relpaths
+
+
+def _promotion_new_loop_package_python_paths(paths: DoppelgangerPaths) -> set[str]:
+    relpaths: set[str] = set()
+    green_base = paths.green_root / LOOP_PACKAGE_ROOT
+    if not green_base.exists():
+        return relpaths
+    for candidate in _iter_src_files(green_base):
+        if not candidate.is_file() or candidate.suffix != ".py":
+            continue
+        rel = f"{LOOP_PACKAGE_ROOT}/{candidate.relative_to(green_base).as_posix()}"
+        if not (paths.blue_root / rel).exists():
+            relpaths.add(rel)
+    return relpaths
+
+
+def _promotion_protected_diffs(paths: DoppelgangerPaths) -> list[str]:
+    changed: list[str] = []
+    protected_paths = (
+        _load_promotion_protected_paths(paths)
+        | _promotion_test_infra_paths(paths)
+        | _promotion_loop_package_python_paths(paths)
+    )
+    exact_paths = {rel for rel in protected_paths if not rel.endswith("/")}
+    protected_prefixes = {rel for rel in protected_paths if rel.endswith("/")}
+    for rel in sorted(exact_paths):
+        blue_path = paths.blue_root / rel
+        green_path = paths.green_root / rel
+        if not blue_path.exists() and not green_path.exists():
+            continue
+        if blue_path.exists() != green_path.exists():
+            changed.append(rel)
+            continue
+        try:
+            if _sha256(blue_path) != _sha256(green_path):
+                changed.append(rel)
+        except OSError:
+            changed.append(rel)
+    for prefix in sorted(protected_prefixes):
+        blue_files = _iter_existing_files_under(paths.blue_root, prefix)
+        green_files = _iter_existing_files_under(paths.green_root, prefix)
+        for rel in sorted(blue_files | green_files):
+            blue_path = paths.blue_root / rel
+            green_path = paths.green_root / rel
+            if blue_path.exists() != green_path.exists():
+                changed.append(rel)
+                continue
+            try:
+                if _sha256(blue_path) != _sha256(green_path):
+                    changed.append(rel)
+            except OSError:
+                changed.append(rel)
+    return changed
+
+
+def _promotion_protected_paths(paths: DoppelgangerPaths) -> set[str]:
+    return (
+        _load_promotion_protected_paths(paths)
+        | _promotion_test_infra_paths(paths)
+        | _promotion_loop_package_python_paths(paths)
+    )
+
+
+def _promotion_delta_protected_paths(paths: DoppelgangerPaths) -> set[str]:
+    return (
+        _load_promotion_protected_paths(paths)
+        | _promotion_test_infra_paths(paths)
+        | _promotion_new_loop_package_python_paths(paths)
+    )
+
+
+def _validate_green_to_blue_promotion(paths: DoppelgangerPaths) -> None:
+    protected_diffs = _promotion_protected_diffs(paths)
+    if protected_diffs:
+        preview = ", ".join(protected_diffs[:8])
+        raise RuntimeError(f"green promotion blocked by protected/supervisor-owned diff: {preview}")
+
+
+def _normalize_delta_relpath(value: Any) -> str:
+    rel = _normalize_relpath(str(value or "")).strip()
+    if not rel:
+        raise RuntimeError("green promotion blocked by empty delta path")
+    path = Path(rel)
+    if path.is_absolute() or ".." in path.parts:
+        raise RuntimeError(f"green promotion blocked by unsafe delta path: {rel}")
+    return rel
+
+
+def _is_promotable_scope(rel: str) -> bool:
+    normalized = _normalize_relpath(rel)
+    if normalized in _INCLUDE_FILES:
+        return True
+    return any(normalized == root or normalized.startswith(f"{root}/") for root in _INCLUDE_DIRS)
+
+
+def _validate_green_delta_promotion(paths: DoppelgangerPaths, changed_files: Iterable[Any]) -> list[str]:
+    changed = sorted({_normalize_delta_relpath(item) for item in changed_files})
+    if not changed:
+        raise RuntimeError("green promotion blocked: no verified delta paths supplied")
+    protected = _promotion_delta_protected_paths(paths)
+    blocked = [rel for rel in changed if _is_protected_relpath(rel, protected)]
+    if blocked:
+        preview = ", ".join(blocked[:8])
+        raise RuntimeError(f"green promotion blocked by protected/supervisor-owned delta: {preview}")
+    out_of_scope = [rel for rel in changed if not _is_promotable_scope(rel)]
+    if out_of_scope:
+        preview = ", ".join(out_of_scope[:8])
+        raise RuntimeError(f"green promotion blocked by non-promotable delta path: {preview}")
+    return changed
+
+
+def sync_green_delta_to_blue(paths: DoppelgangerPaths, changed_files: Iterable[Any]) -> list[str]:
+    """Copy only the verified green delta into blue.
+
+    Full green->blue sync mirrors entire trees and can overwrite unrelated dirty
+    blue work. Evolve promotions should apply only the verified candidate files.
+    """
+    changed = _validate_green_delta_promotion(paths, changed_files)
+    for rel in changed:
+        src = paths.green_root / rel
+        dst = paths.blue_root / rel
+        if src.exists():
+            if src.is_dir():
+                raise RuntimeError(f"green promotion blocked by directory delta path: {rel}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        else:
+            if dst.exists():
+                if dst.is_dir():
+                    shutil.rmtree(dst)
+                else:
+                    dst.unlink()
+    return changed
+
+
 def sync_blue_to_green(paths: DoppelgangerPaths) -> None:
     paths.green_root.mkdir(parents=True, exist_ok=True)
     for d in _INCLUDE_DIRS:
@@ -205,6 +491,7 @@ def sync_blue_to_green(paths: DoppelgangerPaths) -> None:
 
 
 def sync_green_to_blue(paths: DoppelgangerPaths) -> None:
+    _validate_green_to_blue_promotion(paths)
     for d in _INCLUDE_DIRS:
         src = paths.green_root / d
         if src.exists():
@@ -255,12 +542,32 @@ def rollback(paths: DoppelgangerPaths, backup_dir: Path | None = None) -> Path:
     return backup
 
 
+def _hermetic_venv() -> bool:
+    """True when the green venv must be built without network access (tests/offline).
+
+    Set THOMAS_EVOLVE_HERMETIC_VENV=1 (the test harness does this in
+    tests/conftest.py) to build the green venv with --system-site-packages so it
+    inherits aiohttp/click/httpx from the parent interpreter. The dep probe then
+    passes and the networked `pip install` is skipped entirely -- otherwise that
+    install blocks forever in an offline/sandboxed environment and hangs the
+    evolve test suite.
+    """
+    return os.environ.get("THOMAS_EVOLVE_HERMETIC_VENV", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def ensure_green_venv(paths: DoppelgangerPaths) -> Path:
     """Ensure the green venv exists and has thomas installed editable."""
+    hermetic = _hermetic_venv()
     py = _venv_python(paths.green_venv)
     if not py.exists():
         paths.green_venv.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.check_call([sys.executable, "-m", "venv", str(paths.green_venv)])  # nosec
+        venv_cmd = [sys.executable, "-m", "venv"]
+        # Inherit the parent interpreter's site-packages under test so the dep
+        # probe below passes without a networked install.
+        if hermetic:
+            venv_cmd.append("--system-site-packages")
+        venv_cmd.append(str(paths.green_venv))
+        subprocess.check_call(venv_cmd)  # nosec
     py = _venv_python(paths.green_venv)
     if not py.exists():
         raise RuntimeError(f"Green venv created but python missing: {py}")
@@ -273,6 +580,14 @@ def ensure_green_venv(paths: DoppelgangerPaths) -> Path:
         stderr=subprocess.DEVNULL,
     )
     if probe != 0:
+        # Never run the networked install under test; a hermetic venv inherits
+        # deps via --system-site-packages, so reaching here means the harness is
+        # misconfigured -- fail loudly rather than block forever on the network.
+        if hermetic:
+            raise RuntimeError(
+                "Hermetic green venv is missing core deps (aiohttp/click/httpx); "
+                "expected them via --system-site-packages from the parent interpreter."
+            )
         subprocess.check_call([str(py), "-m", "pip", "install", "--upgrade", "pip"])  # nosec
         subprocess.check_call(  # nosec
             [str(py), "-m", "pip", "install", "-e", ".[repl,server]"],
@@ -348,4 +663,18 @@ def promote_green_to_blue(paths: DoppelgangerPaths, *, stop_port: int = 8899) ->
 
     backup = create_backup(paths)
     sync_green_to_blue(paths)
+    return backup
+
+
+def promote_green_delta_to_blue(
+    paths: DoppelgangerPaths,
+    changed_files: Iterable[Any],
+    *,
+    stop_port: int = 8899,
+) -> Path:
+    """Promote only verified delta paths from green into blue with a backup."""
+    paths.backups_root.mkdir(parents=True, exist_ok=True)
+    _stop_thomas_on_port_windows(int(stop_port))
+    backup = create_backup(paths)
+    sync_green_delta_to_blue(paths, changed_files)
     return backup

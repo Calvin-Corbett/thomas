@@ -22,7 +22,7 @@ def _now_iso() -> str:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[3]
 
 
 def _intake_root(repo: Path, root_arg: str | None) -> Path:

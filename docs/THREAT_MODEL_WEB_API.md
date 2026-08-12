@@ -1,7 +1,8 @@
 # Web/API Threat Model (Baseline)
 
 Date: 2026-03-29  
-Last reviewed: 2026-05-19  
+Last reviewed: 2026-06-26  
+Cadence touch on 2026-06-26: release-hygiene/security-audit review. `python scripts/security_audit.py --repo-root . --json --strict` reported only this document's stale cadence as the high-severity release blocker before this review; mutating-route policy remained green with 186 routes and 3 approved webhook exceptions. No threat-model content changes were required for this release-hygiene metadata fix.  
 Cadence touch on 2026-05-19: no security-relevant code changes since prior review (Praxis rename arc was structural reorganization only — no new attack surface, no auth/authz logic changes, no new public endpoints).  
 Scope: `thomas/server/app.py`, `thomas/server/web/**`, browser chat UI, mutating `/api/*` and `/gateway/*` routes, the root OpenAI-compatible `/openai-compat/*` proxy surface, and public webhook receivers.
 

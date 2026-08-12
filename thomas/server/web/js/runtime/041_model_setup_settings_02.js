@@ -14,12 +14,7 @@ function __thomasBootstrapApp() {
         }
     }
 }
-if (document.readyState === 'loading') {
-    window.addEventListener('DOMContentLoaded', __thomasBootstrapApp, { once: true });
-} else {
-    queueMicrotask(() => __thomasBootstrapApp());
-}
-
+// app_runtime_loader.js starts the app after every split runtime chunk is loaded.
 
 const MODULE_STUDIO_COMFY_STYLE_ID = 'moduleStudioComfyStyles';
 
@@ -996,4 +991,3 @@ function moduleUiEditorAttachEditMode(frame, wb, project, onMutation) {
     };
     return true;
 }
-

@@ -10,6 +10,8 @@ from typing import Any
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
+from thomas.cli.repo_commands import RepoCommand, discover_repo_commands, find_repo_command
+
 
 def _score_match(query: str, candidate: str) -> float:
     """Return a fuzzy score for matching / ranking candidates."""
@@ -330,6 +332,52 @@ def list_slash_specs() -> list[SlashSpec]:
     return list(_SLASH_SPECS)
 
 
+def list_repo_slash_specs(root: Any | None = None) -> tuple[list[SlashSpec], list[str]]:
+    """Return specs for repository-defined commands plus scan warnings.
+
+    Re-scans ``.thomas/commands`` and ``.claude/commands`` on every call
+    (cheap mtime cache underneath), so newly added definition files are
+    discoverable without a REPL restart. Repo commands whose names collide
+    with a built-in command or alias are excluded — built-ins always win.
+    """
+    scan = discover_repo_commands(root)
+    specs: list[SlashSpec] = []
+    for repo_command in scan.commands:
+        if repo_command.command in _COMMAND_SET:
+            continue
+        specs.append(
+            SlashSpec(
+                command=repo_command.command,
+                summary=repo_command.description or f"Repo command ({repo_command.origin})",
+                usage=repo_command.usage,
+                has_args=bool(repo_command.argument_hint),
+            )
+        )
+    return specs, list(scan.warnings)
+
+
+def resolve_slash_invocation(raw: str, root: Any | None = None) -> tuple[str, RepoCommand | None]:
+    """Resolve a raw slash token to ``(builtin_command, repo_command)``.
+
+    Precedence: exact built-in command or alias first (built-ins always win
+    name collisions), then an exact repository-defined command, then the
+    usual built-in prefix/fuzzy normalization. Exactly one element of the
+    returned tuple is truthy for a recognized token; both are falsy when the
+    token is unknown.
+    """
+    token = str(raw or "").strip().lower()
+    if not token.startswith("/"):
+        return "", None
+    if token in _ALIAS_MAP:
+        return _ALIAS_MAP[token], None
+    if token in _COMMAND_SET:
+        return token, None
+    repo_command = find_repo_command(token, root=root)
+    if repo_command is not None and repo_command.command not in _COMMAND_SET:
+        return "", repo_command
+    return normalize_slash_command(raw), None
+
+
 def get_slash_spec(command: str) -> SlashSpec | None:
     """Return the canonical spec for *command* if registered."""
     token = str(command or "").strip().lower()
@@ -452,15 +500,18 @@ class SlashCommandCompleter(Completer):
         token_query = token.strip()
 
         if len(parts) <= 1:
+            all_specs = list(_SLASH_SPECS)
+            repo_specs, _repo_warnings = list_repo_slash_specs()
+            all_specs.extend(repo_specs)
             ranked: list[tuple[float, SlashSpec]] = []
             if token_query in {"", "/"}:
-                ranked = [(1.0, spec) for spec in _SLASH_SPECS]
+                ranked = [(1.0, spec) for spec in all_specs]
             else:
-                prefix_matches = [spec for spec in _SLASH_SPECS if spec.command.startswith(token_query)]
+                prefix_matches = [spec for spec in all_specs if spec.command.startswith(token_query)]
                 if prefix_matches:
                     ranked = [(1.0 if spec.command == token_query else 0.95, spec) for spec in prefix_matches]
                 else:
-                    for spec in _SLASH_SPECS:
+                    for spec in all_specs:
                         score = _score_match(token_query, spec.command)
                         if score >= 0.68:
                             ranked.append((score, spec))

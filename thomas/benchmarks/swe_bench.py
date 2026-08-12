@@ -9,6 +9,10 @@ Generates software engineering benchmark tasks that test:
 """
 
 import logging
+import re
+from dataclasses import dataclass, field
+from difflib import unified_diff
+from typing import Any
 
 from thomas.benchmarks.types import (
     BenchmarkSuite,
@@ -18,6 +22,309 @@ from thomas.benchmarks.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LocalSWEBenchFixture:
+    """Offline issue-to-patch fixture small enough for unit tests and CI gates."""
+
+    issue_id: str
+    repository: str
+    issue_title: str
+    issue_body: str
+    base_files: dict[str, str]
+    expected_files: dict[str, str]
+    fail_to_pass_tests: list[str] = field(default_factory=list)
+    pass_to_pass_tests: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    schema_version: str = "local-swe-bench-v1"
+
+    def __post_init__(self) -> None:
+        _validate_fixture_paths(self.base_files)
+        _validate_fixture_paths(self.expected_files)
+        missing_base = sorted(set(self.expected_files) - set(self.base_files))
+        if missing_base:
+            raise ValueError(f"local SWE-bench fixtures only support existing-file patches: {missing_base}")
+
+    def prompt(self) -> str:
+        """Render the issue and repository snapshot as a patch-generation prompt."""
+        file_blocks = []
+        for path in sorted(self.base_files):
+            file_blocks.append(f"### {path}\n```python\n{self.base_files[path]}```")
+        tests = self.fail_to_pass_tests + self.pass_to_pass_tests
+        tests_text = "\n".join(f"- {item}" for item in tests) if tests else "- No test commands declared"
+        files_text = "\n\n".join(file_blocks)
+        return (
+            f"You are fixing issue {self.issue_id} in repository {self.repository}.\n\n"
+            f"Title: {self.issue_title}\n\n"
+            f"{self.issue_body.strip()}\n\n"
+            "Return a unified diff patch only. Do not rewrite unrelated files.\n\n"
+            "Repository files:\n\n"
+            f"{files_text}\n\n"
+            "Offline verification commands:\n"
+            f"{tests_text}\n"
+        )
+
+    def reference_patch(self) -> str:
+        """Return the canonical unified diff from base files to expected files."""
+        chunks: list[str] = []
+        for path in sorted(self.expected_files):
+            before = self.base_files[path].splitlines()
+            after = self.expected_files[path].splitlines()
+            chunks.extend(
+                unified_diff(
+                    before,
+                    after,
+                    fromfile=f"a/{path}",
+                    tofile=f"b/{path}",
+                    lineterm="",
+                )
+            )
+        return "\n".join(chunks) + "\n"
+
+    def to_benchmark_task(self) -> BenchmarkTask:
+        """Convert the local fixture into the existing benchmark task contract."""
+        return BenchmarkTask(
+            name=f"local_swe_bench_{self.issue_id}",
+            description="Offline SWE-bench style repository issue patch fixture",
+            category="issue_patch",
+            difficulty=TaskDifficulty.EASY,
+            prompt=self.prompt(),
+            expected_output=self.reference_patch(),
+            eval_metric=EvalMetric.FUNCTIONAL,
+            eval_fn=lambda output, _expected: score_swe_bench_patch(self, output)["score"],
+            tags=["swe-bench", "local-fixture", "offline", "issue-to-patch"],
+            metadata={
+                "schema_version": self.schema_version,
+                "issue_id": self.issue_id,
+                "repository": self.repository,
+                "base_files": sorted(self.base_files),
+                "expected_files": sorted(self.expected_files),
+                "fail_to_pass_tests": list(self.fail_to_pass_tests),
+                "pass_to_pass_tests": list(self.pass_to_pass_tests),
+                **dict(self.metadata),
+            },
+            time_limit_seconds=60,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the fixture schema for future file-backed loaders."""
+        return {
+            "schema_version": self.schema_version,
+            "issue_id": self.issue_id,
+            "repository": self.repository,
+            "issue_title": self.issue_title,
+            "issue_body": self.issue_body,
+            "base_files": dict(self.base_files),
+            "expected_files": dict(self.expected_files),
+            "fail_to_pass_tests": list(self.fail_to_pass_tests),
+            "pass_to_pass_tests": list(self.pass_to_pass_tests),
+            "metadata": dict(self.metadata),
+        }
+
+
+def _validate_fixture_paths(files: dict[str, str]) -> None:
+    for path in files:
+        normalized = path.replace("\\", "/").strip()
+        if not normalized or normalized.startswith("/") or normalized.startswith("../") or "/../" in normalized:
+            raise ValueError(f"invalid fixture path: {path!r}")
+
+
+def create_local_swe_bench_fixture() -> LocalSWEBenchFixture:
+    """Create a tiny offline repository issue fixture inspired by SWE-bench."""
+    base = (
+        "def percentage(numerator, denominator):\n"
+        '    """Return numerator as a percentage of denominator."""\n'
+        "    return round((numerator / denominator) * 100, 2)\n"
+    )
+    expected = (
+        "def percentage(numerator, denominator):\n"
+        '    """Return numerator as a percentage of denominator."""\n'
+        "    if denominator == 0:\n"
+        "        return None\n"
+        "    return round((numerator / denominator) * 100, 2)\n"
+    )
+    return LocalSWEBenchFixture(
+        issue_id="local-zero-division-001",
+        repository="local/finance-utils",
+        issue_title="percentage crashes when denominator is zero",
+        issue_body=(
+            "Users report that percentage(5, 0) raises ZeroDivisionError. The repository contract expects "
+            "None when the denominator is zero, while existing non-zero behavior must remain unchanged."
+        ),
+        base_files={"finance_utils/metrics.py": base},
+        expected_files={"finance_utils/metrics.py": expected},
+        fail_to_pass_tests=["pytest tests/test_metrics.py::test_percentage_zero_denominator"],
+        pass_to_pass_tests=["pytest tests/test_metrics.py::test_percentage_regular_values"],
+        metadata={"source": "local-offline-fixture"},
+    )
+
+
+def create_local_swe_bench_suite() -> BenchmarkSuite:
+    """Create a one-task local SWE-bench style issue-to-patch suite."""
+    suite = BenchmarkSuite(
+        name="swe_bench_local",
+        description="Offline SWE-bench inspired issue-to-patch fixture",
+        version="1.0",
+    )
+    suite.add_task(create_local_swe_bench_fixture().to_benchmark_task())
+    return suite
+
+
+def score_swe_bench_patch(fixture: LocalSWEBenchFixture, candidate_patch: str) -> dict[str, Any]:
+    """Score a candidate unified diff against a local SWE-bench fixture."""
+    try:
+        diff_text = _extract_unified_diff(candidate_patch)
+        patched_files = _apply_unified_diff(fixture.base_files, diff_text)
+    except ValueError as exc:
+        return {
+            "passed": False,
+            "score": 0.0,
+            "error": str(exc),
+            "modified_files": [],
+            "missing_files": sorted(fixture.expected_files),
+            "mismatched_files": [],
+        }
+
+    modified = sorted(path for path in patched_files if patched_files[path] != fixture.base_files.get(path, ""))
+    missing = sorted(path for path in fixture.expected_files if path not in patched_files)
+    mismatched = sorted(
+        path for path, expected in fixture.expected_files.items() if patched_files.get(path) != expected
+    )
+    unexpected = sorted(path for path in patched_files if path not in fixture.base_files)
+
+    required_count = max(1, len(fixture.expected_files))
+    matched_count = len(fixture.expected_files) - len(set(missing) | set(mismatched))
+    score = max(0.0, matched_count / required_count)
+    if unexpected:
+        score = min(score, 0.5)
+
+    passed = not missing and not mismatched and not unexpected
+    return {
+        "passed": passed,
+        "score": 1.0 if passed else score,
+        "error": "",
+        "modified_files": modified,
+        "missing_files": missing,
+        "mismatched_files": mismatched,
+        "unexpected_files": unexpected,
+    }
+
+
+def _extract_unified_diff(text: str) -> str:
+    raw = str(text or "")
+    if not raw.strip():
+        raise ValueError("candidate patch is empty")
+    fenced = re.search(r"```(?:diff|patch)?\s*(.*?)```", raw, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        raw = fenced.group(1).strip("\n")
+    markers = ("diff --git ", "--- a/", "--- ")
+    for marker in markers:
+        idx = raw.find(marker)
+        if idx >= 0:
+            return raw[idx:].lstrip()
+    raise ValueError("candidate patch does not contain a unified diff")
+
+
+def _apply_unified_diff(base_files: dict[str, str], diff_text: str) -> dict[str, str]:
+    patched = dict(base_files)
+    lines = str(diff_text or "").splitlines(keepends=True)
+    index = 0
+    touched = False
+    while index < len(lines):
+        line = lines[index]
+        if line.startswith("diff --git "):
+            index += 1
+            continue
+        if not line.startswith("--- "):
+            index += 1
+            continue
+
+        old_path = _diff_path(line[4:].strip())
+        index += 1
+        if index >= len(lines) or not lines[index].startswith("+++ "):
+            raise ValueError(f"missing +++ header after {old_path}")
+        new_path = _diff_path(lines[index][4:].strip())
+        index += 1
+        target_path = new_path if new_path != "/dev/null" else old_path
+        if target_path not in base_files:
+            raise ValueError(f"candidate patch modifies unknown file: {target_path}")
+
+        source = patched[target_path].splitlines(keepends=True)
+        output: list[str] = []
+        source_index = 0
+        saw_hunk = False
+        while index < len(lines):
+            current = lines[index]
+            if current.startswith(("diff --git ", "--- ")):
+                break
+            if not current.startswith("@@ "):
+                index += 1
+                continue
+
+            old_start = _parse_old_hunk_start(current)
+            output.extend(source[source_index : old_start - 1])
+            source_index = old_start - 1
+            saw_hunk = True
+            index += 1
+
+            while index < len(lines):
+                patch_line = lines[index]
+                if patch_line.startswith(("@@ ", "diff --git ", "--- ")):
+                    break
+                if patch_line.startswith("\\"):
+                    index += 1
+                    continue
+                if not patch_line:
+                    index += 1
+                    continue
+                prefix = patch_line[0]
+                content = patch_line[1:]
+                if prefix == " ":
+                    _require_source_line(source, source_index, content, target_path)
+                    output.append(source[source_index])
+                    source_index += 1
+                elif prefix == "-":
+                    _require_source_line(source, source_index, content, target_path)
+                    source_index += 1
+                elif prefix == "+":
+                    output.append(content)
+                else:
+                    raise ValueError(f"unsupported diff line for {target_path}: {patch_line.rstrip()}")
+                index += 1
+
+        if not saw_hunk:
+            raise ValueError(f"no hunks found for {target_path}")
+        output.extend(source[source_index:])
+        patched[target_path] = "".join(output)
+        touched = True
+
+    if not touched:
+        raise ValueError("candidate patch did not modify any files")
+    return patched
+
+
+def _diff_path(raw: str) -> str:
+    token = raw.split("\t", 1)[0].strip()
+    if token in {"/dev/null", "dev/null"}:
+        return "/dev/null"
+    if token.startswith(("a/", "b/")):
+        token = token[2:]
+    return token.replace("\\", "/").strip()
+
+
+def _parse_old_hunk_start(header: str) -> int:
+    match = re.match(r"@@ -(?P<start>\d+)(?:,\d+)? \+\d+(?:,\d+)? @@", header)
+    if not match:
+        raise ValueError(f"invalid unified diff hunk header: {header.rstrip()}")
+    return int(match.group("start"))
+
+
+def _require_source_line(source: list[str], source_index: int, expected: str, path: str) -> None:
+    if source_index >= len(source):
+        raise ValueError(f"candidate patch hunk extends past end of {path}")
+    if source[source_index] != expected:
+        raise ValueError(f"candidate patch context mismatch in {path}")
 
 
 def create_swe_bench_suite() -> BenchmarkSuite:

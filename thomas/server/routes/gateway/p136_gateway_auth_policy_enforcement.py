@@ -144,7 +144,20 @@ _AUTH_FAILURES_CACHE: weakref.WeakKeyDictionary[web.Application, dict[str, Any]]
 _AUTH_FAILURE_LOCKS: weakref.WeakKeyDictionary[web.Application, asyncio.Lock] = weakref.WeakKeyDictionary()
 
 # In auto/prefix modes, enforcement targets these gateway-ish paths.
-_DEFAULT_GATEWAY_PREFIXES: tuple[str, ...] = ("/gateway", "/ws")
+#
+# `/v1/gateway` was missing, so four live gateway routes sat outside the policy
+# even once the middleware was installed: /v1/gateway/state,
+# /v1/gateway/state/persistence-model and the two p142 passthrough-mapping
+# routes. Probed with auth=token and a deliberately wrong bearer token,
+# GET /v1/gateway/state answered 200 and returned gateway state.
+#
+# NOT added here, because it is a judgement call rather than an oversight:
+# /v1/chat/completions and /v1/responses (plus their schema routes). Those are
+# the OpenAI-compatible surface -- the most likely thing to be exposed remotely
+# -- and they are currently not covered by gateway auth either. Whether they
+# should answer to this policy or carry their own is the owner's decision, so
+# they are reported rather than silently locked down.
+_DEFAULT_GATEWAY_PREFIXES: tuple[str, ...] = ("/gateway", "/ws", "/v1/gateway")
 
 _ACCEPTED_HEADERS: tuple[str, ...] = ("Authorization", "X-Thomas-Gateway-Token", "X-Gateway-Token")
 _ACCEPTED_QUERY_PARAMS: tuple[str, ...] = ("token", "auth", "gateway_token")

@@ -12,8 +12,10 @@ All events go through ``EventDispatcher.emit()`` which handles:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import secrets
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -22,6 +24,7 @@ log = logging.getLogger(__name__)
 
 # Type alias for the send function (writes bytes to StreamResponse)
 SendFn = Callable[[bytes], Awaitable[None]]
+EventSinkFn = Callable[[dict[str, Any]], None]
 
 
 class EventDispatcher:
@@ -38,37 +41,65 @@ class EventDispatcher:
     All events are NDJSON: one JSON object per line, terminated by ``\\n``.
     """
 
-    def __init__(self, send_fn: SendFn) -> None:
+    def __init__(
+        self,
+        send_fn: SendFn,
+        *,
+        run_id: str | None = None,
+        event_sink: EventSinkFn | None = None,
+    ) -> None:
         self._send = send_fn
+        self._event_sink = event_sink
         self._event_count = 0
         self._started_at = time.monotonic()
         self._history: list[dict[str, Any]] = []
+        self._run_id = str(run_id or secrets.token_urlsafe(12))
+        self._emit_lock = asyncio.Lock()
 
     async def emit(self, event: dict[str, Any]) -> None:
         """Emit a single NDJSON event.
 
         Retries once on error before permanently dropping the event.
         """
-        try:
-            line = json.dumps(event, default=str, ensure_ascii=False) + "\n"
-            await self._send(line.encode("utf-8"))
-            self._event_count += 1
-            self._history.append(event)
-        except Exception as exc:
-            # Attempt one retry
+        async with self._emit_lock:
+            payload = dict(event)
+            payload.setdefault("seq", self._event_count)
+            payload.setdefault("run_id", self._run_id)
             try:
-                log.debug("EventDispatcher.emit retry after error: %s (event type=%s)", exc, event.get("type"))
-                line = json.dumps(event, default=str, ensure_ascii=False) + "\n"
-                await self._send(line.encode("utf-8"))
-                self._event_count += 1
-                self._history.append(event)
-            except Exception as retry_exc:
-                log.warning(
-                    "Event permanently dropped after retry: %s (event type=%s, error=%s)",
-                    event.get("type"),
-                    exc,
-                    retry_exc,
-                )
+                line = json.dumps(payload, default=str, ensure_ascii=False) + "\n"
+                encoded = line.encode("utf-8")
+            except (RecursionError, TypeError, UnicodeError, ValueError) as exc:
+                log.warning("Event serialization failed: %s (event type=%s)", exc, payload.get("type"))
+                return
+
+            for attempt in range(2):
+                try:
+                    await self._send(encoded)
+                    self._event_count += 1
+                    self._history.append(payload)
+                    if self._event_sink is not None:
+                        try:
+                            self._event_sink(payload)
+                        except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+                            log.warning(
+                                "Event persistence failed without interrupting chat: %s (event type=%s)",
+                                exc,
+                                payload.get("type"),
+                            )
+                    return
+                except (OSError, RuntimeError) as exc:
+                    if attempt == 0:
+                        log.debug(
+                            "EventDispatcher.emit retry after error: %s (event type=%s)",
+                            exc,
+                            payload.get("type"),
+                        )
+                    else:
+                        log.warning(
+                            "Event permanently dropped after retry: %s (event type=%s)",
+                            exc,
+                            payload.get("type"),
+                        )
 
     async def emit_text(self, text: str) -> None:
         """Convenience: emit a text chunk."""

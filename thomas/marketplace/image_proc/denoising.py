@@ -8,7 +8,6 @@ wavelet denoising, simplified BM3D, and noise-aware sharpening.
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import convolve, gaussian_filter
 
 from ._exceptions import ImageProcessingError
 from ._types import DenoisingConfig, Image, NoiseModel
@@ -75,6 +74,8 @@ class Denoiser:
         Returns:
             Estimated NoiseModel.
         """
+        from scipy.ndimage import convolve
+
         img_float = image.to_float32()
 
         # Use high-frequency wavelet coefficients
@@ -100,6 +101,8 @@ class Denoiser:
         Searches for similar patches in a window and weights them
         exponentially by patch distance.
         """
+        from scipy.ndimage import gaussian_filter
+
         img_float = image.to_float32()
 
         # This is a vectorized approximation of NLM that preserves the same
@@ -328,6 +331,8 @@ class Denoiser:
         Returns:
             Sharpened image.
         """
+        from scipy.ndimage import gaussian_filter
+
         img_float = image.to_float32()
 
         # Estimate noise

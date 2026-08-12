@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
+
+from thomas.core.timezones import resolve_timezone
 
 # Scheduling spec (JSON):
 # - {"type":"once","run_at":"2026-02-10T12:34:56-06:00"}
@@ -55,7 +56,7 @@ def compute_next_run(schedule: dict[str, Any] | None, now: datetime) -> datetime
 
     if stype in ("daily", "weekly"):
         tz_name = schedule.get("tz") or "UTC"
-        tz = ZoneInfo(tz_name)
+        tz = resolve_timezone(tz_name)
         at = _parse_hhmm(schedule.get("at", "00:00"))
         # Convert "now" into target tz for calendar logic
         local_now = now.astimezone(tz)

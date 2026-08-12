@@ -8,6 +8,18 @@ function officeCollectAgentPrefsSnapshot() {
             color: /^#[0-9a-f]{6}$/i.test(safeString(agent.color)) ? safeString(agent.color) : '#9ad8ff',
             costume: safeString(agent.costume || 'none'),
             tint: safeString(agent.tint || 'blue'),
+            specialty: safeString(agent.specialty || 'Generalist').slice(0, 64),
+            personality: safeString(agent.personality || 'Helpful, direct, and persistent.').slice(0, 160),
+            chatProfile: safeString(agent.chatProfile).slice(0, 80),
+            chatModelId: safeString(agent.chatModelId).slice(0, 120),
+            officeChatHistory: Array.isArray(agent.officeChatHistory)
+                ? agent.officeChatHistory.slice(-18).map((entry) => ({
+                    role: safeString(entry?.role).slice(0, 16),
+                    text: safeString(entry?.text).slice(0, 600),
+                    at: Number(entry?.at) || Date.now(),
+                    timeLabel: safeString(entry?.timeLabel).slice(0, 24),
+                })).filter((entry) => entry.text)
+                : [],
         };
     });
     return snapshot;
@@ -66,6 +78,37 @@ function initContentWorkspace() {
 //   Nav mode switching, chat list, office/content workspace init           
 // 
 
+// Deep-link consumer for "My Stuff" build deliverables: a "/?forge_code=<cid>"
+// URL (the deep_link a deliverable carries back to its originating Code
+// conversation) opens the Forge Code surface and resumes that conversation. The
+// param is stripped afterward so a refresh does not re-trigger it. Fully
+// defensive: a missing global or unknown id simply lands on the Code surface.
+function maybeOpenForgeCodeDeepLink() {
+    let cid = '';
+    try {
+        cid = new URLSearchParams(window.location.search).get('forge_code') || '';
+    } catch (_e) {
+        cid = '';
+    }
+    if (!cid) return;
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('forge_code');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    } catch (_e) { /* non-fatal: leave the URL as-is */ }
+    setSidebarNavMode('evolution');
+    // The Evolution shell + Code surface build on the next frame; open Code and
+    // resume the conversation once they exist.
+    window.setTimeout(() => {
+        try {
+            if (typeof forgeShowSide === 'function') forgeShowSide('code');
+            if (typeof window.forgeCodeOpenConversation === 'function') {
+                void window.forgeCodeOpenConversation(cid);
+            }
+        } catch (_e) { /* non-fatal */ }
+    }, 60);
+}
+
 function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const requestedMode = normalizeNavMode(mode);
     const previousMode = sidebarNavMode;
@@ -81,12 +124,14 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
 
     /* Body class so CSS can scope things to the chat page */
     document.body.classList.toggle('te-nav-chat', isChat);
+    document.body.classList.toggle('office-active', isOffice);
 
     if (navChatBtn) navChatBtn.classList.toggle('active', isChat);
     const navOfficeBtnLive = document.getElementById('navOfficeBtn');
     if (navOfficeBtnLive) navOfficeBtnLive.classList.toggle('active', isOffice);
     if (navMissionBtn) navMissionBtn.classList.toggle('active', isMission);
-    if (navEvolutionBtn) navEvolutionBtn.classList.toggle('active', isEvolution);
+    const navForgeBtnLive = document.getElementById('navForgeBtn');
+    if (navForgeBtnLive) navForgeBtnLive.classList.toggle('active', isEvolution);
     if (navContentBtn) navContentBtn.classList.toggle('active', isContent);
     sidebarModeButtons.forEach((button) => {
         const buttonMode = normalizeNavMode(button.dataset.navMode);
@@ -106,6 +151,13 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     if (evolutionWorkspace) evolutionWorkspace.classList.toggle('hidden', !isEvolution);
     if (contentWorkspace) contentWorkspace.classList.toggle('hidden', !isContent);
     if (moduleWorkspace) moduleWorkspace.classList.toggle('hidden', !isModule);
+    /* The main chat composer belongs to the chat view only. Without this it
+       stays floating (position:absolute, z-index:20) on top of the workspace
+       dashboards (Evolution/Mission/Office/Content/Module), which reads as a
+       confusing second chat whose messages post to the now-hidden chat thread.
+       Hide it whenever we are not in chat/search so each workspace owns its
+       surface cleanly. */
+    if (composerContainer) composerContainer.classList.toggle('hidden', !isChat);
     if (appRoot) {
         appRoot.classList.toggle('office-active', isOffice);
         appRoot.classList.toggle('office-preview-active', showOfficePreview);
@@ -250,6 +302,14 @@ function renderSidebarChatList() {
             empty.textContent = 'No matches yet. Try another search term.';
         } else if (sidebarSearchScope === 'general') {
             empty.textContent = withAgentName('Search {{agent}} to find chats and relevant items.');
+        } else if (sidebarHistoryLoadState === 'pending') {
+            // "No chats yet." is a claim about the data, and before the history
+            // fetch answers there IS no data -- this render path runs from mode
+            // and scope switches that never wait for fetchChatHistory. Measured
+            // 2026-08-05: the empty claim showed over hundreds of real chats.
+            empty.textContent = 'Loading chats…';
+        } else if (sidebarHistoryLoadState === 'error') {
+            empty.textContent = 'Chat history could not be loaded. Reload to retry.';
         } else {
             empty.textContent = 'No chats yet. Start one from New Chat.';
         }
@@ -520,16 +580,45 @@ async function fetchChatHistory() {
                     .filter(Boolean);
             }
             sidebarSessions.sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0));
+            sidebarHistoryLoadState = 'loaded';
+            // This wholesale replacement used to DROP the conversation the user
+            // just started: the server list only learns about a chat once its
+            // first turn is persisted, so a refresh racing the first reply made
+            // the active chat vanish from Recent (measured 2026-08-05). If the
+            // active conversation has real messages and the server does not
+            // know it yet, re-seat it instead of trusting the stale list.
+            const activeId = safeString(activeChatId) || safeString(sessionId);
+            const activeHasMessages = Array.isArray(chatHistory) && chatHistory.length > 0;
+            const activeMissing = Boolean(activeId)
+                && activeHasMessages
+                && !sidebarSessions.some((row) => safeString(row?.id) === activeId);
+            if (activeMissing) {
+                syncActiveChatSidebarEntry({ touchUpdatedAt: false });
+            }
             rebuildChatHistorySelector();
             renderSidebarChatList();
             updateDebugDockSnapshot();
+        } else if (sidebarHistoryLoadState !== 'loaded') {
+            // A refused answer is a failure to name, not an empty history. A
+            // later failed REFRESH keeps 'loaded' -- the rows on screen are
+            // still real.
+            sidebarHistoryLoadState = 'error';
+            renderSidebarChatList();
         }
     } catch (e) {
+        if (sidebarHistoryLoadState !== 'loaded') {
+            sidebarHistoryLoadState = 'error';
+            renderSidebarChatList();
+        }
         console.error("Failed to fetch chat history:", e);
     }
 }
 
 async function createNewSessionAndRefresh() {
+    // Abort any in-flight generation so a still-streaming reply from the old chat
+    // can't bleed into the new one (live persona testing: starting a new chat while
+    // a prior task was still streaming mis-titled the new chat and dropped its prompt).
+    abortInFlightChatGeneration();
     try {
         const res = await fetchJsonSafe('/api/session/new', { method: 'POST' });
         const data = res.data || {};
@@ -551,78 +640,24 @@ async function createNewSessionAndRefresh() {
     } catch (e) { console.error("Error creating new session:", e); }
 }
 
-async function saveAgentIdentityName(nameRaw, { source = 'rename' } = {}) {
-    const nextName = sanitizeAgentNameInput(nameRaw);
-    if (!nextName) {
-        notifyUser('Agent name cannot be empty.', {
-            tone: 'warning',
-            durationMs: 2400,
-            debugKind: 'settings',
-        });
-        return false;
-    }
-
-    const currentName = getAgentName();
-    if (nextName === currentName) return true;
-
-    const payload = {
-        profile: {
-            display_name: nextName,
-            avatar_url: safeString(currentPreferences?.profile?.avatar_url),
-        },
-    };
-
+// Cancel an in-flight streaming generation (used when switching/creating chats so
+// a prior reply can't bleed into a different chat). Best-effort and side-effect-safe.
+function abortInFlightChatGeneration() {
     try {
-        const res = await fetch('/api/preferences', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-            const details = await res.text();
-            throw new Error(details || `HTTP ${res.status}`);
+        if (typeof currentAbortController !== 'undefined' && currentAbortController) {
+            currentAbortController.abort();
+            currentAbortController = null;
         }
-        currentPreferences = await res.json();
-        if (settingsDisplayName) settingsDisplayName.value = resolveAgentName(currentPreferences);
-        refreshSettingsAvatarPreview();
-        updateSidebarIdentity();
-        notifyUser(`Agent renamed to ${getAgentName()}.`, {
-            tone: 'success',
-            durationMs: 2200,
-            debugKind: 'settings',
-        });
-        emitOnboardingTelemetry('agent.renamed', {
-            source: safeString(source) || 'rename',
-            name: getAgentName(),
-        });
-        return true;
-    } catch (error) {
-        notifyUser(`Could not rename agent: ${safeString(error?.message) || 'unknown error'}`, {
-            tone: 'error',
-            durationMs: 3000,
-            debugKind: 'error',
-        });
-        return false;
-    }
-}
-
-async function promptRenameAgentIdentity() {
-    const currentName = getAgentName();
-    const prompted = window.prompt('Rename your assistant', currentName);
-    if (prompted === null) return;
-    const nextName = sanitizeAgentNameInput(prompted);
-    if (!nextName) {
-        notifyUser('Agent name cannot be blank.', {
-            tone: 'warning',
-            durationMs: 2400,
-            debugKind: 'settings',
-        });
-        return;
-    }
-    await saveAgentIdentityName(nextName, { source: 'sidebar_pencil' });
+    } catch (_) { /* best-effort */ }
+    try {
+        if (typeof setGeneratingState === 'function') setGeneratingState(false);
+    } catch (_) { /* best-effort */ }
 }
 
 async function loadSessionFromHistory(sid) {
+    // Abort any in-flight generation before switching chats so the prior reply
+    // can't stream into the chat we're switching to.
+    abortInFlightChatGeneration();
     activeChatId = sid;
     saveStoredActiveChatId(activeChatId);
     rebuildChatHistorySelector();
@@ -643,21 +678,14 @@ async function loadSessionFromHistory(sid) {
             welcomeScreen.classList.add('hidden');
             chatScrollArea.classList.remove('hidden');
             let lastAssistantMessage = '';
-            let lastUserMessage = '';
             chatHistory.forEach((msg) => {
                 renderMessage(msg);
-                if (safeString(msg?.role) === 'user') {
-                    lastUserMessage = safeString(msg?.content);
-                }
                 if (safeString(msg?.role) === 'assistant') {
                     lastAssistantMessage = safeString(msg?.content);
                 }
             });
             if (lastAssistantMessage) {
-                maybeShowAssistantFollowups({
-                    assistantText: lastAssistantMessage,
-                    userText: lastUserMessage,
-                });
+                maybeShowAssistantFollowups();
             } else {
                 showStarterSuggestionRail({ force: true });
             }
@@ -675,6 +703,11 @@ async function loadSessionFromHistory(sid) {
     syncActiveChatSidebarEntry({ touchUpdatedAt: false });
     renderSidebarChatList();
     pushDebugEvent('chat', `Loaded session ${safeString(sid)}`);
+    // Rebuild the deliverable chips from the durable task ledger so a reload/chat-switch
+    // no longer loses them (the per-message strip state is in-memory only).
+    if (typeof reconcileSessionDeliverables === 'function') {
+        void reconcileSessionDeliverables(sid);
+    }
     await refreshTaskContinuity({ sessionOverride: sessionId || sid, force: true });
     _positionRobotDock();
     if (!document.querySelector('.chat-robot-landed')) {
@@ -688,6 +721,16 @@ async function fetchModels() {
         if (res.ok) {
             const data = res.data || {};
             availableModelProfiles = Array.isArray(data.profiles) ? data.profiles : [];
+            if (data.preferences && typeof data.preferences === 'object') {
+                currentPreferences = currentPreferences && typeof currentPreferences === 'object' ? currentPreferences : {};
+                currentPreferences.advanced = currentPreferences.advanced && typeof currentPreferences.advanced === 'object'
+                    ? currentPreferences.advanced
+                    : {};
+                currentPreferences.advanced.model = {
+                    ...(currentPreferences.advanced.model || {}),
+                    ...data.preferences,
+                };
+            }
             modelSelector.innerHTML = '';
             setupProviderSelector.innerHTML = '';
 
@@ -695,14 +738,20 @@ async function fetchModels() {
             const active = availableModelProfiles.filter(m => m.has_api_key);
 
             for (const m of availableModelProfiles) {
+                // Legacy "codex" profile is hidden from the picker — the real
+                // ChatGPT OAuth path is the "openai_codex" profile.
+                if (safeString(m.name).toLowerCase() === 'codex') continue;
+
+                const displayName = formatProviderDisplay(m.name) || m.name;
+
                 const providerOption = document.createElement('option');
-                providerOption.value = m.name;
-                providerOption.textContent = m.name;
+                providerOption.value = m.name;          // internal value unchanged
+                providerOption.textContent = displayName;
                 setupProviderSelector.appendChild(providerOption);
 
                 const legacyOption = document.createElement('option');
-                legacyOption.value = m.name;
-                legacyOption.textContent = m.name;
+                legacyOption.value = m.name;            // internal value unchanged
+                legacyOption.textContent = displayName;
                 modelSelector.appendChild(legacyOption);
             }
 
@@ -711,7 +760,8 @@ async function fetchModels() {
                 || safeString(window.localStorage.getItem('thomas_active_profile'));
             const savedProfileMeta = savedProfile ? availableModelProfiles.find(m => m.name === savedProfile) : null;
             const hasPersistedProfile = Boolean(safeString(currentPreferences?.advanced?.model?.active_profile));
-            const targetProfile = (savedProfileMeta && savedProfileMeta.active)
+            const savedProfileReady = savedProfileMeta && (savedProfileMeta.has_api_key || savedProfileMeta.active);
+            const targetProfile = savedProfileReady
                 ? savedProfile
                 : (data.default || (active[0] && active[0].name) || (availableModelProfiles[0] && availableModelProfiles[0].name) || '');
 
@@ -723,6 +773,7 @@ async function fetchModels() {
             updateDebugDockSnapshot();
         }
     } catch (e) { console.error("Failed to fetch models", e); }
+    if (typeof syncModelSetupCurrentLabel === 'function') syncModelSetupCurrentLabel({ force: true });
 }
 
 function initFeatures() {
@@ -741,6 +792,7 @@ function initFeatures() {
     initMissionWorkspace();
     initContentWorkspace();
     initModuleWorkspace();
+    void moduleRefreshInstalledPluginNav({ force: true });
     void moduleRefreshMarketplace({ force: true });
     setDebugDockOpen(false, { recordEvent: false });
     const restoredMode = resolveBootNavMode();
@@ -748,6 +800,7 @@ function initFeatures() {
     applyResponsiveSidebarState();
     setChatListExpanded(chatListExpanded, { persist: false });
     setSidebarNavMode(restoredMode, { persist: false });
+    maybeOpenForgeCodeDeepLink();
     if (taskContinuityRefreshBtn) {
         taskContinuityRefreshBtn.addEventListener('click', () => {
             void refreshTaskContinuity({ force: true });
@@ -842,8 +895,9 @@ function initFeatures() {
         });
     }
 
-    if (navEvolutionBtn) {
-        navEvolutionBtn.addEventListener('click', () => {
+    const navForgeBtn = document.getElementById('navForgeBtn');
+    if (navForgeBtn) {
+        navForgeBtn.addEventListener('click', () => {
             ensureSettingsUiClosed();
             setSidebarNavMode('evolution');
         });

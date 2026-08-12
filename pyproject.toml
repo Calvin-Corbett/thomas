@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas-ai"
-version = "0.16.11"
+# Release 0.19.0: security-reviewed local Chat, Code, and Work lifecycle checkpoint (2026-07-18).
+version = "0.19.25"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}
@@ -48,7 +49,14 @@ gpu = ["sentence-transformers>=3.0", "torch>=2.0"]
 train = ["numpy>=1.26", "scikit-learn>=1.4"]
 science = ["scipy>=1.14"]
 travel = ["pytz>=2024.1"]
-server = ["aiohttp==3.13.5", "fastapi>=0.115", "python-multipart>=0.0.20", "sqlalchemy>=2.0"]
+server = [
+    "aiohttp==3.13.5",
+    "fastapi>=0.115",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0",
+    "reportlab>=4.0",
+    "openpyxl>=3.1",
+]
 mcp = ["mcp>=1.0"]
 telegram = ["python-telegram-bot>=21.0"]
 investigation = ["python-docx>=1.0", "pdfplumber>=0.10"]
@@ -81,7 +89,7 @@ bootdoctor = "thomas.bootdoctor.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["thomas*"]
+include = ["thomas*", "evolve_supervisor*"]
 exclude = [
     "runtime*",
     "output*",
@@ -204,11 +212,10 @@ ignore = [
     "F841",   # unused-local (assigned-but-never-used; safe in error fixtures)
     "UP007",  # type-deprecated-alias (Union/Optional → X | Y; rolled in part)
     "UP035",  # deprecated-import (typing → collections.abc; rolled in part)
-    "UP038",  # non-pep604-isinstance (isinstance(x, (A, B)) → isinstance(x, A | B))
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["thomas"]
+known-first-party = ["thomas", "evolve_supervisor"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -248,6 +255,7 @@ indent-style = "space"
 "skills/security-best-practices" = ["skills/security-best-practices/SKILL.md"]
 "skills/security-ownership-map" = ["skills/security-ownership-map/SKILL.md"]
 "skills/security-threat-model" = ["skills/security-threat-model/SKILL.md"]
+"skills/self-extend" = ["skills/self-extend/SKILL.md"]
 "skills/serializer-deserializer-feature-matrix" = ["skills/serializer-deserializer-feature-matrix/SKILL.md"]
 "skills/static-taint-analysis" = ["skills/static-taint-analysis/SKILL.md"]
 "skills/sentry" = ["skills/sentry/SKILL.md"]

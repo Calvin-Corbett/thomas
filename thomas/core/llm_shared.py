@@ -2,8 +2,28 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from typing import Any
+
+# HTTP statuses every provider transport treats as worth another attempt.
+# Shared so a change to the retry policy reaches all providers at once.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def callable_accepts_keyword(func: Any, keyword: str) -> bool:
+    """Return whether a callable explicitly or variadically accepts a keyword."""
+    try:
+        return any(
+            (
+                parameter.name == keyword
+                and parameter.kind in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+            )
+            or parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in inspect.signature(func).parameters.values()
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 class LLMError(Exception):

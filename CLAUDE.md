@@ -13,6 +13,28 @@ Read AGENTS.md immediately. Every rule in that file applies to you.
 - You MUST NOT commit with `--no-verify`. Pre-commit hooks exist for a reason.
 - You MUST run `ruff check` on any Python file you modify before committing.
 
+## How to write about Calvin in anything public
+
+Commit messages, CHANGELOG entries, PR titles and descriptions, and release notes
+are public and effectively permanent — a merged PR keeps its commit list on GitHub
+forever. Calvin reads these long after they are written, and has found himself
+described in them without knowing it. When your text refers to the person who owns
+this project:
+
+- **Write to him in the second person** — "you", "your". Not "the owner", not
+  "the user", not his name in the third person.
+- **Never characterize his ability, background, or knowledge.** No "is not a
+  programmer", "non-technical", "cannot read code", "did not understand". Describe
+  what the software did and what it failed to show. That is the finding; the person
+  is not.
+- **Quote him directly when it is evidence.** His actual words about what he wanted
+  are the clearest justification a change can have. Quote the request, never a
+  judgement about the requester.
+- **Do not infer pronouns.** They have not been stated. If a third-person reference
+  is genuinely unavoidable, use they/them.
+- The same rule applies to anything else that leaves this machine: issue text,
+  plan files that get published, and generated docs.
+
 ## What Thomas is
 
 Thomas is an AI-first workspace platform with a marketplace of domain modules. The repo is intentionally broad in scope — that is a feature, not a problem. Do not suggest removing, consolidating, or refactoring domain modules (e.g. `thomas/agriculture/`, `thomas/blockchain/`, etc.) unless the user explicitly asks you to.
@@ -51,3 +73,12 @@ The startup router (`crew/brief/startup_router.py`) now scans branches automatic
 2. Read `GUARDRAILS.md` (immutable project rules)
 3. Read the module-level `GUARDRAILS.md` in whatever directory you're modifying (if one exists)
 4. Check `agent_safety.toml` for protected files, forbidden patterns, and circular import rules
+
+## Installed Claude Code tooling (use it — don't wait to be asked)
+
+- `/code-review` - run on any nontrivial diff before committing to `dev`
+- `/security-review` - run when touching `thomas/server/`, `/gateway` routes, or auth/token/secret handling
+- `frontend-design` skill + Playwright MCP - any `thomas/server/web/` UI work: apply the design skill, then verify live at http://127.0.0.1:8899 (`run-ui.cmd`)
+- `code-simplifier` agent - run after completing a refactor or a logical chunk of new code
+- Context7 MCP - pull current docs for aiohttp/ChromaDB/sentence-transformers instead of answering from memory
+- `/feature-dev` - use for multi-file features (explorer → architect → reviewer flow)

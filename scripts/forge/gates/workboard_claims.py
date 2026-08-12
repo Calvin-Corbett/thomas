@@ -228,6 +228,53 @@ def _extract_section_entries(
     return entries, errors
 
 
+def _split_field_segments(entry: str) -> list[str]:
+    segments: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for char in str(entry or ""):
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\" and quote == '"':
+            current.append(char)
+            escaped = True
+            continue
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = None
+            continue
+        if char in {'"', "'", "`"}:
+            quote = char
+            current.append(char)
+            continue
+        if char == ";":
+            segment = "".join(current).strip()
+            if segment:
+                segments.append(segment)
+            current = []
+            continue
+        current.append(char)
+    segment = "".join(current).strip()
+    if segment:
+        segments.append(segment)
+    return segments
+
+
+def _parse_field_value(raw: str) -> str:
+    value = str(raw or "").strip()
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return value.strip("`").strip("'").strip('"')
+        return str(decoded).strip()
+    return value.strip("`").strip("'").strip('"')
+
+
 def _parse_kv_fields(
     line_no: int,
     entry: str,
@@ -243,12 +290,12 @@ def _parse_kv_fields(
         token = token[1:-1].strip()
 
     fields: dict[str, str] = {}
-    for part in [p.strip() for p in token.split(";") if p.strip()]:
+    for part in _split_field_segments(token):
         if "=" not in part:
             return None, f"line {line_no}: invalid field format `{part}` (expected key=value)"
         key, value = part.split("=", 1)
         key = key.strip().lower()
-        value = value.strip()
+        value = _parse_field_value(value)
         if not key or not value:
             return None, f"line {line_no}: invalid field `{part}` (expected non-empty key=value)"
         fields[key] = value

@@ -489,21 +489,17 @@ async def run_gateway_usage_cost(
 
 
 def _json_response(payload: Any, *, status: int = 200) -> web.Response:
-    """Prefer shared json_response helper if available; fall back to aiohttp."""
-    try:
-        from thomas.server.routes import core_aiohttp  # type: ignore
+    """Serialise a payload the way every other route in this package does.
 
-        json_resp = getattr(core_aiohttp, "json_response", None)
-        if callable(json_resp):
-            try:
-                return json_resp(payload, status=status)
-            except TypeError:
-                try:
-                    return json_resp(payload, status)
-                except TypeError:
-                    return json_resp(payload)
-    except Exception:
-        pass
+    This used to open with "prefer the shared json_response helper if
+    available", reaching for `thomas.server.routes.core_aiohttp.json_response`
+    through three nested TypeError fallbacks. That module never defined a
+    `json_response` attribute, so the preference could never be honoured and the
+    last line was the only reachable statement -- fourteen lines of branch whose
+    other outcome was impossible, wrapped in a bare `except Exception: pass`
+    that guaranteed nobody would ever find out. `core_aiohttp` has since been
+    deleted outright, which makes it impossible twice over.
+    """
     return web.json_response(payload, status=status)
 
 

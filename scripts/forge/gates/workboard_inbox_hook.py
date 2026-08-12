@@ -37,7 +37,7 @@ def _is_single_inbox_command(command: str) -> bool:
     )
     if not any(script in normalized for script in allowed_scripts):
         return False
-    allowed_actions = ("--list", "--ack", "--resolve", "--sent")
+    allowed_actions = ("--list", "--inbox", "--current", "--ack", "--resolve", "--sent")
     return any(action in normalized.split() for action in allowed_actions)
 
 
@@ -77,7 +77,7 @@ def evaluate_hook(
         "Unread Thomas workboard messages must be acked before this tool can run.\n"
         f"Agent: {actor}\n"
         f"{detail}\n"
-        f"Run: python scripts/crew/workboard/message.py --list --agent {actor}\n"
+        f"Run: python scripts/crew/workboard/message.py --inbox --agent {actor}\n"
         f"Ack: python scripts/crew/workboard/message.py --ack --msg-id <msg-id> --agent {actor}",
     )
 

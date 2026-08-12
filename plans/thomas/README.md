@@ -1,5 +1,8 @@
 # Thomas Plan Workspace (active)
 
+- `plans/thomas/tasks/ui-modernization-20260721/PLAN.md` - completed local eight-workspace corrective implementation, resident-specialist contract, and shared UI Edit Mode proof; awaiting isolated owner testing before integration.
+- `plans/thomas/tasks/thomas-coherence-passage-2026-07-12/PLAN.md` - canonical governed-operator migration across V2 chat, action, delegation, memory, and proof.
+
 - `plans/thomas/WORKBOARD.md` — active execution board.
 - `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
 - `plans/thomas/ui/UI_UPGRADE_PLAN.md`
@@ -8,4 +11,48 @@
 - `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
 - `plans/thomas/V3_CHAT_SPEC.md`
 - `plans/thomas/verification/AGENT_VERIFICATION_PROTOCOL_PLAN.md`
+- `plans/thomas/WT2_LANDING_MAP_2026-07-15.md` — landing plan for the unified Chat/Code/Work shell (wt2).
+- `plans/thomas/PRODUCT_READY_PUSH_2026-07-15.md` — binding mission plan for the claude+codex product-ready push.
+- `plans/thomas/AGENTIC_AI_FEATURE_RANKINGS.md` — agentic-AI feature research rankings.
+- `plans/thomas/AGENTIC_AI_FEATURE_RESEARCH_QUEUE.md` — agentic-AI feature research queue.
+- `plans/thomas/MODULAR_WORKER_BUILD_PLAN_2026-06-15.md` — modular worker build plan (moved from docs/, 2026-07-15).
 - `plans/thomas/HARDENING_REPORT_2026-06-02.md` — security hardening sweep report (2026-06-02).
+- `plans/thomas/CLAUDE_CODE_PARITY_RUBRIC_v2.md`
+- `plans/thomas/COMPOSER_FIX_FOR_THOMAS.md`
+- `plans/thomas/COMPOSER_REBUILD_SPEC.md`
+- `plans/thomas/COMPOSER_REDESIGN_V2_FOR_THOMAS.md`
+- `plans/thomas/COMPOSER_TERMINAL_REFINED_SPEC.md`
+- `plans/thomas/EVOLVE_SELF_MASTER_PLAN_2026-06-22.md`
+- `plans/thomas/EVOLVE_SELF_OPERATING_MODEL_V2_2026-06-22.md`
+- `plans/thomas/FORGE_CODE_BUILDOUT_PROMPT.md`
+- `plans/thomas/FORGE_CODE_RUBRIC.md`
+- `plans/thomas/FORGE_FRONTIER_GAP.md`
+- `plans/thomas/FORGE_PERF_RUBRIC.md`
+- `plans/thomas/FORGE_RUBRIC_SCORECARD.md`
+- `plans/thomas/FORGE_UI_RUBRIC.md`
+- `plans/thomas/FORGE_UX_RUBRIC.md`
+- `plans/thomas/SESSION_HANDOFF_2026-06-21.md`
+- `plans/thomas/THOMAS_CODEBASE_ISSUE_QUEUE.md`
+- `plans/thomas/THOMAS_CODEBASE_ISSUE_RANKINGS.md`
+- `plans/thomas/chat_stress_2026-06-17/FILE_ACCESS.md`
+- `plans/thomas/chat_stress_2026-06-17/FINDINGS_ADVERSARIAL.md`
+- `plans/thomas/chat_stress_2026-06-17/FIXES.md`
+- `plans/thomas/chat_stress_2026-06-17/REPORT.md`
+- `plans/thomas/chat_stress_2026-06-17/RUBRIC.md`
+- `plans/thomas/evals/GITTASKBENCH_WORKER_REGRESSION_COMPARISON.md`
+- `plans/thomas/evolve_auto/NIGHTSHIFT_DESIGN.md`
+- `plans/thomas/evolve_auto/SEED_BACKLOG.md`
+- `plans/thomas/reviews/EVOLVE_REDTEAM_PUNCHLIST_2026-06-22.md`
+- `plans/thomas/reviews/EVOLVE_V55_REVIEW_2026-06-22.md`
+- `plans/thomas/security/AIO_SANDBOX_WORKER_ISOLATION_THREAT_MODEL.md`
+- `plans/thomas/security/CYBERARK_MCP_SECRET_PROXY_THREAT_MODEL.md`
+- `plans/thomas/security/PIPELOCK_EGRESS_PROXY_THREAT_MODEL.md`
+- `plans/thomas/self_improvement/SELF_IMPROVEMENT_NATIVE_TRANSFER.md`
+- `plans/thomas/self_improvement/SELF_IMPROVEMENT_RESEARCH_QUEUE.md`
+- `plans/thomas/self_improvement/SELF_IMPROVEMENT_RUBRICS.md`
+- `plans/thomas/ui/PARALLEL_CODE_WORKER_UI_COMPARISON.md`
+
+## Landed 0.19.0 plan documents (reference)
+- `plans/thomas/chatgpt_parity/BONUS_SCORECARD.md`
+- `plans/thomas/chatgpt_parity/GAP_LEDGER.md`
+- `plans/thomas/chatgpt_parity/RUBRIC.md`

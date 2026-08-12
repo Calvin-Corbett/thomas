@@ -8,6 +8,8 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     };
     const derived = deriveOnboardingDefaults(onboardingAnswers);
     const completedAt = onboardingNowIso();
+    const selectedProfile = resolveEasySetupSelectedProfile();
+    const selectedModelId = resolveEasySetupSelectedModelId(selectedProfile);
 
     const patch = {
         autonomy: { default_level: `L${derived.autonomyLevel}` },
@@ -15,6 +17,10 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
         notifications: { desktop: derived.desktopNotifications },
         profile: { profile_type: derived.profileType },
         advanced: {
+            model: {
+                active_profile: selectedProfile,
+                model_id: selectedModelId,
+            },
             runtime: {
                 default_mode: derived.defaultMode,
                 default_token_economy: derived.tokenEconomy,
@@ -70,6 +76,24 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     activeAutonomyLevel = derived.autonomyLevel;
     activeTokenEconomy = derived.tokenEconomy === 'optimal' ? 'balanced' : derived.tokenEconomy;
     activeChatMode = normalizeChatMode(derived.defaultMode) || 'auto';
+    if (selectedProfile) {
+        activeModelOverride = selectedModelId;
+        if (setupProviderSelector) setupProviderSelector.value = selectedProfile;
+        if (modelSelector) modelSelector.value = selectedProfile;
+        if (setupModelSelector && selectedModelId) {
+            if (!setupModelSelector.querySelector(`option[value="${CSS.escape(selectedModelId)}"]`)) {
+                const opt = document.createElement('option');
+                opt.value = selectedModelId;
+                opt.textContent = selectedModelId;
+                setupModelSelector.appendChild(opt);
+            }
+            setupModelSelector.value = selectedModelId;
+        }
+        try { window.localStorage.setItem('thomas_active_profile', selectedProfile); } catch (_) {}
+        try { window.localStorage.setItem('thomas_active_model_id', selectedModelId); } catch (_) {}
+        renderSetupProviderPickerMenu(selectedProfile, { preserveExpanded: false });
+        if (modelSetupCurrentLabel) modelSetupCurrentLabel.textContent = _profileHeaderLabel(selectedProfile);
+    }
     setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
     setSegmentedControlSelection('setupEconomyGroup', activeTokenEconomy);
     if (settingAdvDefaultMode) settingAdvDefaultMode.value = activeChatMode;
@@ -90,164 +114,7 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     });
 }
 
-function includesAny(text, terms = []) {
-    return (terms || []).some((term) => text.includes(term));
-}
-
-function isSecurityTrustConcern(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return false;
-    return includesAny(text, [
-        'security',
-        'secure',
-        'unsafe',
-        'cyber',
-        'risk',
-        'risky',
-        'trust',
-        'dependency',
-        'dependencies',
-        'dependency tree',
-        'dependency trees',
-        'install',
-        'installer',
-        'download',
-        'permission',
-        'permissions',
-        'malware',
-        'virus',
-        'supply chain',
-    ]);
-}
-
-function buildSetupSafetyMessage() {
-    return [
-        'Fair concern. Setup is designed to be explicit and user-controlled:',
-        withAgentName('- No silent installs: {{agent}} only runs dependency installs after your approval.'),
-        '- Dependency step shows why each tool is needed and where it comes from.',
-        '- You can choose the lowest-download path: Manual API Key.',
-        '- Safe defaults keep command approval on so actions stay supervised.',
-    ].join('\n');
-}
-
-function showSetupSafetySuggestions() {
-    setAssistantSuggestions({
-        title: 'Setup safety',
-        context: 'setup_safety',
-        dismissible: false,
-        options: [
-            {
-                label: 'Run Easy Setup',
-                kind: 'action',
-                tone: 'primary',
-                onChoose: async () => {
-                    ensureChatVisible();
-                    await openEasySetup({ source: 'safety_suggestion', force: false, restart: false });
-                },
-            },
-            {
-                label: 'Use lowest-download setup',
-                kind: 'action',
-                onChoose: async () => {
-                    ensureChatVisible();
-                    await openEasySetup({ source: 'safety_suggestion', force: false, restart: true });
-                    handleEasySetupPathSelect('manual');
-                },
-            },
-            {
-                label: 'Show exact downloads',
-                kind: 'option',
-                send_prompt: withAgentName('Show exactly what {{agent}} installs in each setup path and why each dependency is required.'),
-            },
-        ],
-    });
-}
-
-function resolveOnboardingOptionLabel(question, value) {
-    const options = Array.isArray(question?.options) ? question.options : [];
-    const found = options.find((option) => safeString(option?.value) === safeString(value));
-    return safeString(found?.label) || safeString(value);
-}
-
-function formatOnboardingQuestionOptionList(question) {
-    const options = Array.isArray(question?.options) ? question.options : [];
-    return options.map((option) => `"${safeString(option?.label)}"`).filter(Boolean).join(', ');
-}
-
-function parseOnboardingQuestionAnswer(question, textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return '';
-    if (text === 'skip' || includesAny(text, ['skip interview', 'skip questions', 'skip setup', 'skip this'])) {
-        return '__skip_interview__';
-    }
-
-    const options = Array.isArray(question?.options) ? question.options : [];
-    for (const option of options) {
-        const valueToken = safeString(option?.value).toLowerCase().replace(/_/g, ' ');
-        const labelToken = safeString(option?.label).toLowerCase();
-        if ((valueToken && text.includes(valueToken)) || (labelToken && text.includes(labelToken))) {
-            return safeString(option?.value);
-        }
-    }
-
-    const questionId = safeString(question?.id);
-    if (questionId === 'experience') {
-        if (includesAny(text, ['new', 'beginner', 'novice', 'first time', 'first-time', 'non technical', 'non-technical', 'just starting'])) return 'new';
-        if (includesAny(text, ['expert', 'advanced', 'senior', 'professional', 'pro'])) return 'expert';
-        if (includesAny(text, ['builder', 'intermediate', 'some experience', 'comfortable'])) return 'builder';
-    }
-    if (questionId === 'personality') {
-        if (includesAny(text, ['direct', 'technical', 'blunt', 'straight', 'no fluff', 'concise'])) return 'direct_technical';
-        if (includesAny(text, ['calm', 'friendly', 'gentle', 'coach', 'guide', 'supportive'])) return 'calm_guide';
-        if (includesAny(text, ['balanced', 'normal', 'neutral', 'mix'])) return 'balanced';
-    }
-    if (questionId === 'autonomy') {
-        if (includesAny(text, ['guided', 'careful', 'safe', 'step by step', 'step-by-step', 'confirm', 'approval', 'ask first'])) return 'guided';
-        if (includesAny(text, ['aggressive', 'autonomous', 'fully auto', 'take over', 'run with it', 'do it all', 'max autonomy'])) return 'aggressive';
-        if (includesAny(text, ['balanced', 'normal', 'middle'])) return 'balanced';
-    }
-    if (questionId === 'cost_quality') {
-        if (includesAny(text, ['low cost', 'cheap', 'budget', 'save money', 'cost first', 'economy'])) return 'low_cost';
-        if (includesAny(text, ['max quality', 'highest quality', 'best quality', 'quality first', 'accuracy', 'premium'])) return 'max_quality';
-        if (includesAny(text, ['balanced', 'middle'])) return 'balanced';
-    }
-    if (questionId === 'memory') {
-        if (includesAny(text, ['disable memory', 'no memory', 'dont remember', 'do not remember', 'forget', 'private'])) return 'disabled';
-        if (includesAny(text, ['session only', 'this session', 'temporary', 'temp memory'])) return 'session_only';
-        if (includesAny(text, ['remember', 'across sessions', 'persistent', 'save context'])) return 'remember';
-    }
-    if (questionId === 'workflow') {
-        if (includesAny(text, ['build', 'ship', 'feature', 'features', 'product', 'app', 'coding', 'code'])) return 'build_features';
-        if (includesAny(text, ['research', 'investigate', 'analyze', 'compare', 'study'])) return 'research';
-        if (includesAny(text, ['ops', 'reliability', 'incident', 'monitoring', 'infra', 'infrastructure', 'production', 'stability'])) return 'ops_reliability';
-    }
-    if (questionId === 'default_toggles') {
-        if (includesAny(text, ['safe', 'conservative', 'cautious', 'guardrails', 'approval'])) return 'safe_defaults';
-        if (includesAny(text, ['power', 'advanced', 'fast', 'max control', 'pro mode'])) return 'power_mode';
-        if (includesAny(text, ['quiet', 'minimal', 'silent', 'fewer notifications', 'no notifications'])) return 'quiet_mode';
-    }
-
-    return '';
-}
-
-function parseOnboardingSkipConfirmAction(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return '';
-    if (includesAny(text, ['finish', 'defaults', 'default settings', 'skip it', 'yes'])) return 'finish_defaults';
-    if (includesAny(text, ['resume', 'continue', 'questions', 'go back', 'no'])) return 'resume';
-    return '';
-}
-
-function parseOnboardingReviewAction(textRaw) {
-    const text = safeString(textRaw).toLowerCase();
-    if (!text) return '';
-    if (includesAny(text, ['open settings', 'settings', 'tweak settings'])) return 'settings';
-    if (includesAny(text, ['defaults', 'skip interview', 'finish with defaults', 'use defaults'])) return 'skip';
-    if (includesAny(text, ['finish', 'apply', 'done', 'complete', 'looks good', 'yes'])) return 'apply';
-    return '';
-}
-
-async function submitOnboardingInterviewAnswer(question, value, { source = 'bubble' } = {}) {
+async function submitOnboardingInterviewAnswer(question, value) {
     const index = Number(easySetupState.interviewIndex);
     easySetupState.interviewAnswers[question.id] = value;
     easySetupState.interviewIndex = index + 1;
@@ -259,15 +126,8 @@ async function submitOnboardingInterviewAnswer(question, value, { source = 'bubb
     emitOnboardingTelemetry('interview.answer', {
         question_id: question.id,
         value,
-        source: safeString(source) || 'bubble',
+        source: 'explicit_button',
     });
-    if (safeString(source) === 'text') {
-        const answerLabel = resolveOnboardingOptionLabel(question, value);
-        renderMessage({
-            role: 'assistant',
-            content: `Got it. **${answerLabel}** works for that.`,
-        });
-    }
     promptOnboardingQuestion();
 }
 
@@ -371,133 +231,22 @@ function promptOnboardingQuestion() {
                 await promptInterviewSkipConfirm();
                 return;
             }
-            await submitOnboardingInterviewAnswer(question, value, { source: 'bubble' });
+            await submitOnboardingInterviewAnswer(question, value);
         }
     );
 }
 
-async function handleOnboardingChatInput(textRaw, { docsCount = 0, imagesCount = 0 } = {}) {
-    const text = safeString(textRaw);
+async function handleOnboardingChatInput(_textRaw, { docsCount = 0, imagesCount = 0 } = {}) {
     if (docsCount > 0 || imagesCount > 0) {
         renderMessage({
             role: 'assistant',
-            content: 'For onboarding, plain text replies work best. I ignored attachments for this step.',
+            content: 'Attachments do not change onboarding choices, so I ignored them for this step.',
         });
     }
-    if (!text) {
-        renderMessage({
-            role: 'assistant',
-            content: 'Reply with your preference in plain language, or use a suggestion bubble.',
-        });
-        return;
-    }
-
-    const stage = safeString(easySetupState.interviewStage) || 'question';
-    if (stage === 'skip_confirm') {
-        const action = parseOnboardingSkipConfirmAction(text);
-        if (!action) {
-            if (isSecurityTrustConcern(text)) {
-                renderMessage({
-                    role: 'assistant',
-                    content: `${buildSetupSafetyMessage()}\n\nWhen ready, say "finish with defaults" or "resume questions".`,
-                });
-                return;
-            }
-            renderMessage({
-                role: 'assistant',
-                content: 'Say "finish with defaults" or "resume questions".',
-            });
-            return;
-        }
-        if (action === 'finish_defaults') {
-            try {
-                await applyOnboardingCompletion({ skippedInterview: true });
-                renderMessage({
-                    role: 'assistant',
-                    content: withAgentName('Setup complete. {{agent}} is ready with safe defaults.'),
-                });
-            } catch (err) {
-                renderMessage({
-                    role: 'assistant',
-                    content: `Could not finalize setup: ${safeString(err?.message) || 'unknown error'}`,
-                });
-            }
-            return;
-        }
-        easySetupState.interviewSkipChosen = false;
-        promptOnboardingQuestion();
-        return;
-    }
-
-    if (stage === 'review') {
-        const action = parseOnboardingReviewAction(text);
-        if (!action) {
-            if (isSecurityTrustConcern(text)) {
-                renderMessage({
-                    role: 'assistant',
-                    content: `${buildSetupSafetyMessage()}\n\nWhen ready, say "finish setup", "use defaults", or "open settings".`,
-                });
-                return;
-            }
-            renderMessage({
-                role: 'assistant',
-                content: 'Say "finish setup", "use defaults", or "open settings".',
-            });
-            return;
-        }
-        if (action === 'settings') {
-            openSettingsModal();
-            renderMessage({
-                role: 'assistant',
-                content: 'Settings opened. Return when you want me to finish onboarding.',
-            });
-            return;
-        }
-        try {
-            await applyOnboardingCompletion({ skippedInterview: action === 'skip' });
-            renderMessage({
-                role: 'assistant',
-                content: withAgentName('Onboarding complete. {{agent}} is connected and ready.'),
-            });
-        } catch (err) {
-            renderMessage({
-                role: 'assistant',
-                content: `Could not finalize setup: ${safeString(err?.message) || 'unknown error'}`,
-            });
-        }
-        return;
-    }
-
-    const question = onboardingInterviewQuestions[Number(easySetupState.interviewIndex)];
-    if (!question) {
-        promptOnboardingQuestion();
-        return;
-    }
-
-    const parsedValue = parseOnboardingQuestionAnswer(question, text);
-    if (parsedValue === '__skip_interview__') {
-        easySetupState.interviewSkipChosen = true;
-        await promptInterviewSkipConfirm();
-        return;
-    }
-    if (!parsedValue) {
-        if (isSecurityTrustConcern(text)) {
-            const optionHints = formatOnboardingQuestionOptionList(question);
-            renderMessage({
-                role: 'assistant',
-                content: `${buildSetupSafetyMessage()}\n\nWhen you are ready, answer this step: ${withAgentName(question.prompt)}\nI can map replies like: ${optionHints}.`,
-            });
-            return;
-        }
-        const optionHints = formatOnboardingQuestionOptionList(question);
-        renderMessage({
-            role: 'assistant',
-            content: `I can map that, but I am not fully sure yet. Try phrasing it closer to one of: ${optionHints}.`,
-        });
-        return;
-    }
-
-    await submitOnboardingInterviewAnswer(question, parsedValue, { source: 'text' });
+    renderMessage({
+        role: 'assistant',
+        content: 'Onboarding answers only change when you choose one of the visible buttons. Your message did not change any setup setting.',
+    });
 }
 
 async function beginOnboardingInterview() {
@@ -508,7 +257,7 @@ async function beginOnboardingInterview() {
     await persistOnboardingPrefs({ current_step: 'interview', dismissed_at: null });
     renderMessage({
         role: 'assistant',
-        content: 'Brain handshake complete. I am caffeinated and morally obligated to make this easy. Tell me your preferences in plain English and I will translate them into setup defaults.',
+        content: 'Brain handshake complete. Choose the visible options below so every setup preference is explicit.',
     });
     promptOnboardingQuestion();
     emitOnboardingTelemetry('interview.started', {
@@ -634,183 +383,51 @@ function syncSetupReasoningVisibility(profileName = '') {
     }
 }
 
-function ensureChatComposerSubbar() {
-    const inputRow = composerTextarea?.closest('.composer-input-row');
-    if (!(inputRow instanceof HTMLElement)) return null;
-    const shell = composerBox instanceof HTMLElement ? composerBox : inputRow.parentElement;
-    if (!(shell instanceof HTMLElement)) return null;
-
-    let style = document.getElementById('chatComposerSubbarStyle');
-    if (!(style instanceof HTMLStyleElement)) {
-        style = document.createElement('style');
-        style.id = 'chatComposerSubbarStyle';
-        style.textContent = `
-            .chat-composer-subbar {
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                gap: 6px 10px;
-                padding: 6px 8px 0;
-                border-top: 1px solid var(--border-light, rgba(255,255,255,0.08));
-                margin-top: 4px;
-            }
-            .chat-composer-control {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                min-width: 0;
-            }
-            .chat-composer-control[hidden] { display: none !important; }
-            .chat-composer-control-label {
-                font-size: 10px;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-                color: var(--text-muted, #929bb0);
-                white-space: nowrap;
-            }
-            .chat-composer-control-select {
-                min-width: 108px;
-                padding: 5px 8px;
-                border-radius: 8px;
-                border: 1px solid var(--border-light, rgba(255,255,255,0.12));
-                background: rgba(19, 22, 30, 0.82);
-                color: var(--text-primary, #ececf1);
-                font-size: 11px;
-                font-weight: 600;
-                outline: none;
-            }
-            .chat-composer-control-select:focus {
-                border-color: var(--accent, #58a6ff);
-                box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.18);
-            }
-            @media (max-width: 760px) {
-                .chat-composer-subbar {
-                    align-items: stretch;
-                    gap: 8px;
-                }
-                .chat-composer-control {
-                    width: 100%;
-                    justify-content: space-between;
-                }
-                .chat-composer-control-select {
-                    flex: 1 1 auto;
-                    min-width: 0;
-                }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    let root = document.getElementById('chatComposerSubbar');
-    if (!(root instanceof HTMLElement)) {
-        root = document.createElement('div');
-        root.id = 'chatComposerSubbar';
-        root.className = 'chat-composer-subbar';
-        inputRow.insertAdjacentElement('afterend', root);
-    }
-    return root;
-}
-
-function renderChatComposerSubbar() {
-    const root = ensureChatComposerSubbar();
-    if (!(root instanceof HTMLElement)) return;
-
-    const profileName = safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
-    const controls = resolveProfileChatControls(profileName);
-    const reasoningControl = controls?.model?.reasoning_effort;
-    const autonomyControl = controls?.thomas?.autonomy_level;
-    const tokenControl = controls?.thomas?.token_economy;
-    const reasoningOptions = Array.isArray(reasoningControl?.options) ? reasoningControl.options : [];
-    const autonomyOptions = Array.isArray(autonomyControl?.options) ? autonomyControl.options : [];
-    const tokenOptions = Array.isArray(tokenControl?.options) ? tokenControl.options : [];
-
-    const renderOptions = (options, selectedValue = '') => options.map((option) => {
-        const value = safeString(option?.value);
-        const label = safeString(option?.label) || value;
-        const selected = value === safeString(selectedValue) ? ' selected' : '';
-        return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
-    }).join('');
-
-    root.innerHTML = `
-        <div class="chat-composer-control" data-control="reasoning"${reasoningControl?.supported ? '' : ' hidden'}>
-            <span class="chat-composer-control-label">${escapeHtml(safeString(reasoningControl?.label) || 'Reasoning')}</span>
-            <select id="chatComposerReasoningSelect" class="chat-composer-control-select">
-                ${renderOptions(reasoningOptions, normalizeReasoningEffort(activeReasoningEffort))}
-            </select>
-        </div>
-        <div class="chat-composer-control" data-control="autonomy">
-            <span class="chat-composer-control-label">${escapeHtml(safeString(autonomyControl?.label) || 'Autonomy')}</span>
-            <select id="chatComposerAutonomySelect" class="chat-composer-control-select">
-                ${renderOptions(autonomyOptions.length ? autonomyOptions : [
-                    { value: '1', label: 'L1 Chat' },
-                    { value: '2', label: 'L2 Assist' },
-                    { value: '3', label: 'L3 Agent' },
-                    { value: '4', label: 'L4 Full Autonomy' },
-                ], String(activeAutonomyLevel || 1))}
-            </select>
-        </div>
-        <div class="chat-composer-control" data-control="token_economy">
-            <span class="chat-composer-control-label">${escapeHtml(safeString(tokenControl?.label) || 'Token Economy')}</span>
-            <select id="chatComposerTokenEconomySelect" class="chat-composer-control-select">
-                ${renderOptions(tokenOptions.length ? tokenOptions : [
-                    { value: 'cheap', label: 'Cheap' },
-                    { value: 'balanced', label: 'Balanced' },
-                    { value: 'max', label: 'Maximum' },
-                ], safeString(activeTokenEconomy) || 'balanced')}
-            </select>
-        </div>
-    `;
-
-    const reasoningSelect = document.getElementById('chatComposerReasoningSelect');
-    if (reasoningSelect instanceof HTMLSelectElement) {
-        reasoningSelect.value = normalizeReasoningEffort(activeReasoningEffort);
-        reasoningSelect.addEventListener('change', (event) => {
-            activeReasoningEffort = normalizeReasoningEffort(event.target.value);
-            setSegmentedControlSelection('setupReasoningEffortGroup', activeReasoningEffort);
-            if (settingAdvReasoningEffort) settingAdvReasoningEffort.value = activeReasoningEffort || 'medium';
-        });
-    }
-
-    const autonomySelect = document.getElementById('chatComposerAutonomySelect');
-    if (autonomySelect instanceof HTMLSelectElement) {
-        autonomySelect.value = String(activeAutonomyLevel || 1);
-        autonomySelect.addEventListener('change', (event) => {
-            autonomyLevelManuallySet = true;
-            activeAutonomyLevel = parseInt(event.target.value, 10) || 1;
-            setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
-            if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
-        });
-    }
-
-    const tokenSelect = document.getElementById('chatComposerTokenEconomySelect');
-    if (tokenSelect instanceof HTMLSelectElement) {
-        tokenSelect.value = safeString(activeTokenEconomy) || 'balanced';
-        tokenSelect.addEventListener('change', (event) => {
-            activeTokenEconomy = safeString(event.target.value) || 'balanced';
-            setSegmentedControlSelection('setupEconomyGroup', activeTokenEconomy);
-            const runtimeValue = activeTokenEconomy === 'balanced' ? 'optimal' : activeTokenEconomy;
-            if (settingAdvDefaultTokenEconomy) settingAdvDefaultTokenEconomy.value = runtimeValue;
-        });
-    }
-}
-
-function initChatComposerSubbar() {
-    ensureChatComposerSubbar();
-    renderChatComposerSubbar();
-}
+/* ---------------------------------------------------------------------------
+ * Composer controls (the 5 dials) render/toggle MOVED to js/composer_controls.js.
+ *
+ * ensureChatComposerControls / ensureChatComposerSubbar / wireComposerControlsToggle
+ * / renderChatComposerSubbar / initChatComposerSubbar now live in composer_controls.js
+ * (loaded as a classic script before app_runtime_loader.js, so they join this
+ * shared global scope). They still read the same runtime state vars
+ * (activeReasoningEffort, activeTokenEconomy, activeAutonomyLevel, activeFileAccess,
+ * activeGuardrails, autonomyLevelManuallySet) and helpers defined here / elsewhere
+ * in the runtime, and the runtime keeps calling them by bare name. The 5 <select>
+ * ids, option sets and change side-effects are byte-identical to the originals.
+ * buildChatRequestPayload() (below) is the sole reader of those state vars.
+ * ------------------------------------------------------------------------- */
 
 function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt = '', resolvedProfile = '', studioChatContext = null } = {}) {
-    const profile = safeString(resolvedProfile) || safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
+    const requestedProfile = safeString(resolvedProfile);
+    const fallbackProfile = requestedProfile || safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
+    const role = typeof resolveComposerModelRole === 'function' && !safeString(studioChatContext?.preferredProfile)
+        ? resolveComposerModelRole()
+        : '';
+    const specialty = role && typeof resolveSpecialtyModelSelection === 'function'
+        ? resolveSpecialtyModelSelection(role, fallbackProfile)
+        : null;
+    const profile = safeString(specialty?.profile) || fallbackProfile;
+    // Module scope: when the user is inside a workspace module (e.g. Evolution),
+    // tag the turn so the server starts Thomas in that module's context. It is
+    // still the full Thomas -- the module is a starting point, not a cage, and he
+    // can break out if the conversation goes elsewhere.
+    const activeModuleKey = (typeof sidebarNavMode === 'string' && sidebarNavMode === 'evolution') ? 'evolve' : '';
     const payload = {
         message: message,
         docs: Array.isArray(docs) ? docs : [],
         images: Array.isArray(images) ? images : [],
         session_id: sessionId,
+        module: activeModuleKey || undefined,
         profile: profile,
         model: profile,
-        model_id: resolveActiveModelIdForProfile(profile) || undefined,
+        model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined,
         autonomy_level: Math.max(1, parseInt(String(activeAutonomyLevel || 1), 10) || 1),
+        file_access: safeString(activeFileAccess) || 'workspace',
         token_economy: resolveChatPayloadTokenEconomy(),
+        thomas_guardrails: safeString(activeGuardrails) || 'guarded',
+        thomas_guardrail_modes: (() => {
+            try { return JSON.parse(localStorage.getItem('thomasGuardrailModes') || 'null') || undefined; } catch (e) { return undefined; }
+        })(),
         system_prompt: systemPrompt || undefined,
     };
     const reasoningEffort = resolveChatPayloadReasoningEffort(profile);
@@ -1186,4 +803,3 @@ function _modelPaletteSelect() {
         debugKind: 'engine-action',
     });
 }
-

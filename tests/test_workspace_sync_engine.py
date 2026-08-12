@@ -1,8 +1,42 @@
 import subprocess
+import threading
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from thomas.core.engine_manager import EngineManager
 from thomas.core.workspace_sync_engine import WorkspaceSyncEngine
+
+
+def test_workspace_sync_and_push_are_opt_in_by_default(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", raising=False)
+    monkeypatch.delenv("THOMAS_WORKSPACE_SYNC_AUTO_PUSH", raising=False)
+
+    status = WorkspaceSyncEngine(repo_root=tmp_path).status_snapshot()
+
+    assert status["enabled"] is False
+    assert status["auto_push"] is False
+
+
+def test_engine_manager_user_activity_pulses_every_idle_engine(monkeypatch) -> None:
+    calls: list[str] = []
+    modules = (
+        ("thomas.core.initiative", "get_initiative_engine", "initiative"),
+        ("thomas.core.testing_suite", "get_testing_suite", "testing"),
+        ("thomas.core.code_issue_engine", "get_code_issue_engine", "code_issue"),
+        ("thomas.core.self_upgrade_engine", "get_self_upgrade_engine", "self_upgrade"),
+        ("thomas.core.ui_workflow_engine", "get_ui_workflow_engine", "ui_workflow"),
+        ("thomas.core.workspace_sync_engine", "get_workspace_sync_engine", "workspace_sync"),
+        ("thomas.core.local_agent_engine", "get_local_agent_engine", "local_agent"),
+    )
+    for module_name, getter_name, label in modules:
+        module = __import__(module_name, fromlist=[getter_name])
+        engine = SimpleNamespace(record_user_message=lambda name=label: calls.append(name))
+        monkeypatch.setattr(module, getter_name, lambda value=engine: value)
+
+    EngineManager().record_user_message()
+
+    assert calls == [label for _module, _getter, label in modules]
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -177,6 +211,7 @@ def test_workspace_sync_engine_releases_claim_after_cycle(tmp_path: Path, monkey
 
 
 def test_workspace_sync_engine_waits_on_coordination_retry_before_retrying(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", "true")
     repo = tmp_path / "repo"
     _init_repo(repo)
     src = repo / "thomas" / "core" / "retry.py"
@@ -223,6 +258,55 @@ def test_workspace_sync_engine_returns_busy_when_active(tmp_path: Path) -> None:
     report = engine.run_cycle_once(reason="manual", force=True)
     assert report.get("ok") is False
     assert report.get("reason") == "busy"
+
+
+def test_workspace_sync_engine_activity_lease_blocks_commits(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "game.js").write_text("const ready = true;\n", encoding="utf-8")
+    engine = WorkspaceSyncEngine(repo_root=repo, stable_age_s=0.0, auto_push=False)
+
+    lease = engine.acquire_activity_lease("code:run-1")
+    blocked = engine.run_cycle_once(reason="unit-test", force=True)
+
+    assert blocked.get("committed") is False
+    assert blocked.get("skip_reason") == "interactive_work_active"
+    assert "?? game.js" in _git(repo, "status", "--porcelain").stdout
+
+    engine.release_activity_lease(lease)
+    completed = engine.run_cycle_once(reason="unit-test", force=True)
+    assert completed.get("committed") is True
+
+
+def test_activity_lease_waits_for_inflight_sync_mutation(tmp_path: Path, monkeypatch) -> None:
+    engine = WorkspaceSyncEngine(repo_root=tmp_path)
+    cycle_entered = threading.Event()
+    allow_cycle_finish = threading.Event()
+    lease_acquired = threading.Event()
+
+    def _slow_cycle(*, reason: str, force: bool) -> dict[str, object]:
+        cycle_entered.set()
+        assert allow_cycle_finish.wait(timeout=2.0)
+        return {"ok": True, "reason": reason, "force": force}
+
+    monkeypatch.setattr(engine, "_run_cycle", _slow_cycle)
+    cycle_thread = threading.Thread(target=lambda: engine.run_cycle_once(reason="race", force=True))
+    cycle_thread.start()
+    assert cycle_entered.wait(timeout=1.0)
+
+    def _acquire() -> None:
+        engine.acquire_activity_lease("code:run-race")
+        lease_acquired.set()
+
+    lease_thread = threading.Thread(target=_acquire)
+    lease_thread.start()
+    time.sleep(0.05)
+    assert lease_acquired.is_set() is False
+
+    allow_cycle_finish.set()
+    cycle_thread.join(timeout=2.0)
+    lease_thread.join(timeout=2.0)
+    assert lease_acquired.is_set() is True
 
 
 def test_engine_manager_start_all_includes_workspace_sync_engine(monkeypatch) -> None:

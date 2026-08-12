@@ -16,11 +16,25 @@ model-specific agent env vars. Use `--all` only for board-wide audits.
 
 Claude is the coordinator and leader of repo-quality work for Thomas. Codex and any spawned workers report to Claude. Calvin overrides anyone.
 
-## Supervisor Protocol
+## Supervisor Protocol (V2 — async, Calvin-directed 2026-07-15)
 
-Workers do one unit at a time, then message Claude with `state=open` and STOP. Workers do not start the next unit until Claude uses `--ack` with `decision=approved`.
+Workers message-and-PROCEED. Post a status message after each unit, then continue immediately
+with the next queued unit — do not stop to wait for an ack.
 
-Approved means proceed. Rejected means correct the requested issue. Use `kind=ping` for questions and wait for Claude's answer before acting.
+Message-and-WAIT applies ONLY to:
+- protected-file changes that need an owner (Windows-Hello) tap,
+- scope conflicts with an ACTIVE claim,
+- irreversible or destructive operations,
+- genuine questions (`kind=ping`).
+
+Staleness rule: before waiting on any blocker involving external state (PR checks, CI, branch
+state), re-verify LIVE first (`gh pr view/checks`, `git fetch`). If reality has moved past your
+report, resolve your own message and proceed on the fresh evidence.
+
+If you are blocked on the coordinator for more than ~15 minutes and a queued default exists,
+take the default and note it. Escalated p0 messages are for real fires only.
+
+Rejected still means correct the requested issue before proceeding on that unit.
 
 ## Message Tool Surface
 

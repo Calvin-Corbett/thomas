@@ -8,7 +8,6 @@ HDR radiance map construction, and tone mapping operators (Reinhard, Drago, Mant
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import convolve2d
 
 from ._exceptions import AlgorithmError, ImageProcessingError
 from ._types import ExposureInfo, Image, ToneMap
@@ -298,6 +297,11 @@ class HDRProcessor:
 
         Uses weighted average of global and local operators.
         """
+        # scipy costs ~1.5s to import and every Thomas process pays it at boot,
+        # while these image operations are rarely used. Importing inside the
+        # function keeps that cost on the callers who actually need it.
+        from scipy.signal import convolve2d
+
         gray = np.mean(radiance, axis=2)
         mean_lum = np.mean(gray[gray > 0])
 
@@ -358,6 +362,8 @@ class HDRProcessor:
 
         Preserves local contrast while compressing dynamic range.
         """
+        from scipy.signal import convolve2d
+
         gray = np.mean(radiance, axis=2)
 
         # Edge-preserving filter (bilateral-like)
@@ -451,6 +457,8 @@ class HDRProcessor:
     @staticmethod
     def _compute_contrast_weight(img: Image) -> np.ndarray:
         """Compute Laplacian contrast weight."""
+        from scipy.signal import convolve2d
+
         gray = np.mean(img.data, axis=2)
         kernel = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32) / 4
         contrast = np.abs(convolve2d(gray, kernel, mode="same", boundary="symm"))

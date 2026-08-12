@@ -12,6 +12,127 @@ from aiohttp.test_utils import AioHTTPTestCase
 from thomas.core.config import AppConfig, ModelConfig, ServerConfig
 from thomas.marketplace.observability.run_db import connect, ensure_schema
 from thomas.server.app import create_app
+from thomas.server.app_middleware_handlers import _is_sandboxed_artifact_asset_request
+from thomas.server.app_middleware_security import (
+    cors_origin_for_request,
+    resource_policy_for_request,
+)
+
+
+class _ArtifactAssetRequest:
+    def __init__(self, path: str, *, method: str = "GET", **headers: str) -> None:
+        self.path = path
+        self.method = method
+        self.headers = headers
+
+
+class TestSandboxedArtifactAssetAccess(unittest.TestCase):
+    def test_main_origin_never_relaxes_direct_deliverable_assets(self):
+        request = _ArtifactAssetRequest(
+            "/deliverable/exec-0123456789ab/src/main.js",
+            Origin="null",
+            **{
+                "Sec-Fetch-Site": "cross-site",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Dest": "script",
+            },
+        )
+        self.assertEqual(resource_policy_for_request(request), "same-site")
+        self.assertIsNone(cors_origin_for_request(request))
+
+    def test_missing_fetch_metadata_keeps_strict_main_origin_policy(self):
+        request = _ArtifactAssetRequest("/deliverable/exec-0123456789ab/styles.css")
+        self.assertEqual(resource_policy_for_request(request), "same-site")
+        self.assertIsNone(cors_origin_for_request(request))
+
+    def test_allows_only_passive_no_cors_generated_app_assets(self):
+        request = _ArtifactAssetRequest(
+            "/api/evolve/agent/artifact-content/" + ("a" * 64) + "/fc_123/game.js",
+            **{
+                "Sec-Fetch-Site": "cross-site",
+                "Sec-Fetch-Mode": "no-cors",
+                "Sec-Fetch-Dest": "script",
+            },
+        )
+        self.assertTrue(_is_sandboxed_artifact_asset_request(request))
+
+        missing_capability = _ArtifactAssetRequest(
+            "/api/evolve/agent/artifact/fc_123/game.js",
+            **{
+                "Sec-Fetch-Site": "cross-site",
+                "Sec-Fetch-Mode": "no-cors",
+                "Sec-Fetch-Dest": "script",
+            },
+        )
+        self.assertFalse(_is_sandboxed_artifact_asset_request(missing_capability))
+
+    def test_code_artifact_capability_allows_module_font_and_data_cors(self):
+        prefix = "/api/evolve/agent/artifact-content/" + ("c" * 64) + "/fc_123/"
+        base = {
+            "Origin": "null",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "cors",
+        }
+        for tail, destination in (
+            ("src/main.js", "script"),
+            ("fonts/app.woff2", "font"),
+            ("data.json", "empty"),
+        ):
+            request = _ArtifactAssetRequest(prefix + tail, **{**base, "Sec-Fetch-Dest": destination})
+            with self.subTest(tail=tail, destination=destination):
+                self.assertTrue(_is_sandboxed_artifact_asset_request(request))
+                self.assertEqual(resource_policy_for_request(request), "cross-origin")
+                self.assertEqual(cors_origin_for_request(request), "null")
+
+    def test_rejects_cross_site_documents_api_fetches_and_mutations(self):
+        base = {
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Dest": "document",
+        }
+        self.assertFalse(
+            _is_sandboxed_artifact_asset_request(
+                _ArtifactAssetRequest("/api/evolve/agent/artifact/fc_123/index.html", **base)
+            )
+        )
+        self.assertFalse(
+            _is_sandboxed_artifact_asset_request(
+                _ArtifactAssetRequest(
+                    "/api/models",
+                    **{
+                        "Sec-Fetch-Site": "cross-site",
+                        "Sec-Fetch-Mode": "no-cors",
+                        "Sec-Fetch-Dest": "script",
+                    },
+                )
+            )
+        )
+        self.assertFalse(
+            _is_sandboxed_artifact_asset_request(
+                _ArtifactAssetRequest(
+                    "/api/evolve/agent/artifact-content/" + ("b" * 64) + "/fc_123/app.js",
+                    method="POST",
+                    **{
+                        "Sec-Fetch-Site": "cross-site",
+                        "Sec-Fetch-Mode": "no-cors",
+                        "Sec-Fetch-Dest": "script",
+                    },
+                )
+            )
+        )
+        self.assertFalse(
+            _is_sandboxed_artifact_asset_request(
+                _ArtifactAssetRequest(
+                    "/api/evolve/agent/artifact-content/" + ("b" * 64) + "/fc_123/app.js",
+                    Origin="https://evil.example",
+                    **{
+                        "Sec-Fetch-Site": "cross-site",
+                        "Sec-Fetch-Mode": "no-cors",
+                        "Sec-Fetch-Dest": "script",
+                    },
+                )
+            )
+        )
 
 
 class TestServerAccessModeLocal(AioHTTPTestCase):
@@ -134,6 +255,10 @@ class TestServerAccessModeLocal(AioHTTPTestCase):
         self.assertEqual(resp.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin")
         self.assertEqual(resp.headers.get("X-Frame-Options"), "SAMEORIGIN")
         self.assertIn("default-src 'self'", str(resp.headers.get("Content-Security-Policy") or ""))
+        self.assertIn(
+            "frame-src 'self' http://127.0.0.1:*",
+            str(resp.headers.get("Content-Security-Policy") or ""),
+        )
         self.assertEqual(resp.headers.get("Cross-Origin-Opener-Policy"), "same-origin")
         self.assertEqual(resp.headers.get("Cross-Origin-Resource-Policy"), "same-site")
         self.assertEqual(resp.headers.get("X-Permitted-Cross-Domain-Policies"), "none")
@@ -190,6 +315,37 @@ class TestServerAccessModeRemote(AioHTTPTestCase):
             headers={"Authorization": "Bearer test-token"},
         )
         self.assertEqual(with_auth.status, 200)
+
+    async def test_remote_mode_chat_v2_read_routes_require_token(self):
+        paths = [
+            "/api/v2/chat/session/private-session",
+            "/api/v2/chat/session/private-session/export",
+            "/api/v2/chat/session/private-session/delegations",
+            "/api/v2/chat/voice/status",
+            "/api/v2/chat/specialists",
+        ]
+        for path in paths:
+            no_auth = await self.client.get(path)
+            self.assertEqual(no_auth.status, 401, path)
+
+        expected_authenticated = [404, 404, 200, 200, 200]
+        for path, expected_status in zip(paths, expected_authenticated, strict=True):
+            with_auth = await self.client.get(
+                path,
+                headers={"Authorization": "Bearer test-token"},
+            )
+            self.assertEqual(with_auth.status, expected_status, path)
+
+    async def test_remote_mode_deliverables_require_token(self):
+        path = "/deliverable/private-session/secret.pdf?download=1"
+        no_auth = await self.client.get(path)
+        self.assertEqual(no_auth.status, 401)
+
+        with_auth = await self.client.get(
+            path,
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(with_auth.status, 404)
 
     async def test_remote_mode_workspace_mutation_requires_token(self):
         no_auth = await self.client.post("/api/workspaces", json={"name": "remote-ws"})

@@ -1,29 +1,157 @@
-/* tokens.css */
-:root {
-    /* Unified Theme: Website Lock (Thomas Site) */
-    --theme-name: "Website Lock";
-    --bg-app: #16181f;
-    --bg-surface: #1f232c;
-    --bg-surface-hover: #242936;
-    --text-primary: #ececf1;
-    --text-secondary: #adb3c2;
-    --text-muted: #929bb0;
-    --border-light: rgba(255, 255, 255, 0.12);
-    --border-focus: #8a9aad;
-    --accent: #8a9aad;
-    --accent-strong: #6b7d8f;
-    --accent-mint: #47d7ac;
-    --warn-bg: rgba(255, 191, 71, 0.16);
-    --warn-line: rgba(255, 191, 71, 0.45);
-    --warn-ink: #ffd89a;
-    --danger-bg: rgba(255, 107, 107, 0.14);
-    --danger-line: rgba(255, 120, 120, 0.42);
-    --danger-ink: #ffd0d0;
-    --shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.45);
+/* tokens.css — THE Thomas design token set (single source).
+ *
+ * The canonical palette is the --c-* set from the "Thomas Chat" design
+ * (chat.html, served at /). Every surface — the unified shell, the classic
+ * SPA (/classic), /settings, /mission, /companion — consumes these tokens.
+ *
+ * chat.html's theme switcher DERIVES its vars payloads from this file at
+ * load time (js/chat_themes.js reads these blocks via CSSOM), so editing a
+ * value here updates the chat shell automatically. The baked fallback in
+ * chat_themes.js only fires if this sheet is unreachable - refresh it when
+ * you reshape the token set.
+ *
+ * Legacy token names (--bg-app, --text-primary, --accent, …) are BRIDGED onto
+ * the canonical set further down. Never assign a legacy name a literal value:
+ * that forks the design again.
+ */
 
-    /* Typography: System Native for professional precision */
-    --font-sans: Manrope, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+/* Shared component classes (.status-pill, .empty-state, .t-input, …) ride
+   along with the tokens: every page that links tokens.css gets them with no
+   extra <link> line. Bump the version when shared_components.css changes. */
+@import url("./shared_components.css?v=20260806-audited-winners");
+
+:root {
+    color-scheme: dark;
+    --theme-name: "Nebula Core";
+
+    /* ── Canonical palette — Nebula Core (default theme) ─────────────── */
+    --c-bg: #070912;
+    --c-sidebar: rgba(11, 14, 26, .72);
+    --c-surface: rgba(255, 255, 255, .04);
+    --c-surface-2: rgba(255, 255, 255, .08);
+    --c-hover: rgba(255, 255, 255, .06);
+    --c-border: rgba(255, 255, 255, .10);
+    --c-border-2: rgba(255, 255, 255, .17);
+    --c-text: #eef0fb;
+    --c-dim: rgba(238, 240, 251, .66);
+    --c-muted: rgba(238, 240, 251, .42);
+    --c-accent: #8b8cff;
+    --c-accent-ink: #0a0b16;
+    --c-accent-soft: rgba(139, 140, 255, .16);
+    --c-accent-line: rgba(139, 140, 255, .45);
+    --c-user-bg: rgba(124, 118, 235, .20);
+    --c-user-text: #eef0fb;
+    --c-composer-bg: rgba(16, 19, 34, .86);
+    --c-shadow: 0 18px 50px rgba(2, 4, 12, .55);
+    --c-menu-bg: #15142b;
+
+    /* ── Semantic status (per theme; dark values mirror chat.html THEMES) ── */
+    --c-danger: #ff9a9a;
+    --c-warn: #e2b25f;
+    --c-success: #47d7ac;
+
+    /* ── Scrollbars (per theme; light themes get LIGHT scrollbars) ───────── */
+    --c-scroll-track: rgba(17, 20, 26, .74);
+    --c-scroll-thumb: rgba(173, 179, 194, .40);
+
+    /* ── Typography ──────────────────────────────────────────────────── */
+    --font-head: "Manrope", system-ui, sans-serif;
+    --font-label: "Manrope", system-ui, sans-serif;
+    --font-sans: "Manrope", system-ui, sans-serif;
+    --font-serif: "Newsreader", Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+    /* ── Shape ───────────────────────────────────────────────────────── */
+    --r-card: 14px;
+    --r-composer: 18px;
+}
+
+/* ── Themes (same names the chat shell and workspace pages use) ──────── */
+html[data-thomas-theme="dark"], html[data-theme="dark"] {
+    --c-bg: #16181c; --c-sidebar: #101216; --c-surface: rgba(255, 255, 255, .035);
+    --c-surface-2: rgba(255, 255, 255, .07); --c-hover: rgba(255, 255, 255, .055);
+    --c-border: rgba(255, 255, 255, .09); --c-border-2: rgba(255, 255, 255, .15);
+    --c-text: #e7e9ee; --c-dim: rgba(231, 233, 238, .64); --c-muted: rgba(231, 233, 238, .40);
+    --c-accent: #6e9bff; --c-accent-ink: #0b1020; --c-accent-soft: rgba(110, 155, 255, .14);
+    --c-accent-line: rgba(110, 155, 255, .42); --c-user-bg: #2a2e36; --c-user-text: #e7e9ee;
+    --c-composer-bg: #1b1e23; --c-shadow: 0 14px 40px rgba(0, 0, 0, .45);
+    --c-menu-bg: #22252b; --font-head: "Manrope", system-ui, sans-serif;
+    --font-label: "JetBrains Mono", ui-monospace, monospace; --r-card: 8px; --r-composer: 12px;
+    --c-danger: #ff9a9a; --c-warn: #e2b25f; --c-success: #47d7ac;
+    --c-scroll-track: rgba(13, 15, 18, .74); --c-scroll-thumb: rgba(173, 179, 194, .40);
+}
+
+html[data-thomas-theme="light"], html[data-theme="light"] {
+    color-scheme: light; --c-bg: #fafbfc; --c-sidebar: #f3f5f8; --c-surface: #fff;
+    --c-surface-2: #f3f5f8; --c-hover: rgba(20, 30, 60, .05); --c-border: rgba(20, 30, 60, .10);
+    --c-border-2: rgba(20, 30, 60, .16); --c-text: #1c2330; --c-dim: rgba(28, 35, 48, .66);
+    --c-muted: rgba(28, 35, 48, .64); --c-accent: #2b62f3; --c-accent-ink: #fff;
+    --c-accent-soft: rgba(43, 98, 243, .10); --c-accent-line: rgba(43, 98, 243, .42);
+    --c-user-bg: #eaeef6; --c-user-text: #1c2330; --c-composer-bg: #fff;
+    --c-shadow: 0 14px 40px rgba(20, 30, 60, .12);
+    --c-menu-bg: #fff; --font-head: "Manrope", system-ui, sans-serif;
+    --font-label: "Manrope", system-ui, sans-serif; --r-card: 16px; --r-composer: 18px;
+    --c-danger: #b3261e; --c-warn: #a15c00; --c-success: #197849;
+    --c-scroll-track: rgba(20, 30, 60, .07); --c-scroll-thumb: rgba(28, 35, 48, .32);
+}
+
+html[data-thomas-theme="aurora"], html[data-theme="aurora"] {
+    --c-bg: #08151a; --c-sidebar: rgba(9, 22, 26, .78); --c-surface: rgba(120, 255, 220, .04);
+    --c-surface-2: rgba(120, 255, 220, .08); --c-hover: rgba(120, 255, 220, .06);
+    --c-border: rgba(140, 255, 225, .12); --c-border-2: rgba(140, 255, 225, .20);
+    --c-text: #e7f3ef; --c-dim: rgba(231, 243, 239, .66); --c-muted: rgba(231, 243, 239, .42);
+    --c-accent: #34e0b0; --c-accent-ink: #04211a; --c-accent-soft: rgba(52, 224, 176, .14);
+    --c-accent-line: rgba(52, 224, 176, .45); --c-user-bg: rgba(36, 120, 100, .30);
+    --c-user-text: #e7f3ef; --c-composer-bg: rgba(10, 28, 30, .88);
+    --c-shadow: 0 18px 50px rgba(0, 12, 10, .55);
+    --c-menu-bg: #0c2226; --font-head: "Manrope", system-ui, sans-serif;
+    --font-label: "Manrope", system-ui, sans-serif; --r-card: 14px; --r-composer: 18px;
+    --c-danger: #ff9a9a; --c-warn: #e2b25f; --c-success: #47d7ac;
+    --c-scroll-track: rgba(6, 20, 22, .74); --c-scroll-thumb: rgba(160, 220, 205, .34);
+}
+
+html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
+    color-scheme: light; --c-bg: #f4ede1; --c-sidebar: #efe5d6; --c-surface: #fbf6ee;
+    --c-surface-2: #f1e7d7; --c-hover: rgba(80, 52, 28, .06); --c-border: rgba(90, 62, 34, .16);
+    --c-border-2: rgba(90, 62, 34, .26); --c-text: #2f2a22; --c-dim: rgba(47, 42, 34, .70);
+    --c-muted: rgba(47, 42, 34, .68); --c-accent: #a84e30; --c-accent-ink: #fdf6ee;
+    --c-accent-soft: rgba(168, 78, 48, .12); --c-accent-line: rgba(168, 78, 48, .45);
+    --c-user-bg: #ece0cd; --c-user-text: #2f2a22; --c-composer-bg: #fbf6ee;
+    --c-shadow: 0 14px 40px rgba(90, 62, 34, .16);
+    --c-menu-bg: #fbf6ee; --font-head: "Newsreader", Georgia, serif;
+    --font-label: "Newsreader", Georgia, serif; --r-card: 12px; --r-composer: 14px;
+    --c-danger: #a33a28; --c-warn: #8a4b12; --c-success: #40704a;
+    --c-scroll-track: rgba(90, 62, 34, .10); --c-scroll-thumb: rgba(90, 62, 34, .34);
+}
+
+/* ── Legacy bridge ────────────────────────────────────────────────────
+   Older surfaces (classic SPA components, companion, token economy) were
+   written against these names. They are aliases now: they follow the
+   canonical palette and every theme automatically. */
+:root {
+    --bg-app: var(--c-bg);
+    --bg-surface: var(--c-menu-bg);
+    --bg-surface-hover: color-mix(in srgb, var(--c-menu-bg) 88%, #fff);
+    --text-primary: var(--c-text);
+    --text-secondary: var(--c-dim);
+    --text-muted: var(--c-muted);
+    --border-light: var(--c-border);
+    --border-focus: var(--c-accent-line);
+    --accent: var(--c-accent);
+    --accent-strong: color-mix(in srgb, var(--c-accent) 72%, #10101c);
+    --accent-mint: var(--c-success);
+
+    /* Migration aliases — older pages use the long names. They follow the
+       per-theme semantic tokens automatically; never give them literals. */
+    --c-warning: var(--c-warn);
+    --c-positive: var(--c-success);
+    --warn-bg: color-mix(in srgb, var(--c-warn) 14%, transparent);
+    --warn-line: color-mix(in srgb, var(--c-warn) 45%, transparent);
+    --warn-ink: var(--c-warn);
+    --danger-bg: color-mix(in srgb, var(--c-danger) 12%, transparent);
+    --danger-line: color-mix(in srgb, var(--c-danger) 42%, transparent);
+    --danger-ink: var(--c-danger);
+    --shadow-strong: var(--c-shadow);
 
     /* Consistent Spacing */
     --space-1: 4px;
@@ -52,17 +180,17 @@
     --z-tooltip: 70;
     --z-skip-link: 9999;
 
-    /* ── Button Profile (Thomas Standard) ─────────────────────────────────
-       Thomas uses a SKINNY button profile across the entire UI.
-       All interactive buttons should reference these tokens.
-       Vertical padding is intentionally tight (3–5px) to keep UI dense.
-       ──────────────────────────────────────────────────────────────────── */
-    --btn-pad-y: 4px;
-    --btn-pad-x: 12px;
-    --btn-font-size: 12px;
-    --btn-font-weight: 600;
-    --btn-line-height: 1.4;
-    --btn-radius: var(--radius-sm);
+    /* ── Button Profile (Thomas Standard = the Chat surface's language) ──
+       Filled var(--c-accent) buttons, 38px tall, radius 10, Manrope 12.5/700.
+       The old "skinny" 4px-pad outline profile is gone: it had exactly one
+       consumer product-wide and matched nothing the unified Chat ships. */
+    --btn-pad-y: 8px;
+    --btn-pad-x: 14px;
+    --btn-min-h: 38px;
+    --btn-font-size: 12.5px;
+    --btn-font-weight: 700;
+    --btn-line-height: 1.2;
+    --btn-radius: 10px;
     --btn-transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
@@ -72,26 +200,25 @@
     padding: 0;
 }
 
+/* Paint only — layout (height/overflow) belongs to each page's own shell CSS
+   so scrolling pages like /mission keep scrolling. */
 body {
     font-family: var(--font-sans);
-    background:
-        radial-gradient(circle at 14% 12%, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0) 34%),
-        radial-gradient(circle at 88% 8%, rgba(71, 215, 172, 0.12), rgba(71, 215, 172, 0) 30%),
-        radial-gradient(circle at 70% 90%, rgba(255, 178, 66, 0.12), rgba(255, 178, 66, 0) 32%),
-        var(--bg-app);
-    color: var(--text-primary);
+    background: var(--c-bg);
+    color: var(--c-text);
     line-height: 1.6;
-    height: 100vh;
-    width: 100vw;
-    overflow: hidden;
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scrollbars follow the theme: light worlds get light tracks. The colours
+   live in each theme block as --c-scroll-track/--c-scroll-thumb — never put
+   a literal back here, that is exactly what painted dark scrollbars onto
+   the light themes. */
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(173, 179, 194, 0.44) rgba(17, 20, 26, 0.62);
+    scrollbar-color: var(--c-scroll-thumb) var(--c-scroll-track);
 }
 
 *::-webkit-scrollbar {
@@ -100,34 +227,40 @@ body {
 }
 
 *::-webkit-scrollbar-track {
-    background: rgba(17, 20, 26, 0.74);
+    background: var(--c-scroll-track);
     border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    border: 2px solid rgba(17, 20, 26, 0.8);
-    background: rgba(173, 179, 194, 0.36);
+    border: 2px solid var(--c-scroll-track);
+    background: var(--c-scroll-thumb);
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: rgba(173, 179, 194, 0.52);
+    background: color-mix(in srgb, var(--c-scroll-thumb) 78%, var(--c-text) 22%);
 }
 
 /* ── Thomas Button Standard ───────────────────────────────────────────────────
-   Reusable utility classes for the skinny button profile.
-   Usage: <button class="t-btn t-btn-accent">Label</button>
-   Variants: t-btn-accent, t-btn-mint, t-btn-ghost, t-btn-danger
+   The Chat surface's button, as a reusable class: filled accent, 38px tall,
+   radius 10, Manrope 12.5/700.
+   Usage: <button class="t-btn">Label</button>          (filled — the default)
+          <button class="t-btn t-btn-quiet">Label</button>  (transparent + border)
+   Variants: t-btn-quiet, t-btn-ghost, t-btn-danger.
+   t-btn-accent needs no rules any more (kept in markup for compat): the base
+   IS the accent profile now. t-btn-mint is gone — it had zero consumers.
    ─────────────────────────────────────────────────────────────────────────── */
 .t-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    gap: 6px;
+    min-height: var(--btn-min-h);
     padding: var(--btn-pad-y) var(--btn-pad-x);
     border-radius: var(--btn-radius);
-    border: 1px solid var(--border-light);
-    background: transparent;
-    color: var(--text-secondary);
+    border: 1px solid transparent;
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
     font-size: var(--btn-font-size);
     font-weight: var(--btn-font-weight);
     font-family: var(--font-sans);
@@ -139,55 +272,85 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 .t-btn:hover {
-    background: rgba(162, 191, 233, 0.08);
-    border-color: rgba(255, 255, 255, 0.20);
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--c-accent) 86%, var(--c-text) 14%);
 }
 .t-btn:active {
-    transform: scale(0.97);
+    transform: scale(0.98);
+}
+.t-btn:focus-visible {
+    outline: 2px solid var(--c-accent-line);
+    outline-offset: 2px;
 }
 .t-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
     pointer-events: none;
 }
-/* Accent blue variant */
-.t-btn-accent {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: rgba(88, 166, 255, 0.06);
-}
-.t-btn-accent:hover {
-    background: rgba(88, 166, 255, 0.14);
-    border-color: var(--accent);
-    color: var(--accent);
-}
-/* Mint / success variant */
-.t-btn-mint {
-    border-color: var(--accent-mint);
-    color: var(--accent-mint);
-    background: rgba(71, 215, 172, 0.06);
-}
-.t-btn-mint:hover {
-    background: rgba(71, 215, 172, 0.14);
-    border-color: var(--accent-mint);
-    color: var(--accent-mint);
-}
-/* Ghost / minimal variant */
-.t-btn-ghost {
-    border-color: transparent;
+/* Quiet variant — transparent with the hairline border */
+.t-btn-quiet {
     background: transparent;
+    border-color: var(--c-border);
+    color: var(--c-dim);
+}
+.t-btn-quiet:hover {
+    background: var(--c-hover);
+    border-color: var(--c-border-2);
+    color: var(--c-text);
+}
+/* Ghost / minimal variant — quiet without even the border */
+.t-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--c-dim);
 }
 .t-btn-ghost:hover {
-    background: rgba(162, 191, 233, 0.10);
+    background: var(--c-hover);
     border-color: transparent;
+    color: var(--c-text);
 }
-/* Danger / destructive variant */
+/* Danger / destructive variant — quiet shape, semantic colour */
 .t-btn-danger {
-    border-color: var(--danger-line);
-    color: var(--danger-ink);
-    background: var(--danger-bg);
+    background: color-mix(in srgb, var(--c-danger) 12%, transparent);
+    border-color: color-mix(in srgb, var(--c-danger) 45%, transparent);
+    color: var(--c-danger);
 }
 .t-btn-danger:hover {
-    background: rgba(255, 107, 107, 0.22);
+    background: color-mix(in srgb, var(--c-danger) 20%, transparent);
+}
+
+/* Screen-reader-only content (single definition; accessibility.css keeps the
+   :focus reveal used by skip links). */
+.sr-only,
+.screen-reader-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Reduced motion: honored on every page (chat's living worlds included -
+   their animations are inline styles, so only an !important rule can stop
+   them). Iteration count 1 + near-zero duration freezes each animation at
+   its resolved end state. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}
+
+/* Keyboard focus: one accent ring on every page. !important because several
+   legacy controls suppress outlines inline (outline: none) - a keyboard user
+   must always be able to see where they are. Pointer clicks are unaffected
+   (:focus-visible only matches keyboard-driven focus). */
+:focus-visible {
+    outline: 2px solid var(--c-accent) !important;
+    outline-offset: 2px;
 }

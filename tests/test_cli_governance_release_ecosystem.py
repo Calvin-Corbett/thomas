@@ -43,11 +43,31 @@ def test_cli_security_audit_json(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["-c", str(cfg), "security", "audit", "--json"])
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    assert result.stdout.lstrip().startswith("{")
+    payload = json.loads(result.stdout)
     assert payload["command"] == "security"
     assert payload["action"] == "audit"
     assert "summary" in payload
     assert int(payload["summary"]["check_count"]) >= 4
+
+
+def test_cli_security_audit_json_keeps_optional_tool_warning_on_stderr(tmp_path: Path, monkeypatch) -> None:
+    from thomas.server import tool_extensions
+
+    cfg = _write_min_config(tmp_path)
+    monkeypatch.setattr(
+        tool_extensions,
+        "_OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD",
+        len(tool_extensions._OPTIONAL_TOOL_MODULES) + 1,
+    )
+
+    result = CliRunner().invoke(cli, ["-c", str(cfg), "security", "audit", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout.lstrip().startswith("{")
+    assert "Loaded only" not in result.stdout
+    assert "Loaded only" in result.stderr
+    json.loads(result.stdout)
 
 
 def test_cli_plugins_certify_and_update_json(tmp_path: Path) -> None:

@@ -35,6 +35,20 @@ if ([string]::IsNullOrWhiteSpace($DeepLink) -and $RemainingArgs) {
   }
 }
 
+function Test-PortListening([int]$P) {
+  # Get-NetTCPConnection costs ~1s per call on Windows 11 and this runs once per
+  # readiness poll. The .NET listener table answers the same question in ~3ms.
+  # A failure falls through to $false, matching the -ErrorAction SilentlyContinue
+  # the cmdlet calls this replaced used to carry.
+  try {
+    $listeners = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
+  } catch {
+    return $false
+  }
+  foreach ($l in $listeners) { if ($l.Port -eq $P) { return $true } }
+  return $false
+}
+
 function Invoke-NativeCore {
   param(
     [Parameter(Mandatory = $true)][string]$Exe,
@@ -300,18 +314,14 @@ function Ensure-Installed {
     return
   }
 
-  # Ensure the editable package is present.
-  $show = Invoke-NativeQuiet $VenvPy @("-m", "pip", "show", "thomas-ai")
-  if ($show -ne 0) {
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]", "--disable-pip-version-check")
-    if ($code -ne 0) { throw "[thomas] pip install failed (exit $code)" }
-  }
+  # No `pip show thomas-ai` probe here: the import probe above already proves the
+  # environment is installed, and pip show spent a whole subprocess (~0.8s on
+  # every launch) confirming what that import implies.
 }
 
 function Find-FreePort([int]$Preferred) {
   for ($p = $Preferred; $p -le ($Preferred + 25); $p++) {
-    $inUse = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
-    if (-not $inUse) { return $p }
+    if (-not (Test-PortListening $p)) { return $p }
   }
   return 0
 }
@@ -339,7 +349,7 @@ function Get-ThomasBootHealth {
 
   $listening = $false
   try {
-    $listening = [bool](Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue)
+    $listening = [bool](Test-PortListening $P)
   } catch { }
 
   $probeSpecs = @(
@@ -595,8 +605,11 @@ function Invoke-BootDoctor {
   }
 
   Write-Host ("[thomas] Boot Doctor report: {0}" -f $report)
+  # Never throw a Notepad window in the owner's face. Thomas is an app, and an
+  # app that fails to start does not open a text editor about it. The path is
+  # written above for anyone who wants the detail.
   if (-not $recovered) {
-    try { Start-Process notepad.exe $report | Out-Null } catch { }
+    Write-Host "[thomas] Boot did not recover. The report path above has the detail."
   }
 
   return [pscustomobject]@{
@@ -653,7 +666,9 @@ function Open-BootDoctorRescue {
       "--reason", $Reason,
       "--startup-context", $contextPath,
       "--relaunch"
-    ) -WorkingDirectory $Root -PassThru
+      # Hidden: a rescue is Thomas's business, not a console the owner must
+      # watch. Without this a PowerShell window pops up on every rescue.
+    ) -WorkingDirectory $Root -WindowStyle Hidden -PassThru
   } catch {
     Write-Host ("[thomas] WARNING: unable to launch Boot Doctor rescue window: {0}" -f $_.Exception.Message)
   }
@@ -670,68 +685,6 @@ function Open-BootDoctorRescue {
     Recovered = $recovered
     ContextPath = $contextPath
     Process = $proc
-  }
-}
-
-function Get-ThomasListenersOnPort([int]$P) {
-  $hits = Get-ThomasListeners
-  if (-not $hits) { return @() }
-  return @($hits | Where-Object { [int]$_.Port -eq $P })
-}
-
-function Test-ThomasProcessCommand([string]$CommandLine) {
-  $cmd = [string]$CommandLine
-  if ([string]::IsNullOrWhiteSpace($cmd)) { return $false }
-  return $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|-m\s+thomas\.tray_agent\b|\bthomas(\.exe)?\s+serve\b)'
-}
-
-function Get-ThomasListeners {
-  $hits = @()
-  $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue
-  if (-not $listeners) { return $hits }
-  foreach ($l in $listeners) {
-    $owningPid = [int]$l.OwningProcess
-    if ($owningPid -le 0) { continue }
-    $cmd = $null
-    try {
-      $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
-    } catch { }
-    if (Test-ThomasProcessCommand $cmd) {
-      $hits += [pscustomobject]@{
-        Port = [int]$l.LocalPort
-        Pid = $owningPid
-        CommandLine = $cmd
-      }
-    }
-  }
-  return $hits
-}
-
-function Get-ThomasHealthyCandidate {
-  param([int]$PreferredPort)
-
-  $listeners = @(Get-ThomasListeners)
-  if (-not $listeners.Count) { return $null }
-
-  $ports = @($listeners | Select-Object -ExpandProperty Port -Unique | Sort-Object)
-  $orderedPorts = @()
-  if ($ports -contains $PreferredPort) { $orderedPorts += $PreferredPort }
-  $orderedPorts += @($ports | Where-Object { [int]$_ -ne $PreferredPort })
-
-  foreach ($candidatePort in $orderedPorts) {
-    if (Wait-ThomasHttpOnPort -P ([int]$candidatePort)) {
-      return [pscustomobject]@{
-        Port = [int]$candidatePort
-        Listeners = @($listeners | Where-Object { [int]$_.Port -eq [int]$candidatePort })
-        AllListeners = $listeners
-      }
-    }
-  }
-
-  return [pscustomobject]@{
-    Port = $null
-    Listeners = @()
-    AllListeners = $listeners
   }
 }
 
@@ -781,6 +734,15 @@ function Stop-ThomasServerOnPort([int]$P) {
       }
     }
   } catch { }
+
+  # Cheap check first. Get-NetTCPConnection stays below because killing the old
+  # server needs its OwningProcess, which the .NET listener table does not carry
+  # - but on the common path (nothing listening on this port) we now answer in
+  # ~3ms instead of paying ~1s for a connection object we would throw away.
+  if (-not (Test-PortListening $P)) {
+    if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
+    return $stoppedAny
+  }
 
   $listeners = Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue
   if (-not $listeners) {
@@ -880,6 +842,10 @@ function Show-DefaultModelWarning {
     return
   }
 
+  if ($defaultModel -eq "openai_codex") {
+    return
+  }
+
   $envName = Get-CloudEnvVarName $defaultModel
   $envValue = [Environment]::GetEnvironmentVariable($envName, "Process")
   if (-not $envValue) { $envValue = [Environment]::GetEnvironmentVariable($envName, "User") }
@@ -898,8 +864,7 @@ function Ensure-OllamaRunning {
     return
   }
 
-  $listening = Get-NetTCPConnection -LocalPort 11434 -State Listen -ErrorAction SilentlyContinue
-  if ($listening) { return }
+  if (Test-PortListening 11434) { return }
 
   Write-Host "[thomas] Starting Ollama (for local model endpoint on :11434)..."
   try {
@@ -918,34 +883,9 @@ if (Uses-OllamaLocal) {
 Show-DefaultModelWarning
 
 # Ã¢â€â‚¬Ã¢â€â‚¬ ALWAYS start fresh Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Kill ALL existing Thomas servers and tray agents so we always run the
-# current version from this working tree.  The old "reuse" logic caused
-# stale servers to persist after code updates.
-$allListeners = @(Get-ThomasListeners)
-if ($allListeners.Count -gt 0) {
-  $allPorts = @($allListeners | Select-Object -ExpandProperty Port -Unique)
-  Write-Host ("[thomas] Stopping {0} existing Thomas instance(s) on port(s): {1}" -f $allListeners.Count, ($allPorts -join ", "))
-  foreach ($existingPort in $allPorts) {
-    Stop-ThomasServerOnPort ([int]$existingPort) | Out-Null
-  }
-  # Also kill any orphaned tray agents that aren't listening on a port
-  try {
-    $pyProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue
-    foreach ($proc in $pyProcs) {
-      $procCmd = [string]$proc.CommandLine
-      if ($procCmd -and $procCmd -match '(?i)-m\s+thomas\.tray_agent\b') {
-        $procId = [int]$proc.ProcessId
-        if ($procId -gt 0) {
-          Write-Host ("[thomas] Stopping orphaned tray agent (pid {0})" -f $procId)
-          try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
-        }
-      }
-    }
-  } catch { }
-  Start-Sleep -Milliseconds 800
-}
-
-# Also ensure the target port is clear (non-Thomas process might hold it)
+# Always start the requested Thomas surface from this working tree without
+# enumerating or stopping unrelated listeners on other ports.
+# Stop-ThomasServerOnPort also stops a tray agent bound to this exact port.
 Stop-ThomasServerOnPort $Port | Out-Null
 
 $FreePort = Find-FreePort $Port
@@ -971,10 +911,17 @@ if ($FreePort -ne $Port) {
 }
 
 # Show what version we're about to start so the user can confirm it's current.
+# Read the literal out of thomas/__init__.py rather than booting a Python
+# interpreter for one string; importing the package to print its version cost
+# roughly a second of the launch every single time.
 $startingVersion = ""
 try {
-  $vOut = & $VenvPy -c "from thomas import __version__; print(__version__)" 2>$null
-  if ($vOut) { $startingVersion = $vOut.Trim() }
+  $initPath = Join-Path $Root "thomas\__init__.py"
+  if (Test-Path $initPath) {
+    $initText = [System.IO.File]::ReadAllText($initPath, [System.Text.Encoding]::UTF8)
+    $m = [regex]::Match($initText, '(?m)^__version__\s*=\s*["'']([^"'']+)["'']')
+    if ($m.Success) { $startingVersion = $m.Groups[1].Value.Trim() }
+  }
 } catch { }
 if (-not $startingVersion) { $startingVersion = "unknown" }
 
@@ -1084,6 +1031,22 @@ function Start-DetachedThomasServer {
     [Parameter(Mandatory = $true)][string]$BindAddress,
     [Parameter(Mandatory = $true)][int]$ServerPort
   )
+
+  # Idle self-improvement engines (code-issue, self-upgrade, UI-workflow,
+  # local-agent, workspace-sync) make continuous background LLM calls that
+  # burn the ChatGPT subscription while nobody is using Thomas (observed:
+  # one POST to chatgpt.com every ~19s, 24/7). Default them OFF for
+  # launcher-started servers until interactive use is reliable. To re-enable,
+  # set the variable to "1" in the shell before running run-ui.
+  foreach ($quietVar in @(
+      'THOMAS_CODE_ISSUE_ENGINE_ENABLED',
+      'THOMAS_SELF_UPGRADE_ENGINE_ENABLED',
+      'THOMAS_UI_WORKFLOW_ENGINE_ENABLED',
+      'THOMAS_LOCAL_AGENT_ENGINE_ENABLED',
+      'THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED',
+      'THOMAS_WORKSPACE_SYNC_AUTO_PUSH')) {
+    if (-not (Test-Path "Env:$quietVar")) { Set-Item "Env:$quietVar" '0' }
+  }
 
   $logDir = Join-Path $Root 'runtime\logs'
   New-Item -ItemType Directory -Force -Path $logDir | Out-Null

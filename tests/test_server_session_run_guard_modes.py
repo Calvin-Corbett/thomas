@@ -1,3 +1,21 @@
+"""Session-run-guard behaviour across chat modes.
+
+Two requests for the SAME session must never run a turn concurrently --
+concurrent turns can interleave conversation state.
+
+History (2026-07-22): this suite previously sabotaged Chat V2 registration to
+force a "legacy" chat route and mocked ``AgentLoop``. Both premises were dead:
+``register_chat_routes`` is never called, so ``/api/chat`` is registered ONLY by
+Chat V2 (sabotaging it made the endpoint 404), and Chat V2 drives
+``OrchestratorBrain`` rather than ``AgentLoop``, so no patch target could work.
+The suite therefore timed out rather than testing anything.
+
+Migrating it to the real seam exposed a genuine defect: the session-run guard
+had never been ported to Chat V2, so both requests executed concurrently. The
+fix serialises turns per session (rather than rejecting the second and silently
+dropping the user's message), which is what these tests now assert.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +26,6 @@ from unittest.mock import patch
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
-from thomas.core.events import AgentEvent, EventType
 from thomas.server.app import create_app
 
 
@@ -28,32 +45,39 @@ class _BaseServerRunGuardCase(AioHTTPTestCase):
         return self._tmpdir.name
 
 
-class _SlowAgentLoop:
+class _ConcurrencyProbeBrain:
+    """Holds the first turn open and records how many turns overlap."""
+
     started: asyncio.Event | None = None
     release: asyncio.Event | None = None
+    active = 0
+    max_active = 0
+    hold_prompt = ""
 
-    def __init__(self, *_args, **_kwargs):
+    @classmethod
+    def reset(cls, hold_prompt: str) -> None:
+        cls.started = asyncio.Event()
+        cls.release = asyncio.Event()
+        cls.active = 0
+        cls.max_active = 0
+        cls.hold_prompt = hold_prompt
+
+    def __init__(self, *_args, **_kwargs) -> None:
         pass
 
-    async def run(self, prompt, *, mode="auto", tools_policy="auto", token_economy="optimal", **kwargs):  # noqa: ANN001
-        _ = prompt
-        _ = token_economy
-        _ = kwargs
-        if isinstance(type(self).started, asyncio.Event):
-            type(self).started.set()
-        if isinstance(type(self).release, asyncio.Event):
-            await asyncio.wait_for(type(self).release.wait(), timeout=2.0)
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "route": {"path": "general", "confidence": 1.0},
-                "mode": str(mode),
-                "tools_policy": str(tools_policy),
-                "autonomy_level": 3,
-                "autonomy_name": "Auto",
-            },
-        )
-        yield AgentEvent.agent_done(text="RUN_GUARD_OK", iterations=1, tool_calls=0)
+    async def process_message(self, *, session_id, conversation, prompt, dispatcher, **kwargs):  # noqa: ANN001
+        _ = (session_id, dispatcher, kwargs)
+        cls = type(self)
+        cls.active += 1
+        cls.max_active = max(cls.max_active, cls.active)
+        try:
+            if prompt == cls.hold_prompt and isinstance(cls.started, asyncio.Event):
+                cls.started.set()
+                if isinstance(cls.release, asyncio.Event):
+                    await asyncio.wait_for(cls.release.wait(), timeout=10.0)
+            return conversation
+        finally:
+            cls.active -= 1
 
 
 class TestSessionRunGuardAcrossModes(_BaseServerRunGuardCase):
@@ -71,10 +95,7 @@ class TestSessionRunGuardAcrossModes(_BaseServerRunGuardCase):
             memory=MemoryConfig(root=self._memory_root),
             server=ServerConfig(access_mode="local"),
         )
-        with patch(
-            "thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")
-        ):
-            return create_app(cfg)
+        return create_app(cfg)
 
     async def _new_session_id(self) -> str:
         resp = await self.client.post("/api/session/new", json={})
@@ -82,35 +103,69 @@ class TestSessionRunGuardAcrossModes(_BaseServerRunGuardCase):
         payload = await resp.json()
         return str(payload.get("session_id") or "")
 
-    async def _assert_second_request_conflicts(self, payload: dict, *, expected_second_status: int = 409) -> None:
-        started = asyncio.Event()
-        release = asyncio.Event()
-        _SlowAgentLoop.started = started
-        _SlowAgentLoop.release = release
+    async def _assert_turns_do_not_overlap(self, sid: str, mode: str | None = None) -> None:
+        first = {"session_id": sid, "text": "hold"}
+        second = {"session_id": sid, "text": "follow-up"}
+        if mode:
+            first["mode"] = mode
+            second["mode"] = mode
 
-        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _SlowAgentLoop):
-            first_task = asyncio.create_task(self.client.post("/api/chat", json=payload))
-            await asyncio.wait_for(started.wait(), timeout=2.0)
-            second = await self.client.post("/api/chat", json=payload)
-            self.assertEqual(second.status, expected_second_status)
-            release.set()
-            first = await first_task
-            self.assertEqual(first.status, 200)
+        _ConcurrencyProbeBrain.reset("hold")
+        try:
+            with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _ConcurrencyProbeBrain):
+                first_task = asyncio.create_task(self.client.post("/api/chat", json=first))
+                await asyncio.wait_for(_ConcurrencyProbeBrain.started.wait(), timeout=15.0)
+
+                # Fire the second while the first is provably still inside its
+                # turn, and give it a real chance to barge in.
+                second_task = asyncio.create_task(self.client.post("/api/chat", json=second))
+                await asyncio.sleep(0.75)
+
+                self.assertEqual(
+                    _ConcurrencyProbeBrain.max_active,
+                    1,
+                    "a second request executed a turn while the first was still running",
+                )
+
+                _ConcurrencyProbeBrain.release.set()
+                first_resp = await first_task
+                second_resp = await second_task
+
+            self.assertEqual(first_resp.status, 200)
+            self.assertEqual(second_resp.status, 200)
+            self.assertEqual(_ConcurrencyProbeBrain.max_active, 1)
+        finally:
+            if isinstance(_ConcurrencyProbeBrain.release, asyncio.Event):
+                _ConcurrencyProbeBrain.release.set()
 
     async def test_default_mode_path_enforces_session_run_guard(self):
-        sid = await self._new_session_id()
-        payload = {"session_id": sid, "text": "default run"}
-        await self._assert_second_request_conflicts(payload, expected_second_status=202)
+        await self._assert_turns_do_not_overlap(await self._new_session_id())
 
     async def test_batch_mode_path_enforces_session_run_guard(self):
-        sid = await self._new_session_id()
-        payload = {"session_id": sid, "text": "batch run", "mode": "batch"}
-        await self._assert_second_request_conflicts(payload, expected_second_status=202)
+        await self._assert_turns_do_not_overlap(await self._new_session_id(), mode="batch")
 
     async def test_swarm_mode_path_enforces_session_run_guard(self):
-        sid = await self._new_session_id()
-        payload = {"session_id": sid, "text": "swarm run", "mode": "swarm"}
-        await self._assert_second_request_conflicts(payload, expected_second_status=202)
+        await self._assert_turns_do_not_overlap(await self._new_session_id(), mode="swarm")
+
+    async def test_different_sessions_are_not_serialised_against_each_other(self):
+        """The guard must be per-session, not a global chat bottleneck."""
+        sid_a = await self._new_session_id()
+        sid_b = await self._new_session_id()
+
+        _ConcurrencyProbeBrain.reset("hold")
+        try:
+            with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _ConcurrencyProbeBrain):
+                held = asyncio.create_task(self.client.post("/api/chat", json={"session_id": sid_a, "text": "hold"}))
+                await asyncio.wait_for(_ConcurrencyProbeBrain.started.wait(), timeout=15.0)
+
+                other = await self.client.post("/api/chat", json={"session_id": sid_b, "text": "other session"})
+                self.assertEqual(other.status, 200)
+
+                _ConcurrencyProbeBrain.release.set()
+                self.assertEqual((await held).status, 200)
+        finally:
+            if isinstance(_ConcurrencyProbeBrain.release, asyncio.Event):
+                _ConcurrencyProbeBrain.release.set()
 
 
 if __name__ == "__main__":

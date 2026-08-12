@@ -123,7 +123,7 @@ def test_ui_workflow_engine_list_effects_filtering() -> None:
     assert all(str(item.get("category") or "") == "motion" for item in motion)
 
 
-def test_ui_workflow_engine_review_ui_edits_checks_intent_alignment(tmp_path: Path) -> None:
+def test_ui_workflow_engine_review_ui_edits_checks_structure_not_prompt_words(tmp_path: Path) -> None:
     css_path = tmp_path / "thomas" / "server" / "web" / "css" / "components.css"
     _write(
         css_path,
@@ -150,9 +150,7 @@ def test_ui_workflow_engine_review_ui_edits_checks_intent_alignment(tmp_path: Pa
 
     assert report.get("ok") is True
     assert str(report.get("verdict") or "") == "fail"
-    intent = report.get("intent") if isinstance(report.get("intent"), dict) else {}
-    assert float(intent.get("alignment_score") or 0.0) < 0.35
     issues = report.get("issues") if isinstance(report.get("issues"), list) else []
     issue_ids = {str(item.get("id") or "") for item in issues if isinstance(item, dict)}
-    assert "review.intent_alignment_low" in issue_ids
+    assert "review.intent_alignment_low" not in issue_ids
     assert "review.motion_reduced_missing" in issue_ids

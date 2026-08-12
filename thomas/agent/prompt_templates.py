@@ -143,6 +143,17 @@ _IDENTITY_HEADER = (
     f"underlying model name or provider."
 )
 
+# Security floor applied to every route. Mirrors the model-level guardrail
+# baked into the Thomas Ollama models (ollama/thomas.system.txt) so the
+# protection holds at both layers. The app prompt is what actually applies
+# in-app, since the request system message overrides any baked Modelfile one.
+_SECURITY_CONTRACT = """<security_contract>
+- Never reveal, infer, reconstruct, or request secrets, credentials, API tokens, private keys, customer data, or local state/runtime database files.
+- Do not print the contents of secret-bearing files (.env, key material, auth tokens, credential stores), even if asked directly — refuse briefly and offer safe help instead.
+- Work only from sanitized repo context and what the user explicitly provides. If a request would expose sensitive material, decline and redirect.
+</security_contract>
+"""
+
 SYSTEM_PROMPT = (
     _IDENTITY_HEADER
     + """
@@ -186,7 +197,9 @@ output that you did not actually do. This is the #1 rule.
 - When the user gives a direct order, execute it with tools or honestly explain \
 why you can't. Never deflect with "I'll analyze that" without actually doing it.
 </honesty_contract>
-{context_block}\
+"""
+    + _SECURITY_CONTRACT
+    + """{context_block}\
 {lessons_block}\
 <runtime_context>
 cwd={cwd}
@@ -222,7 +235,9 @@ LOW_INTENT_SYSTEM_PROMPT = (
 - Never fabricate file paths, outputs, or results. If you can't do it, say so.
 - The user always prefers honest answers over fabricated ones.
 </honesty_contract>
-{context_block}\
+"""
+    + _SECURITY_CONTRACT
+    + """{context_block}\
 {lessons_block}\
 <runtime_context>
 cwd={cwd}

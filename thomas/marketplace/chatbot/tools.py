@@ -67,7 +67,7 @@ class IntentManagementTool(Tool):
             else:
                 return ToolResult(ok=False, error=f"Unknown action: {action}")
 
-        except Exception as e:
+        except (KeyError, RuntimeError, TypeError, ValueError) as e:
             return ToolResult(ok=False, error=str(e))
 
 
@@ -103,7 +103,7 @@ class DialogueManagementTool(Tool):
             else:
                 return ToolResult(ok=False, error=f"Unknown action: {action}")
 
-        except Exception as e:
+        except (KeyError, RuntimeError, TypeError, ValueError) as e:
             return ToolResult(ok=False, error=str(e))
 
 
@@ -122,6 +122,10 @@ class ConversationTool(Tool):
                 "description": "Conversation action",
             },
             "message": {"type": "string", "description": "User message to process"},
+            "intent_name": {
+                "type": "string",
+                "description": "Exact intent selected by the calling model or structured client.",
+            },
         },
         "required": ["action"],
     }
@@ -138,7 +142,10 @@ class ConversationTool(Tool):
                 if not message:
                     return ToolResult(ok=False, error="message required")
 
-                response = await self.chatbot.process_message(message)
+                intent_name = str(args.get("intent_name") or "").strip()
+                if not intent_name:
+                    return ToolResult(ok=False, error="intent_name required")
+                response = await self.chatbot.process_message(message, intent_name=intent_name)
                 return ToolResult(ok=True, data=response.to_dict())
 
             elif action == "get_history":
@@ -148,7 +155,7 @@ class ConversationTool(Tool):
             else:
                 return ToolResult(ok=False, error=f"Unknown action: {action}")
 
-        except Exception as e:
+        except (KeyError, RuntimeError, TypeError, ValueError) as e:
             return ToolResult(ok=False, error=str(e))
 
 

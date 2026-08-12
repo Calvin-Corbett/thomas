@@ -1,7 +1,6 @@
-"""Virtual Office agent roster for the Thomas REPL. Dynamically parses agent definitions from virtual_office.html so that renaming an agent in the Virtual Office propagates everywhere."""
+"""Expose the canonical browser Virtual Office agent seeds to the Thomas REPL."""
 
 import logging
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,154 +46,92 @@ def _hex_to_rich_color(hex_color: str) -> str:
     return "cyan"
 
 
-# Ordered list of (keyword, specialty) tuples -- specific before general so that
-# e.g. "devops" matches before "ops" and "engineer" never steals a more precise hit.
-_ROLE_KEYWORDS: list[tuple[str, str]] = [
-    ("ops", "Operations"),
-    ("devops", "DevOps"),
-    ("research", "Research"),
-    ("creative", "Creative"),
-    ("support", "Support"),
-    ("game", "Gaming"),
-    ("security", "Security"),
-    ("data", "Data"),
-    ("design", "Design"),
-    ("qa", "QA"),
-    ("engineer", "Engineering"),  # last -- avoids false matches on e.g. "research"
-]
-
-
-def _role_to_specialty(role: str) -> str:
-    """Return a specialty string by scanning the role text for known keywords."""
-    role_lower = role.lower()
-    for keyword, specialty in _ROLE_KEYWORDS:
-        if keyword in role_lower:
-            return specialty
-    return "General"
-
-
 # ---------------------------------------------------------------------------
 # Cache state
 # ---------------------------------------------------------------------------
 _cached_roster: tuple["VirtualAgent", ...] | None = None
-_cached_mtime: float | None = None
+_cached_mtime_ns: int | None = None
 _cached_path: Path | None = None
 
 
-def _find_virtual_office_html() -> Path | None:
-    """Search several candidate locations for virtual_office.html."""
-    project_root = Path(__file__).resolve().parent.parents[1]
-    candidates = [
-        project_root / "virtual_office.html",
-        project_root / "thomas" / "server" / "web" / "virtual_office.html",
-        project_root / "thomas" / "server" / "web" / "static" / "virtual_office.html",
-        Path(os.getcwd()) / "virtual_office.html",
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
+def _canonical_agent_seed_path() -> Path:
+    """Return the active browser runtime file that owns ``OFFICE_AGENT_SEEDS``."""
+    return Path(__file__).resolve().parents[1] / "server" / "web" / "js" / "runtime" / "office_static_config.js"
 
 
-# Regex that matches a single agent entry in the JS agents array inside the HTML.
-# Named groups: id, name, role, body (customization block text), accent extracted separately.
-_AGENT_RE = re.compile(
-    r"""
-    \{[^}]*                              # opening of object literal
-    id\s*:\s*'(?P<id>[^']+)'            # id field
-    .*?                                  # anything in between
-    name\s*:\s*'(?P<name>[^']+)'        # name field
-    .*?                                  # anything in between
-    role\s*:\s*'(?P<role>[^']+)'        # role field
-    .*?                                  # anything in between
-    customization\s*:\s*\{(?P<body>.*?)\}  # customization block
-    """,
-    re.VERBOSE | re.DOTALL,
+_SEED_BLOCK_RE = re.compile(r"\bconst\s+OFFICE_AGENT_SEEDS\s*=\s*\[(?P<body>.*?)\];", re.DOTALL)
+_SEED_OBJECT_RE = re.compile(r"\{(?P<body>[^{}]*)\}", re.DOTALL)
+_SEED_FIELD_RE = re.compile(
+    r"\b(?P<key>name|color|specialty)\s*:\s*(?P<quote>['\"])(?P<value>.*?)(?P=quote)",
+    re.DOTALL,
 )
 
-_ACCENT_RE = re.compile(r"accentColor\s*:\s*'(?P<accent>[^']+)'")
-_BODY_RE = re.compile(r"bodyColor\s*:\s*'(?P<body>[^']+)'")
 
-
-def _parse_agents_from_html(html_path: Path) -> tuple["VirtualAgent", ...]:
-    """Parse agent definitions out of *html_path* and return a tuple of VirtualAgent."""
+def _parse_agents_from_seed_source(source_path: Path) -> tuple["VirtualAgent", ...]:
+    """Parse ``OFFICE_AGENT_SEEDS`` from the active browser runtime source."""
     try:
-        text = html_path.read_text(encoding="utf-8", errors="replace")
+        text = source_path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
-        log.warning("Cannot read %s: %s", html_path, exc)
+        log.warning("Cannot read Virtual Office agent seeds from %s: %s", source_path, exc)
+        return ()
+
+    block_match = _SEED_BLOCK_RE.search(text)
+    if block_match is None:
+        log.warning("OFFICE_AGENT_SEEDS was not found in %s", source_path)
         return ()
 
     agents: list[VirtualAgent] = []
-    for m in _AGENT_RE.finditer(text):
-        name = m.group("name")
-        role = m.group("role")
-        body_block = m.group("body")
-
-        body_m = _BODY_RE.search(body_block)
-        accent_m = _ACCENT_RE.search(body_block)
-
-        body_hex = body_m.group("body") if body_m else "#008B8B"
-        accent_hex = accent_m.group("accent") if accent_m else "#FFFFFF"
-
-        rich_color = _hex_to_rich_color(body_hex)
-        specialty = _role_to_specialty(role)
-
+    for object_match in _SEED_OBJECT_RE.finditer(block_match.group("body")):
+        fields = {
+            match.group("key"): match.group("value")
+            for match in _SEED_FIELD_RE.finditer(object_match.group("body"))
+        }
+        if not {"name", "color", "specialty"}.issubset(fields):
+            continue
+        name = fields["name"]
+        seed_color = fields["color"]
+        specialty = fields["specialty"]
         agents.append(
             VirtualAgent(
-                agent_id=name.lower(),  # use display name (lower-cased) as stable id
+                agent_id=name.lower(),
                 name=name,
-                role=role,
-                color=rich_color,
-                accent=accent_hex,
+                role=specialty,
+                color=_hex_to_rich_color(seed_color),
+                accent=seed_color,
                 specialty=specialty,
             )
         )
 
-    log.debug("Parsed %d agents from %s", len(agents), html_path)
+    log.debug("Parsed %d canonical agents from %s", len(agents), source_path)
     return tuple(agents)
 
 
-# ---------------------------------------------------------------------------
-# Default fallback roster (used when HTML is not found or yields no agents)
-# ---------------------------------------------------------------------------
-_DEFAULT_ROSTER: tuple[VirtualAgent, ...] = (
-    VirtualAgent("atlas", "Atlas", "Engineering Lead", "blue", "#2E5C8A", "Engineering"),
-    VirtualAgent("nova", "Nova", "Research Specialist", "purple", "#6C3A7D", "Research"),
-    VirtualAgent("spark", "Spark", "Creative Director", "yellow", "#CC7700", "Creative"),
-    VirtualAgent("cipher", "Cipher", "Ops Engineer", "green", "#2E7D4E", "Operations"),
-    VirtualAgent("echo", "Echo", "Support Lead", "cyan", "#008B8B", "Support"),
-    VirtualAgent("pixel", "Pixel", "Game Master", "red", "#CC3333", "Gaming"),
-)
-
-
 def get_roster() -> tuple[VirtualAgent, ...]:
-    """Return the current agent roster, reloading from HTML if the file has changed."""
-    global _cached_roster, _cached_mtime, _cached_path
+    """Return canonical agents, reloading when the active JS seed file changes."""
+    global _cached_roster, _cached_mtime_ns, _cached_path
 
-    html_path = _find_virtual_office_html()
-
-    if html_path is None:
-        if _cached_roster is None:
-            log.debug("virtual_office.html not found; using default roster")
-            _cached_roster = _DEFAULT_ROSTER
-        return _cached_roster
-
+    source_path = _canonical_agent_seed_path()
     try:
-        mtime = html_path.stat().st_mtime
-    except OSError:
-        return _cached_roster or _DEFAULT_ROSTER
+        mtime_ns = source_path.stat().st_mtime_ns
+    except OSError as exc:
+        if _cached_roster is not None:
+            log.warning("Keeping cached Virtual Office roster after source stat failed: %s", exc)
+            return _cached_roster
+        raise RuntimeError(f"Canonical Virtual Office agent seed source is unavailable: {source_path}") from exc
 
-    if _cached_roster is not None and _cached_path == html_path and _cached_mtime == mtime:
+    if _cached_roster is not None and _cached_path == source_path and _cached_mtime_ns == mtime_ns:
         return _cached_roster
 
-    parsed = _parse_agents_from_html(html_path)
+    parsed = _parse_agents_from_seed_source(source_path)
     if parsed:
         _cached_roster = parsed
-        _cached_mtime = mtime
-        _cached_path = html_path
+        _cached_mtime_ns = mtime_ns
+        _cached_path = source_path
     else:
-        log.warning("No agents parsed from %s; using default roster", html_path)
-        _cached_roster = _DEFAULT_ROSTER
+        if _cached_roster is not None:
+            log.warning("Keeping cached Virtual Office roster after seed parsing failed")
+            return _cached_roster
+        raise RuntimeError(f"No OFFICE_AGENT_SEEDS could be parsed from {source_path}")
 
     return _cached_roster
 
@@ -279,7 +216,7 @@ def list_active() -> dict[str, VirtualAgent]:
 
 
 def format_agent_label(agent: VirtualAgent, model: str = "") -> str:
-    """Return a short display label such as "ATLAS [codex]"."""
+    """Return a short display label such as ``BRANDON [codex]``."""
     name_part = agent.name.upper()
     model_part = f" [{model}]" if model else ""
     return f"{name_part}{model_part}"
@@ -289,17 +226,21 @@ def format_agent_label(agent: VirtualAgent, model: str = "") -> str:
 # Specialist map
 # ---------------------------------------------------------------------------
 SPECIALIST_AGENT_MAP: dict[str, str] = {
-    "engineering": "atlas",
-    "research": "nova",
-    "creative": "spark",
-    "ops": "cipher",
-    "support": "echo",
-    "gaming": "pixel",
-    "security": "cipher",
-    "data": "nova",
-    "design": "spark",
-    "qa": "echo",
-    "devops": "cipher",
+    "engineering": "brandon",
+    "research": "trey",
+    "creative": "pixel",
+    "ops": "nova",
+    "support": "john",
+    "gaming": "zach",
+    "security": "glitch",
+    "data": "byte",
+    "design": "matt",
+    "qa": "john",
+    "devops": "nova",
+    "planning": "taylor",
+    "documentation": "echo",
+    "integration": "orbit",
+    "debugging": "glitch",
 }
 
 

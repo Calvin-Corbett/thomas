@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .evolve_autonomy import DEFAULT_POSTURE
+from evolve_supervisor import DEFAULT_POSTURE
+
 from .evolve_planner import CATEGORIES, EvolveGoal
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ def read_control(project_root: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
+        logger.debug("evolve loop control file read failed (non-fatal): %s", path, exc_info=True)
         return {}
 
 
@@ -76,10 +78,11 @@ def write_control(project_root: Path, **flags: Any) -> Path:
 
 
 def clear_control(project_root: Path) -> None:
+    path = _control_path(project_root)
     try:
-        _control_path(project_root).unlink()
+        path.unlink()
     except OSError:
-        pass
+        logger.debug("evolve loop control file removal failed (non-fatal): %s", path, exc_info=True)
 
 
 def append_event(project_root: Path, event: dict[str, Any], sink: EventSink | None) -> None:
@@ -95,7 +98,7 @@ def append_event(project_root: Path, event: dict[str, Any], sink: EventSink | No
         try:
             sink(event)
         except Exception as exc:  # noqa: BLE001 - a bad sink must not kill the loop
-            logger.debug("evolve loop event sink raised (non-fatal): %s", exc)
+            logger.debug("evolve loop event sink raised (non-fatal): %s", exc, exc_info=True)
 
 
 # ---------------------------------------------------------------------------

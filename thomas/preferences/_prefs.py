@@ -146,6 +146,8 @@ class ProfilePrefs(BaseModel):
 class AdvancedModelPrefs(BaseModel):
     active_profile: str = ""  # persisted selected provider/profile
     model_id: str = ""  # persisted model override
+    role_profiles: dict[str, str] = Field(default_factory=dict)
+    role_model_ids: dict[str, str] = Field(default_factory=dict)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     frequency_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
@@ -161,6 +163,19 @@ class AdvancedModelPrefs(BaseModel):
     @classmethod
     def _trim_stop_sequences(cls, v: str) -> str:
         return str(v or "").strip()
+
+    @field_validator("role_profiles", "role_model_ids", mode="before")
+    @classmethod
+    def _normalize_role_map(cls, v: Any) -> dict[str, str]:
+        if not isinstance(v, dict):
+            return {}
+        normalized: dict[str, str] = {}
+        for key, value in v.items():
+            role = str(key or "").strip().lower().replace("-", "_").replace(" ", "_")
+            text = str(value or "").strip()
+            if role and text:
+                normalized[role] = text
+        return normalized
 
 
 class AdvancedToolsPrefs(BaseModel):
@@ -212,7 +227,7 @@ class AdvancedMemoryPrefs(BaseModel):
 class AdvancedCostPrefs(BaseModel):
     session_token_budget: int = Field(default=200000, ge=1000, le=5000000)
     daily_token_budget: int = Field(default=2000000, ge=10000, le=50000000)
-    throttle_on_budget: bool = True
+    throttle_on_budget: bool = False
     low_cost_mode: bool = False
     max_retries: int = Field(default=2, ge=0, le=20)
     retry_backoff_ms: int = Field(default=800, ge=0, le=120000)
@@ -279,6 +294,11 @@ class AdvancedSecurityPrefs(BaseModel):
     human_breakglass_enabled: bool = False
     human_breakglass_changed_at: str | None = None
     human_breakglass_changed_by: str | None = None
+    # Approval window: when enabled, a single (AI-prompted) Windows-Hello tap
+    # opens a time-boxed window during which protected actions don't re-prompt.
+    # Scoped to the breakglass auth gate only; user-adjustable here in Settings.
+    breakglass_window_enabled: bool = False
+    breakglass_window_hours: float = Field(default=3.0, ge=0.25, le=12.0)
     enforcement_mode: str = "development"
     last_changed_at: str | None = None
     last_changed_by: str | None = None

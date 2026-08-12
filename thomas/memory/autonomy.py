@@ -10,6 +10,7 @@ Telegram) so autonomy behavior stays consistent.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import time
@@ -21,7 +22,6 @@ from thomas.core.config import AppConfig
 log = logging.getLogger(__name__)
 
 _GLOBAL_RETRIEVAL_THREAD_ID = "__global__"
-_GLOBAL_EPISODE_FACT_SUBJECTS = frozenset({"user", "project"})
 
 
 @dataclass
@@ -61,12 +61,6 @@ class AutonomyMemoryEngine:
             )
         except (ValueError, TypeError):
             self._curator_min_interval_s = 180
-        try:
-            self._curator_max_episode_scan = max(
-                10, int(os.environ.get("THOMAS_MEMORY_CURATOR_MAX_EPISODE_SCAN", "120") or 120)
-            )
-        except (ValueError, TypeError):
-            self._curator_max_episode_scan = 120
         try:
             self._curator_max_library_scan = max(
                 10, int(os.environ.get("THOMAS_MEMORY_CURATOR_MAX_LIBRARY_SCAN", "40") or 40)
@@ -193,7 +187,6 @@ class AutonomyMemoryEngine:
                 curator_cfg = CuratorConfig(
                     enabled=True,
                     min_interval_seconds=self._curator_min_interval_s,
-                    max_episode_scan=self._curator_max_episode_scan,
                     max_library_scan=self._curator_max_library_scan,
                     max_promotions_per_run=self._curator_max_promotions,
                     approval_enabled=self._curator_approval_enabled,
@@ -206,9 +199,8 @@ class AutonomyMemoryEngine:
                     config=curator_cfg,
                 )
                 log.info(
-                    "Memory curator enabled (interval=%ss, episode_scan=%s, library_scan=%s).",
+                    "Memory curator enabled (interval=%ss, library_scan=%s).",
                     self._curator_min_interval_s,
-                    self._curator_max_episode_scan,
                     self._curator_max_library_scan,
                 )
             except (ImportError, RuntimeError, OSError) as e:
@@ -279,7 +271,6 @@ class AutonomyMemoryEngine:
                     role=role,
                     content=payload,
                     source=source,
-                    also_extract_profile=(role == "user"),
                 )
                 # ingest_episode may return either an int episode_id or a dict
                 # with shape `{"episode_id": int, ...}` depending on the
@@ -294,12 +285,6 @@ class AutonomyMemoryEngine:
                         v2_int = 0
                 if out_id <= 0:
                     out_id = v2_int
-                self.auto_promote_event_memory(
-                    thread_id,
-                    etype,
-                    payload,
-                    source_episode_id=v2_int,
-                )
             except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 add_event failed: %s", e)
 
@@ -307,66 +292,39 @@ class AutonomyMemoryEngine:
 
     def auto_promote_event_memory(
         self,
+        *,
         thread_id: str,
         etype: str,
         text: str,
-        *,
         source_episode_id: int | None = None,
-        ts_ms: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> bool:
+        """Persist an explicit structured ``user_fact`` event as global memory.
+
+        This compatibility seam is called only after the model-owned remember
+        tool has been selected. It deliberately does not interpret ordinary
+        conversation prose or derive semantic fields from text.
+        """
+
         self._require_started()
-        if self._fabric_v2 is None:
-            return {"promoted": 0, "duplicates": 0, "reason": "fabric_v2_unavailable"}
-        if self._event_role(etype) != "user":
-            return {"promoted": 0, "duplicates": 0, "reason": "role_not_user"}
-
+        if str(etype or "").strip().lower() != "user_fact":
+            return False
         payload = str(text or "").strip()
-        if not payload:
-            return {"promoted": 0, "duplicates": 0, "reason": "empty"}
-
+        if not payload or self._fabric_v2 is None:
+            return False
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
         try:
-            from thomas.memory.curator import extract_episode_facts
-        except Exception as e:
-            log.debug("Runtime fact promotion helper unavailable: %s", e)
-            return {"promoted": 0, "duplicates": 0, "reason": "extractor_unavailable"}
-
-        int(ts_ms or time.time() * 1000)
-        promoted = 0
-        duplicates = 0
-        for subject, predicate, obj, confidence in extract_episode_facts(payload):
-            normalized_subject = str(subject or "").strip().lower()
-            normalized_predicate = str(predicate or "").strip().lower()
-            normalized_obj = str(obj or "").strip()
-            if normalized_subject not in _GLOBAL_EPISODE_FACT_SUBJECTS:
-                continue
-            if not normalized_predicate or not normalized_obj:
-                continue
-            existing = self._fabric_v2.db.execute(
-                """
-                SELECT id FROM semantic_facts
-                WHERE subject=? AND predicate=? AND obj=? AND thread_id IS NULL
-                ORDER BY id DESC LIMIT 1
-                """,
-                (normalized_subject, normalized_predicate, normalized_obj),
-            ).fetchone()
-            if existing is not None:
-                duplicates += 1
-                continue
-            # fabric_v2.upsert_fact() does not accept `provenance_episode_id`
-            # or `ts_ms`; both are inferred internally (now_ms for ts, no
-            # provenance link recorded at this level). The promotion outcome
-            # is still tracked via the local duplicates counter above.
             self._fabric_v2.upsert_fact(
+                subject="user",
+                predicate=f"explicit_memory_{digest}",
+                obj=payload,
+                confidence=1.0,
                 thread_id=None,
-                subject=normalized_subject,
-                predicate=normalized_predicate,
-                obj=normalized_obj,
-                confidence=float(max(0.0, min(1.0, confidence))),
-                base_salience=1.15 if normalized_subject == "user" else 1.10,
+                base_salience=1.05,
             )
-            promoted += 1
-
-        return {"promoted": promoted, "duplicates": duplicates, "reason": "ok"}
+            return True
+        except (RuntimeError, OSError) as e:
+            log.warning("Memory Fabric v2 explicit fact write failed for %s: %s", thread_id, e)
+            return False
 
     def retrieve(
         self,
@@ -413,6 +371,19 @@ class AutonomyMemoryEngine:
                 log.warning("Legacy memory retrieval failed: %s", e)
 
         return _MemoryText(text="")
+
+    def interrupt_retrieval(self) -> bool:
+        """Interrupt an over-budget Memory Fabric query without waiting on its DB lock."""
+        fabric = self._fabric_v2
+        db = getattr(fabric, "db", None) if fabric is not None else None
+        interrupt = getattr(db, "interrupt", None)
+        if not callable(interrupt):
+            return False
+        try:
+            interrupt()
+            return True
+        except (RuntimeError, OSError):
+            return False
 
     def ingest_pending(self) -> dict[str, Any]:
         self._require_started()
@@ -800,6 +771,43 @@ class AutonomyMemoryEngine:
                 self._fabric_v2.pin_profile_hint(k, pinned=False)
             except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 unpin failed: %s", e)
+
+    def forget_pin(self, key: str) -> dict[str, Any]:
+        """Forget a pinned value instead of only hiding its pinned flag."""
+        self._require_started()
+        k = str(key or "").strip()
+        if not k:
+            return {"forgotten": False}
+        result: dict[str, Any] = {"forgotten": False}
+        if self._legacy is not None:
+            try:
+                self._legacy.unpin(k)
+            except (RuntimeError, OSError) as e:
+                log.warning("Legacy memory forget pin failed: %s", e)
+        if self._fabric_v2 is not None:
+            try:
+                forget_fn = getattr(self._fabric_v2, "forget_profile_hint", None)
+                if callable(forget_fn):
+                    result = dict(forget_fn(k))
+                else:
+                    self._fabric_v2.pin_profile_hint(k, pinned=False)
+            except (RuntimeError, OSError) as e:
+                log.warning("Memory Fabric v2 forget pin failed: %s", e)
+        return result
+
+    def forget_thread(self, thread_id: str) -> dict[str, Any]:
+        """Forget all retrievable v2 memory owned by one chat thread."""
+
+        self._require_started()
+        tid = str(thread_id or "").strip()
+        if not tid or self._fabric_v2 is None:
+            return {"forgotten": False}
+        try:
+            forget_fn = getattr(self._fabric_v2, "forget_thread", None)
+            return dict(forget_fn(tid)) if callable(forget_fn) else {"forgotten": False}
+        except (RuntimeError, OSError) as e:
+            log.warning("Memory Fabric v2 forget_thread failed: %s", e)
+            return {"forgotten": False, "error": type(e).__name__}
 
     def list_pins(self) -> list[tuple[str, str, int]]:
         self._require_started()

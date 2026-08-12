@@ -23,9 +23,9 @@ __all__ = [
 def is_supported_provider(provider: str) -> bool:
     """Check if the given provider string is supported.
 
-    Supported providers: openai, anthropic, codex, ollama, vllm, lm_studio, azure
+    Supported providers: openai, anthropic, openai_codex, ollama, vllm, lm_studio, azure
     """
-    supported = {"openai", "anthropic", "codex", "ollama", "vllm", "lm_studio", "azure"}
+    supported = {"openai", "anthropic", "openai_codex", "ollama", "vllm", "lm_studio", "azure"}
     return provider.lower() in supported
 
 
@@ -35,15 +35,12 @@ def get_provider_for_model(model_name: str) -> str:
     Examples:
         - gpt-4, gpt-3.5-turbo -> openai
         - claude-* -> anthropic
-        - codex-* -> codex
         - Others default to openai (compatible)
     """
     model_lower = (model_name or "").lower()
 
     if model_lower.startswith("claude"):
         return "anthropic"
-    elif model_lower.startswith("codex"):
-        return "codex"
     elif model_lower.startswith("gpt") or model_lower.startswith("dall-e"):
         return "openai"
     else:

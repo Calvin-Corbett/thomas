@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -420,6 +422,60 @@ def test_sync_live_index_resets_selected_paths_to_head(monkeypatch, tmp_path: Pa
     mod._sync_live_index(repo, ["src/app.py", "CHANGELOG.md"])
 
     assert calls == [["reset", "-q", "HEAD", "--", "src/app.py", "CHANGELOG.md"]]
+
+
+def test_create_commit_object_signs_when_repository_requires_it(monkeypatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_git(repo_root: Path, args: tuple[str, ...] | list[str], **kwargs):
+        calls.append(list(args))
+        if list(args) == ["config", "--get", "commit.gpgsign"]:
+            return subprocess.CompletedProcess(args, 0, "true\n", "")
+        return subprocess.CompletedProcess(args, 0, "signed-commit\n", "")
+
+    monkeypatch.setattr(mod, "_git_output", lambda *args, **kwargs: "tree-sha")
+    monkeypatch.setattr(mod, "_run_git", fake_run_git)
+
+    commit_sha = mod._create_commit_object(
+        tmp_path,
+        agent="codex",
+        index_path=tmp_path / "index",
+        parent_head="parent-sha",
+        message="feat: signed\n",
+    )
+
+    assert commit_sha == "signed-commit"
+    assert calls[-1] == ["commit-tree", "tree-sha", "-p", "parent-sha", "-S"]
+
+
+@pytest.mark.parametrize(("config_returncode", "config_stdout"), [(0, "false\n"), (1, "")])
+def test_create_commit_object_keeps_unsigned_fallback_without_signing_config(
+    monkeypatch,
+    tmp_path: Path,
+    config_returncode: int,
+    config_stdout: str,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_git(repo_root: Path, args: tuple[str, ...] | list[str], **kwargs):
+        calls.append(list(args))
+        if list(args) == ["config", "--get", "commit.gpgsign"]:
+            return subprocess.CompletedProcess(args, config_returncode, config_stdout, "")
+        return subprocess.CompletedProcess(args, 0, "unsigned-commit\n", "")
+
+    monkeypatch.setattr(mod, "_git_output", lambda *args, **kwargs: "tree-sha")
+    monkeypatch.setattr(mod, "_run_git", fake_run_git)
+
+    commit_sha = mod._create_commit_object(
+        tmp_path,
+        agent="codex",
+        index_path=tmp_path / "index",
+        parent_head="parent-sha",
+        message="feat: portable\n",
+    )
+
+    assert commit_sha == "unsigned-commit"
+    assert calls[-1] == ["commit-tree", "tree-sha", "-p", "parent-sha"]
 
 
 def test_agent_commit_run_json_emits_blocker_payload(monkeypatch, capsys) -> None:

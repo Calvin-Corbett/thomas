@@ -1,4 +1,4 @@
-"""Tool Specialist — executes domain tools from Thomas's 132 modules.
+"""Tool Specialist — executes tools from Thomas's registered domain modules.
 
 This specialist handles tasks that require invoking Thomas's domain
 tools (bioinformatics, CAD, telecom, blockchain, IoT, robotics,
@@ -13,16 +13,165 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Any
 
+import httpx
+
+from thomas.core.llm_shared import LLMError
 from thomas.marketplace.orchestrator.protocol import CapabilityToken, DelegationContract
 from thomas.marketplace.specialists.base import BaseSpecialist
 
 log = logging.getLogger(__name__)
 
+# What a provider call can realistically fail with. BaseSpecialist._call_llm logs
+# and re-raises whatever it got, and LLMClient.stream_chat deliberately lets
+# LLMError (rate limit / provider error) and raw httpx transport faults through
+# unwrapped -- so both have to be named here or a routine rate-limit would crash
+# the specialist stream instead of degrading to "no tool plan". The rest covers
+# parsing the model's plan. asyncio.CancelledError is a BaseException and was
+# never caught by the `except Exception` this replaces.
+_LLM_CALL_FAULTS = (
+    LLMError,
+    httpx.HTTPError,
+    OSError,
+    NotImplementedError,
+    LookupError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
+# Reading the tool registry: a registry that does not implement list_tools or
+# yields odd rows. The catalog is a prompt nicety -- never worth a crash.
+_REGISTRY_READ_FAULTS = (AttributeError, LookupError, RuntimeError, TypeError, ValueError)
+
+
+# Categories most useful for chat-driven actions get listed first so the
+# catalog stays within a local model's smaller context window when capped.
+_PRIORITY_CATEGORIES = ("filesystem", "fs", "shell", "git", "code", "diff", "eng", "system")
+_CATALOG_TOOL_CAP = 70
+
+# Tool-name fragments that mark an action as high-risk (irreversible / executes
+# arbitrary code / mutates external state). Withheld below Agent-level autonomy so
+# the autonomy setting actually gates tool access in the worker path.
+_HIGH_RISK_TOOL_HINTS = (
+    "shell",
+    "exec",
+    "run_command",
+    "subprocess",
+    "bash",
+    "powershell",
+    "delete",
+    "remove",
+    "rm_",
+    ".rm",
+    "destroy",
+    "drop",
+    "truncate",
+    "format",
+    "deploy",
+    "publish",
+    "push",
+    "force",
+    "write_file",
+    "fs.write",
+    "overwrite",
+    "chmod",
+    "kill",
+    "terminate",
+)
+
+
+def _is_high_risk_tool(name: str) -> bool:
+    low = str(name or "").lower()
+    return any(hint in low for hint in _HIGH_RISK_TOOL_HINTS)
+
+
+def _extract_tool_calls(plan: str) -> list[dict[str, Any]]:
+    """Parse a tool-call plan from a (possibly messy) local-model response.
+
+    Local models often wrap JSON in markdown fences or add a sentence of
+    preamble. Be tolerant: strip fences, then parse the first JSON array
+    (or a bare object) found in the text. Returns [] on any failure.
+    """
+    text = str(plan or "").strip()
+    if not text:
+        return []
+
+    # Strip ```json ... ``` / ``` ... ``` fences.
+    if "```" in text:
+        import re as _re
+
+        fence = _re.search(r"```(?:json)?\s*(.+?)```", text, _re.S | _re.I)
+        if fence:
+            text = fence.group(1).strip()
+
+    candidates: list[str] = []
+    start = text.find("[")
+    end = text.rfind("]")
+    if start != -1 and end > start:
+        candidates.append(text[start : end + 1])
+    obj_start = text.find("{")
+    obj_end = text.rfind("}")
+    if obj_start != -1 and obj_end > obj_start:
+        candidates.append(text[obj_start : obj_end + 1])
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        if isinstance(parsed, list):
+            calls = [c for c in parsed if isinstance(c, dict) and c.get("tool")]
+            if calls:
+                return calls
+    return []
+
 
 class ToolSpecialist(BaseSpecialist):
-    """Domain tool execution specialist for Thomas's 132 tool modules."""
+    """Domain tool execution specialist for Thomas's registered tool modules."""
+
+    def _build_tool_catalog(self) -> str:
+        """Render available tools as compact signatures the LLM can call.
+
+        Each line is ``name(required_args) — description``. Priority
+        categories (filesystem, shell, git, …) are listed first, then the
+        list is capped so the catalog fits a local model's context window.
+        """
+        if not (self.tools and hasattr(self.tools, "list_tools")):
+            return "(no tools registered)"
+        try:
+            tool_list = list(self.tools.list_tools())
+        except _REGISTRY_READ_FAULTS:
+            log.warning("Tool catalog unavailable; the model will be prompted without it", exc_info=True)
+            return "(tool catalog unavailable)"
+        if not tool_list:
+            return "(no tools registered)"
+
+        def _priority(tool: Any) -> int:
+            cat = str(getattr(tool, "category", "") or "").lower()
+            for idx, name in enumerate(_PRIORITY_CATEGORIES):
+                if name in cat:
+                    return idx
+            return len(_PRIORITY_CATEGORIES)
+
+        ordered = sorted(tool_list, key=lambda t: (_priority(t), str(getattr(t, "name", ""))))
+        lines: list[str] = []
+        for tool in ordered[:_CATALOG_TOOL_CAP]:
+            name = str(getattr(tool, "name", "") or "")
+            if not name:
+                continue
+            params = getattr(tool, "parameters", None) or {}
+            required = params.get("required", []) if isinstance(params, dict) else []
+            sig = ", ".join(str(r) for r in required)
+            desc = str(getattr(tool, "description", "") or "").strip().replace("\n", " ")
+            lines.append(f"- {name}({sig}) — {desc[:80]}")
+        if len(ordered) > _CATALOG_TOOL_CAP:
+            lines.append(f"... and {len(ordered) - _CATALOG_TOOL_CAP} more tools")
+        return "\n".join(lines)
 
     @property
     def specialist_id(self) -> str:
@@ -32,7 +181,7 @@ class ToolSpecialist(BaseSpecialist):
     def description(self) -> str:
         return (
             "Executes domain-specific tools: file operations, system info, "
-            "engineering analysis, data processing, and all 132 registered "
+            "engineering analysis, data processing, and registered domain "
             "tool modules."
         )
 
@@ -58,92 +207,30 @@ class ToolSpecialist(BaseSpecialist):
         conversation_context: list[dict[str, Any]],
         memory_context: str,
     ) -> AsyncIterator[dict[str, Any]]:
-        provider = str(getattr(getattr(self.llm, "config", None), "provider", "") or "").strip().lower()
-        if provider == "codex" and hasattr(self.llm, "stream_chat"):
-            direct_messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are Thomas's tool execution specialist. "
-                        "Use available tools when needed to complete the user's request. "
-                        "Return the final answer in plain text only."
-                    ),
-                }
-            ]
-            if memory_context:
-                direct_messages.append({"role": "system", "content": f"Context:\n{memory_context}"})
-            for msg in conversation_context:
-                if msg.get("role") == "system":
-                    continue
-                direct_messages.append(msg)
-            direct_messages.append({"role": "user", "content": prompt})
-
-            streamed_parts: list[str] = []
-            tool_results = 0
-            async for event in self.llm.stream_chat(
-                messages=direct_messages,
-                tools=[{"type": "function", "function": {"name": "codex_tools_enabled"}}],
-            ):
-                event_type = str(getattr(event, "type", "") or "")
-                data = getattr(event, "data", {}) or {}
-                if event_type == "token":
-                    token_text = str(data.get("text", "") or "")
-                    if token_text:
-                        streamed_parts.append(token_text)
-                        yield {"type": "text", "text": token_text}
-                elif event_type == "tool_call_start":
-                    yield {
-                        "type": "tool_start",
-                        "name": str(data.get("name", "") or "tool"),
-                        "id": str(data.get("id", "") or ""),
-                        "args": {},
-                    }
-                elif event_type == "tool_call_end":
-                    tool_results += 1
-                    yield {
-                        "type": "tool_result",
-                        "name": str(data.get("name", "") or "tool"),
-                        "id": str(data.get("id", "") or ""),
-                        "ok": True,
-                        "result": str(data.get("output", "") or ""),
-                        "ms": 0,
-                    }
-                elif event_type == "error":
-                    yield {"type": "error", "error": str(data.get("error") or "Tool execution failed")}
-                    return
-                elif event_type == "done":
-                    break
-
-            response = "".join(streamed_parts).strip()
-            if not response:
-                yield {"type": "error", "error": "Tool specialist returned an empty response"}
-                return
-
-            yield {"type": "done", "content": response, "iterations": 1, "tool_calls": tool_results}
-            return
-
         yield {
             "type": "thinking",
             "text": "Determining which tools to use...",
             "phase": "tool_selection",
         }
 
-        # Ask LLM what tools to call
-        available_tools = "general tools"
-        if self.tools and hasattr(self.tools, "list_tools"):
-            try:
-                tool_list = self.tools.list_tools()
-                if tool_list:
-                    available_tools = ", ".join(t[:30] for t in tool_list[:50])
-            except Exception:
-                pass
+        # Ask LLM what tools to call. Local models have no built-in tool
+        # executor, so they must emit a JSON tool plan. That only
+        # works if the prompt gives them the real tool names AND argument
+        # schemas — previously this passed "general tools" (a swallowed
+        # ``t[:30]`` TypeError on Tool objects), so local models never knew
+        # ``fs.write_file`` existed and fell back to describing shell commands.
+        available_tools = self._build_tool_catalog()
 
         system = (
-            "You are Thomas's tool execution specialist. Determine which tools "
-            "to call for the user's request. Respond with a JSON array of tool "
-            "calls, each with 'tool' and 'args' keys. If no tools are needed, "
-            "respond with an empty array [].\n\n"
-            f"Available tools: {available_tools}\n\n"
+            "You are Thomas's tool execution specialist. Decide which tools to "
+            "call to fulfil the user's request, then respond with ONLY a JSON "
+            "array — no prose, no markdown fences. Each element is an object "
+            'with "tool" (exact tool name) and "args" (object matching that '
+            "tool's parameters). If no tool is needed, respond with [].\n\n"
+            "Example: to create a file you would respond exactly:\n"
+            '[{"tool": "fs.write_file", "args": {"path": "notes.txt", '
+            '"content": "hello"}}]\n\n'
+            f"Available tools (name(required_args) — description):\n{available_tools}\n\n"
         )
         if memory_context:
             system += f"Context:\n{memory_context}\n\n"
@@ -153,16 +240,54 @@ class ToolSpecialist(BaseSpecialist):
 
         try:
             plan = await self._call_llm(messages, max_tokens=1_000)
-            tool_calls = json.loads(plan) if plan.strip().startswith("[") else []
-        except (json.JSONDecodeError, Exception):
+            tool_calls = _extract_tool_calls(plan)
+        except _LLM_CALL_FAULTS as exc:
+            log.warning("Tool plan generation/parse failed: %s", exc, exc_info=True)
             tool_calls = []
+
+        # The issued token's allowed_tools holds the specialist's *capability
+        # categories* ("filesystem", "shell", …), not concrete tool names, so
+        # token.permits_tool("fs.write_file") would wrongly deny every real
+        # call. Scope an execution token to the actually-registered tool names
+        # (the registry is the security boundary — only sandboxed-safe tools
+        # are registered), preserving autonomy/session/expiry.
+        #
+        # Autonomy gating: the token carries autonomy_level — CONSULT it. Below
+        # Agent level (3) the user has not granted hands-off execution, so exclude
+        # high-risk tools (shell/exec, destructive filesystem, deploy/push). Without
+        # this the per-task autonomy setting was nullified (a low-autonomy task could
+        # still run shell + fs-write). See thomas/core/autonomy.
+        exec_token = token
+        try:
+            registered = {str(getattr(t, "name", "") or "") for t in self.tools.list_tools() if getattr(t, "name", "")}
+            if registered:
+                autonomy_level = int(getattr(token, "autonomy_level", 0) or 0)
+                if autonomy_level >= 3:
+                    allowed = registered
+                else:
+                    allowed = {n for n in registered if not _is_high_risk_tool(n)}
+                    gated = registered - allowed
+                    if gated:
+                        yield {
+                            "type": "thinking",
+                            "text": f"Autonomy level {autonomy_level}: withholding {len(gated)} high-risk tools (shell/destructive/deploy).",
+                            "phase": "tool_selection",
+                        }
+                exec_token = replace(token, allowed_tools=allowed)
+        # Reading the registry, coercing token.autonomy_level, and rebuilding the
+        # token dataclass. Falling back to the unscoped token is deliberate and
+        # safe: the registry is still the security boundary, and only
+        # sandbox-safe tools are ever registered.
+        except _REGISTRY_READ_FAULTS:
+            log.warning("Could not scope the execution token; using the issued token", exc_info=True)
+            exec_token = token
 
         results = []
         for tc in tool_calls[:5]:  # max 5 tools per turn
             tool_name = tc.get("tool", "")
             tool_args = tc.get("args", {})
 
-            async for event in self._run_tool(tool_name, tool_args, token):
+            async for event in self._run_tool(tool_name, tool_args, exec_token):
                 yield event
                 if event.get("type") == "tool_result":
                     results.append(event)

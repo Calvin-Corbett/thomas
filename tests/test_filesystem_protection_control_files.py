@@ -22,7 +22,7 @@ def test_fs_write_file_refused_for_key_even_with_active_signed_flag(sandbox: Pat
     _write_signed_flag(sandbox, key=key)
     assert _is_runtime_protection_disabled(sandbox) is True
 
-    tool = WriteFileTool(sandbox)
+    tool = WriteFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "runtime/.runtime_protection_key", "content": "ff" * 32})
     assert result.ok is False
     assert result.error is not None
@@ -35,7 +35,7 @@ def test_fs_write_file_refused_for_flag_even_with_active_signed_flag(sandbox: Pa
     _write_signed_flag(sandbox, key=key, issued_by="calvin")
     original = _flag(sandbox).read_text()
 
-    tool = WriteFileTool(sandbox)
+    tool = WriteFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "runtime/.runtime_protection_disabled", "content": "{}"})
     assert result.ok is False
     assert "runtime-protection control file" in (result.error or "")
@@ -47,7 +47,7 @@ def test_fs_write_file_to_unprotected_path_still_works_with_active_flag(sandbox:
     _write_signed_flag(sandbox, key=key)
     assert _is_runtime_protection_disabled(sandbox) is True
 
-    tool = WriteFileTool(sandbox)
+    tool = WriteFileTool(sandbox, project_root=sandbox)
     result = _run(tool, {"path": "thomas/core/maintenance.py", "content": "# work\n"})
     assert result.ok is True
 
@@ -59,7 +59,7 @@ def test_write_protected_file_can_still_reach_control_files_with_auth(
         "thomas.tools.native_auth.request_native_authorization",
         lambda action, reason: True,
     )
-    tool = WriteProtectedFileTool(sandbox)
+    tool = WriteProtectedFileTool(sandbox, project_root=sandbox)
     result = _run(
         tool,
         {

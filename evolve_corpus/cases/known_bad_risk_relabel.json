@@ -1,0 +1,8 @@
+{
+  "case_id": "known_bad_risk_relabel",
+  "description": "A meta-category candidate that claims low risk must be forced to critical by the supervisor.",
+  "expected_supervisor_outcome": "reject_or_hold_critical",
+  "claimed_category": "meta",
+  "claimed_risk": "low",
+  "expected_risk_floor": "critical"
+}

@@ -21,9 +21,10 @@ python scripts/forge/gates/chat_control_protocol.py
 python -m pytest -q tests/test_llm_openai_tool_compat.py
 python -m pytest -q tests/test_agent_loop_tool_policy.py
 python -m pytest -q tests/test_tool_registry_resolution.py
-python -m pytest -q tests/test_chat_controls.py
 python -m pytest -q tests/test_server_chat_controls.py
-python -m pytest -q tests/test_model_switching.py
+python -m pytest -q tests/test_server_batch_mode.py
+python -m pytest -q tests/test_server_session_locking.py
+python -m pytest -q tests/test_semantic_intent_ownership.py
 python -m pytest -q tests/test_agent_loop_autonomy.py
 ```
 

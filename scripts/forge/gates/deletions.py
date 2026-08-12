@@ -161,8 +161,19 @@ def run(argv: list[str] | None = None) -> int:
     protected = [p for p in affected if any(p.startswith(prefix) for prefix in PROTECTED_PREFIXES)]
     approved_paths, record_errors = _load_deletion_records(repo_root / "docs" / "deletions")
 
+    # The owner retired deletion records on 2026-08-12: "we don't need to be
+    # tracking deletions -- just delete the shit if it's not meant to be on
+    # GitHub because it's internal dev work." Everything in this repo is his own
+    # test material, and a separate docs/deletions/ folder of JSON paperwork was
+    # ceremony around removing it.
+    #
+    # The guard still RUNS and still REPORTS every protected deletion, because
+    # "what did this change remove" is worth seeing. It just no longer blocks:
+    # the record now lives in the commit message and the diff, which are in git
+    # and are what a reviewer actually reads. Record errors still fail, so a
+    # malformed record cannot pass silently if anyone reintroduces the folder.
     violations = [p for p in protected if p not in approved_paths]
-    ok = not violations and not record_errors
+    ok = not record_errors
 
     payload: dict[str, Any] = {
         "ok": ok,
@@ -178,14 +189,19 @@ def run(argv: list[str] | None = None) -> int:
     else:
         if ok:
             print("Deletion guard: PASS")
-            print(f"- protected deletions/renames requiring records: {len(protected)}")
+            if protected:
+                print(f"- {len(protected)} protected path(s) deleted or renamed by this change:")
+                for path in protected[:25]:
+                    print(f"    {path}")
+                if len(protected) > 25:
+                    print(f"    ... and {len(protected) - 25} more")
+                print("- reported, not blocked. The commit message and diff are the record.")
+            else:
+                print("- no protected deletions or renames.")
         else:
             print("Deletion guard: FAIL")
             for err in record_errors:
                 print(f"- record error: {err}")
-            for path in violations:
-                print(f"- missing deletion record for protected path: {path}")
-            print("- required: docs/deletions/*.json with `approved_by_human: true` and `files` entries")
 
     return 0 if ok else 1
 

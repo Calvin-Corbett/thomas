@@ -8,7 +8,12 @@ function initModuleWorkspace() {
     }
 
     const itemActionHandler = async (event) => {
-        const target = event.target instanceof Element ? event.target.closest('.module-item-btn[data-module-action-id]') : null;
+        // Secondary marketplace actions (Uninstall, Download ZIP) render as
+        // .marketplace-secondary-btn; the category chip carries its own
+        // data-module-marketplace-filter handler and stays excluded here.
+        const target = event.target instanceof Element
+            ? event.target.closest('.module-item-btn[data-module-action-id], .marketplace-secondary-btn[data-module-action-id]:not([data-module-marketplace-filter])')
+            : null;
         if (!target) return;
         const mode = MODULE_NAV_MODE_SET.has(target.dataset.moduleMode) ? target.dataset.moduleMode : (state.activeMode || 'dashboard');
         const section = safeString(target.dataset.moduleSection).toLowerCase() || 'queue';
@@ -233,6 +238,27 @@ function initModuleWorkspace() {
             const fileInput = moduleQueueList.querySelector('input[data-marketplace-import-input]');
             if (fileInput instanceof HTMLInputElement) {
                 fileInput.click();
+            }
+        });
+        moduleQueueList.addEventListener('click', async (event) => {
+            const urlButton = event.target instanceof Element ? event.target.closest('[data-marketplace-import-url][data-module-mode]') : null;
+            if (!urlButton) return;
+            const raw = window.prompt('Paste a plugin ZIP URL (GitHub links work - use the repo’s "Download ZIP" or release asset URL). Community plugins install unverified with their tool servers switched off.');
+            const url = safeString(raw).trim();
+            if (!url) return;
+            urlButton.disabled = true;
+            try {
+                const result = await moduleImportMarketplacePlugin({ url });
+                if (!result?.ok) {
+                    throw new Error(safeString(result?.error) || 'Unable to install from that URL.');
+                }
+                await moduleRefreshMarketplace({ force: true });
+                moduleRender('marketplace', { touch: false });
+                notifyUser('Plugin installed from URL.', { tone: 'success', durationMs: 1800, debugKind: 'marketplace-import' });
+            } catch (error) {
+                notifyUser(safeString(error?.message) || 'Unable to install from that URL.', { tone: 'error', durationMs: 2600, debugKind: 'marketplace-import' });
+            } finally {
+                urlButton.disabled = false;
             }
         });
         moduleQueueList.addEventListener('change', async (event) => {
@@ -918,6 +944,13 @@ function officeCollectRuntimeSnapshot(now = performance.now()) {
                     color: safeString(agent?.color),
                     costume: safeString(agent?.costume || 'none').toLowerCase(),
                     tint: safeString(agent?.tint || officeAgentTintFromColor(agent?.color)).toLowerCase(),
+                    specialty: safeString(agent?.specialty || 'Generalist').slice(0, 64),
+                    personality: safeString(agent?.personality || 'Helpful, direct, and persistent.').slice(0, 160),
+                    source: safeString(agent?.source || 'seed'),
+                    remoteIds: agent?.remoteIds && typeof agent.remoteIds === 'object' ? { ...agent.remoteIds } : {},
+                    remoteRoomId: safeString(agent?.remoteRoomId),
+                    remoteStatus: safeString(agent?.remoteStatus),
+                    lastMissionSummary: safeString(agent?.lastMissionSummary).slice(0, 180),
                     x: Number(agent?.x) || 0,
                     y: Number(agent?.y) || 0,
                     targetX: Number(agent?.targetX) || 0,
@@ -1013,6 +1046,13 @@ function officeApplyRuntimeSnapshot(snapshotRaw, now = performance.now()) {
             agent.costume = costume;
         }
         agent.tint = safeString(saved?.tint).toLowerCase() || officeAgentTintFromColor(agent.color);
+        agent.specialty = safeString(saved?.specialty || agent.specialty || 'Generalist').slice(0, 64);
+        agent.personality = safeString(saved?.personality || agent.personality || 'Helpful, direct, and persistent.').slice(0, 160);
+        agent.source = safeString(saved?.source || agent.source || 'seed');
+        agent.remoteIds = saved?.remoteIds && typeof saved.remoteIds === 'object' ? { ...saved.remoteIds } : (agent.remoteIds || {});
+        agent.remoteRoomId = safeString(saved?.remoteRoomId || agent.remoteRoomId);
+        agent.remoteStatus = safeString(saved?.remoteStatus || agent.remoteStatus);
+        agent.lastMissionSummary = safeString(saved?.lastMissionSummary || agent.lastMissionSummary).slice(0, 180);
         agent.speed = officeClamp(Number(saved?.speed) || agent.speed, 1.3, 5.2);
         agent.facing = Number(saved?.facing) >= 0 ? 1 : -1;
         agent.laneBias = officeClamp(Number(saved?.laneBias) || 0, -1, 1);
@@ -1169,7 +1209,7 @@ function officeApplyStoredAgentPrefs(agents, prefsRaw) {
             agent.color = color;
         }
         const costume = safeString(saved.costume).toLowerCase();
-        if (new Set(['none', 'cap', 'visor', 'headset', 'bowtie']).has(costume)) {
+        if (new Set(OFFICE_AGENT_COSTUME_POOL || ['none', 'cap', 'visor', 'headset', 'bowtie']).has(costume)) {
             agent.costume = costume;
         }
         const tint = safeString(saved.tint).toLowerCase();
@@ -1177,6 +1217,19 @@ function officeApplyStoredAgentPrefs(agents, prefsRaw) {
             agent.tint = tint;
         } else {
             agent.tint = officeAgentTintFromColor(agent.color);
+        }
+        agent.specialty = safeString(saved.specialty || agent.specialty || 'Generalist').slice(0, 64);
+        agent.personality = safeString(saved.personality || agent.personality || 'Helpful, direct, and persistent.').slice(0, 160);
+        agent.chatProfile = safeString(saved.chatProfile || agent.chatProfile).slice(0, 80);
+        agent.chatModelId = safeString(saved.chatModelId || agent.chatModelId).slice(0, 120);
+        if (Array.isArray(saved.officeChatHistory)) {
+            agent.officeChatHistory = saved.officeChatHistory.slice(-18).map((entry) => ({
+                role: safeString(entry?.role || 'agent').slice(0, 16),
+                text: safeString(entry?.text).replace(/\s+/g, ' ').trim().slice(0, 600),
+                at: Number(entry?.at) || Date.now(),
+                timeLabel: safeString(entry?.timeLabel).slice(0, 24)
+                    || new Date(Number(entry?.at) || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+            })).filter((entry) => entry.text);
         }
     });
 }

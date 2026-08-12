@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_INDEX_PATH = ROOT / "thomas" / "server" / "web" / "index.html"
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+COMPOSER_CONTROLS_PATH = ROOT / "thomas" / "server" / "web" / "js" / "composer_controls.js"
+COMPANION_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "companion_runtime.js"
+RETIRED_PRIMARY_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+CHAT_HTML_PATH = ROOT / "thomas" / "server" / "web" / "chat.html"
 
 
 def _read(path: Path) -> str:
@@ -44,15 +49,117 @@ def test_evolve_runtime_stays_in_chat_and_posts_followups() -> None:
     assert "const EVOLVE_TERMINAL_JOB_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'dead']);" in text
 
 
-def test_chat_runtime_defaults_to_v2_and_renders_delegation_activity() -> None:
+def test_chat_runtime_uses_only_v2_and_renders_delegation_activity() -> None:
     text = _read_all_runtime_js()
-    assert "const chatEndpoint = window.__THOMAS_CHAT_V2__ === false ? '/api/chat' : '/api/v2/chat';" in text
+    assert "const chatEndpoint = '/api/v2/chat';" in text
+    assert "window.__THOMAS_CHAT_V2__" not in text
+    assert "'/api/chat'" not in text
     assert "function createDelegationBadge(specialistId, task) {" in text
     assert "function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {" in text
     assert "function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs) {" in text
     assert "} else if (evt.type === 'delegation') {" in text
     assert "} else if (evt.type === 'agent_activity') {" in text
     assert "} else if (evt.type === 'memory_refresh') {" in text
+
+
+def test_chatgpt_connection_reply_opens_profile_scoped_easy_setup_recovery() -> None:
+    text = _read(RUNTIME_DIR / "013_actions_interactions_02.js")
+
+    assert "function shouldPromptChatGPTConnectionRecovery(assistantText = '', payload = {}) {" in text
+    assert "if (!isChatGPTConnectionProfile(payload?.profile || payload?.model)) return false;" in text
+    assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in text
+    assert "if (!normalized || normalized.length > 500) return false;" in text
+    assert "if (shouldPromptChatGPTConnectionRecovery(assistantFinalText, payload)) {" in text
+    assert "await promptChatGPTConnectionRecovery(payload);" in text
+    assert "source: 'chatgpt_connection_recovery'" in text
+    assert "handleEasySetupPathSelect('codex');" in text
+    assert "Your ChatGPT or Codex app sign-in is separate from Thomas." in text
+
+
+def test_companion_chat_uses_the_canonical_v2_endpoint() -> None:
+    text = _read(COMPANION_RUNTIME_PATH)
+    assert 'fetch("/api/v2/chat", {' in text
+    assert 'fetch("/api/chat", {' not in text
+
+
+def test_retired_primary_runtime_bundle_stays_deleted() -> None:
+    # app_runtime_primary.mjs was a 2.3 MB near-copy of js/runtime/ that no
+    # page loaded. Every contract test that consulted it was measuring a dead
+    # bundle; it is deleted and must not be resurrected as a parallel truth.
+    assert not RETIRED_PRIMARY_RUNTIME_PATH.exists()
+
+
+def test_chat_shell_defaults_to_a_usable_profile_case_insensitively() -> None:
+    text = _read(CHAT_HTML_PATH)
+    assert "String(prefs.active_profile || d.default || '').trim().toLowerCase()" in text
+    assert "String(p.name || '').trim().toLowerCase() === active" in text
+    assert "profilesData.find(usable) || profilesData[0]" in text
+    assert "profilesData.find(p => !!p.has_api_key) || pick || profilesData[0]" not in text
+
+
+def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
+    # The prompt module moved verbatim to js/chat_connect_prompt.js (a factory
+    # that receives page state); chat.html keeps the wiring and the call site.
+    text = _read(CHAT_HTML_PATH)
+    module = _read(CHAT_HTML_PATH.parent / "js" / "chat_connect_prompt.js")
+
+    assert '<script src="/static/js/chat_connect_prompt.js' in text
+    # The factory gained getShell on 2026-08-12. It is not cosmetic: the module
+    # was extracted from chat.html with a bare `shell` global that does not exist
+    # outside the page IIFE, so appendChild threw ReferenceError and the reconnect
+    # overlay had NEVER rendered. The container now arrives through the factory,
+    # so this pins all three arguments -- a future extraction that drops getShell
+    # would silently reinstate the same dead prompt.
+    assert (
+        "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile, "
+        "getProfiles: () => profilesData, getShell: () => shell })"
+    ) in text
+    assert "await maybePromptChatGPTConnection(acc);" in text
+
+    assert "function shouldPromptChatGPTConnection(assistantText) {" in module
+    assert "if (!isChatGPTOAuthProfile(opts.getProfile())) return false;" in module
+    assert "/^(?:the )?chatgpt(?: oauth| model)? (?:is not|isn't) connected\\b/i" in module
+    assert "status.needs_login === true && status.logged_in !== true" in module
+    assert "overlay.id = 'tc-chatgpt-connect-prompt';" in module
+    assert "Connect ChatGPT to Thomas" in module
+    assert "Your ChatGPT or Codex app sign-in is separate from Thomas's local connection." in module
+    assert "fetch('/api/openai-codex/login', {" in module
+    assert "body: JSON.stringify({ profile: opts.getProfile() || 'openai_codex', timeout_s: 300 })" in module
+
+
+def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> None:
+    text = _read(CHAT_HTML_PATH)
+
+    assert "async function hydrateProfileModels() {" in text
+    assert "fetch('/api/openai-codex/models?profile=' + encodeURIComponent(p.name))" in text
+    assert "body: JSON.stringify({ advanced: { model: { active_profile: profileName, model_id: modelId } } })" in text
+    # Red since the picker rows became two lines. This required the literal
+    # `' · unavailable on this connection'` -- a leading middle dot, from when the
+    # status was an inline suffix after the model name. The rows now render the
+    # status in its own display:block span under the name (verified on screen:
+    # "GPT-5.6 Terra" over "openai_codex", "gpt-4o-mini" over "needs key"), so the
+    # separator was correctly dropped and the literal became unreachable. Nothing
+    # regressed; the test just could not pass again, and a permanently-red test is
+    # how a real regression gets ignored.
+    #
+    # Now pinned to the behaviour -- an unavailable model says so, in its own
+    # status slot -- rather than to one spelling of the surrounding punctuation.
+    assert re.search(r"m\.available === false\s*\?\s*'unavailable on this connection'", text), (
+        "an unavailable model must still say so in the picker"
+    )
+    assert "${status}" in text, "the status must reach the row it describes"
+    assert "['none', 'None']" in text
+    assert "['xhigh', 'xHigh']" in text
+    assert "['max', 'Max']" in text
+
+
+def test_root_chat_canvas_hint_requires_visual_object_and_action() -> None:
+    text = _read(CHAT_HTML_PATH)
+
+    assert "function detectVisualIntent(text)" in text
+    assert "playable (browser )?game|interactive (chart|graph|dashboard|site|app|visual)" in text
+    assert "return visual.test(lc) && (action.test(lc) || leading.test(lc));" in text
+    assert "_pendingCanvasIntent = !!detectVisualIntent(text);" in text
 
 
 def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> None:
@@ -64,11 +171,26 @@ def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> Non
 def test_chat_runtime_scopes_model_state_to_active_profile_and_skips_inactive_saved_profiles() -> None:
     text = _read_all_runtime_js()
     assert "function resolveStoredModelSelection(profileName = '', { allowLocalBackup = false } = {}) {" in text
-    assert "const targetProfile = (savedProfileMeta && savedProfileMeta.active)" in text
+    assert (
+        "const savedProfileReady = savedProfileMeta && (savedProfileMeta.has_api_key || savedProfileMeta.active);"
+        in text
+    )
+    assert "const targetProfile = savedProfileReady" in text
     assert "applyProfileSelection(targetProfile, { allowLocalBackup: !hasPersistedProfile });" in text
     assert "const model = (activeProfile === safeString(profileName) ? safeString(activeModelOverride) : '')" in text
-    assert "model_id: resolveActiveModelIdForProfile(profile) || undefined," in text
+    assert "model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined," in text
     assert "activeModelOverride = savedModelId ||" not in text
+
+
+def test_chat_runtime_persists_easy_setup_and_specialty_model_preferences() -> None:
+    text = _read_all_runtime_js()
+    assert "function resolveEasySetupSelectedProfile() {" in text
+    assert "active_profile: selectedProfile," in text
+    assert "model_id: selectedModelId," in text
+    assert "role_profiles: specialtyPatch.role_profiles," in text
+    assert "role_model_ids: specialtyPatch.role_model_ids," in text
+    assert "function resolveSpecialtyModelSelection(roleRaw = '', fallbackProfileRaw = '') {" in text
+    assert "model_id: safeString(specialty?.modelId) || resolveActiveModelIdForProfile(profile) || undefined," in text
 
 
 def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profiles_to_setup() -> None:
@@ -88,7 +210,7 @@ def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profile
         "provider === 'local' || provider === 'ollama' || profileKey === 'local' || profileKey.includes('ollama')"
         in text
     )
-    assert "ChatGPT / Codex selected. Run connection test." in text
+    assert "ChatGPT (OpenAI) selected. Run connection test." in text
     assert "Ready now" not in text
     assert "Needs connection" not in text
     assert (
@@ -98,7 +220,7 @@ def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profile
 
 
 def test_chat_runtime_uses_profile_aware_composer_subbar_and_payload_helper() -> None:
-    text = _read_all_runtime_js()
+    text = _read_all_runtime_js() + "\n" + _read(COMPOSER_CONTROLS_PATH)
     assert "initChatComposerSubbar();" in text
     assert "function ensureChatComposerSubbar() {" in text
     assert (
@@ -148,7 +270,7 @@ def test_chat_runtime_renders_hover_timestamps_and_inline_edit_panel() -> None:
     )
 
 
-def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -> None:
+def test_chat_runtime_uses_structured_office_delegation_bridge() -> None:
     text = _read_all_runtime_js()
     assert "const CHAT_THINKING_UI_ENABLED = false;" in text
     assert "function robotAmbientStatusText(channel = 'thinking') {" in text
@@ -162,25 +284,21 @@ def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -
     assert "chat-robot-thinking-toggle" not in create_robot_block
     assert "chat-robot-thinking-details" not in create_robot_block
     assert "function _syncDelegationWorkerVisual(evt, status, taskText) {" in text
-    assert "officeQueueTask(taskText, {" in text
-    assert (
-        "const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';"
-        in text
-    )
-    assert "source: `chat-delegation:${previewSessionId}:${activityId}`," in text
-    assert "const previewScoped = Boolean(officeWorkspace?.classList.contains('chat-preview-active'));" in text
-    assert "officeState.tasks.filter((task) => officeTaskMatchesChatPreview(task))" in text
-    assert "officeBeginTeleportSequence(agent, performance.now());" in text
+    sync_start = text.index("function _syncDelegationWorkerVisual(evt, status, taskText) {")
+    sync_end = text.index("function _delegationActivityId(evt) {", sync_start)
+    sync_block = text[sync_start:sync_end]
+    assert "officeSyncStructuredDelegationTask(evt, status, taskText);" in sync_block
+    assert "officeBeginTeleportSequence(" not in sync_block
+    assert "_syncDelegationWorkerVisual(evt, status, taskText);" in text
 
 
 def test_chat_css_supports_footer_actions_settings_scroll_and_new_robot_idles() -> None:
-    bubble_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-game-animations.css")
-    settings_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "settings-panel.css")
-    robot_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-robot-animations.css")
+    bubble_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "chat-game-animations.css")
+    settings_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "settings-panel.css")
+    robot_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "chat-robot-animations.css")
     office_layout_css = _read_many(
         [
-            ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-workspace.css",
-            ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-responsive.css",
+            ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-workspace.css",
         ]
     )
     assert ".message-footer {" in bubble_css

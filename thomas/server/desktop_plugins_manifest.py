@@ -26,9 +26,13 @@ _PLUGIN_STORE_IDENTITY_RELATIVE_PATH = Path(".thomas") / "plugin_store_identity.
 # clear-text-storage finding on the identity file is therefore a false positive
 # for this constant. Real keys come from the environment and are never written here.
 _DEFAULT_PLUGIN_STORE_API_KEY = "local-dev-install-key"  # noqa: S105 - non-secret local-dev placeholder
-_MARKETPLACE_TYPES = {"command_center", "plugin", "dependency", "integration"}
+_MARKETPLACE_TYPES = {"app", "plugin", "dependency", "integration"}
+# "command_center" was renamed to "app" (2026-06-11). Old manifests and
+# installed registries keep working: legacy values normalize on read.
+_LEGACY_MARKETPLACE_TYPE_ALIASES = {"command_center": "app"}
 _LEFT_NAV_BEHAVIORS = {"none", "workspace"}
-_DEFAULT_NAV_SECTIONS = {"command_centers", "installed"}
+_DEFAULT_NAV_SECTIONS = {"apps", "installed"}
+_LEGACY_NAV_SECTION_ALIASES = {"command_centers": "apps"}
 
 
 def _utc_now_iso() -> str:
@@ -82,10 +86,11 @@ def _infer_marketplace_type(
     surface_entry_html: str,
 ) -> str:
     explicit = _safe_text(data.get("marketplace_type")).lower()
+    explicit = _LEGACY_MARKETPLACE_TYPE_ALIASES.get(explicit, explicit)
     if explicit in _MARKETPLACE_TYPES:
         return explicit
     if kind == "desktop_plugin" and mode_id and surface_entry_html:
-        return "command_center"
+        return "app"
     return "plugin"
 
 
@@ -93,15 +98,16 @@ def _infer_left_nav_behavior(data: dict[str, Any], marketplace_type: str) -> str
     explicit = _safe_text(data.get("left_nav_behavior")).lower()
     if explicit in _LEFT_NAV_BEHAVIORS:
         return explicit
-    return "workspace" if marketplace_type == "command_center" else "none"
+    return "workspace" if marketplace_type == "app" else "none"
 
 
 def _infer_default_nav_section(data: dict[str, Any], marketplace_type: str, left_nav_behavior: str) -> str:
     explicit = _safe_text(data.get("default_nav_section")).lower()
+    explicit = _LEGACY_NAV_SECTION_ALIASES.get(explicit, explicit)
     if explicit in _DEFAULT_NAV_SECTIONS:
         return explicit
-    if marketplace_type == "command_center" or left_nav_behavior == "workspace":
-        return "command_centers"
+    if marketplace_type == "app" or left_nav_behavior == "workspace":
+        return "apps"
     return "installed"
 
 
@@ -250,7 +256,7 @@ def load_desktop_plugin_manifest_from_data(
     marketplace_type = _infer_marketplace_type(data, kind=kind, mode_id=mode_id, surface_entry_html=surface_entry_html)
     left_nav_behavior = _infer_left_nav_behavior(data, marketplace_type)
     default_nav_section = _infer_default_nav_section(data, marketplace_type, left_nav_behavior)
-    default_nav_order = _safe_int(data.get("default_nav_order"), 400 if marketplace_type == "command_center" else 900)
+    default_nav_order = _safe_int(data.get("default_nav_order"), 400 if marketplace_type == "app" else 900)
     tags = _normalize_tags(
         data, categories=categories, marketplace_type=marketplace_type, left_nav_behavior=left_nav_behavior
     )

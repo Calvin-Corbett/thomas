@@ -2,12 +2,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
 from thomas.server.app_keys import APP_APPROVALS_BROKER
+from thomas.server.routes.mission_support import _latest_run_event
 
 
 def _parse_ndjson(blob: str):
@@ -18,6 +20,27 @@ def _parse_ndjson(blob: str):
             continue
         out.append(json.loads(line))
     return out
+
+
+class TestLatestRunEventCache(unittest.TestCase):
+    def test_terminal_runs_are_cached_while_active_runs_stay_live(self):
+        class FakeRunStore:
+            def __init__(self):
+                self.calls = 0
+
+            def stream_replay(self, run_id):
+                self.calls += 1
+                yield {"run_id": run_id, "seq": self.calls}
+
+        store = FakeRunStore()
+        first = _latest_run_event(store, "finished-run", terminal=True)
+        second = _latest_run_event(store, "finished-run", terminal=True)
+        self.assertEqual(first, second)
+        self.assertEqual(store.calls, 1)
+
+        _latest_run_event(store, "active-run", terminal=False)
+        _latest_run_event(store, "active-run", terminal=False)
+        self.assertEqual(store.calls, 3)
 
 
 class TestServerMissionControl(AioHTTPTestCase):
@@ -262,7 +285,7 @@ class TestServerMissionControl(AioHTTPTestCase):
         self.assertTrue(terminal_statuses)
         self.assertTrue(terminal_statuses.issubset({"cancelled", "canceled", "failed", "succeeded", "dead"}))
 
-    async def test_chat_prompt_auto_starts_autopilot_objective(self):
+    async def test_chat_prompt_does_not_auto_start_autopilot_objective(self):
         session_resp = await self.client.post("/api/session/new")
         self.assertEqual(session_resp.status, 200)
         session_id = str((await session_resp.json()).get("session_id") or "")
@@ -285,11 +308,9 @@ class TestServerMissionControl(AioHTTPTestCase):
         self.assertEqual(list_resp.status, 200)
         list_payload = await list_resp.json()
         self.assertIs(list_payload.get("ok"), True)
-        self.assertNotIn("unavailable", list_payload)
         rows = list_payload.get("objectives") or []
-        self.assertGreaterEqual(len(rows), 1)
         goals = [str(row.get("goal") or "").lower() for row in rows]
-        self.assertTrue(any("24/7" in goal or "continuously" in goal for goal in goals))
+        self.assertFalse(any("24/7" in goal or "continuously" in goal for goal in goals))
 
     async def test_mission_approval_actions_404_when_unavailable(self):
         autonomy = await self.client.post(
@@ -502,9 +523,31 @@ class TestServerMissionControl(AioHTTPTestCase):
         text = await resp.text()
         self.assertIn("<title>Thomas Mission Control</title>", text)
         self.assertIn("Mission Control", text)
-        self.assertIn('id="missions-list"', text)
-        self.assertIn('id="approvals-list"', text)
-        self.assertIn('id="agents-grid"', text)
+        self.assertIn('id="missionApp"', text)
+        self.assertIn('id="jobsList"', text)
+        self.assertIn('id="approvalsList"', text)
+        self.assertIn('id="agentsList"', text)
+        self.assertIn('/static/mission.style01.css', text)
+        self.assertIn('/static/mission.script01.js', text)
+
+    async def test_mission_control_snapshot_cache_coalesces_and_fresh_bypasses(self):
+        with patch(
+            "thomas.server.routes.mission_control_routes._utc_iso_now",
+            side_effect=("first-build", "forced-build"),
+        ):
+            first_resp = await self.client.get("/api/mission/control")
+            second_resp = await self.client.get("/api/mission/control")
+            fresh_resp = await self.client.get("/api/mission/control?fresh=1")
+
+        self.assertEqual(first_resp.status, 200)
+        self.assertEqual(second_resp.status, 200)
+        self.assertEqual(fresh_resp.status, 200)
+        first = await first_resp.json()
+        second = await second_resp.json()
+        fresh = await fresh_resp.json()
+        self.assertEqual(first.get("generated_at"), "first-build")
+        self.assertEqual(second.get("generated_at"), "first-build")
+        self.assertEqual(fresh.get("generated_at"), "forced-build")
 
     async def test_mission_stream_returns_snapshot_payload(self):
         resp = await self.client.get("/api/mission/stream?max_updates=1&interval=0.01")

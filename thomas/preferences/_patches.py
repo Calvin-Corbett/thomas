@@ -167,6 +167,8 @@ class ProfilePatch(BaseModel):
 class AdvancedModelPatch(BaseModel):
     active_profile: str | None = None
     model_id: str | None = None
+    role_profiles: dict[str, str | None] | None = None
+    role_model_ids: dict[str, str | None] | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     frequency_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
@@ -177,6 +179,25 @@ class AdvancedModelPatch(BaseModel):
     json_mode: bool | None = None
     deterministic_seed: int | None = Field(default=None, ge=0, le=2147483647)
     stop_sequences: str | None = None
+
+    @field_validator("role_profiles", "role_model_ids", mode="before")
+    @classmethod
+    def _normalize_role_map(cls, v: Any) -> dict[str, str | None] | None:
+        if v is None:
+            return None
+        if not isinstance(v, dict):
+            return None
+        normalized: dict[str, str | None] = {}
+        for key, value in v.items():
+            role = str(key or "").strip().lower().replace("-", "_").replace(" ", "_")
+            if not role:
+                continue
+            if value is None:
+                normalized[role] = None
+                continue
+            text = str(value or "").strip()
+            normalized[role] = text if text else None
+        return normalized
 
 
 class AdvancedToolsPatch(BaseModel):

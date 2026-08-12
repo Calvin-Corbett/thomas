@@ -1,0 +1,13 @@
+{
+  "files": {
+    "README.md": "74458a75517eb9d4dbc300e109bbbdb2f776beef12a99ae651edd07a1522d873",
+    "cases/known_bad_candidate_corpus_tamper.json": "1fac6e06b89163bfd5e3a5aaced4767e438a7a80b7b4db2dba6c4f667707db12",
+    "cases/known_bad_empty_verification.json": "abad53e2cda63d211f1e6f5e5fa0006a3a7223e86e7753829002a09ced2c517a",
+    "cases/known_bad_exam_suppression.json": "66680cccc192d90637d709711c5bb00a146f5c34d7a004157ef8f042106fe3d1",
+    "cases/known_bad_meta_autonomous_human_hold.json": "71da27c2254b576d1542dbac0133bd4a4ce1f8956817e49c66b46054cafffa11",
+    "cases/known_bad_print_only_repair.json": "b1322b0f20dfbb3e2c375b771bce3f0da0d0e42e1d3fccf38492319eb6dd21ec",
+    "cases/known_bad_risk_relabel.json": "103122aaacd0f03e9ef242057681ba3b65379ac6b9f527f0c1c5e79501060f56",
+    "cases/known_good_minimal_session.json": "5db526611f7a91608d4a44423a70e32d50d0868dd204b5968a37b8d9bd95e9f5"
+  },
+  "version": 1
+}

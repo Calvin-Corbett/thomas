@@ -11,13 +11,18 @@ to disk. Installation/distribution decisions are left to the caller.
 Deterministic errors are provided for reliable automation.
 """
 
+import hashlib
 import json
 import keyword
 import re
+import shutil
+import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from thomas.plugins.p098_plugin_manifest_schema import PluginManifestSchemaError, validate_plugin_manifest
 
 # -----------------------------
 # Deterministic errors
@@ -75,8 +80,16 @@ class PluginBootstrapRequest:
     skill_intents: Sequence[str] = field(default_factory=tuple)
     skill_tools: Sequence[str] = field(default_factory=tuple)
     skill_examples: Sequence[str] = field(default_factory=tuple)
+    assistant_instructions: str = ""
+    conversation_starters: Sequence[str] = field(default_factory=tuple)
+    knowledge_files: Sequence[Path] = field(default_factory=tuple)
+    allowed_tools: Sequence[str] = field(default_factory=tuple)
+    allowed_apps: Sequence[str] = field(default_factory=tuple)
+    allowed_apis: Sequence[str] = field(default_factory=tuple)
     plugin_version: str = "0.1.0"
     create_manifest: bool = True
+    create_share_bundle: bool = False
+    share_bundle_path: Path | None = None
     validate: bool = True
     install_after_bootstrap: bool = False
     install_root: Path | None = None
@@ -95,6 +108,9 @@ class PluginBootstrapResult:
     installed_path: str | None = None
     installation_result_path: str | None = None
     install_root: str | None = None
+    share_bundle_file: str | None = None
+    share_bundle_sha256: str | None = None
+    knowledge_files: list[str] = field(default_factory=list)
     validation_ok: bool = True
     validation_errors: list[str] = field(default_factory=list)
     files_created: list[str] = field(default_factory=list)
@@ -112,6 +128,9 @@ class PluginBootstrapResult:
             "installed_path": self.installed_path,
             "installation_result_path": self.installation_result_path,
             "install_root": self.install_root,
+            "share_bundle_file": self.share_bundle_file,
+            "share_bundle_sha256": self.share_bundle_sha256,
+            "knowledge_files": self.knowledge_files,
             "validation_ok": self.validation_ok,
             "validation_errors": self.validation_errors,
             "files_created": self.files_created,
@@ -127,6 +146,9 @@ class PluginBootstrapResult:
 _PKG_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _WHITESPACE_RE = re.compile(r"\s+")
 _TOML_ESCAPE_RE = re.compile(r"[\r\n\t\"]")
+_PERMISSION_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
+_MAX_KNOWLEDGE_FILE_BYTES = 2 * 1024 * 1024
+_MAX_KNOWLEDGE_TOTAL_BYTES = 10 * 1024 * 1024
 
 
 def _normalize_plugin_name(name: str) -> str:
@@ -202,6 +224,82 @@ def _normalize_sequence(items: Sequence[str] | str | None) -> list[str]:
     return cleaned
 
 
+def _normalize_permissions(items: Sequence[str] | str | None, *, field_name: str) -> list[str]:
+    values = _normalize_sequence(items)
+    normalized: list[str] = []
+    for value in values:
+        if not _PERMISSION_RE.fullmatch(value) or value.lower() in {"all", "any", "root", "system"}:
+            raise InvalidInputError(
+                f"{field_name} contains an invalid or unrestricted permission.",
+                details={"field": field_name, "value": value},
+            )
+        if value not in normalized:
+            normalized.append(value)
+    return normalized
+
+
+def _copy_knowledge_files(
+    sources: Sequence[Path],
+    *,
+    package_dir: Path,
+    overwrite: bool,
+) -> tuple[list[str], list[str]]:
+    if not sources:
+        return [], []
+
+    knowledge_dir = package_dir / "knowledge"
+    knowledge_dir.mkdir(parents=True, exist_ok=True)
+    relative_paths: list[str] = []
+    created: list[str] = []
+    seen_names: set[str] = set()
+    total_bytes = 0
+    for raw_source in sources:
+        source = Path(raw_source).expanduser()
+        try:
+            if source.is_symlink():
+                raise InvalidInputError(
+                    "Knowledge files must not be symbolic links.",
+                    details={"path": str(source)},
+                )
+            resolved = source.resolve(strict=True)
+        except InvalidInputError:
+            raise
+        except (OSError, RuntimeError) as exc:
+            raise InvalidInputError(
+                "Knowledge file does not exist or cannot be resolved.",
+                details={"path": str(source), "reason": type(exc).__name__},
+            ) from exc
+        if not resolved.is_file():
+            raise InvalidInputError("Knowledge attachment must be a file.", details={"path": str(resolved)})
+        size = resolved.stat().st_size
+        total_bytes += size
+        if size > _MAX_KNOWLEDGE_FILE_BYTES or total_bytes > _MAX_KNOWLEDGE_TOTAL_BYTES:
+            raise InvalidInputError(
+                "Knowledge attachment exceeds the safe package size limit.",
+                details={"path": str(resolved), "size_bytes": size, "total_bytes": total_bytes},
+            )
+        name = resolved.name
+        if name in seen_names:
+            raise InvalidInputError("Knowledge attachment names must be unique.", details={"name": name})
+        seen_names.add(name)
+        destination = knowledge_dir / name
+        if destination.exists() and not overwrite:
+            raise AlreadyExistsError(
+                "Knowledge attachment already exists in the package.",
+                details={"path": str(destination)},
+            )
+        try:
+            shutil.copyfile(resolved, destination)
+        except OSError as exc:
+            raise ExternalFailureError(
+                "Unable to copy knowledge attachment.",
+                details={"source": str(resolved), "destination": str(destination), "reason": type(exc).__name__},
+            ) from exc
+        relative_paths.append(f"knowledge/{name}")
+        created.append(str(destination))
+    return relative_paths, created
+
+
 def _resolve_skill_root(destination: Path, explicit_root: Path | None) -> Path:
     if explicit_root is not None:
         return explicit_root
@@ -255,25 +353,82 @@ def _build_skill_md(
     )
 
 
-def _build_plugin_code(name: str, description: str, version: str) -> str:
+def _build_plugin_code(
+    name: str,
+    description: str,
+    version: str,
+    *,
+    instructions: str,
+    conversation_starters: Sequence[str],
+    knowledge_files: Sequence[str],
+    allowed_tools: Sequence[str],
+    allowed_apps: Sequence[str],
+    allowed_apis: Sequence[str],
+) -> str:
     return (
         "from __future__ import annotations\n\n"
         f'"""{_py_escape(description)}"""\n\n'
         "from dataclasses import dataclass\n"
+        "from pathlib import Path\n"
         "from typing import Any\n\n"
         "@dataclass\n"
         "class Plugin:\n"
-        '    """Small plugin shim with deterministic registration entrypoints."""\n\n'
+        '    """Assistant-backed plugin with explicit knowledge and authority."""\n\n'
+        f"    plugin_id: str = {name!r}\n"
         f'    name: str = "{_py_escape(name)}"\n'
         f'    version: str = "{_py_escape(version)}"\n'
-        f'    description: str = "{_py_escape(description)}"\n\n'
+        f'    description: str = "{_py_escape(description)}"\n'
+        f"    instructions: str = {instructions!r}\n"
+        f"    conversation_starters: tuple[str, ...] = {tuple(conversation_starters)!r}\n"
+        f"    knowledge_files: tuple[str, ...] = {tuple(knowledge_files)!r}\n"
+        f"    allowed_tools: tuple[str, ...] = {tuple(allowed_tools)!r}\n"
+        f"    allowed_apps: tuple[str, ...] = {tuple(allowed_apps)!r}\n"
+        f"    allowed_apis: tuple[str, ...] = {tuple(allowed_apis)!r}\n\n"
+        "    def _knowledge_matches(self, query: str) -> list[dict[str, str]]:\n"
+        "        package_root = Path(__file__).resolve().parent\n"
+        "        needle = str(query or '').strip().lower()\n"
+        "        if not needle:\n"
+        "            return []\n"
+        "        matches: list[dict[str, str]] = []\n"
+        "        for relative in self.knowledge_files:\n"
+        "            candidate = (package_root / relative).resolve()\n"
+        "            try:\n"
+        "                candidate.relative_to(package_root)\n"
+        "            except ValueError:\n"
+        "                continue\n"
+        "            if not candidate.is_file() or candidate.is_symlink():\n"
+        "                continue\n"
+        "            text = candidate.read_text(encoding='utf-8', errors='replace')[:262144]\n"
+        "            position = text.lower().find(needle)\n"
+        "            if position >= 0:\n"
+        "                start = max(0, position - 80)\n"
+        "                end = min(len(text), position + len(needle) + 160)\n"
+        "                matches.append({'file': relative, 'excerpt': text[start:end]})\n"
+        "        return matches\n\n"
+        "    def use(self, prompt: str, *, tool_name: str = '', knowledge_query: str = '') -> dict[str, Any]:\n"
+        "        requested_tool = str(tool_name or '').strip()\n"
+        "        if requested_tool and requested_tool not in self.allowed_tools:\n"
+        "            raise PermissionError(f\"Tool '{requested_tool}' is not allowed for this assistant.\")\n"
+        "        return {\n"
+        "            'plugin_id': self.plugin_id,\n"
+        "            'instructions': self.instructions,\n"
+        "            'prompt': str(prompt),\n"
+        "            'tool': requested_tool,\n"
+        "            'knowledge': self._knowledge_matches(knowledge_query),\n"
+        "        }\n\n"
         "    def register(self, registry: Any) -> None:\n"
         '        """Register plugin capabilities with a Thomas registry."""\n'
         "        _ = registry\n"
         "        return\n\n"
         "def register(registry: Any) -> None:\n"
         '    """Compatibility entrypoint for module-style plugin loading."""\n'
-        "    Plugin().register(registry)\n"
+        "    Plugin().register(registry)\n\n"
+        "def get_plugin() -> Plugin:\n"
+        '    """Runtime entrypoint used by Thomas installed-plugin loading."""\n'
+        "    return Plugin()\n\n"
+        "def create_plugin() -> Plugin:\n"
+        '    """Compatibility alias for plugin runtimes using create_plugin."""\n'
+        "    return get_plugin()\n"
     )
 
 
@@ -283,8 +438,24 @@ def _build_plugin_manifest(
     version: str,
     description: str,
     author: str,
+    instructions: str,
+    conversation_starters: Sequence[str],
+    knowledge_files: Sequence[str],
+    allowed_tools: Sequence[str],
+    allowed_apps: Sequence[str],
+    allowed_apis: Sequence[str],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    module_entrypoint = f"{plugin_name}.plugin:register"
+    module_entrypoint = f"{plugin_name}.plugin:get_plugin"
+    assistant = {
+        "instructions": instructions,
+        "conversation_starters": list(conversation_starters),
+        "knowledge_files": list(knowledge_files),
+    }
+    permissions = {
+        "tools": list(allowed_tools),
+        "apps": list(allowed_apps),
+        "apis": list(allowed_apis),
+    }
 
     simple_manifest = {
         "name": plugin_name,
@@ -292,20 +463,15 @@ def _build_plugin_manifest(
         "description": description,
         "entrypoint": module_entrypoint,
         "runtime": "python",
-        "capabilities": [],
+        "capabilities": ["custom_assistant"],
+        "assistant": assistant,
+        "permissions": permissions,
     }
     if author:
         simple_manifest["author"] = author
 
     rich_manifest = {
         "schema_version": "v1",
-        "id": plugin_name,
-        "name": plugin_name,
-        "description": description,
-        "version": version,
-        "displayName": plugin_name,
-        "entrypoint": module_entrypoint,
-        "capabilities": [],
         "plugin": {
             "id": plugin_name,
             "name": plugin_name,
@@ -317,10 +483,43 @@ def _build_plugin_manifest(
             "entrypoint": module_entrypoint,
         },
         "tools": [],
+        "assistant": assistant,
+        "permissions": permissions,
     }
     if author:
-        rich_manifest["author"] = author
+        rich_manifest["plugin"]["author"] = author
     return simple_manifest, rich_manifest
+
+
+def _create_share_bundle(package_dir: Path, output_path: Path, *, overwrite: bool) -> str:
+    if output_path.exists() and not overwrite:
+        raise AlreadyExistsError("Share bundle already exists.", details={"path": str(output_path)})
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for source in sorted(package_dir.rglob("*")):
+                if source.is_symlink():
+                    raise InvalidInputError(
+                        "Plugin share bundles must not contain symbolic links.", details={"path": str(source)}
+                    )
+                if not source.is_file():
+                    continue
+                relative = source.relative_to(package_dir)
+                if "__pycache__" in relative.parts or source.suffix.lower() in {".pyc", ".pyo"}:
+                    continue
+                archive.write(source, arcname=str(Path(package_dir.name) / relative).replace("\\", "/"))
+    except PluginBootstrapError:
+        if output_path.exists():
+            output_path.unlink()
+        raise
+    except (OSError, zipfile.BadZipFile) as exc:
+        if output_path.exists():
+            output_path.unlink()
+        raise ExternalFailureError(
+            "Unable to create plugin share bundle.",
+            details={"path": str(output_path), "reason": type(exc).__name__},
+        ) from exc
+    return hashlib.sha256(output_path.read_bytes()).hexdigest()
 
 
 def _to_json(value: Any) -> str:
@@ -380,10 +579,40 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
     installed_path: str | None = None
     installation_manifest_path: str | None = None
     install_root: str | None = None
+    share_bundle_file: str | None = None
+    share_bundle_sha256: str | None = None
 
-    init_py = 'from __future__ import annotations\n\nfrom .plugin import Plugin\n\n__all__ = ["Plugin"]\n'
+    instructions = str(req.assistant_instructions or req.description).strip()
+    if not instructions:
+        raise InvalidInputError("assistant_instructions or description is required.")
+    conversation_starters = _normalize_sequence(req.conversation_starters)
+    allowed_tools = _normalize_permissions(req.allowed_tools, field_name="allowed_tools")
+    allowed_apps = _normalize_permissions(req.allowed_apps, field_name="allowed_apps")
+    allowed_apis = _normalize_permissions(req.allowed_apis, field_name="allowed_apis")
+    knowledge_files, knowledge_created = _copy_knowledge_files(
+        req.knowledge_files,
+        package_dir=package_dir,
+        overwrite=req.overwrite,
+    )
+    files_created.extend(knowledge_created)
 
-    plugin_py = _build_plugin_code(name, req.description, req.plugin_version)
+    init_py = (
+        "from __future__ import annotations\n\n"
+        "from .plugin import Plugin, create_plugin, get_plugin\n\n"
+        '__all__ = ["Plugin", "create_plugin", "get_plugin"]\n'
+    )
+
+    plugin_py = _build_plugin_code(
+        name,
+        req.description,
+        req.plugin_version,
+        instructions=instructions,
+        conversation_starters=conversation_starters,
+        knowledge_files=knowledge_files,
+        allowed_tools=allowed_tools,
+        allowed_apps=allowed_apps,
+        allowed_apis=allowed_apis,
+    )
 
     skill_intents = _normalize_sequence(req.skill_intents)
     skill_tools = _normalize_sequence(req.skill_tools)
@@ -474,6 +703,12 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
                 version=req.plugin_version,
                 description=req.description,
                 author=(req.author or "").strip(),
+                instructions=instructions,
+                conversation_starters=conversation_starters,
+                knowledge_files=knowledge_files,
+                allowed_tools=allowed_tools,
+                allowed_apps=allowed_apps,
+                allowed_apis=allowed_apis,
             )
             plugin_manifest = package_dir / "plugin.json"
             if _write_file(plugin_manifest, _to_json(simple_manifest), overwrite=req.overwrite):
@@ -512,11 +747,22 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
             try:
                 if path.name.endswith(".json") and path.exists():
                     _validate_json_file(path)
+                    if path.name == "manifest.json":
+                        validate_plugin_manifest(json.loads(path.read_text(encoding="utf-8")))
                 elif path.suffix == ".py":
                     _validate_python_source(path)
             except PluginBootstrapError as exc:
                 validation_ok = False
                 validation_errors.append(f"{path.name}: {exc.message}")
+            except PluginManifestSchemaError as exc:
+                validation_ok = False
+                message = str(getattr(exc, "message", "") or str(exc) or type(exc).__name__)
+                validation_errors.append(f"{path.name}: {message}")
+
+    if req.create_share_bundle:
+        bundle_path = req.share_bundle_path or (dest / f"{name}-{req.plugin_version}.thomas-plugin.zip")
+        share_bundle_sha256 = _create_share_bundle(package_dir, bundle_path, overwrite=req.overwrite)
+        share_bundle_file = str(bundle_path.resolve())
 
     if req.install_after_bootstrap and req.validate and not validation_ok:
         raise InstallFailedError(
@@ -581,6 +827,9 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
         installed_path=installed_path,
         installation_result_path=installation_manifest_path,
         install_root=install_root,
+        share_bundle_file=share_bundle_file,
+        share_bundle_sha256=share_bundle_sha256,
+        knowledge_files=knowledge_files,
         validation_ok=validation_ok,
         validation_errors=validation_errors,
         skill_file=str(skill_file) if skill_file else None,

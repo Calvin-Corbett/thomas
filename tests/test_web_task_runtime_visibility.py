@@ -2,9 +2,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
-TASK_CSS = ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "tool-calls-chat.css"
-MISSION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-workspace.css"
-SIDEBAR_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-app-shell.css"
+TASK_CSS = ROOT / "thomas" / "server" / "web" / "css" / "component_styles" / "tool-calls-chat.css"
+MISSION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-workspace.css"
+SIDEBAR_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_styles" / "layout-app-shell.css"
 MOTION_PROOF_SCRIPT = ROOT / "scripts" / "capture_chat_motion_proof.mjs"
 
 
@@ -80,12 +80,11 @@ def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
     assert "physicsNeedsSnap" in js
     assert "${officePixelAgentMarkup()}" in js
     assert ".task-continuity-panel {" in task_css
-    assert ".chat-robot-world {" in task_css
-    assert ".chat-robot-world-physics {" in task_css
+    assert ".chat-robot-world," in task_css
+    assert ".chat-robot-world-physics," in task_css
+    assert "display: none !important;" in task_css
     assert ".assistant-inline-thinking-status {" in task_css
-    assert ".chat-robot-world-route.route-door {" in task_css
-    assert ".chat-robot-world-route.route-ladder {" in task_css
-    assert ".chat-robot-world-route.route-lift" in task_css
+    assert ".chat-robot-world-route," in task_css
     assert ".mission-runtime-panel.is-focused {" in mission_css
     assert ".nav-item::before {" in sidebar_css
     assert "display: none;" in sidebar_css

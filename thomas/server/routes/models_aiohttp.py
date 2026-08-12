@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import sqlite3
 from collections.abc import Callable
 from typing import Any
 
@@ -16,6 +18,8 @@ from thomas.models.discovery import discover_models_async, handshake_models_asyn
 from thomas.models.protocol import validate_model_profile_async
 from thomas.server.app_keys import APP_CONFIG, APP_RUNTIME_GUARD_STATE, APP_SECRETS
 from thomas.server.secrets import SecretStore
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ModelCfgFn = Callable[[str], Any]
@@ -164,6 +168,32 @@ def _resolve_default_model(cfg: AppConfig) -> tuple[str, str]:
     return fallback, ""
 
 
+def _model_preferences_payload() -> dict[str, Any]:
+    try:
+        from thomas.preferences.store import PreferencesStore, get_db_path
+
+        prefs = PreferencesStore(get_db_path()).get(user_id="default")
+        model_prefs = getattr(getattr(prefs, "advanced", None), "model", None)
+        return {
+            "active_profile": str(getattr(model_prefs, "active_profile", "") or "").strip(),
+            "model_id": str(getattr(model_prefs, "model_id", "") or "").strip(),
+            "role_profiles": dict(getattr(model_prefs, "role_profiles", {}) or {}),
+            "role_model_ids": dict(getattr(model_prefs, "role_model_ids", {}) or {}),
+        }
+    # The preferences store is sqlite behind an optional import: ImportError if the
+    # module is absent, OSError/sqlite3.Error for the file and the query, and
+    # TypeError/ValueError/AttributeError for a row that is not shaped like the
+    # model prefs. Defaults are a legitimate answer, but say why they were used.
+    except (ImportError, OSError, sqlite3.Error, TypeError, ValueError, AttributeError):
+        log.warning("Model preferences unavailable; reporting defaults", exc_info=True)
+        return {
+            "active_profile": "",
+            "model_id": "",
+            "role_profiles": {},
+            "role_model_ids": {},
+        }
+
+
 def register_models_routes(
     app: web.Application,
     *,
@@ -179,11 +209,26 @@ def register_models_routes(
 
         profiles = []
         for name, m in cfg.models.items():
-            has_key = m.provider == "codex" or bool(secrets.get(name) or m.api_key)
+            provider_name = str(m.provider or "").strip().lower().replace("-", "_")
+            if provider_name == "openai_codex":
+                try:
+                    from thomas.server.openai_codex_oauth import has_openai_codex_token
+
+                    has_key = bool(m.api_key or has_openai_codex_token(secrets, name))
+                # Reading a stored OAuth token: ImportError if the OAuth module is
+                # absent, OSError for the secret file, ValueError/TypeError/KeyError
+                # for a token blob that will not parse. Fall back to the plain key.
+                except (ImportError, OSError, ValueError, TypeError, KeyError):
+                    log.debug("openai_codex token probe failed for profile %s", name, exc_info=True)
+                    has_key = bool(m.api_key)
+            else:
+                has_key = bool(secrets.get(name) or m.api_key)
             profile_info: dict[str, Any] = {
                 "name": name,
                 "provider": m.provider,
-                "base_url": "codex://app-server" if m.provider == "codex" else m.base_url,
+                "base_url": (
+                    "https://chatgpt.com/backend-api/codex" if provider_name == "openai_codex" else m.base_url
+                ),
                 "model": m.model,
                 "context_window": m.context_window,
                 "max_tokens": m.max_tokens,
@@ -193,7 +238,11 @@ def register_models_routes(
             if m.reasoning_effort:
                 profile_info["reasoning_effort"] = m.reasoning_effort
             profiles.append(profile_info)
-        payload: dict[str, Any] = {"default": resolved_default or cfg.default_model, "profiles": profiles}
+        payload: dict[str, Any] = {
+            "default": resolved_default or cfg.default_model,
+            "profiles": profiles,
+            "preferences": _model_preferences_payload(),
+        }
         if str(request.query.get("catalog", "")).strip().lower() in {"1", "true", "yes"}:
             from thomas.models.catalog import get_model_catalog_async
 
@@ -265,15 +314,28 @@ def register_models_routes(
 
         try:
             handshake_timeout_s = float(request.query.get("timeout", "3.0"))
-        except Exception:
+        except (TypeError, ValueError):  # a query string that is not a number -> use the default
             handshake_timeout_s = 3.0
         try:
             tool_timeout_s = float(request.query.get("tool_timeout", "20.0"))
-        except Exception:
+        except (TypeError, ValueError):
             tool_timeout_s = 20.0
 
+        profile_cfg = model_cfg_with_secrets(profile)
+
+        # Self-heal the most common local failure before declaring it: an
+        # installed-but-not-running Ollama. The setup wizard's "Connect and
+        # Test" lands here — start the backend so the test can pass instead
+        # of telling the user to go start it themselves.
+        from thomas.core.ollama_autostart import maybe_autostart_ollama
+
+        if maybe_autostart_ollama(getattr(profile_cfg, "base_url", None)):
+            import asyncio as _asyncio
+
+            await _asyncio.sleep(2.5)  # give the backend a moment to bind
+
         report = await validate_model_profile_async(
-            model_cfg_with_secrets(profile),
+            profile_cfg,
             handshake_timeout_s=max(0.5, min(30.0, handshake_timeout_s)),
             tool_timeout_s=max(2.0, min(120.0, tool_timeout_s)),
             run_tool_smoke=run_tool_smoke,

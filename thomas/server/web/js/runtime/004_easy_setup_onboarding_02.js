@@ -275,6 +275,9 @@ function chatPhysicsWorldActorDebugRow(activityId) {
 
 function chatWorldSyncRootVisibility() {
     const root = chatWorldEnsureUi();
+    if (!(root instanceof HTMLElement)) {
+        return;
+    }
     const hasHelpers = chatAgentPresenceStateByActivityId.size > 0;
     const show = chatRobotWorldShouldBeVisible() && (Boolean(chatPrimaryPresenceState?.element) || hasHelpers);
     root.classList.toggle('is-hidden', !show);
@@ -415,13 +418,16 @@ function chatRobotWorldApplyPalette(state) {
     state.element.style.setProperty('--agent-glow', palette.glow);
     const agentEl = state.element.querySelector('.office-pixel-agent, .chat-robot-agent');
     if (!(agentEl instanceof HTMLElement)) return;
+    agentEl.style.setProperty('--agent-primary', palette.primary);
+    agentEl.style.setProperty('--agent-secondary', palette.secondary);
+    agentEl.style.setProperty('--agent-glow', palette.glow);
     agentEl.classList.toggle('facing-left', Number(state.facing || 1) < 0);
     CHAT_ROBOT_ANIMATIONS.forEach((anim) => agentEl.classList.remove(`chat-robot-anim-${anim}`));
     const behavior = safeString(state.behaviorClass).replace(/^chat-robot-anim-/, '');
     if (behavior) {
         agentEl.classList.add(`chat-robot-anim-${behavior}`);
     }
-    agentEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
+    agentEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie', 'costume-toolbelt', 'costume-satchel', 'costume-scarf', 'costume-badge', 'costume-tablet', 'costume-wrench', 'costume-mug');
     const costume = safeString(state.costume || 'none').toLowerCase();
     if (costume && costume !== 'none') {
         agentEl.classList.add(`costume-${costume}`);
@@ -809,82 +815,6 @@ function chatRobotWorldPerchTarget(state, platforms = []) {
     };
 }
 
-function chatRobotWorldTaskFocusTarget(state, graph = null) {
-    const bounds = chatRobotWorldBounds();
-    const platforms = graph?.platforms || chatRobotWorldPlatforms(bounds);
-    const strip = document.querySelector('.message-task-strip:not(.hidden)');
-    if (strip instanceof HTMLElement) {
-        const rect = strip.getBoundingClientRect();
-        const x = chatRobotWorldClamp(Math.round(rect.left - bounds.left + (rect.width * 0.5)), 28, bounds.width - 28);
-        const roof = platforms.find((platform) => platform.id === 'composer-roof')
-            || platforms.find((platform) => platform.kind === 'ui' || platform.kind === 'suggestion')
-            || platforms.find((platform) => platform.kind === 'floor')
-            || null;
-        if (roof) {
-            return {
-                x: chatRobotWorldClamp(x, roof.x1 + 10, roof.x2 - 10),
-                y: roof.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
-                platformId: roof.id,
-            };
-        }
-    }
-    const perch = chatRobotWorldPerchTarget(state, platforms);
-    const platform = platforms.find((item) => (
-        perch.x >= (item.x1 - 6)
-        && perch.x <= (item.x2 + 6)
-        && Math.abs((item.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET) - perch.y) <= 14
-    )) || platforms.find((item) => item.kind === 'roof' || item.kind === 'ui') || platforms[0] || null;
-    return {
-        x: platform ? chatRobotWorldClamp(perch.x, platform.x1 + 8, platform.x2 - 8) : perch.x,
-        y: platform ? (platform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET) : perch.y,
-        platformId: safeString(platform?.id),
-    };
-}
-
-function chatRobotWorldHomeTarget(state, graph = null) {
-    const bounds = chatRobotWorldBounds();
-    const platforms = graph?.platforms || chatRobotWorldPlatforms(bounds);
-    const preferredFloorId = safeString(state?.homeFloorId);
-    const floor = platforms.find((platform) => platform.id === preferredFloorId)
-        || platforms.find((platform) => platform.kind === 'floor' && Number(state?.homeX || 0) <= ((platform.x1 + platform.x2) * 0.5))
-        || platforms.find((platform) => platform.kind === 'floor')
-        || null;
-    if (!floor) {
-        return {
-            x: chatRobotWorldClamp(Number(state?.homeX || 48), 24, bounds.width - 24),
-            y: bounds.groundY,
-            platformId: '',
-        };
-    }
-    const homeX = chatRobotWorldClamp(Number(state?.homeX || floor.x1 + 18), floor.x1 + 8, floor.x2 - 8);
-    return {
-        x: homeX,
-        y: floor.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
-        platformId: floor.id,
-    };
-}
-
-function chatRobotWorldStartPortalTransfer(state, target = {}, reason = 'portal') {
-    if (!state?.element || !target) return false;
-    if (state.portalTransfer) return false;
-    state.portalTransfer = {
-        reason: safeString(reason || 'portal'),
-        startedAt: performance.now(),
-        sourceX: Number(state.x || 0),
-        sourceY: Number(state.y || 0),
-        targetX: Number(target.x || state.x || 0),
-        targetY: Number(target.y || state.y || 0),
-        targetPlatformId: safeString(target.platformId || state.targetPlatformId || state.currentPlatformId || ''),
-        arrivalPortalPlayed: false,
-    };
-    state.mode = 'inspect';
-    state.modeUntil = Date.now() + 2200;
-    state.vx = 0;
-    state.vy = 0;
-    chatRobotWorldPlayPortal(state, 'open');
-    return true;
-}
-
 function chatRobotWorldAdvancePortalTransfer(state, bounds) {
     const transfer = state?.portalTransfer;
     if (!transfer) return false;
@@ -1052,4 +982,3 @@ function chatRobotWorldPickTargetPlatform(state, graph, mode, motion) {
         : candidates;
     return officePick(directional) || officePick(sideBiased) || officePick(candidates) || candidates[0];
 }
-

@@ -26,15 +26,73 @@ def test_v2_retrieval_stays_thread_scoped_for_episodes(tmp_path) -> None:  # noq
         mem.close()
 
 
-def test_cross_thread_retrieval_can_use_global_user_facts(tmp_path) -> None:  # noqa: ANN001
+def test_cross_thread_retrieval_can_use_explicit_global_user_facts(tmp_path) -> None:  # noqa: ANN001
     mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        mem.add_event("telegram:1", "user_message", "my deployment target is cloudflare workers")
+        episode_id = mem.add_event(
+            "telegram:1",
+            "user_fact",
+            "The deployment target is cloudflare workers",
+            metadata={"source": "user_remember"},
+        )
+        promoted = mem.auto_promote_event_memory(
+            thread_id="telegram:1",
+            etype="user_fact",
+            text="The deployment target is cloudflare workers",
+            source_episode_id=episode_id,
+        )
 
         ctx_other = mem.retrieve("deployment target", thread="telegram:2", budget=900, mode="auto")
 
+        assert promoted is True
         assert "cloudflare workers" in ctx_other.text.lower()
+    finally:
+        mem.close()
+
+
+def test_ordinary_prose_is_not_promoted_as_global_memory(tmp_path) -> None:  # noqa: ANN001
+    mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
+    mem.start()
+    try:
+        episode_id = mem.add_event(
+            "telegram:1",
+            "user_message",
+            "my deployment target is cloudflare workers",
+        )
+        promoted = mem.auto_promote_event_memory(
+            thread_id="telegram:1",
+            etype="user_message",
+            text="my deployment target is cloudflare workers",
+            source_episode_id=episode_id,
+        )
+
+        ctx_other = mem.retrieve("deployment target", thread="telegram:2", budget=900, mode="auto")
+
+        assert promoted is False
+        assert "cloudflare workers" not in ctx_other.text.lower()
+    finally:
+        mem.close()
+
+
+def test_explicit_memory_writes_are_idempotent_and_do_not_conflict(tmp_path) -> None:  # noqa: ANN001
+    mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
+    mem.start()
+    try:
+        for text in (
+            "The launch code is 101",
+            "The backup phone ends in 202",
+            "The launch code is 101",
+        ):
+            assert mem.auto_promote_event_memory(
+                thread_id="telegram:1",
+                etype="user_fact",
+                text=text,
+            )
+
+        stats = mem.stats()
+        assert int(stats.get("v2_facts", 0)) == 2
+        assert int(stats.get("v2_contradictions_open", 0)) == 0
     finally:
         mem.close()
 

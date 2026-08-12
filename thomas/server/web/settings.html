@@ -1,35 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="nebula">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Thomas Agent Settings</title>
-  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@1.4.0/src/index.css" />
+  <style>
+    /* Local, deterministic icon fallback: Settings must work fully offline. */
+    .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
+    .ph::before { content: "\2022"; }
+    .ph-magnifying-glass::before { content: "\2315"; }
+    .ph-gear::before { content: "\2699"; }
+    .ph-cpu::before { content: "\25A3"; }
+    .ph-plug::before { content: "\238B"; }
+    .ph-robot::before { content: "\25C9"; }
+    .ph-shield-check::before { content: "\25C6"; }
+    .ph-palette::before { content: "\25D2"; }
+    .ph-wrench::before { content: "\25C7"; }
+    .ph-check::before { content: "\2713"; }
+    .ph-arrow-counterclockwise::before { content: "\21B6"; }
+    .ph-eye::before { content: "\25C9"; }
+    .ph-trash::before, .ph-x::before { content: "\00D7"; }
+    .ph-download::before { content: "\2193"; }
+    .ph-warning::before { content: "!"; }
+    .ph-floppy-disk::before, .ph-desktop::before { content: "\25A3"; }
+    .ph-arrow-clockwise::before { content: "\21BB"; }
+  </style>
   
-  <link rel="stylesheet" href="settings.style01.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/workspace_shell.css">
+  <link rel="stylesheet" href="/static/settings.style01.css">
+  <link rel="stylesheet" href="/static/css/ui_edit_mode.css">
 
 </head>
-<body>
-  <form id="legacySettingsCredentialForm" class="hidden" aria-hidden="true"></form>
-  <div class="settings-header">
+<body data-ui-id="settings.shell" data-ui-workspace="settings" data-ui-policy="root protected" data-ui-constraints="no-move no-resize preserve-preference-ids preserve-security-boundaries">
+  <form id="legacySettingsCredentialForm" class="hidden" aria-hidden="true" data-ui-id="settings.credentials.form" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete"></form>
+  <header class="settings-header" data-ui-id="settings.header" data-ui-policy="layout" data-ui-constraints="minWidth=360 minHeight=70 preserve-brand preserve-search preserve-theme-control">
     <div class="header-top">
-      <h1>Settings</h1>
+      <div class="settings-brand" aria-label="Thomas Settings">
+        <span class="thomas-eyes-mark" aria-hidden="true"><i></i><i></i></span>
+        <span class="settings-brand-copy">
+          <span class="settings-brand-name">Thomas</span>
+          <span class="settings-brand-title">Settings</span>
+          <span class="settings-brand-subtitle">Control the workspace without leaving the conversation.</span>
+        </span>
+      </div>
       <div class="header-actions">
-        <div class="search-box">
-          <i class="ph ph-magnifying-glass"></i>
+        <label class="theme-picker" for="theme" data-ui-id="settings.theme-control" data-ui-policy="control" data-ui-constraints="preserve-id preserve-options">
+          <i class="ph ph-palette" aria-hidden="true"></i>
+          <span class="theme-picker-copy">
+            <span>Theme</span>
+            <strong id="activeThemeName">Nebula Core</strong>
+          </span>
+          <select id="theme" class="dropdown-select" aria-label="Thomas theme" data-thomas-theme-select>
+            <option value="nebula">Nebula Core</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="aurora">Aurora</option>
+            <option value="sandstone">Sandstone</option>
+          </select>
+        </label>
+        <label class="search-box" for="searchInput" data-ui-id="settings.search" data-ui-policy="control" data-ui-constraints="preserve-id preserve-label">
+          <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
           <input
-            type="text"
+            type="search"
             id="searchInput"
-            placeholder="Search settings..."
+            placeholder="Search settings"
             aria-label="Search settings"
+            autocomplete="off"
           />
-        </div>
+        </label>
       </div>
     </div>
-  </div>
+  </header>
 
-  <main>
-    <nav class="settings-sidebar" role="navigation" aria-label="Settings categories">
+  <main data-ui-id="settings.workspace" data-ui-policy="layout" data-ui-constraints="minWidth=320 minHeight=360 preserve-scroll-regions">
+    <nav class="settings-sidebar" role="navigation" aria-label="Settings categories" data-ui-id="settings.navigation" data-ui-policy="layout" data-ui-constraints="preserve-order preserve-keyboard-navigation">
       <ul class="sidebar-nav">
         <li>
           <button class="sidebar-nav-item active" data-section="general" aria-current="page">
@@ -79,11 +124,11 @@
     <div class="settings-container">
       <div class="settings-content">
         <!-- General Settings -->
-        <div id="general" class="settings-panel active">
+        <div id="general" class="settings-panel active" data-ui-id="settings.panel.general" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-save-actions">
           <div class="panel-title">General Settings</div>
           <div class="panel-description">Configure basic Thomas agent behavior and preferences.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.general.agent" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Agent Configuration</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -101,6 +146,10 @@
               </div>
               <div class="setting-control">
                 <select id="defaultModel" class="dropdown-select">
+                  <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                  <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+                  <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                  <option value="gpt-5.5">GPT-5.5</option>
                   <option value="gpt-4">OpenAI GPT-4</option>
                   <option value="gpt-3.5">OpenAI GPT-3.5 Turbo</option>
                   <option value="claude-opus">Anthropic Claude Opus 4.6</option>
@@ -117,7 +166,8 @@
               </div>
               <div class="setting-control">
                 <select id="defaultProvider" class="dropdown-select">
-                  <option value="openai">OpenAI</option>
+                  <option value="openai_codex">ChatGPT / Codex (signed in)</option>
+                  <option value="openai">OpenAI API (API key)</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="google">Google</option>
                   <option value="ollama">Ollama</option>
@@ -126,26 +176,24 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.general.experience" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">User Experience</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Theme</div>
-                <div class="setting-description">Visual appearance preference</div>
-              </div>
-              <div class="setting-control">
-                <select id="theme" class="dropdown-select">
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                  <option value="system">System</option>
-                </select>
-              </div>
-            </div>
             <div class="setting-item">
               <div class="setting-label">
                 <div class="setting-name">Language</div>
                 <div class="setting-description">Interface language</div>
               </div>
+              <div class="setting-control">
+                <select id="language" class="dropdown-select">
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="ja">日本語</option>
+                  <option value="zh">中文</option>
+                </select>
+              </div>
+            </div>
             <div class="setting-item">
               <div class="setting-label">
                 <div class="setting-name">Workflow Mode</div>
@@ -155,17 +203,6 @@
                 <select id="workflowMode" class="dropdown-select">
                   <option value="guided">Guided workflow (Recommended)</option>
                   <option value="expert">Expert bypass</option>
-                </select>
-              </div>
-            </div>
-              <div class="setting-control">
-                <select id="language" class="dropdown-select">
-                  <option value="en">English</option>
-                  <option value="es">Español</option>
-                  <option value="fr">Français</option>
-                  <option value="de">Deutsch</option>
-                  <option value="ja">日本語</option>
-                  <option value="zh">中文</option>
                 </select>
               </div>
             </div>
@@ -185,7 +222,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('general')">
+            <button class="btn btn-secondary" onclick="resetSection('general')" data-ui-id="settings.action.reset.general" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -193,21 +230,21 @@
         </div>
 
         <!-- Models & Providers Settings -->
-        <div id="models" class="settings-panel">
+        <div id="models" class="settings-panel" data-ui-id="settings.panel.models" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-credential-boundaries">
           <div class="panel-title">Models & Providers</div>
           <div class="panel-description">Configure AI models and API provider credentials.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.models.openai" data-ui-policy="layout" data-ui-constraints="preserve-controls protect-credentials">
             <div class="group-title">OpenAI Configuration</div>
-            <div class="setting-item">
+            <div class="setting-item" data-ui-id="settings.models.openai.credential" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy">
               <div class="setting-label">
                 <div class="setting-name">API Key</div>
                 <div class="setting-description">Your OpenAI API key</div>
               </div>
               <div class="setting-control">
                 <div class="key-input-group">
-                  <input type="password" id="openaiKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-..." aria-label="OpenAI API key" />
-                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                  <input type="password" id="openaiKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-..." aria-label="OpenAI API key" data-ui-id="settings.secret.openai" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0" data-ui-id="settings.secret.openai.visibility" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
                     <i class="ph ph-eye"></i>
                   </button>
                 </div>
@@ -220,6 +257,10 @@
               </div>
               <div class="setting-control">
                 <select id="openaiModel" class="dropdown-select">
+                  <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                  <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+                  <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                  <option value="gpt-5.5">GPT-5.5</option>
                   <option value="gpt-4">GPT-4</option>
                   <option value="gpt-3.5">GPT-3.5 Turbo</option>
                   <option value="gpt-4-turbo">GPT-4 Turbo</option>
@@ -228,17 +269,17 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.models.anthropic" data-ui-policy="layout" data-ui-constraints="preserve-controls protect-credentials">
             <div class="group-title">Anthropic Configuration</div>
-            <div class="setting-item">
+            <div class="setting-item" data-ui-id="settings.models.anthropic.credential" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy">
               <div class="setting-label">
                 <div class="setting-name">API Key</div>
                 <div class="setting-description">Your Anthropic API key</div>
               </div>
               <div class="setting-control">
                 <div class="key-input-group">
-                  <input type="password" id="anthropicKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-ant-..." aria-label="Anthropic API key" />
-                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                  <input type="password" id="anthropicKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-ant-..." aria-label="Anthropic API key" data-ui-id="settings.secret.anthropic" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0" data-ui-id="settings.secret.anthropic.visibility" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
                     <i class="ph ph-eye"></i>
                   </button>
                 </div>
@@ -259,17 +300,17 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.models.google" data-ui-policy="layout" data-ui-constraints="preserve-controls protect-credentials">
             <div class="group-title">Google Configuration</div>
-            <div class="setting-item">
+            <div class="setting-item" data-ui-id="settings.models.google.credential" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy">
               <div class="setting-label">
                 <div class="setting-name">API Key</div>
                 <div class="setting-description">Your Google API key</div>
               </div>
               <div class="setting-control">
                 <div class="key-input-group">
-                  <input type="password" id="googleKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="AIza..." aria-label="Google API key" />
-                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                  <input type="password" id="googleKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="AIza..." aria-label="Google API key" data-ui-id="settings.secret.google" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0" data-ui-id="settings.secret.google.visibility" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
                     <i class="ph ph-eye"></i>
                   </button>
                 </div>
@@ -289,7 +330,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.models.ollama" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Ollama Configuration</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -311,7 +352,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.models.defaults" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Model Defaults</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -338,7 +379,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('models')">
+            <button class="btn btn-secondary" onclick="resetSection('models')" data-ui-id="settings.action.reset.models" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -346,49 +387,49 @@
         </div>
 
         <!-- Integrations Settings -->
-        <div id="integrations" class="settings-panel">
+        <div id="integrations" class="settings-panel" data-ui-id="settings.panel.integrations" data-ui-policy="layout" data-ui-constraints="preserve-honest-status preserve-control-ids">
           <div class="panel-title">Integrations</div>
           <div class="panel-description">Connect Thomas to external services and platforms.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.integrations.google-workspace" data-ui-policy="protected" data-ui-constraints="no-operational-claims preserve-status">
             <div class="group-title">Google Workspace</div>
             <div style="margin-bottom: 16px;">
               <div class="status-badge status-disconnected" id="googleWorkspaceStatus">
                 <span class="status-indicator"></span>
-                <span>Not Connected</span>
+                <span>Setup unavailable</span>
               </div>
             </div>
             <div class="setting-item">
               <div class="setting-label">
                 <div class="setting-name">Gmail & Calendar Access</div>
-                <div class="setting-description">Enable email and calendar integration</div>
+                <div class="setting-description">This build does not yet provide the Google authorization flow.</div>
               </div>
               <div class="setting-control">
-                <button class="btn btn-secondary" onclick="connectGoogleWorkspace()">
+                <button class="btn btn-secondary" onclick="connectGoogleWorkspace()" disabled aria-disabled="true">
                   <i class="ph ph-plug"></i>
-                  Connect
+                  Unavailable
                 </button>
               </div>
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.integrations.slack" data-ui-policy="protected" data-ui-constraints="no-operational-claims preserve-status protect-webhook">
             <div class="group-title">Slack</div>
             <div style="margin-bottom: 16px;">
               <div class="status-badge status-disconnected" id="slackStatus">
                 <span class="status-indicator"></span>
-                <span>Not Connected</span>
+                <span>Setup unavailable</span>
               </div>
             </div>
             <div class="setting-item">
               <div class="setting-label">
                 <div class="setting-name">Workspace Connection</div>
-                <div class="setting-description">Connect to Slack workspace</div>
+                <div class="setting-description">This build does not yet provide the Slack authorization flow.</div>
               </div>
               <div class="setting-control">
-                <button class="btn btn-secondary" onclick="connectSlack()">
+                <button class="btn btn-secondary" onclick="connectSlack()" disabled aria-disabled="true">
                   <i class="ph ph-plug"></i>
-                  Connect
+                  Unavailable
                 </button>
               </div>
             </div>
@@ -398,28 +439,28 @@
                 <div class="setting-description">Incoming webhook for notifications</div>
               </div>
               <div class="setting-control">
-                <input type="text" id="slackWebhook" class="text-input" placeholder="https://hooks.slack.com/services/..." />
+                <input type="text" id="slackWebhook" class="text-input" placeholder="https://hooks.slack.com/services/..." data-ui-id="settings.secret.slack-webhook" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy" />
               </div>
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.integrations.notion" data-ui-policy="protected" data-ui-constraints="no-operational-claims preserve-status">
             <div class="group-title">Notion</div>
             <div style="margin-bottom: 16px;">
               <div class="status-badge status-disconnected" id="notionStatus">
                 <span class="status-indicator"></span>
-                <span>Not Connected</span>
+                <span>Setup unavailable</span>
               </div>
             </div>
             <div class="setting-item">
               <div class="setting-label">
                 <div class="setting-name">Database Connection</div>
-                <div class="setting-description">Access Notion workspaces</div>
+                <div class="setting-description">This build does not yet provide the Notion authorization flow.</div>
               </div>
               <div class="setting-control">
-                <button class="btn btn-secondary" onclick="connectNotion()">
+                <button class="btn btn-secondary" onclick="connectNotion()" disabled aria-disabled="true">
                   <i class="ph ph-plug"></i>
-                  Connect
+                  Unavailable
                 </button>
               </div>
             </div>
@@ -430,7 +471,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('integrations')">
+            <button class="btn btn-secondary" onclick="resetSection('integrations')" data-ui-id="settings.action.reset.integrations" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -438,11 +479,11 @@
         </div>
 
         <!-- Autonomy Settings -->
-        <div id="autonomy" class="settings-panel">
+        <div id="autonomy" class="settings-panel" data-ui-id="settings.panel.autonomy" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-approval-boundaries">
           <div class="panel-title">Autonomy</div>
           <div class="panel-description">Control agent decision-making and automatic actions.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.autonomy.level" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Autonomy Level</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -460,7 +501,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.autonomy.thresholds" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-safety-copy">
             <div class="group-title">Auto-Approval Thresholds</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -497,7 +538,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.autonomy.behavior" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Behavior</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -522,7 +563,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.autonomy.tools" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-safety-copy">
             <div class="group-title">Tool Permissions</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -603,7 +644,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('autonomy')">
+            <button class="btn btn-secondary" onclick="resetSection('autonomy')" data-ui-id="settings.action.reset.autonomy" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -611,11 +652,11 @@
         </div>
 
         <!-- Privacy & Security Settings -->
-        <div id="privacy" class="settings-panel">
+        <div id="privacy" class="settings-panel" data-ui-id="settings.panel.privacy" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-security-boundaries">
           <div class="panel-title">Privacy & Security</div>
           <div class="panel-description">Manage data privacy, security, and access controls.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.privacy.data" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-security-copy">
             <div class="group-title">Data Privacy</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -643,7 +684,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.privacy.security" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-breakglass-endpoint">
             <div class="group-title">Security</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -665,7 +706,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.privacy.domains" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-validation">
             <div class="group-title">Domain Whitelist</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -683,7 +724,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('privacy')">
+            <button class="btn btn-secondary" onclick="resetSection('privacy')" data-ui-id="settings.action.reset.privacy" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -691,11 +732,11 @@
         </div>
 
         <!-- Appearance Settings -->
-        <div id="appearance" class="settings-panel">
+        <div id="appearance" class="settings-panel" data-ui-id="settings.panel.appearance" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-save-actions">
           <div class="panel-title">Appearance</div>
           <div class="panel-description">Customize the visual interface.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.appearance.interface" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Interface</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -734,7 +775,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.appearance.messages" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Chat & Messages</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -760,7 +801,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.appearance.notifications" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Notifications</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -787,7 +828,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('appearance')">
+            <button class="btn btn-secondary" onclick="resetSection('appearance')" data-ui-id="settings.action.reset.appearance" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -795,11 +836,11 @@
         </div>
 
         <!-- Advanced Settings -->
-        <div id="advanced" class="settings-panel">
+        <div id="advanced" class="settings-panel" data-ui-id="settings.panel.advanced" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-destructive-boundaries">
           <div class="panel-title">Advanced</div>
           <div class="panel-description">Technical configuration for developers and power users.</div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.advanced.debugging" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Debugging</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -827,7 +868,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.advanced.plugins" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Plugin Management</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -849,7 +890,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.advanced.tools" data-ui-policy="layout" data-ui-constraints="preserve-controls">
             <div class="group-title">Custom Tools</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -862,7 +903,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.advanced.database" data-ui-policy="layout" data-ui-constraints="preserve-controls protect-connection-string">
             <div class="group-title">Database</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -870,7 +911,7 @@
                 <div class="setting-description">Database connection URL</div>
               </div>
               <div class="setting-control">
-                <input type="text" id="dbConnection" class="text-input" placeholder="postgresql://user:pass@localhost/thomas" />
+                <input type="text" id="dbConnection" class="text-input" placeholder="postgresql://user:pass@localhost/thomas" data-ui-id="settings.secret.database" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete no-copy" />
               </div>
             </div>
             <div class="setting-item">
@@ -884,7 +925,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.advanced.maintenance" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-confirmation">
             <div class="group-title">Maintenance</div>
             <div class="setting-item">
               <div class="setting-label">
@@ -892,7 +933,7 @@
                 <div class="setting-description">Clear in-memory and persistent caches</div>
               </div>
               <div class="setting-control">
-                <button class="btn btn-secondary" onclick="clearCache()">
+                <button class="btn btn-secondary" onclick="clearCache()" data-ui-id="settings.action.clear-cache" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-confirmation">
                   <i class="ph ph-trash"></i>
                   Clear Cache
                 </button>
@@ -916,7 +957,7 @@
                 <div class="setting-description">Restore all settings to factory defaults</div>
               </div>
               <div class="setting-control">
-                <button class="btn btn-danger" onclick="confirmReset()">
+                <button class="btn btn-danger" onclick="confirmReset()" data-ui-id="settings.action.reset-all" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-confirmation">
                   <i class="ph ph-warning"></i>
                   Reset All
                 </button>
@@ -924,7 +965,7 @@
             </div>
           </div>
 
-          <div class="settings-group">
+          <div class="settings-group" data-ui-id="settings.advanced.isolated-desktop" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-runtime-hooks">
             <div class="group-title">Isolated Desktop Mode</div>
             <div style="margin-bottom: 16px;">
               <div class="status-badge status-disconnected" id="isolatedDesktopStatusBadge">
@@ -1019,7 +1060,7 @@
               <i class="ph ph-check"></i>
               Save Changes
             </button>
-            <button class="btn btn-secondary" onclick="resetSection('advanced')">
+            <button class="btn btn-secondary" onclick="resetSection('advanced')" data-ui-id="settings.action.reset.advanced" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
               <i class="ph ph-arrow-counterclockwise"></i>
               Reset
             </button>
@@ -1033,7 +1074,7 @@
   <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Confirmation Modal -->
-  <div class="modal-overlay" id="confirmModal">
+  <div class="modal-overlay" id="confirmModal" data-ui-id="settings.confirmation" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-focus">
     <div class="modal">
       <div class="modal-header">
         <h2 class="modal-title">Confirm Action</h2>
@@ -1044,13 +1085,17 @@
       <div class="modal-body" id="confirmMessage"></div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-danger" id="confirmButton" onclick="executeConfirm()">Confirm</button>
+        <button class="btn btn-danger" id="confirmButton" onclick="executeConfirm()" data-ui-id="settings.action.confirm-destructive" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">Confirm</button>
       </div>
     </div>
   </div>
 
   
-  <script src="settings.script01.js"></script>
+  <script defer src="/static/js/workspace_shell.js"></script>
+  <script defer src="/static/js/ui_edit_layout.js"></script>
+  <script defer src="/static/js/ui_edit_mode.js"></script>
+  <script src="/static/settings.isolated-desktop.js"></script>
+  <script src="/static/settings.script01.js"></script>
 
 </body>
 </html>

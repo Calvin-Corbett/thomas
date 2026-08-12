@@ -7,7 +7,19 @@ It now drops the bad value so the validated default applies.
 
 from __future__ import annotations
 
-from thomas.core.config import _coerce_types
+from thomas.core.config import _coerce_types, _collect_unknown_core_keys
+
+
+def test_evolve_section_is_tolerated_not_an_unknown_core_key():
+    # Regression: [evolve.funnel] / [evolve.claude_bridge] must not make load_config
+    # reject thomas.toml with "Unknown core config key 'evolve'" (it broke server boot).
+    data = {
+        "models": {},
+        "evolve": {"funnel": {"enabled": False, "lanes": 5}, "claude_bridge": {"enabled": False}},
+    }
+    unknown = _collect_unknown_core_keys(data)
+    assert "evolve" not in unknown
+    assert unknown == []
 
 
 def test_malformed_numeric_overrides_are_dropped_not_crashing():

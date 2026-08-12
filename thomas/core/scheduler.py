@@ -742,6 +742,7 @@ class TaskScheduler:
         """
         now = self._now()
         fires: list[tuple[str, datetime]] = []
+        changed = False
 
         with self._lock:
             for t in self._tasks.values():
@@ -755,12 +756,14 @@ class TaskScheduler:
                     t.last_error = f"Invalid cron (paused): {e}"
                     t.next_run_at = None
                     t.updated_at = _iso(now) or t.updated_at
+                    changed = True
                     continue
 
                 nxt = t.next_run_dt()
                 if nxt is None:
                     t.next_run_at = _iso(self._next_after(t.cron_expr, base=now))
                     t.updated_at = _iso(now) or t.updated_at
+                    changed = True
                     continue
 
                 if now < nxt:
@@ -769,7 +772,10 @@ class TaskScheduler:
                 due_count = 0
                 scheduled_for = nxt
 
-                it = croniter(t.cron_expr, scheduled_for - timedelta(seconds=1))
+                # Start strictly after the already-known due occurrence. Starting
+                # one second before it makes the iterator yield the same timestamp
+                # again, so catch_up_limit > 1 can enqueue one missed slot twice.
+                it = croniter(t.cron_expr, scheduled_for)
 
                 # Skip stale runs aggressively when policy is "skip". If we missed
                 # beyond the grace window, fast-forward to the next future slot and
@@ -785,6 +791,7 @@ class TaskScheduler:
                             guard += 1
                         t.next_run_at = _iso(scheduled_for)
                         t.updated_at = _iso(now) or t.updated_at
+                        changed = True
                         continue
 
                 while now >= scheduled_for and due_count < self._catch_up_limit:
@@ -810,8 +817,12 @@ class TaskScheduler:
 
                 t.next_run_at = _iso(scheduled_for)
                 t.updated_at = _iso(now) or t.updated_at
+                changed = True
 
-            if fires:
+            # Persist schedule advancement even when every stale occurrence was
+            # skipped. Otherwise a restart reloads the old due timestamp and
+            # repeatedly reprocesses the same missed-run window.
+            if fires or changed:
                 self._persist_locked()
 
         for task_id, scheduled_for_dt in fires:

@@ -13,11 +13,31 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 # Chars-per-token ratio. Conservative default that slightly overestimates
 # token count (better to trim too early than blow the context window).
 _CHARS_PER_TOKEN = float(os.environ.get("THOMAS_TOKEN_RATIO", "3.5"))
+_COMPACT_TOOL_ARGUMENT_CHARS = 1024
+
+# The sentence every trim marker carries, and the count it opens with. The
+# heuristic compactor writes the same sentence with a trailing clause, so the
+# prefix is matched rather than the whole line.
+_TRIM_MARKER_TEXT = "earlier messages trimmed to fit context window"
+_TRIM_MARKER_COUNT = re.compile(r"\[(\d+) earlier messages trimmed")
+
+
+def _trim_marker_count(message: dict[str, Any]) -> int:
+    """How many earlier messages a trim marker already accounts for.
+
+    0 when the message is not a trim marker.
+    """
+    content = message.get("content")
+    if not isinstance(content, str) or _TRIM_MARKER_TEXT not in content:
+        return 0
+    match = _TRIM_MARKER_COUNT.search(content)
+    return int(match.group(1)) if match else 0
 
 
 def estimate_tokens(text: str) -> int:
@@ -156,7 +176,15 @@ def trim_messages_to_budget(
         kept_middle.insert(0, msg)
         used += msg_tokens
 
-    dropped = len(middle) - len(kept_middle)
+    # A marker left by an EARLIER trim is not one lost message: it is the only
+    # record of the N this list has already lost. `_build_messages` trims twice
+    # (the route's soft history cap, then the model's window), and the second
+    # pass treated the first pass's marker as ordinary middle content -- it
+    # dropped it and announced "[2 earlier messages trimmed]" for a list that
+    # had lost 23, deleting the sentence that said so. Same shape as the
+    # compaction bug fixed in 1d8a26b8, one layer down. Absorbing the dropped
+    # marker's count keeps the number true whatever order the stages run in.
+    dropped = sum(_trim_marker_count(message) or 1 for message in middle[: len(middle) - len(kept_middle)])
     if dropped > 0:
         trim_marker = {
             "role": "system",
@@ -165,3 +193,152 @@ def trim_messages_to_budget(
         return head + [trim_marker] + kept_middle + tail
     else:
         return head + kept_middle + tail
+
+
+def _tool_call_ids(message: dict[str, Any]) -> set[str]:
+    calls = message.get("tool_calls")
+    if not isinstance(calls, list):
+        return set()
+    return {str(call.get("id") or "") for call in calls if isinstance(call, dict) and call.get("id")}
+
+
+def _compact_tool_arguments(raw: Any) -> str:
+    if isinstance(raw, str):
+        text = raw or "{}"
+    else:
+        try:
+            text = json.dumps(raw if raw is not None else {}, ensure_ascii=False)
+        except (TypeError, ValueError):
+            text = "{}"
+    if len(text) <= _COMPACT_TOOL_ARGUMENT_CHARS:
+        return text
+    identity: dict[str, Any] = {}
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        for key in ("path", "file", "filename", "name", "operation"):
+            value = parsed.get(key)
+            if isinstance(value, (str, int, float, bool)) and len(str(value)) <= 256:
+                identity[key] = value
+    identity["_thomas_context"] = "completed tool arguments compacted"
+    identity["original_chars"] = len(text)
+    return json.dumps(identity, ensure_ascii=False, separators=(",", ":"))
+
+
+def _compact_completed_tool_calls(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    completed_ids = {
+        str(message.get("tool_call_id") or "")
+        for message in messages
+        if message.get("role") == "tool" and message.get("tool_call_id")
+    }
+    result = list(messages)
+    for index, message in enumerate(messages):
+        calls = message.get("tool_calls")
+        if message.get("role") != "assistant" or not isinstance(calls, list):
+            continue
+        changed = False
+        compacted_calls: list[Any] = []
+        for call in calls:
+            if not isinstance(call, dict) or str(call.get("id") or "") not in completed_ids:
+                compacted_calls.append(call)
+                continue
+            function = call.get("function")
+            if not isinstance(function, dict):
+                compacted_calls.append(call)
+                continue
+            arguments = _compact_tool_arguments(function.get("arguments"))
+            if arguments == function.get("arguments"):
+                compacted_calls.append(call)
+                continue
+            changed = True
+            compacted_calls.append({**call, "function": {**function, "arguments": arguments}})
+        if changed:
+            result[index] = {**message, "tool_calls": compacted_calls}
+    return result
+
+
+def _drop_orphan_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    declared: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for message in messages:
+        declared.update(_tool_call_ids(message))
+        if message.get("role") == "tool":
+            call_id = str(message.get("tool_call_id") or "")
+            if not call_id or call_id not in declared:
+                continue
+        result.append(message)
+    return result
+
+
+def _turn_span(messages: list[dict[str, Any]], start: int) -> tuple[int, int]:
+    role = str(messages[start].get("role") or "")
+    end = start + 1
+    if role == "user":
+        while end < len(messages) and messages[end].get("role") not in {"system", "user", "developer"}:
+            end += 1
+    elif role == "assistant":
+        call_ids = _tool_call_ids(messages[start])
+        while end < len(messages) and messages[end].get("role") == "tool":
+            if str(messages[end].get("tool_call_id") or "") not in call_ids:
+                break
+            end += 1
+    return start, end
+
+
+def fit_messages_to_hard_cap(
+    messages: list[dict[str, Any]],
+    *,
+    hard_cap: int,
+    anchor_source: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Fit disposable history without altering required request context.
+
+    Large completed tool arguments are first replaced with valid, compact JSON.
+    Older turns are then removed atomically. The most recent user message and
+    every system/developer instruction are retained byte-for-byte. If those
+    required messages cannot fit, fail instead of silently deleting policy or
+    request text.
+    """
+
+    cap = int(hard_cap)
+    if cap <= 0:
+        raise ValueError(f"Model message budget must be positive; received {cap} estimated tokens")
+
+    fitted = _drop_orphan_tool_results(_compact_completed_tool_calls(list(messages)))
+    sources = anchor_source if anchor_source is not None else messages
+    anchor = next((dict(message) for message in reversed(sources) if message.get("role") == "user"), None)
+    if anchor is not None and not any(message.get("role") == "user" for message in fitted):
+        fitted.insert(1 if fitted else 0, anchor)
+
+    while estimate_messages_tokens(fitted) > cap and len(fitted) > 2:
+        anchor_index = next(
+            (index for index in range(len(fitted) - 1, -1, -1) if fitted[index].get("role") == "user"),
+            -1,
+        )
+        removable: tuple[int, int] | None = None
+        index = 1
+        while index < len(fitted):
+            span = _turn_span(fitted, index)
+            required_instruction = fitted[span[0]].get("role") in {"system", "developer"}
+            if not required_instruction and not (span[0] <= anchor_index < span[1]):
+                removable = span
+                break
+            index = span[1]
+        if removable is None and anchor_index >= 0:
+            index = anchor_index + 1
+            if index < len(fitted) and fitted[index].get("role") not in {"system", "developer"}:
+                removable = _turn_span(fitted, index)
+        if removable is None:
+            break
+        del fitted[removable[0] : removable[1]]
+        fitted = _drop_orphan_tool_results(fitted)
+
+    required_tokens = estimate_messages_tokens(fitted)
+    if required_tokens > cap:
+        raise ValueError(
+            "Required system/developer instructions and latest user request need "
+            f"{required_tokens} estimated tokens, exceeding the {cap}-token message budget"
+        )
+    return fitted

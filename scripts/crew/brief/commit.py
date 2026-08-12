@@ -335,7 +335,24 @@ def _selected_paths(repo_root: Path, scope_selection: ScopeSelection, include_pa
         ]
         if outside:
             raise ValueError("requested include path(s) are outside the selected commit scope: " + ", ".join(outside))
-        in_scope = [path for path in include_norm if path in changed_set]
+        # `--include` accepts a DIRECTORY as well as a file, matched the same way
+        # claim scopes are matched in the else-branch below.
+        #
+        # This used to be `path in changed_set`, an exact-file membership test.
+        # A directory is never itself a changed path, so `--include server` or
+        # `--include evolve_supervisor` selected nothing and the caller was told
+        # `no_claimed_changes` -- "there is nothing to commit" -- when the truth
+        # was "your include matched no changed file". Three separate batches were
+        # silently dropped that way before anyone noticed the commit was smaller
+        # than the staging.
+        in_scope = [path for path in changed if any(_scope_matches_path(inc, path) for inc in include_norm)]
+        if not in_scope:
+            raise ValueError(
+                "requested include path(s) matched no changed file: "
+                + ", ".join(include_norm)
+                + ". Nothing was committed. (A path with no pending change selects nothing;"
+                " run without --include to commit everything in the claim scope.)"
+            )
     else:
         in_scope = [
             path for path in changed if any(_scope_matches_path(scope, path) for scope in scope_selection.scopes)
@@ -454,7 +471,16 @@ def _run_local_gates(
 def _create_commit_object(repo_root: Path, *, agent: str, index_path: Path, parent_head: str, message: str) -> str:
     env = _temp_index_env(agent, index_path)
     tree = _git_output(repo_root, ["write-tree"], env=env)
-    proc = _run_git(repo_root, ["commit-tree", tree, "-p", parent_head], env=env, input_text=message)
+    # `git commit-tree` is plumbing and does NOT honor commit.gpgsign, so every
+    # scoped agent commit was created UNSIGNED and failed the required
+    # signed-commits-check on CI (discovered 2026-07-15, PR 102). Sign
+    # explicitly with the repo-configured key when signing is configured;
+    # otherwise keep the old behavior so ad-hoc clones still work.
+    sign_args: list[str] = []
+    gpgsign_proc = _run_git(repo_root, ["config", "--get", "commit.gpgsign"], env=env)
+    if gpgsign_proc.returncode == 0 and str(gpgsign_proc.stdout or "").strip().lower() == "true":
+        sign_args.append("-S")
+    proc = _run_git(repo_root, ["commit-tree", tree, "-p", parent_head, *sign_args], env=env, input_text=message)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or "git commit-tree failed")
     return str(proc.stdout or "").strip()

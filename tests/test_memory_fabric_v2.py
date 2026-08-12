@@ -24,6 +24,24 @@ class TestMemoryFabricV2(unittest.TestCase):
         self.assertTrue(res.pack_text)
         self.assertIn("Hudson", res.pack_text)
 
+    def test_memory_persists_after_reopening_fabric(self):
+        thread_id = "t1_restart"
+        self.fabric.ingest_episode(
+            thread_id,
+            "user",
+            "Remember that the desktop QA color is cobalt blue",
+            ts_ms=1700000000000,
+        )
+        self.fabric.add_pin(kind="note", ref_id="qa_color", thread_id=thread_id, note="desktop QA color: cobalt blue")
+        self.fabric.db.close()
+
+        reopened = MemoryFabricV2(root_path=self.tmp)
+        try:
+            res = reopened.retrieve(thread_id, "desktop QA color", budget_tokens=500)
+            self.assertIn("cobalt blue", res.pack_text.lower())
+        finally:
+            reopened.db.close()
+
     def test_contradiction_detection_on_profile_hint_change(self):
         thread_id = "t2"
         self.fabric.upsert_profile_hints(
@@ -40,6 +58,93 @@ class TestMemoryFabricV2(unittest.TestCase):
         )
         contras = self.fabric.list_contradictions(only_open=True, limit=10)
         self.assertTrue(any("profile_hint_value_change" in c["reason"] for c in contras))
+
+    def test_forget_profile_hint_removes_retrievable_value_and_caches(self):
+        value = "PARITY-FORGET-UNIQUE-401"
+        self.fabric.upsert_profile_hints(
+            thread_id=None,
+            hints=[{"key": "user.preference", "value": value, "confidence": 1.0}],
+            source_episode_id=None,
+        )
+        self.fabric.pin_profile_hint("user.preference", pinned=True)
+        self.fabric.ingest_episode("forget-thread", "assistant", value)
+        self.fabric.upsert_fact(
+            thread_id=None,
+            subject="user",
+            predicate="preference",
+            obj=value,
+            confidence=1.0,
+        )
+        self.fabric.add_pin(kind="note", ref_id="preference", note=value)
+        self.fabric.retrieve("forget-thread", "What is my preference?", budget_tokens=500)
+
+        result = self.fabric.forget_profile_hint("user.preference")
+
+        self.assertTrue(result["forgotten"])
+        for table, column in (
+            ("profile_hints", "value"),
+            ("episodes", "content"),
+            ("semantic_facts", "obj"),
+            ("pins", "note"),
+            ("packs", "text"),
+            ("retrieval_traces", "results_json"),
+        ):
+            count = self.fabric.db.execute(
+                f'SELECT COUNT(*) AS c FROM "{table}" WHERE "{column}" LIKE ?',
+                (f"%{value}%",),
+            ).fetchone()["c"]
+            self.assertEqual(int(count), 0, table)
+
+    def test_forget_thread_removes_thread_rows_and_promoted_derivatives(self):
+        thread = "private-thread"
+        other = "other-thread"
+        episode = self.fabric.ingest_episode(thread, "user", "PRIVATE-THREAD-MARKER-771")
+        self.fabric.ingest_episode(other, "user", "OTHER-THREAD-MARKER-882")
+        self.fabric.upsert_fact(
+            "owner",
+            "private_marker",
+            "PRIVATE-THREAD-MARKER-771",
+            thread_id=thread,
+            provenance_episode_id=int(episode["id"]),
+        )
+        self.fabric.upsert_profile_hints(
+            {"private.marker": ("PRIVATE-THREAD-MARKER-771", 1.0)},
+            source_episode_id=int(episode["id"]),
+        )
+        self.fabric.add_pin("episode", str(episode["id"]), thread_id=thread, note="private")
+        self.fabric.retrieve(thread, "private marker", budget_tokens=400)
+
+        result = self.fabric.forget_thread(thread)
+
+        self.assertTrue(result["forgotten"])
+        self.assertEqual(
+            self.fabric.db.execute("SELECT COUNT(*) c FROM episodes WHERE thread_id=?", (thread,)).fetchone()["c"],
+            0,
+        )
+        self.assertEqual(
+            self.fabric.db.execute("SELECT COUNT(*) c FROM semantic_facts WHERE thread_id=?", (thread,)).fetchone()[
+                "c"
+            ],
+            0,
+        )
+        self.assertEqual(
+            self.fabric.db.execute("SELECT COUNT(*) c FROM pins WHERE thread_id=?", (thread,)).fetchone()["c"],
+            0,
+        )
+        self.assertEqual(
+            self.fabric.db.execute("SELECT COUNT(*) c FROM retrieval_traces WHERE thread_id=?", (thread,)).fetchone()[
+                "c"
+            ],
+            0,
+        )
+        self.assertEqual(
+            self.fabric.db.execute("SELECT COUNT(*) c FROM profile_hints WHERE key='private.marker'").fetchone()["c"],
+            0,
+        )
+        self.assertEqual(
+            self.fabric.db.execute("SELECT COUNT(*) c FROM episodes WHERE thread_id=?", (other,)).fetchone()["c"],
+            1,
+        )
 
     def test_profile_hint_lower_confidence_does_not_replace_higher_confidence_value(self):
         thread_id = "t2b"

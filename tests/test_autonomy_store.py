@@ -49,6 +49,19 @@ class TestAutonomyStore(unittest.TestCase):
         nxt = compute_next_run(sched, now)
         self.assertTrue(nxt > now)
 
+    def test_create_job_accepts_deterministic_uuid_identity(self):
+        job = self.store.create_job(
+            name="Work event",
+            kind="workflow_task",
+            payload={"goal": "Process one durable event", "work_event_delivery_id": "delivery-42"},
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            job_id="5f2a52b1a9364a7684cda86417e6f019",
+        )
+
+        self.assertEqual(job.id, "5f2a52b1a9364a7684cda86417e6f019")
+        self.assertEqual(self.store.get_job(job.id).payload["work_event_delivery_id"], "delivery-42")
+
 
 if __name__ == "__main__":
     unittest.main()

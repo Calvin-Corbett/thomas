@@ -1,5 +1,5 @@
 /* layout.css */
 /* Split into functional areas to keep each file below monolith limits. */
-@import url("./layout_parts/layout-app-shell.css?v=20260401-rename");
-@import url("./layout_parts/layout-debug-panel.css?v=20260401-rename");
-@import url("./layout_parts/layout-workspace.css?v=20260401-rename");
+@import url("./layout_styles/layout-app-shell.css?v=20260401-rename");
+@import url("./layout_styles/layout-debug-panel.css?v=20260618-agent-selection");
+@import url("./layout_styles/layout-workspace.css?v=20260401-rename");

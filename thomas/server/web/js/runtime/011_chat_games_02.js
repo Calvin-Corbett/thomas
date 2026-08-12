@@ -119,6 +119,20 @@ function chatGameHandleKeyInput(event, pressed) {
     }
 }
 
+function chatGameBootFromUrl() {
+    let gameId = '';
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        gameId = safeString(params.get('game') || params.get('chat_game')).toLowerCase();
+    } catch (_error) {
+        gameId = '';
+    }
+    if (gameId !== 'cloud_jump' && gameId !== JETPACK_GAME_ID && gameId !== DINO_GAME_ID) return;
+    window.setTimeout(() => {
+        chatGameOpen(gameId);
+    }, 150);
+}
+
 function initChatGame() {
     const best = chatGameGetHighScore();
     if (chatGameScore) chatGameScore.textContent = '0';
@@ -152,6 +166,7 @@ function initChatGame() {
     document.addEventListener('keyup', (event) => {
         chatGameHandleKeyInput(event, false);
     });
+    chatGameBootFromUrl();
 }
 
 // 
@@ -565,14 +580,14 @@ function initActions() {
         micBaseText = safeString(composerTextarea.value);
         micPendingSend = false;
 
-        if (micPreferServerCapture && navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== 'undefined') {
-            const started = await startServerMicCapture();
-            if (started) return;
-        }
-
         if (recognition) {
             startSpeechRecognitionCapture();
             return;
+        }
+
+        if (micPreferServerCapture && navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== 'undefined') {
+            const started = await startServerMicCapture();
+            if (started) return;
         }
 
         notifyUser("Speech recognition isn't supported in this browser.", {
@@ -856,27 +871,34 @@ async function runChatSendJob(sendJob) {
     if (safeString(suggestionContext) !== 'onboarding') {
         hideAssistantSuggestions({ force: true });
     }
-    if (safeString(text)) {
-        officeMaybeQueueTaskFromPrompt(text, 'chat');
-    }
-
     if (welcomeScreen && !welcomeScreen.classList.contains('hidden')) {
         welcomeScreen.classList.add('hidden');
         chatScrollArea.classList.remove('hidden');
     }
 
     // Build user message content once for both display and history.
+    // Attachments now render as real thumbnails / file badges below the text
+    // (see buildMessageAttachments in renderMessage), so we no longer inject
+    // the old "(Attached N …)" placeholder text into the bubble.
     let userContent = safeString(text);
-    if (docsToSend.length > 0) userContent += `\n\n*(Attached ${docsToSend.length} document(s))*`;
-    if (imagesToSend.length > 0) userContent += `\n\n*(Attached ${imagesToSend.length} image(s))*`;
-    userContent = userContent || (queuedModeId === 'evolve' ? '(Evolve Thomas)' : '(Sent Attachments)');
+    if (!userContent && docsToSend.length === 0 && imagesToSend.length === 0) {
+        userContent = (queuedModeId === 'evolve' ? '(Evolve Thomas)' : '(Sent Attachments)');
+    }
+    const attachmentMeta = {};
+    if (imagesToSend.length > 0) attachmentMeta.images = imagesToSend;
+    if (docsToSend.length > 0) attachmentMeta.docs = docsToSend;
 
     // Skip rendering if already shown when queued
     if (!sendJob._alreadyRendered) {
         const existingUserRow = document.getElementById(clientMessageId);
         if (!existingUserRow) {
-            renderMessage({ role: 'user', content: userContent, id: clientMessageId });
+            renderMessage({ role: 'user', content: userContent, id: clientMessageId, ...attachmentMeta });
         }
+    } else {
+        // The job was rendered at queue time with a "Queued — will send when
+        // the current reply finishes" note; it is being sent now, so the note
+        // has served its purpose.
+        clearMessageQueuedNote(clientMessageId);
     }
     if (!safeString(activeChatId)) {
         activeChatId = safeString(sessionId) || `chat-${Date.now()}`;
@@ -888,6 +910,7 @@ async function runChatSendJob(sendJob) {
         createdAt: Date.now(),
         status: 'complete',
         toolCalls: [],
+        ...attachmentMeta,
     });
     syncActiveChatSidebarEntry();
     void persistActiveChat({ quiet: true });
@@ -989,18 +1012,10 @@ async function handleSend() {
         if (safeString(text)) {
             renderMessage({ role: 'user', content: text });
         }
-        if (isSecurityTrustConcern(text)) {
-            renderMessage({
-                role: 'assistant',
-                content: `${buildSetupSafetyMessage()}\n\nFinish Easy Setup first, then I can run normal chat tasks.`,
-            });
-            showSetupSafetySuggestions();
-        } else {
-            renderMessage({
-                role: 'assistant',
-                content: withAgentName('Finish Easy Setup first. {{agent}} requires setup before chat can run.'),
-            });
-        }
+        renderMessage({
+            role: 'assistant',
+            content: withAgentName('Finish Easy Setup first. {{agent}} requires setup before chat can run.'),
+        });
         openEasySetup({ source: 'mandatory', force: false, restart: false });
         return;
     }
@@ -1008,39 +1023,64 @@ async function handleSend() {
     const sendJob = buildSendJobFromComposer(text);
     if (!sendJob) return;
     if (isGenerating) {
-        // FIX (2026-03-18): Don't abort the current generation when user
-        // sends a new message. Instead, send it as an interrupt to the backend
-        // so Thomas can keep working while the user keeps chatting.
-        // The backend queues the message and the active run picks it up.
-        const interruptPayload = {
-            text: text,
-            session_id: sessionId,
-            profile: currentProfile || '',
-            busy_strategy: 'interrupt',
-        };
-        // Render user message immediately
-        renderMessage({ role: 'user', content: text });
-        chatHistory.push({
-            role: 'user',
-            content: text,
-            createdAt: Date.now(),
-            status: 'complete',
-        });
-        // Fire and forget — don't block, don't abort current stream
-        const chatEndpoint = window.__THOMAS_CHAT_V2__ ? '/api/v2/chat' : '/api/chat';
-        fetch(chatEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(interruptPayload),
-        }).catch(err => console.warn('[Thomas] Interrupt send failed:', err));
-        // Clear composer
-        composerTextarea.value = '';
-        composerTextarea.dispatchEvent(new Event('input'));
-        composerSyncSendButtonState();
+        // A message sent while a reply is generating is QUEUED and auto-sent
+        // when the current reply finishes (drainQueuedSends runs in
+        // streamChatResponse's finally). The previous branch here fired the
+        // message at /api/v2/chat as a fire-and-forget fetch tagged
+        // busy_strategy:'interrupt' -- a field only the retired legacy
+        // /api/chat handler ever read. V2 ignored it, ran a second serialized
+        // turn, and streamed its reply into a response body nobody read: the
+        // user's message appeared, no reply ever did, and nothing said why
+        // (measured 2026-08-05 -- the classic quick correction "change tuesday
+        // to 9" was silently lost).
+        queueSendJobWhileGenerating(sendJob);
         return;
     }
 
     await runChatSendJob(sendJob);
+}
+
+function queueSendJobWhileGenerating(sendJob) {
+    // Render the user message immediately (chronologically after the reply
+    // that is currently streaming) with a visible queued note, then park the
+    // job. runChatSendJob skips the duplicate render via _alreadyRendered --
+    // the hook was built for exactly this and had no caller until now.
+    const clientMessageId = safeString(sendJob?.clientMessageId);
+    const docsToSend = Array.isArray(sendJob?.docsToSend) ? sendJob.docsToSend : [];
+    const imagesToSend = Array.isArray(sendJob?.imagesToSend) ? sendJob.imagesToSend : [];
+    let userContent = safeString(sendJob?.text);
+    if (!userContent && docsToSend.length === 0 && imagesToSend.length === 0) {
+        userContent = '(Sent Attachments)';
+    }
+    const attachmentMeta = {};
+    if (imagesToSend.length > 0) attachmentMeta.images = imagesToSend;
+    if (docsToSend.length > 0) attachmentMeta.docs = docsToSend;
+    if (typeof ensureChatVisible === 'function') ensureChatVisible();
+    renderMessage({ role: 'user', content: userContent, id: clientMessageId, ...attachmentMeta });
+
+    const row = document.getElementById(clientMessageId);
+    if (row instanceof HTMLElement && !row.querySelector('.message-queued-note')) {
+        const note = document.createElement('div');
+        note.className = 'message-queued-note';
+        note.textContent = 'Queued — will send when the current reply finishes';
+        note.style.fontSize = '12px';
+        note.style.fontStyle = 'italic';
+        note.style.opacity = '0.75';
+        note.style.marginTop = '4px';
+        (row.querySelector('.message-stack') || row).appendChild(note);
+    }
+
+    sendJob._alreadyRendered = true;
+    pendingSendQueue.push(sendJob);
+    composerSyncSendButtonState();
+    pushDebugEvent('chat', 'Queued a message while a reply is generating');
+}
+
+function clearMessageQueuedNote(messageId) {
+    const row = document.getElementById(safeString(messageId));
+    if (!row) return;
+    const note = row.querySelector('.message-queued-note');
+    if (note) note.remove();
 }
 
 const VIBE_CODE_FALLBACK_NODES = [
@@ -1104,7 +1144,7 @@ const VIBE_CODE_FALLBACK_EDGES = [
 ];
 const VIBE_CODE_PROJECT_NODES = [
     { id: 'project.frontend', label: 'Frontend UI', summary: 'Sidebar, composer, and user input.' },
-    { id: 'project.api', label: 'Chat API', summary: 'HTTP/SSE stream entrypoint.' },
+    { id: 'project.api', label: 'Chat API', summary: 'Where your messages arrive.' },
     { id: 'project.session', label: 'Session + Memory', summary: 'Session/profile/runtime context.' },
     { id: 'project.router', label: 'Route + Planner', summary: 'Routing and execution strategy.' },
     { id: 'project.model', label: 'Model Runtime', summary: 'Reasoning + generation.' },

@@ -1,0 +1,87 @@
+/* shared_components.css — the audited WINNERS, as shared classes.
+ *
+ * Loaded everywhere via the @import at the top of css/tokens.css, so every
+ * page that links tokens.css (chat, /classic, /mission, /settings,
+ * /companion, marketplace, my-stuff) gets these for free — no <link> edits.
+ *
+ * Each class is the best existing implementation found in the 2026-08 token
+ * audit, lifted verbatim and re-pointed at the semantic tokens:
+ *   .status-pill              — mission.style01.css:82-89
+ *   .empty-state/.loading-state — mission.style01.css:129 (dashed pattern)
+ *   .t-input                  — settings.style01.css:446-470 profile
+ *
+ * NOT this file's job: page layout, the .t-btn standard (tokens.css), the
+ * classic-SPA aggregator (css/components.css — a different, older file that
+ * @imports the component_styles/ split).
+ */
+
+/* ── Status pill ─────────────────────────────────────────────────────────
+   <span class="status-pill is-success">running</span> */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--c-border);
+    border-radius: 999px;
+    padding: 5px 9px;
+    color: var(--c-dim);
+    background: var(--c-surface);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.status-pill i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 10px currentColor;
+}
+
+.status-pill.is-success { color: var(--c-success); }
+.status-pill.is-warning { color: var(--c-warn); }
+.status-pill.is-danger { color: var(--c-danger); }
+
+/* ── Empty / loading states ──────────────────────────────────────────────
+   The dashed border is the mark for "nothing here yet", as opposed to a
+   solid-border card that lost its content. */
+.empty-state,
+.loading-state {
+    padding: 28px 16px;
+    border: 1px dashed var(--c-border-2);
+    border-radius: 12px;
+    color: var(--c-muted);
+    text-align: center;
+    font-size: 12px;
+}
+
+/* ── Text input (the /settings control profile) ──────────────────────────
+   <input class="t-input"> / <select class="t-input"> / <textarea class="t-input"> */
+.t-input {
+    min-height: 38px;
+    max-width: 100%;
+    padding: 8px 11px;
+    border: 1px solid var(--c-border-2);
+    border-radius: 9px;
+    outline: 0;
+    background: var(--c-composer-bg);
+    color: var(--c-text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.t-input:focus {
+    border-color: var(--c-accent-line);
+    box-shadow: 0 0 0 3px var(--c-accent-soft);
+}
+
+.t-input::placeholder {
+    color: var(--c-muted);
+}
+
+textarea.t-input {
+    white-space: pre-wrap;
+    resize: vertical;
+    min-height: 86px;
+}

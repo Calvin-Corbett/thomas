@@ -12,30 +12,61 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js">
 </script>
-<link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__">
-<link rel="stylesheet" href="/static/css/layout.css?v=__THOMAS_VERSION__">
-<link rel="stylesheet" href="/static/css/accessibility.css?v=__THOMAS_VERSION__">
-<link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__">
-<link rel="stylesheet" href="/static/css/evolution.css?v=__THOMAS_VERSION__">
-<link rel="stylesheet" href="/static/css/token_economy.css?v=__THOMAS_VERSION__">
+<!-- All CSS cache-busted by the BUILD CONTENT HASH (__THOMAS_WEB_BUILD__), not the
+     static version string. The version only changes on a release, so any CSS edit
+     between releases was served stale from the browser cache — the root cause of
+     "the AI fixed it but it never changed on my machine". The content hash changes
+     on every CSS/JS edit, so edits actually reach the browser on a normal reload. -->
+<link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/layout.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/accessibility.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/evolution.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/token_economy.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/token_economy_widget.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/token_economy_space_theme.css?v=__THOMAS_WEB_BUILD__">
+<!-- composer.css is loaded LAST among composer-relevant sheets so its plain,
+     normal-specificity selectors win on source order alone (no !important wars).
+     Owns the entire general-chat composer look; achromatic white-alpha only. -->
+<link rel="stylesheet" href="/static/css/composer.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/ui_studio_canvas.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/ui_studio_canvas_panels.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/workspace_shell.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/virtual_office_workspace.css?v=__THOMAS_WEB_BUILD__">
+<link rel="stylesheet" href="/static/css/ui_edit_mode.css?v=__THOMAS_WEB_BUILD__">
+<style>
+  /* Embedded-workspace mode: when the new chat UI hosts a workspace via iframe
+     (?embed=1), hide the legacy shell so ONLY the workspace content shows. The
+     new design supplies the sidebar/chrome; the old UI never appears. */
+  html.tcw-embed body .sidebar,
+  html.tcw-embed body .top-nav,
+  html.tcw-embed body .composer-container,
+  html.tcw-embed body .welcome-screen,
+  html.tcw-embed body #chatScrollArea,
+  html.tcw-embed body .debug-dock,
+  html.tcw-embed body #restartOverlay { display: none !important; }
+  html.tcw-embed body .main-content { width: 100% !important; margin: 0 !important; }
+  html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+</style>
+<script>
+  (function () { try { if (new URLSearchParams(window.location.search).get('embed') === '1') document.documentElement.classList.add('tcw-embed'); } catch (e) {} })();
+</script>
 </head>
 <body>
 <script>
-/* Early theme flash prevention — apply saved theme class before first paint */
+/* Early theme flash prevention — apply the UNIFIED theme before first paint
+   (same key and attributes ThomasWorkspaceShell manages; mission.html has the
+   reference pattern). The old script read the retired 'thomas_theme' key and
+   set body classes no stylesheet reads, so light/sandstone users got a dark
+   nebula flash on every load. */
 (function() {
-    var theme = 'auto';
+    var theme = 'nebula';
     try {
-        theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
+        theme = String(window.localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase();
     } catch (_) {}
-    if (theme === 'light') {
-        document.body.classList.add('te-theme-light');
-        document.body.setAttribute('data-theme', 'light');
-    } else if (theme === 'dark') {
-        document.body.classList.add('te-theme-dark');
-        document.body.setAttribute('data-theme', 'dark');
-    } else {
-        document.body.classList.add('te-space-active');
-    }
+    var de = document.documentElement;
+    de.dataset.thomasTheme = theme;
+    de.dataset.theme = theme;
 })();
 </script>
 <form id="settingsCredentialForm" class="hidden" aria-hidden="true">
@@ -49,7 +80,7 @@
 <i class="ph ph-list">
 </i>
 </button>
-<button class="btn-icon" id="newChatSidebar" title="Rename Agent (Shift+Click for New Chat)" aria-label="Rename agent (Shift+Click for new chat)">
+<button class="btn-icon" id="newChatSidebar" title="New Chat" aria-label="Start new chat">
 <i class="ph ph-pencil-simple">
 </i>
 </button>
@@ -80,20 +111,23 @@
 <option value="new">New Chat</option>
 </select>
 </section>
+<button class="nav-item" id="navForgeBtn" data-nav-mode="evolution">
+<i class="ph ph-hammer"></i> Forge </button>
 <div class="sidebar-nav-divider">Workspaces</div>
 <div id="workspaceNavItems">
 <button class="nav-item" id="navMissionBtn" data-nav-mode="mission">
 <i class="ph ph-crosshair-simple">
 </i> Mission Control </button>
-<button class="nav-item" id="navEvolutionBtn" data-nav-mode="evolution">
-<i class="ph ph-arrows-clockwise">
-</i> Evolution </button>
+<!-- The Evolution workspace is reached through the Forge nav item above
+     (id="navForgeBtn", data-nav-mode="evolution"), which replaced the separate
+     "Evolution" button when Evolve and Code were merged into Forge. A second
+     button for the same mode would render a duplicate sidebar entry. -->
 <button class="nav-item" id="navUiEditorBtn" data-nav-mode="app_builder">
 <i class="ph ph-app-window">
-</i> UI Editor </button>
+</i> Canvas </button>
 <button class="nav-item" id="navMyStuffBtn" data-nav-mode="my_stuff">
 <i class="ph ph-grid-four">
-</i> My Stuff </button>
+</i> Library </button>
 <button class="nav-item" id="navChannelsBtn" data-nav-mode="channels">
 <i class="ph ph-broadcast">
 </i> Channels </button>
@@ -124,7 +158,7 @@
 </div>
 <div class="model-select-wrapper">
 <button id="modelSetupBtn" class="model-setup-btn" title="Configure Model">
-<span id="modelSetupCurrentLabel">loading...</span>
+<span id="modelSetupCurrentLabel">Checking your model…</span>
 </button>
 <select id="modelSelector" class="hidden">
 </select>
@@ -138,7 +172,7 @@
 </nav>
 <section class="settings-screen hidden" id="settingsModal"></section>
 <aside class="debug-dock" id="debugDock" aria-label="Thomas tools panel" data-agent-aria-label-template="{{agent}} tools panel"></aside>
-<section class="office-workspace hidden" id="officeWorkspace" aria-label="Virtual office workspace">
+<section class="office-workspace hidden" id="officeWorkspace" aria-label="Virtual office workspace" data-ui-id="virtual-office.shell" data-ui-label="Virtual Office" data-ui-policy="root protected" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">
 <div class="office-toolbar">
 <div class="office-toolbar-title">
 <span class="office-toolbar-dot">
@@ -147,16 +181,16 @@
 </div>
 <button id="officeEditorToggleBtn" class="settings-mini-btn" type="button">Robot Editor</button>
 </div>
-<div class="office-stage">
-<div class="office-scene-wrap" tabindex="0" aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning.">
+<div class="office-stage" data-ui-id="virtual-office.stage" data-ui-label="Office map stage" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360;preserveHandlers=true;preserveA11y=true">
+<div class="office-scene-wrap" tabindex="0" aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning." data-ui-id="virtual-office.map" data-ui-label="Live office map" data-ui-policy="move resize" data-ui-constraints="minWidth=360;minHeight=360;preserveHandlers=true;preserveA11y=true">
 <div class="office-scene-panzoom" id="officeScenePanzoom">
 <div class="office-scene" id="officeScene">
 </div>
 </div>
-<section class="office-minimap" id="officeMinimap" aria-label="Office minimap">
+<section class="office-minimap" id="officeMinimap" aria-label="Office minimap" data-ui-id="virtual-office.minimap" data-ui-label="Office minimap" data-ui-policy="move resize" data-ui-constraints="minWidth=180;minHeight=130;maxWidth=520;maxHeight=420;preserveHandlers=true;preserveA11y=true">
 <div class="office-minimap-head">
 <span>Live Map</span>
-<button id="officeFollowToggleBtn" class="settings-mini-btn" type="button">Follow: Off</button>
+<button id="officeFollowToggleBtn" class="settings-mini-btn" type="button" data-ui-id="virtual-office.action.follow" data-ui-label="Follow active agent" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">Follow: Off</button>
 </div>
 <canvas id="officeMinimapCanvas" width="240" height="152" aria-label="Office minimap. Click or drag to pan the camera.">
 </canvas>
@@ -171,9 +205,9 @@
 <i class="ph ph-plus">
 </i>
 </button>
-<button id="officeDebugToggleBtn" class="settings-mini-btn" type="button" aria-pressed="false" aria-label="Toggle office debug overlay">Debug</button>
+<button id="officeDebugToggleBtn" class="settings-mini-btn" type="button" aria-pressed="false" aria-label="Toggle office debug overlay" data-ui-id="virtual-office.action.debug" data-ui-label="Office debug controls" data-ui-policy="protected controls" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">Debug</button>
 </div>
-<aside class="office-debug-overlay hidden" id="officeDebugOverlay" aria-live="polite" aria-label="Office debug overlay">
+<aside class="office-debug-overlay hidden" id="officeDebugOverlay" aria-live="polite" aria-label="Office debug overlay" data-ui-id="virtual-office.debug-panel" data-ui-label="Office debug panel" data-ui-policy="protected critical-status" data-ui-constraints="move=false;resize=false;preserveHandlers=true;preserveA11y=true">
 </aside>
 </div>
 <div class="office-editor-modal hidden" id="officeEditorModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="officeEditorTitle">
@@ -545,25 +579,19 @@
 <span class="chat-game-dino-leg chat-game-dino-leg-right">
 </span>
 </span>
-<span class="office-pixel-agent costume-headset" id="chatGameBot">
-<span class="office-agent-head">
-<span class="office-agent-eye office-agent-eye-left">
+<span class="chat-game-player-avatar" id="chatGameBot">
+<span class="chat-game-player-core">
 </span>
-<span class="office-agent-eye office-agent-eye-right">
+<span class="chat-game-player-visor">
 </span>
+<span class="chat-game-player-pack">
 </span>
-<span class="office-agent-jetpack-shell">
+<span class="chat-game-player-flame">
 </span>
-<span class="office-agent-jetpack-flame">
-</span>
-<span class="office-agent-body">
-</span>
-<span class="office-agent-leg office-agent-leg-left">
-</span>
-<span class="office-agent-leg office-agent-leg-right">
+<span class="chat-game-player-trail">
 </span>
 </span>
-<span class="office-agent-label chat-game-bot-name" id="chatGameBotName">Office Bot</span>
+<span class="office-agent-label chat-game-bot-name" id="chatGameBotName">Player</span>
 </div>
 <div class="chat-game-hud">
 <div class="chat-game-score-line chat-game-score-live" id="chatGameScoreWrap">
@@ -578,6 +606,16 @@
 <p class="chat-game-status" id="chatGameStatusText">Press Space to start | Esc to exit</p>
 </div>
 </section>
+<div class="chat-game-controls hidden" id="chatGameControls" role="toolbar" aria-label="Game controls" aria-hidden="true">
+<button class="chat-game-control-btn" id="chatGameRestartBtn" type="button" title="Restart game" aria-label="Restart game">
+<i class="ph ph-arrow-clockwise">
+</i>
+</button>
+<button class="chat-game-control-btn" id="chatGameCloseBtn" type="button" title="Close game" aria-label="Close game">
+<i class="ph ph-x">
+</i>
+</button>
+</div>
 <div class="composer-container">
 <div class="composer-inner">
 <div class="assistant-suggestion-rail hidden" id="assistantSuggestionRail">
@@ -595,8 +633,8 @@
 <div id="attachmentsPreview" class="attachments-preview">
 </div>
 <div class="composer-input-row">
-<button class="btn-icon" id="attachBtn" title="Actions menu" aria-expanded="false" aria-controls="composerActionPopover">
-<i class="ph ph-plus">
+<button class="btn-icon" id="attachBtn" type="button" title="Actions menu" aria-expanded="false" aria-controls="composerActionPopover">
+<i class="ph ph-dots-three-outline">
 </i>
 </button>
 <div class="composer-mode-chip hidden" id="composerModeChip" role="status" aria-live="polite">
@@ -607,16 +645,26 @@
 </i>
 </button>
 </div>
-<textarea class="composer-textarea" id="composerTextarea" rows="1" placeholder="Ask Thomas anything or describe a task" data-agent-placeholder-template="Ask {{agent}} anything or describe a task" autofocus>
+<textarea class="composer-textarea" id="composerTextarea" rows="1" placeholder="Message Thomas…" data-agent-placeholder-template="Message {{agent}}…" autofocus>
 </textarea>
-<button class="btn-icon" id="micBtn" title="Use microphone">
+<div class="composer-right-cluster">
+<button class="btn-icon" id="composerControlsBtn" type="button" title="Controls" aria-label="Conversation controls" aria-haspopup="dialog" aria-expanded="false" aria-controls="composerControlsPopover">
+<i class="ph ph-sliders-horizontal">
+</i>
+</button>
+<button class="btn-icon" id="micBtn" type="button" title="Use microphone">
 <i class="ph ph-microphone">
 </i>
 </button>
-<button class="btn-send" id="sendBtn" disabled>
+<button class="btn-send" id="sendBtn" type="button" disabled>
 <i class="ph ph-arrow-up">
 </i>
 </button>
+</div>
+</div>
+<div class="composer-controls-popover hidden" id="composerControlsPopover" role="dialog" aria-label="Conversation controls" aria-hidden="true">
+<div class="composer-controls-list" id="composerControlsList">
+</div>
 </div>
 <div class="composer-status-bar" id="composerStatusBar" role="status" aria-live="polite">
 </div>
@@ -634,9 +682,9 @@
 </div>
 <div class="composer-games-column hidden" id="composerGamesColumn" aria-label="Game options">
 <div class="composer-games-title">Playable now</div>
-<button class="composer-game-btn" type="button" data-game="cloud_jump">Cloud Jump: Office Bot</button>
-<button class="composer-game-btn" type="button" data-game="jetpack_joyride">Jetpack Joyride: Office Bot</button>
-<button class="composer-game-btn" type="button" data-game="dino_run">Dino Run: Office Bot</button>
+<button class="composer-game-btn" type="button" data-game="cloud_jump">Cloud Jump</button>
+<button class="composer-game-btn" type="button" data-game="jetpack_joyride">Jetpack Joyride</button>
+<button class="composer-game-btn" type="button" data-game="dino_run">Dino Run</button>
 <div class="composer-games-empty">More arcade modes will appear here as they ship.</div>
 </div>
 </div>
@@ -703,14 +751,34 @@
 <select id="setupModelSelector" class="setup-fluid-select">
 </select>
 </div>
+<div class="form-group model-specialty-group" id="setupSpecialtyModelGroup">
+<label for="setupSpecialtyRoleSelector">Specialties</label>
+<div class="model-specialty-controls">
+<select id="setupSpecialtyRoleSelector" class="setup-fluid-select">
+<option value="research">Research</option>
+<option value="coding">Coding</option>
+<option value="planning">Planning</option>
+<option value="memory">Memory</option>
+<option value="tools">Tool use</option>
+<option value="creative">Creative</option>
+</select>
+<select id="setupSpecialtyProviderSelector" class="setup-fluid-select" aria-label="Specialty provider">
+</select>
+<select id="setupSpecialtyModelSelector" class="setup-fluid-select" aria-label="Specialty model">
+</select>
+<button type="button" class="settings-mini-btn" id="setupSpecialtyClearBtn">Inherit</button>
+</div>
+<p class="model-specialty-status" id="setupSpecialtyStatus">Roles inherit the base model until a specialty override is selected.</p>
+</div>
 <div class="form-group" id="setupReasoningGroup" style="display:none">
-<label>Reasoning Effort</label>
+<label>Reasoning</label>
 <div class="segmented-control" id="setupReasoningEffortGroup">
 <button class="segment" data-level="low">Low</button>
 <button class="segment active" data-level="medium">Medium</button>
 <button class="segment" data-level="high">High</button>
 <button class="segment" data-level="xhigh">xHigh</button>
 </div>
+<p class="setup-hint">The model's own thinking depth (its native setting). Higher spends more time reasoning before it answers — better on hard problems, slower and pricier on easy ones.</p>
 </div>
 <div class="form-group split-group">
 <div class="form-subgroup">
@@ -729,25 +797,38 @@
 </textarea>
 </div>
 <div class="form-group">
-<label>Autonomy Engine Level</label>
+<label>Autonomy</label>
 <div class="segmented-control" id="setupAutonomyGroup">
 <button class="segment active" data-level="1">L1 <span>Chat</span>
 </button>
 <button class="segment" data-level="2">L2 <span>Assist</span>
 </button>
-<button class="segment" data-level="3">L3 <span>Auto</span>
+<button class="segment" data-level="3">L3 <span>Agent</span>
 </button>
-<button class="segment" data-level="4">L4 <span>Agent</span>
+<button class="segment" data-level="4">L4 <span>Full</span>
 </button>
 </div>
+<p class="setup-hint">How far Thomas goes on its own. <b>L1 Chat</b> — answers only. <b>L2 Assist</b> — drafts and suggests, you approve. <b>L3 Agent</b> — runs multi-step tasks, checks in on big calls. <b>L4 Full</b> — plans and executes end-to-end without stopping to ask.</p>
 </div>
 <div class="form-group">
-<label>Token Economy</label>
+<label>Effort</label>
 <div class="segmented-control" id="setupEconomyGroup">
-<button class="segment" data-level="cheap">Cheap</button>
-<button class="segment active" data-level="balanced">Balanced</button>
-<button class="segment" data-level="max">Maximum</button>
+<button class="segment" data-level="cheap">Brisk</button>
+<button class="segment active" data-level="balanced">Diligent</button>
+<button class="segment" data-level="max">Exhaustive</button>
 </div>
+<p class="setup-hint">How hard Thomas works on a task. No setting limits how many steps a run may take — Thomas stops when it is done. <b>Brisk</b> — lowest cost: no auto-repair attempt after a failed check, and the leanest build brief. <b>Diligent</b> — the default: auto-repair follows your configured retry count. <b>Exhaustive</b> — staffs a crew, runs adversarial review passes and a quality rubric, and self-corrects until it's right (slowest, most expensive).</p>
+</div>
+<div class="form-group" id="setupGuardrailsGroupWrap">
+<label>Guardrails</label>
+<div class="segmented-control" id="setupGuardrailsGroup">
+<button class="segment" data-level="open">Open</button>
+<button class="segment active" data-level="guarded">Guarded</button>
+<button class="segment" data-level="fortress">Fortress</button>
+</div>
+<p class="setup-hint"><b>Open</b> — minimal friction, fewest checks. <b>Guarded</b> — sensible defaults. <b>Fortress</b> — maximum strictness. Safety-critical Vault checks (secrets, destructive actions) always stay on and can't be turned off.</p>
+<button type="button" class="settings-mini-btn" id="setupGuardrailsDetailBtn" aria-expanded="false">Detailed guardrails &#9662;</button>
+<div class="guardrail-detail hidden" id="setupGuardrailDetail" role="group" aria-label="Per-group guardrails"></div>
 </div>
 <div class="form-group switch-group">
 <div class="switch-label">
@@ -779,18 +860,20 @@
 <input type="file" id="imageFileInput" accept="image/*" style="display:none" multiple />
 <div id="toastContainer" class="toast-container">
 </div>
-<script src="/static/js/theme_rules.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/token_economy_space.js?v=__THOMAS_WEB_BUILD__"></script>
 <script>
 /* Global space background — restore only for Nebula/auto theme */
 (function () {
     'use strict';
     function _shouldInjectGlobalSpace() {
+        /* The space belongs to the Nebula theme only (unified key; the old
+           'thomas_theme' key is retired and had an always-true default). */
         try {
-            var theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
-            return !theme || theme === 'auto' || theme === 'system';
+            var theme = String(window.localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase();
+            return theme === 'nebula';
         } catch (_) {
-            return !document.body.classList.contains('te-theme-light') && !document.body.classList.contains('te-theme-dark');
+            var t = document.documentElement.dataset.thomasTheme || document.documentElement.dataset.theme || 'nebula';
+            return t === 'nebula';
         }
     }
     function _injectGlobalSpace() {
@@ -809,6 +892,10 @@
 })();
 </script>
 <script src="/static/js/token_economy.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/composer_controls.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/workspace_shell.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/ui_edit_layout.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/ui_edit_mode.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_settings.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_debug_dock.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_mission.js?v=__THOMAS_WEB_BUILD__"></script>

@@ -1,7 +1,4 @@
-"""Chatbot framework with intents, slots, and dialogue management.
-
-Implements a conversational AI system with NLU and dialogue state tracking.
-"""
+"""Chatbot framework driven by structured intents and dialogue state."""
 
 import uuid
 from dataclasses import dataclass, field
@@ -50,7 +47,7 @@ class Slot:
 
 @dataclass
 class Intent:
-    """An NLU intent."""
+    """A structured intent selected by the calling model or client."""
 
     name: str
     intent_type: IntentType
@@ -173,38 +170,15 @@ class Chatbot:
         """Register entity values."""
         self.entities[entity_type] = values
 
-    async def process_message(self, message: str) -> Response:
-        """Process a user message and generate response."""
+    async def process_message(self, message: str, *, intent_name: str) -> Response:
+        """Process a message under a model-selected structured intent."""
         self.dialogue_state.turn_count += 1
-
-        # Simulate NLU - classify intent
-        intent = self._classify_intent(message)
+        selected = str(intent_name or "").strip()
+        intent = self.intents.get(selected) or Intent(selected or "unknown", IntentType.QUESTION)
         self.dialogue_state.set_intent(intent)
-
-        # Simulate dialogue management
         response_text = self._generate_response(intent)
-
-        # Record in history
         self.conversation_history.append((message, response_text))
-
-        response = Response(response_text, intent)
-        return response
-
-    def _classify_intent(self, message: str) -> Intent:
-        """Classify the message intent."""
-        # Simplified intent classification
-        message_lower = message.lower()
-
-        if any(word in message_lower for word in ["hello", "hi", "hey"]):
-            intent = Intent("greeting", IntentType.GREETING, 0.95)
-        elif any(word in message_lower for word in ["goodbye", "bye", "quit"]):
-            intent = Intent("farewell", IntentType.FAREWELL, 0.95)
-        elif any(word in message_lower for word in ["help", "assist"]):
-            intent = Intent("help", IntentType.HELP, 0.95)
-        else:
-            intent = Intent("unknown", IntentType.QUESTION, 0.5)
-
-        return intent
+        return Response(response_text, intent)
 
     def _generate_response(self, intent: Intent) -> str:
         """Generate a response for the intent."""

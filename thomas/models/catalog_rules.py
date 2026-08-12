@@ -9,6 +9,9 @@ from urllib.parse import urlparse
 from thomas.core.config import ModelConfig
 
 CURATED_OPENAI_MODELS: tuple[str, ...] = (
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
     "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
@@ -20,14 +23,28 @@ CURATED_OPENAI_MODELS: tuple[str, ...] = (
     "gpt-5.1-codex-mini",
 )
 
+OPENAI_CODEX_GPT56_MODELS: tuple[str, ...] = (
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+)
+
+# Verified against the signed-in ChatGPT/Codex Responses endpoint on 2026-07-14.
+# Keep this list aligned with live provider evidence so a temporary availability
+# result does not leave a recovered GPT-5.6 variant disabled in the local UI.
+OPENAI_CODEX_CHATGPT_VERIFIED_MODELS: tuple[str, ...] = (
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+)
+
 
 def provider_family(cfg: ModelConfig) -> str:
     provider = str(getattr(cfg, "provider", "") or "").strip().lower()
     base_url = str(getattr(cfg, "base_url", "") or "").strip().lower()
     model = str(getattr(cfg, "model", "") or "").strip().lower()
     text = " ".join((provider, base_url, model))
-    if provider == "codex":
-        return "openai"
     # Match the OpenAI API host on the parsed URL hostname (exact / suffix on a
     # dot boundary) instead of a bare substring, so look-alike hosts such as
     # "api.openai.com.evil.example" cannot spoof the openai family.
@@ -147,9 +164,9 @@ def _infer_capabilities(*, model_id: str, provider: str, family: str) -> dict[st
     reasoning = fam == "openai" and mid.startswith("gpt-5")
     return {
         "chat": True,
-        "tools": prov == "codex" or fam in {"openai", "anthropic", "google", "xai", "deepseek"},
+        "tools": fam in {"openai", "anthropic", "google", "xai", "deepseek"},
         "streaming": True,
-        "reasoning_efforts": ["low", "medium", "high", "xhigh"] if reasoning else [],
+        "reasoning_efforts": ["none", "low", "medium", "high", "xhigh", "max"] if reasoning else [],
         "frontier": _is_frontier_candidate(mid),
         "mini": _is_small_model(mid),
         "codex_optimized": "codex" in mid,
@@ -158,7 +175,7 @@ def _infer_capabilities(*, model_id: str, provider: str, family: str) -> dict[st
 
 def _is_small_model(model_id: str) -> bool:
     tokens = {t for t in re.split(r"[^a-z0-9]+", str(model_id or "").lower()) if t}
-    return bool(tokens.intersection({"mini", "small", "nano", "flash", "spark"}))
+    return bool(tokens.intersection({"mini", "small", "nano", "flash", "spark", "luna"}))
 
 
 def _is_frontier_candidate(model_id: str) -> bool:
@@ -166,11 +183,12 @@ def _is_frontier_candidate(model_id: str) -> bool:
     return mid.startswith("gpt-") and not _is_small_model(mid)
 
 
-def _version_score(model_id: str) -> tuple[int, int, int, int, str]:
+def _version_score(model_id: str) -> tuple[int, int, int, int, int, str]:
     mid = str(model_id or "").lower()
     match = re.search(r"\bgpt[-_]?(\d+)(?:[.-](\d+))?", mid)
     major = int(match.group(1)) if match else 0
     minor = int(match.group(2)) if match and match.group(2) else 0
     codex_bonus = 1 if "codex" in mid else 0
     small_penalty = -1 if _is_small_model(mid) else 0
-    return (major, minor, codex_bonus, small_penalty, mid)
+    variant_rank = 3 if "-sol" in mid else 2 if "-terra" in mid else 1 if "-luna" in mid else 0
+    return (major, minor, variant_rank, codex_bonus, small_penalty, mid)

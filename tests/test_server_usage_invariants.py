@@ -1,12 +1,12 @@
 import json
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
-from thomas.core.events import AgentEvent, EventType
 from thomas.server.app import create_app
 
 
@@ -20,62 +20,22 @@ def _parse_ndjson(blob: str):
     return out
 
 
-class _FakeAgentLoopBadUsage:
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        _ = kwargs
-
-    async def run(self, prompt, *, mode="auto", tools_policy="auto", job_type=None):  # noqa: ANN001
-        _ = prompt
-        _ = tools_policy
-        _ = job_type
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "route": {"path": "general", "confidence": 1.0},
-                "mode": str(mode),
-                "tools_policy": "never",
-                "autonomy_level": 3,
-                "autonomy_name": "Standard",
-            },
-        )
-        yield AgentEvent.text_delta("USAGE_BAD")
-        yield AgentEvent.agent_done(
-            text="USAGE_BAD",
-            iterations=1,
-            tool_calls=0,
-            usage={"prompt_tokens": "9", "completion_tokens": -4, "total_tokens": 1},
-            token_report={"mode": str(mode)},
-        )
+async def _fake_process_bad_usage(self, session_id, conversation, prompt, dispatcher, **kwargs):  # noqa: ANN001
+    conversation = conversation.append_message("user", kwargs.get("display_prompt") or prompt)
+    conversation = conversation.append_message("assistant", "USAGE_BAD")
+    self.llm.session_usage = SimpleNamespace(prompt_tokens="9", completion_tokens=-4, total_tokens=1)
+    await dispatcher.emit_text("USAGE_BAD")
+    await dispatcher.emit_done(session_id=session_id, conversation_version=conversation.version)
+    return conversation
 
 
-class _FakeAgentLoopNoUsage:
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        _ = kwargs
-
-    async def run(self, prompt, *, mode="auto", tools_policy="auto", job_type=None):  # noqa: ANN001
-        _ = prompt
-        _ = tools_policy
-        _ = job_type
-        yield AgentEvent(
-            type=EventType.AGENT_START,
-            data={
-                "route": {"path": "general", "confidence": 1.0},
-                "mode": str(mode),
-                "tools_policy": "never",
-                "autonomy_level": 3,
-                "autonomy_name": "Standard",
-            },
-        )
-        yield AgentEvent.text_delta("USAGE_NONE")
-        yield AgentEvent.agent_done(
-            text="USAGE_NONE",
-            iterations=1,
-            tool_calls=0,
-            usage=None,
-            token_report={"mode": str(mode)},
-        )
+async def _fake_process_no_usage(self, session_id, conversation, prompt, dispatcher, **kwargs):  # noqa: ANN001
+    conversation = conversation.append_message("user", kwargs.get("display_prompt") or prompt)
+    conversation = conversation.append_message("assistant", "USAGE_NONE")
+    self.llm.session_usage = None
+    await dispatcher.emit_text("USAGE_NONE")
+    await dispatcher.emit_done(session_id=session_id, conversation_version=conversation.version)
+    return conversation
 
 
 class TestServerUsageInvariants(AioHTTPTestCase):
@@ -108,7 +68,7 @@ class TestServerUsageInvariants(AioHTTPTestCase):
     async def test_done_usage_is_normalized_for_malformed_values(self):
         sid = await self._new_session_id()
 
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopBadUsage):
+        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_bad_usage):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -136,7 +96,7 @@ class TestServerUsageInvariants(AioHTTPTestCase):
     async def test_done_usage_defaults_to_zero_when_missing(self):
         sid = await self._new_session_id()
 
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopNoUsage):
+        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_no_usage):
             resp = await self.client.post(
                 "/api/chat",
                 json={

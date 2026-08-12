@@ -19,27 +19,49 @@ from thomas.core.config import AppConfig
 TOKEN_ECONOMY_LEVELS = ("cheap", "optimal", "max")
 TOKEN_ECONOMY_ALIASES = {
     "balanced": "optimal",
+    # Public "Effort" vocabulary (Brisk / Diligent / Exhaustive) maps onto the
+    # internal token-economy levels (cheap / optimal / max). The user-facing dial
+    # is "Effort"; the internal keys stay for backward-compat across the pipeline.
+    "brisk": "cheap",
+    "diligent": "optimal",
+    "exhaustive": "max",
 }
 RUN_MODES = ("auto", "fast", "thinking")
 
-# Number of passes (iterations) per economy level.
-# These multiply against the base max_agent_iterations from config.
-_PASS_MULTIPLIERS = {
-    "cheap": 0.3,  # ~1-3 passes — single-shot, minimal iteration
-    "optimal": 1.0,  # default number of passes from config
-    "max": 2.5,  # extended passes for thorough multi-step work
-}
+# Passes are NOT rationed. The model stops when it stops asking for tools.
+#
+# This used to hand out 3 / 15 / 32 iterations by economy level, with 15 the
+# default. That is the opposite of how every comparable agent works: the loop runs
+# until the model has nothing left it wants to look at, and an iteration cap exists
+# only as an opt-in safety net, off by default. Cost is capped in dollars, not in
+# steps.
+#
+# Rationing steps does not save money, it wastes it. A run cut off at pass 15 has
+# already paid for 15 passes and produced a half-finished edit, and the owner then
+# has to spend more asking it to continue. Measured 2026-08-05: a three-file app was
+# cut off mid-repair and shipped with an undeclared variable on the last line of
+# app.js; the user's own words afterwards were "it told me he ran out of passes,
+# just really unusable".
+#
+# What remains is a RUNAWAY GUARD. It is deliberately far above any real task, so it
+# only ever catches a genuine infinite loop — never a job that was going fine. If you
+# find yourself tempted to lower it to save tokens, lower the reasoning effort
+# instead: that is native to the model and makes each step cheaper, rather than
+# rationing how many steps the model is allowed to think in.
+_RUNAWAY_GUARD_PASSES = 400
+
+_PASS_MULTIPLIERS = {"cheap": 1.0, "optimal": 1.0, "max": 1.0}
 
 _MIN_PASSES = {
-    "cheap": 1,
-    "optimal": 3,
-    "max": 8,
+    "cheap": _RUNAWAY_GUARD_PASSES,
+    "optimal": _RUNAWAY_GUARD_PASSES,
+    "max": _RUNAWAY_GUARD_PASSES,
 }
 
 _MAX_PASSES = {
-    "cheap": 3,
-    "optimal": 15,
-    "max": 32,
+    "cheap": _RUNAWAY_GUARD_PASSES,
+    "optimal": _RUNAWAY_GUARD_PASSES,
+    "max": _RUNAWAY_GUARD_PASSES,
 }
 
 
@@ -64,48 +86,42 @@ class RuntimeOverheadPolicy:
     runtime_skills_mode: str
 
 
+# Effort does not decide what Thomas is allowed to KNOW.
+#
+# This used to vary by level, and "cheap" (the Brisk effort setting) switched off
+# include_project_instructions — so choosing a faster reasoning setting made Thomas
+# stop reading the project's own instructions, along with the editing policy, the
+# library context, memory and skills. That is not a cheaper Thomas, it is a Thomas
+# that forgot the rules of the repo it was working in, chosen by a user who thought
+# they were picking a speed.
+#
+# Reasoning effort is native to the model: it changes how hard the model thinks per
+# step, which is the honest way to spend less. Everything here is context the model
+# needs to be correct, so every level now gets all of it.
+_FULL_CONTEXT_POLICY = RuntimeOverheadPolicy(
+    include_purpose_brief=True,
+    include_autonomy_profile=True,
+    include_editing_policy=True,
+    include_project_instructions=True,
+    include_best_practice_hint=True,
+    include_review_quality_hint=True,
+    include_test_visibility_hint=True,
+    include_library_context=True,
+    include_memory_profile=True,
+    runtime_skills_mode="explicit",
+)
+
 _RUNTIME_OVERHEAD_POLICIES: dict[str, RuntimeOverheadPolicy] = {
-    "cheap": RuntimeOverheadPolicy(
-        include_purpose_brief=False,
-        include_autonomy_profile=False,
-        include_editing_policy=False,
-        include_project_instructions=False,
-        include_best_practice_hint=False,
-        include_review_quality_hint=False,
-        include_test_visibility_hint=False,
-        include_library_context=False,
-        include_memory_profile=False,
-        runtime_skills_mode="off",
-    ),
-    "optimal": RuntimeOverheadPolicy(
-        include_purpose_brief=False,
-        include_autonomy_profile=True,
-        include_editing_policy=True,
-        include_project_instructions=True,
-        include_best_practice_hint=True,
-        include_review_quality_hint=True,
-        include_test_visibility_hint=False,
-        include_library_context=True,
-        include_memory_profile=False,
-        runtime_skills_mode="explicit",
-    ),
-    "max": RuntimeOverheadPolicy(
-        include_purpose_brief=True,
-        include_autonomy_profile=True,
-        include_editing_policy=True,
-        include_project_instructions=True,
-        include_best_practice_hint=True,
-        include_review_quality_hint=True,
-        include_test_visibility_hint=True,
-        include_library_context=True,
-        include_memory_profile=True,
-        runtime_skills_mode="explicit",
-    ),
+    "cheap": _FULL_CONTEXT_POLICY,
+    "optimal": _FULL_CONTEXT_POLICY,
+    "max": _FULL_CONTEXT_POLICY,
 }
 
 
 def normalize_token_economy_level(raw: Any) -> str:
     level = str(raw or "").strip().lower()
+    if not level:
+        return "optimal"
     if level in TOKEN_ECONOMY_ALIASES:
         level = TOKEN_ECONOMY_ALIASES[level]
     if level in TOKEN_ECONOMY_LEVELS:
@@ -118,6 +134,15 @@ def normalize_mode(raw: Any, *, default: str = "auto") -> str:
     if mode in RUN_MODES:
         return mode
     return str(default or "auto").strip().lower() or "auto"
+
+
+def coerce_base_iterations(value: Any, *, default: int = 10) -> int:
+    """Return a usable max-iteration base for runtime scaling."""
+    try:
+        base = int(value or default)
+    except (TypeError, ValueError):
+        base = int(default)
+    return max(1, base)
 
 
 def build_token_economy_meta(requested_level: Any, applied_level: str | None = None) -> dict[str, str]:
@@ -135,19 +160,21 @@ def runtime_overhead_policy(level: Any) -> RuntimeOverheadPolicy:
     return _RUNTIME_OVERHEAD_POLICIES[applied]
 
 
-def compute_max_passes(level: Any, base_iterations: int) -> int:
+def compute_max_passes(level: Any, base_iterations: int | None) -> int:
     """Compute the max iterations (passes) for a given economy level.
 
     Args:
         level: Token economy level (cheap/optimal/max).
-        base_iterations: The base max_agent_iterations from config.
+        base_iterations: The base max_agent_iterations from config. Missing,
+            zero, or invalid values fall back to the AppConfig default.
 
     Returns:
         Clamped number of passes.
     """
     applied = normalize_token_economy_level(level)
     multiplier = _PASS_MULTIPLIERS[applied]
-    raw = int(base_iterations * multiplier)
+    base = coerce_base_iterations(base_iterations)
+    raw = int(base * multiplier)
     return max(_MIN_PASSES[applied], min(_MAX_PASSES[applied], raw))
 
 
@@ -191,7 +218,8 @@ def apply_token_economy_policy(
 def loop_context_budgets(level: Any, mode: Any) -> tuple[int, int | None, int]:
     """Return (mode_budget, hard_budget, emergency_budget).
 
-    Budgets scale with pass count — more passes need more token room.
+    The mode and emergency values are telemetry thresholds. Per-request model
+    context fit, rather than cumulative task usage, is the hard safety boundary.
     """
     applied = normalize_token_economy_level(level)
     run_mode = normalize_mode(mode, default="auto")
@@ -201,18 +229,16 @@ def loop_context_budgets(level: Any, mode: Any) -> tuple[int, int | None, int]:
         "auto": 180_000,
         "thinking": 320_000,
     }.get(run_mode, 180_000)
-    multiplier = {"cheap": 0.6, "optimal": 1.0, "max": 2.0}[applied]
+    # Effort does not ration context. This used to give "brisk" 0.6x the window,
+    # so choosing a faster reasoning setting also made Thomas dumber -- less of the
+    # conversation, for a decision the user thought was about speed. Effort is
+    # native to the model and changes how hard it thinks per step; it must not
+    # change what it is allowed to SEE. Every level gets the most generous value.
+    multiplier = 2.0
     mode_budget = max(40_000, int(base_mode_budget * multiplier))
 
-    if applied == "cheap":
-        hard_budget: int | None = 250_000
-    elif applied == "optimal":
-        hard_budget = 650_000
-    else:
-        hard_budget = None
-
     emergency_budget = 1_800_000
-    return mode_budget, hard_budget, emergency_budget
+    return mode_budget, None, emergency_budget
 
 
 def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
@@ -222,7 +248,10 @@ def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
 
     base_tool_count = {"fast": 8, "auto": 16, "thinking": 24}.get(run_mode, 16)
     base_spec_tokens = {"fast": 1800, "auto": 2600, "thinking": 3600}.get(run_mode, 2600)
-    multiplier = {"cheap": 0.75, "optimal": 1.0, "max": 1.45}[applied]
+    # Same rule, and this one was worse: at "brisk" the model was handed 0.75x the
+    # TOOLS. A cheaper reasoning setting literally removed capabilities from the
+    # request. Effort never decides which tools exist.
+    multiplier = 1.45
 
     tool_count_cap = max(4, min(40, int(base_tool_count * multiplier)))
     tool_spec_token_cap = max(1200, min(7200, int(base_spec_tokens * multiplier)))
@@ -230,17 +259,110 @@ def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
 
 
 def loop_iteration_prompt_caps(level: Any, mode: Any) -> tuple[int, int | None]:
-    """Return (warn_cap, hard_cap) for prompt tokens spent in a single iteration."""
+    """Return a warning threshold while per-call context fit remains the hard cap."""
     applied = normalize_token_economy_level(level)
     run_mode = normalize_mode(mode, default="auto")
 
     base_warn = {"fast": 8_000, "auto": 12_000, "thinking": 18_000}.get(run_mode, 12_000)
-    base_hard = {"fast": 16_000, "auto": 24_000, "thinking": 36_000}.get(run_mode, 24_000)
     multiplier = {"cheap": 0.75, "optimal": 1.0, "max": 2.0}[applied]
 
     warn_cap = max(4_000, int(base_warn * multiplier))
-    if applied == "max":
-        hard_cap: int | None = None
-    else:
-        hard_cap = max(warn_cap + 2_000, int(base_hard * multiplier))
-    return warn_cap, hard_cap
+    return warn_cap, None
+
+
+# ── Effort dial — public vocabulary + Autonomy coupling + cost ──────────────────
+# The user-facing dial is "Effort": Brisk / Diligent / Exhaustive. These are public
+# aliases over the internal token-economy levels (cheap / optimal / max), which stay
+# for backward-compat. Effort is deliberately NOT orthogonal to Autonomy — see
+# effective_effort(). Cost helpers are advisory pre-dispatch estimates for budgeting.
+
+EFFORT_LEVELS = ("brisk", "diligent", "exhaustive")
+_EFFORT_TO_INTERNAL = {"brisk": "cheap", "diligent": "optimal", "exhaustive": "max"}
+_INTERNAL_TO_EFFORT = {internal: effort for effort, internal in _EFFORT_TO_INTERNAL.items()}
+
+# Rough output-tokens per pass, for advisory pre-dispatch cost estimates only.
+_TOKENS_PER_PASS = 3_000
+
+
+def internal_to_effort(level: Any) -> str:
+    """Map an internal token-economy level (or Effort name) to its public Effort name."""
+    return _INTERNAL_TO_EFFORT.get(normalize_token_economy_level(level), "diligent")
+
+
+def effort_display_name(level: Any) -> str:
+    """Title-case public Effort label, e.g. 'Exhaustive'."""
+    return internal_to_effort(level).title()
+
+
+def effective_effort(level: Any, autonomy_level: int) -> str:
+    """Apply the Effort<->Autonomy coupling; return the internal level to actually run.
+
+    Effort and Autonomy are deliberately NOT orthogonal:
+      * L1 (chat-only) caps Effort to Brisk — no deep pipeline at the lowest autonomy.
+      * Exhaustive requires L3+ (Agent/Full); below that it steps down to Diligent.
+      * L4+ (full agent) auto-promotes Brisk -> Diligent (full autonomy implies real work).
+    """
+    internal = normalize_token_economy_level(level)
+    try:
+        a = int(autonomy_level)
+    except (TypeError, ValueError):
+        a = 3
+    if a <= 1:
+        return "cheap"
+    if internal == "max" and a < 3:
+        internal = "optimal"
+    if a >= 4 and internal == "cheap":
+        internal = "optimal"
+    return internal
+
+
+def _passes_for(internal_level: str) -> tuple[int, int]:
+    return _MIN_PASSES[internal_level], _MAX_PASSES[internal_level]
+
+
+def _cost_for(internal_level: str, team_size: int) -> tuple[int, int]:
+    lo, hi = _passes_for(internal_level)
+    team = max(1, int(team_size or 1))
+    return lo * _TOKENS_PER_PASS * team, hi * _TOKENS_PER_PASS * team
+
+
+def estimate_passes(level: Any, autonomy_level: int) -> tuple[int, int]:
+    """(min, max) passes for an Effort level after the Autonomy coupling."""
+    return _passes_for(effective_effort(level, autonomy_level))
+
+
+def estimate_token_cost(level: Any, autonomy_level: int, *, team_size: int = 1) -> tuple[int, int]:
+    """Advisory (min, max) output-token estimate for a run.
+
+    Cost scales with passes x team size. A rough pre-dispatch estimate for budgeting
+    and UI, NOT hard accounting — calibrate ``_TOKENS_PER_PASS`` from telemetry.
+    """
+    return _cost_for(effective_effort(level, autonomy_level), team_size)
+
+
+def within_budget(level: Any, autonomy_level: int, budget_tokens: int | None, *, team_size: int = 1) -> bool:
+    """True if the worst-case estimate fits the spend cap (no cap -> always True)."""
+    if not budget_tokens or int(budget_tokens) <= 0:
+        return True
+    return estimate_token_cost(level, autonomy_level, team_size=team_size)[1] <= int(budget_tokens)
+
+
+def degrade_to_budget(
+    level: Any, autonomy_level: int, budget_tokens: int | None, *, team_size: int = 1
+) -> tuple[str, int]:
+    """Return (internal_level, team_size) reduced until the worst-case estimate fits.
+
+    Spend cap with graceful degradation: shrink the team first, then step Effort
+    down (max -> optimal -> cheap), rather than rejecting the task outright.
+    """
+    applied = effective_effort(level, autonomy_level)
+    team = max(1, int(team_size or 1))
+    if not budget_tokens or int(budget_tokens) <= 0:
+        return applied, team
+    budget = int(budget_tokens)
+    while team > 1 and _cost_for(applied, team)[1] > budget:
+        team -= 1
+    ladder = ["max", "optimal", "cheap"]
+    while applied in ladder and ladder.index(applied) < len(ladder) - 1 and _cost_for(applied, team)[1] > budget:
+        applied = ladder[ladder.index(applied) + 1]
+    return applied, team

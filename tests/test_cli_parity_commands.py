@@ -377,17 +377,12 @@ def test_skills_conflicts_and_check_report_duplicates(tmp_path: Path, monkeypatc
     assert "name_conflict" in codes
 
 
-def test_skills_resolve_returns_runtime_selection(tmp_path: Path, monkeypatch) -> None:
-    root = _build_root_cli()
-    register_compat_commands(root)
-    runner = CliRunner()
-    cfg = _fake_config(tmp_path)
-
+def _install_probe_skill(tmp_path: Path, monkeypatch, skill_name: str) -> None:
+    """Put one discoverable skill in an isolated CODEX_HOME."""
     home_root = tmp_path / "home"
     codex_home = tmp_path / "codex-home"
     home_root.mkdir(parents=True, exist_ok=True)
     codex_home.mkdir(parents=True, exist_ok=True)
-    skill_name = "__unit_test_skill_runtime_resolve__"
     skill_dir = codex_home / "skills" / skill_name
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text("# Runtime Resolve\n- Apply this skill when requested.\n", encoding="utf-8")
@@ -397,6 +392,40 @@ def test_skills_resolve_returns_runtime_selection(tmp_path: Path, monkeypatch) -
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     monkeypatch.delenv("THOMAS_SKILLS_EXTRA_DIRS", raising=False)
 
+
+def test_skills_resolve_returns_runtime_selection(tmp_path: Path, monkeypatch) -> None:
+    """A literal $skill-name invocation selects that skill.
+
+    The fixture skill used to be named "__unit_test_skill_runtime_resolve__".
+    That name never went through the $-token lexer at all: _extract_explicit_mentions
+    requires the character after "$" to be alphanumeric, both before and after
+    69bbbab0, so it returned [] for "$__unit_test_skill_runtime_resolve__" in the
+    old code too. The test was green only because resolve_runtime_skills also ran
+    _skill_name_mentioned() -- a prose scan for the bare skill name anywhere in
+    the sentence -- and 495fcc27 ("make skill selection model-owned"), landed by
+    69bbbab0, deleted that scan on purpose. Measured on the exact old prompt:
+
+        mechanism                       old code   new code
+        $-token lexer                   []         []        <- never fired
+        prose name scan                 matched    (deleted) <- what made it pass
+
+    So the assertion is unchanged; only the fixture name is, to one that is a
+    legal $-token. Controls: "$unit-test-skill-runtime-resolve" and
+    "$unit_test_skill_runtime_resolve" both select 1 skill today, proving
+    selection works and that the leading underscore was the whole difference.
+
+    Note: a skill whose directory name starts with "_" still cannot be invoked
+    literally. The lexer lives in thomas/agent/skills_runtime.py, a protected
+    file, so that is reported rather than changed here.
+    """
+    root = _build_root_cli()
+    register_compat_commands(root)
+    runner = CliRunner()
+    cfg = _fake_config(tmp_path)
+
+    skill_name = "unit-test-skill-runtime-resolve"
+    _install_probe_skill(tmp_path, monkeypatch, skill_name)
+
     prompt = f"please use ${skill_name} on this turn"
     resolved = runner.invoke(root, ["skills", "resolve", "--prompt", prompt, "--json"], obj={"config": cfg})
     assert resolved.exit_code == 0, resolved.output
@@ -405,6 +434,38 @@ def test_skills_resolve_returns_runtime_selection(tmp_path: Path, monkeypatch) -
     selected_names = {str(row.get("name") or "") for row in payload.get("selected") or []}
     assert skill_name in selected_names
     assert "<runtime_skills" in str(payload.get("context") or "")
+
+
+def test_a_skill_named_only_in_prose_is_not_selected(tmp_path: Path, monkeypatch) -> None:
+    """Naming a skill in a sentence, without the $ control, must select nothing.
+
+    This pins the classifier 495fcc27/69bbbab0 removed, so it cannot creep back.
+    The same prompt with the "$" restored is the control: without it the old
+    prose scan matched the bare name and selected the skill; the removed
+    behaviour is precisely "selects from prose". Measured here: 0 selected for
+    the prose form, >=1 for the $ form, against the identical discovered skill.
+    """
+    root = _build_root_cli()
+    register_compat_commands(root)
+    runner = CliRunner()
+    cfg = _fake_config(tmp_path)
+
+    skill_name = "unit-test-skill-runtime-resolve"
+    _install_probe_skill(tmp_path, monkeypatch, skill_name)
+
+    prose = f"please use the {skill_name} skill on this turn"
+    prose_result = runner.invoke(root, ["skills", "resolve", "--prompt", prose, "--json"], obj={"config": cfg})
+    assert prose_result.exit_code == 0, prose_result.output
+    prose_payload = json.loads(prose_result.output)
+    assert int(prose_payload.get("discovered_count", 0) or 0) >= 1
+    assert int(prose_payload.get("selected_count", 0) or 0) == 0
+
+    # Control: the same skill IS selectable, so the assertion above is measuring
+    # the missing "$" and not a skill that simply cannot be found.
+    explicit = f"please use ${skill_name} on this turn"
+    explicit_result = runner.invoke(root, ["skills", "resolve", "--prompt", explicit, "--json"], obj={"config": cfg})
+    assert explicit_result.exit_code == 0, explicit_result.output
+    assert int(json.loads(explicit_result.output).get("selected_count", 0) or 0) >= 1
 
 
 def _block_memory_backend_imports(monkeypatch) -> None:  # noqa: ANN001

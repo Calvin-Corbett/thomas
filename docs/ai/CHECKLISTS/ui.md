@@ -1,7 +1,7 @@
 # UI Checklist
 
 - Confirm source edits are under `thomas/server/web/js/src/` or other source files, not generated output.
-- Confirm `thomas/server/web/js/app.js` still boots only `app_runtime_primary.mjs`.
+- Confirm `thomas/server/web/js/app.js` still boots through `app_runtime_loader.js` (the ordered split-runtime loader). The old `app_runtime_primary.mjs` monolith was deleted 2026-08-07; if it reappears, that is a regression.
 - If a UI surface replaces an older one, delete or disconnect the older route,
   runtime, and demo backend in the same change.
 - Marketplace must read the live companion APIs only:

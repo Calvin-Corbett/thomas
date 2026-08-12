@@ -35,6 +35,7 @@ from thomas.core.token_economy import (
     _MIN_PASSES,
     _PASS_MULTIPLIERS,
     RuntimeOverheadPolicy,
+    coerce_base_iterations,
     compute_max_passes,
     loop_context_budgets,
     loop_iteration_prompt_caps,
@@ -80,7 +81,8 @@ class RuntimeProfile:
 
     def summary_line(self) -> str:
         """One-line human summary, e.g. 'L3 Agent · Optimal · auto'."""
-        return f"L{self.autonomy_level} {self.autonomy_name} · {self.economy_level.capitalize()} · {self.run_mode}"
+        economy_label = str(self.economy_level).capitalize()
+        return f"L{self.autonomy_level} {self.autonomy_name} · {economy_label} · {self.run_mode}"
 
     def to_dict(self) -> dict[str, Any]:
         """Serializable dict for API responses and logging."""
@@ -110,7 +112,7 @@ def resolve_runtime_profile(
     autonomy_level: Any = 3,
     economy_level: Any = "optimal",
     run_mode: Any = "auto",
-    base_iterations: int = 10,
+    base_iterations: int | None = 10,
 ) -> RuntimeProfile:
     """Compose autonomy + economy into a single resolved profile.
 
@@ -123,13 +125,14 @@ def resolve_runtime_profile(
     aspec: AutonomyLevelSpec = autonomy_spec(alevel)
     elevel = normalize_token_economy_level(economy_level)
     mode = normalize_mode(run_mode, default="auto")
+    base_iter = coerce_base_iterations(base_iterations)
 
     # ── Economy: effort within permissions ────────────────────
     overhead = runtime_overhead_policy(elevel)
     pass_mul = _PASS_MULTIPLIERS[elevel]
     min_p = _MIN_PASSES[elevel]
     max_p = _MAX_PASSES[elevel]
-    computed_passes = compute_max_passes(elevel, base_iterations)
+    computed_passes = compute_max_passes(elevel, base_iter)
 
     # ── Autonomy × economy: iteration count ──────────────────
     # L4 prefers extended iterations — boost the economy pass count
@@ -137,7 +140,7 @@ def resolve_runtime_profile(
     effective_max_iter = computed_passes
     if aspec.prefers_extended_iterations:
         # L4 gets the higher of: economy passes, or 3x base (capped at economy max)
-        extended = min(base_iterations * 3, 32)
+        extended = min(base_iter * 3, 32)
         effective_max_iter = max(computed_passes, min(extended, max_p))
 
     # ── Context budgets ──────────────────────────────────────

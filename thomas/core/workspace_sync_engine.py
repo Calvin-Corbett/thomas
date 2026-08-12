@@ -172,7 +172,7 @@ class WorkspaceSyncEngine:
             _DEFAULT_MAX_FILES_PER_COMMIT if max_files_per_commit is None else max(1, int(max_files_per_commit))
         )
         self._stable_age_s = float(_DEFAULT_STABLE_AGE_S if stable_age_s is None else max(0.0, float(stable_age_s)))
-        self._auto_push = bool(_env_bool("THOMAS_WORKSPACE_SYNC_AUTO_PUSH", True) if auto_push is None else auto_push)
+        self._auto_push = bool(_env_bool("THOMAS_WORKSPACE_SYNC_AUTO_PUSH", False) if auto_push is None else auto_push)
         self._coordination_enabled = bool(
             _env_bool("THOMAS_WORKSPACE_SYNC_COORDINATION_ENABLED", True)
             if coordination_enabled is None
@@ -245,13 +245,15 @@ class WorkspaceSyncEngine:
         self._thread: threading.Thread | None = None
         self._active_cycle = False
         self._lock = threading.Lock()
+        self._mutation_lock = threading.Lock()
+        self._activity_leases: set[str] = set()
         self._last_user_ts = time.monotonic()
         self._last_cycle_ts = 0.0
         self._cycle_count = 0
         self._last_report: dict[str, Any] = {}
         self._last_error: str | None = None
         self._last_error_at: str | None = None
-        self._enabled = _env_bool("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", True)
+        self._enabled = _env_bool("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", False)
 
     def start(self, *, notify_fn: Callable[[str], None] | None = None) -> None:
         if notify_fn is not None:
@@ -269,8 +271,25 @@ class WorkspaceSyncEngine:
     def record_user_message(self) -> None:
         self._last_user_ts = time.monotonic()
 
+    def acquire_activity_lease(self, label: str = "") -> str:
+        """Block auto-commit cycles while interactive work owns the workspace."""
+        token = str(label or f"interactive-{time.time_ns()}").strip()
+        # Waiting on this lock lets an in-flight commit finish before the caller
+        # releases its worker start gate. No new cycle can mutate while leased.
+        with self._mutation_lock:
+            with self._lock:
+                self._activity_leases.add(token)
+            self.record_user_message()
+        return token
+
+    def release_activity_lease(self, token: str) -> None:
+        with self._lock:
+            self._activity_leases.discard(str(token or ""))
+
     def is_idle(self) -> bool:
-        return (time.monotonic() - self._last_user_ts) >= self._idle_threshold_s
+        with self._lock:
+            leased = bool(self._activity_leases)
+        return not leased and (time.monotonic() - self._last_user_ts) >= self._idle_threshold_s
 
     def last_report(self) -> dict[str, Any]:
         with self._lock:
@@ -288,6 +307,7 @@ class WorkspaceSyncEngine:
                 "coordination_blocking_agent": str(self._coordination_conflict_agent or ""),
                 "cycles_completed": int(self._cycle_count),
                 "active_cycle": bool(self._active_cycle),
+                "activity_leases": len(self._activity_leases),
                 "last_cycle_at": str(self._last_report.get("timestamp") or ""),
                 "last_committed": bool(self._last_report.get("committed")) if self._last_report else False,
                 "last_commit_sha": str(self._last_report.get("commit_sha") or ""),
@@ -362,11 +382,25 @@ class WorkspaceSyncEngine:
     def _run_cycle_checked(self, *, reason: str, force: bool) -> dict[str, Any]:
         started = time.monotonic()
         try:
-            report = self._run_cycle(reason=reason, force=force)
+            report = self._run_cycle_with_activity_guard(reason=reason, force=force, started=started)
             self._clear_last_error()
             return report
         except Exception as exc:  # pragma: no cover - defensive path
             return self._error_report(reason=reason, force=force, exc=exc, started=started)
+
+    def _run_cycle_with_activity_guard(self, *, reason: str, force: bool, started: float) -> dict[str, Any]:
+        with self._mutation_lock:
+            with self._lock:
+                lease_count = len(self._activity_leases)
+            if lease_count:
+                return self._finish(
+                    reason=reason,
+                    committed=False,
+                    skip_reason="interactive_work_active",
+                    details={"activity_leases": lease_count},
+                    elapsed_ms=started,
+                )
+            return self._run_cycle(reason=reason, force=force)
 
     def _run_cycle(self, *, reason: str, force: bool) -> dict[str, Any]:
         started = time.monotonic()

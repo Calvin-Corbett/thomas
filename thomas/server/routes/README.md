@@ -44,7 +44,6 @@ Streams response back as JSON/SSE
 | `companion_device_release_aiohttp.py` | `/companion/device/*` | Device app updates |
 | `asset_studio_aiohttp.py` | `/assets/*` | Asset management |
 | `codex_aiohttp.py` | `/codex/*` | Code search and navigation |
-| `core_aiohttp.py` | `/core/*` | Core Thomas operations |
 | `channels_api.py` | `/channels/*` | Channel/workspace API |
 | `local_projects_aiohttp.py` | `/projects/*` | Local project management |
 | `marketplace_catalog_aiohttp.py` | `/marketplace/*` | Plugin marketplace |

@@ -16,6 +16,7 @@ from aiohttp import web
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import APP_CONFIG
+from thomas.server.routes.local_project_folder_picker import pick_folder_via_dialog as _pick_folder_via_dialog
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ def _normalize_board_position(raw: Any, *, index: int = 0) -> dict[str, int]:
         y = _safe_int(raw.get("y")) if isinstance(raw, dict) else 0
         if x >= 0 and y >= 0:
             return {"x": x, "y": y}
-    except Exception:  # pragma: no cover
+    except (AttributeError, TypeError, ValueError):  # pragma: no cover - malformed stored position
         pass
     return _default_board_position(index)
 
@@ -142,6 +143,7 @@ def _registry_path(app: web.Application) -> Path:
         os.environ.get("THOMAS_STATE_DIR"),
         getattr(cfg, "home_dir", None),
         getattr(cfg, "data_dir", None),
+        getattr(cfg, "root", None),
     ):
         value = str(raw or "").strip()
         if value:
@@ -173,7 +175,7 @@ def _read_registry(app: web.Application) -> list[dict[str, Any]]:
         if not isinstance(projects, list):
             return []
         return projects
-    except Exception:  # pragma: no cover
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):  # pragma: no cover
         return []
 
 
@@ -697,6 +699,10 @@ def _build_project_dossier(
         "findings_preview": findings_preview,
         "launch_candidates": launch_candidates,
         "actions": actions,
+        # Owner-managed project context is orthogonal to the file-system dossier.
+        # Preserve it across refreshes so linked chats, pinned references, and
+        # explicit share receipts survive a rescan of the project folder.
+        "workspace": dict(existing.get("workspace") or {}),
     }
     accent = _safe_text(dossier["board_icon"].get("accent")) or _accent_for_id(project_id)
     dossier["board_icon"]["accent"] = accent
@@ -704,19 +710,22 @@ def _build_project_dossier(
 
 
 def _refresh_projects(app: web.Application) -> list[dict[str, Any]]:
+    # An invisible folder is an unplugged drive, not a deleted project, and
+    # callers write this back over the registry. Mark, never drop.
     projects = _read_registry(app)
-    missing_roots = []
-    for project in projects:
-        root_path = _safe_text(project.get("root_path"))
-        if not root_path or not Path(root_path).exists():
-            missing_roots.append(project.get("id"))
-    projects = [p for p in projects if p.get("id") not in missing_roots]
     for index, project in enumerate(projects):
+        root_path = _safe_text(project.get("root_path"))
+        project["offline"] = not (root_path and Path(root_path).exists())
+        if project["offline"]:
+            continue
         try:
-            root = Path(project.get("root_path"))
-            updated = _build_project_dossier(root, existing=project, touch=False, index=index)
+            updated = _build_project_dossier(Path(root_path), existing=project, touch=False, index=index)
+            updated["offline"] = False
             projects[index] = updated
-        except Exception:  # pragma: no cover
+        # RecursionError is deliberate: a dossier parses JSON inside the project,
+        # and a deeply nested file raises that, not ValueError. It would abort the
+        # refresh -- and the catalogue caches only on success, so every retry fails.
+        except (OSError, AttributeError, TypeError, ValueError, RecursionError):  # pragma: no cover
             pass
     return projects
 
@@ -788,31 +797,3 @@ def _perform_project_action(project: dict[str, Any], requested_action: str) -> t
     if action == "open_folder":
         return action, _open_path(root)
     raise web.HTTPBadRequest(text=f"unsupported project action: {action}")
-
-
-def _pick_folder_via_dialog() -> str:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-    except Exception as exc:  # pragma: no cover - platform dependent
-        raise web.HTTPConflict(text="local folder picker is not available on this machine") from exc
-
-    root = None
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            root.attributes("-topmost", True)
-        except Exception:
-            pass
-        selected = filedialog.askdirectory(title="Choose a project folder for My Stuff", mustexist=True)
-    except Exception as exc:  # pragma: no cover - platform dependent
-        log.exception("Local folder picker failed")
-        raise web.HTTPConflict(text="could not open the local folder picker") from exc
-    finally:
-        if root is not None:
-            try:
-                root.destroy()
-            except Exception:
-                pass
-    return _safe_text(selected)

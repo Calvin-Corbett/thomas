@@ -73,12 +73,7 @@ log = logging.getLogger(__name__)
 
 _BEARER_TOKEN_RE = re.compile(r"^Bearer\s+([^\s]+)\s*$", re.IGNORECASE)
 
-try:
-    from thomas.server.routes.chat_aiohttp import AgentLoop as _DEFAULT_APP_AGENT_LOOP
-except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # pragma: no cover
-    from thomas.agent.loop import AgentLoop as _DEFAULT_APP_AGENT_LOOP
-
-AgentLoop = _DEFAULT_APP_AGENT_LOOP
+from thomas.agent.loop import AgentLoop
 
 try:
     from thomas.models.capabilities import supports as model_supports
@@ -86,23 +81,6 @@ except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # prag
 
     def model_supports(*_args, **_kwargs):
         return False
-
-
-try:
-    from thomas.models.chat_controls import resolve_ui_control_request
-except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # pragma: no cover
-
-    def resolve_ui_control_request(*_args, **_kwargs):
-        return None
-
-
-try:
-    from thomas.server.chat_control_mode import handle_ui_control_chat
-except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # pragma: no cover
-    from aiohttp import web
-
-    async def handle_ui_control_chat(request: web.Request, **_kwargs):
-        raise web.HTTPInternalServerError(text="ui control handler unavailable")
 
 
 def _require_api_access(request: Any) -> None:
@@ -122,8 +100,21 @@ def _require_api_access(request: Any) -> None:
     closure(request)
 
 
+def _secret_store_root(config: AppConfig) -> Path:
+    override = str(os.environ.get("THOMAS_SECRET_ROOT") or "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return config.memory.root_path / ".thomas"
+
+
 def create_app(config: AppConfig | None = None):
     """Create and configure the aiohttp application with all routes and middleware."""
+    # Start the clock on the first line of create_app, not partway down it. The
+    # reported duration has to cover tool-registry construction and optional-tool
+    # registration, because that is where the boot seconds actually go; timing
+    # from after that phase described a boot the user never experienced.
+    _boot_start = time.time()
+
     from aiohttp import web
 
     if config is None:
@@ -142,8 +133,8 @@ def create_app(config: AppConfig | None = None):
             config.default_model = resolved_profile
             if resolved_model_id:
                 config.models[resolved_profile].model = resolved_model_id
-    except Exception:
-        pass
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        log.debug("Persisted default-model resolution unavailable: %s", exc)
 
     # Validate configuration before use
     validation_errors = config.validate()
@@ -156,8 +147,8 @@ def create_app(config: AppConfig | None = None):
     app[APP_TOOLS] = _build_tools(config)
     app[APP_MEMORY] = _build_memory(config)
     try:
-        app[APP_SECRETS] = SecretStore(config.memory.root_path / ".thomas")
-    except Exception as secret_exc:
+        app[APP_SECRETS] = SecretStore(_secret_store_root(config))
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as secret_exc:
         log.warning("SecretStore initialization failed: %s", secret_exc)
         app[APP_SECRETS] = _FallbackSecretStore()
     app[APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK] = asyncio.Lock()
@@ -176,6 +167,11 @@ def create_app(config: AppConfig | None = None):
     app[APP_RUNTIME_GUARD_STATE] = _runtime_guard_boot_state(config)
     app[APP_RUNTIME_GUARD_TASK] = None
     try:
+        # This refresh stays: it is what populates state["current"] and
+        # state["status"], which /api/models reads long before the periodic
+        # refresher first fires ~45s later. It no longer re-runs git, though -
+        # boot_state just collected that snapshot, so app_runtime_guard reuses it
+        # for this one call. See _runtime_guard_refresh.
         _runtime_guard_refresh(app)
     except (OSError, KeyError, ValueError) as runtime_guard_exc:
         log.warning("Runtime guard initialization failed: %s", runtime_guard_exc)
@@ -187,7 +183,6 @@ def create_app(config: AppConfig | None = None):
 
     # Startup diagnostics
     _diagnostics: dict[str, bool] = {}
-    _boot_start = time.time()
     _diagnostics["runtime_guard"] = bool(app.get(APP_RUNTIME_GUARD_STATE))
 
     # Optional: durable per-session task ledger
@@ -388,6 +383,21 @@ def create_app(config: AppConfig | None = None):
     app[APP_BOOT_DURATION] = time.time() - _boot_start
     app[APP_CRASH_COUNT] = 0
 
+    def _build_identity() -> dict[str, object]:
+        """Never let build identity, a display nicety, break the health check.
+
+        build_info already swallows a missing, failing or hanging git, so the
+        realistic failures left are import-time ones. Whatever gets through,
+        health still answers with the version it does know.
+        """
+        try:
+            from thomas.core.build_info import build_info
+
+            return build_info()
+        except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, AttributeError) as exc:
+            log.debug("build identity unavailable: %s", exc)
+            return {"version": str(THOMAS_VERSION)}
+
     async def api_health(request: web.Request) -> web.Response:
         diag = request.app.get(APP_DIAGNOSTICS, {})
         boot_time = request.app.get(APP_BOOT_TIME, 0)
@@ -400,16 +410,37 @@ def create_app(config: AppConfig | None = None):
                 str(PreferencesStore(get_db_path()).get().advanced.security.enforcement_mode or "").strip().lower()
                 == "protected"
             )
-        except Exception:
+        except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            log.debug("Protected-mode preference unavailable: %s", exc)
             protected_mode = False
+
+        # A credential that dies AFTER boot was invisible here: health reported
+        # "ok" while every chat turn failed with a 401. Model auth is checked
+        # locally (no network call) so a broken sign-in shows up as degraded
+        # instead of being rediscovered one failed message at a time.
+        auth_health: dict[str, Any] = {"ok": True}
+        try:
+            from thomas.core.model_auth_health import model_auth_health
+
+            auth_health = model_auth_health(request.app)
+        except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, KeyError) as exc:
+            log.debug("model auth health unavailable: %s", exc)
+        if not auth_health.get("ok", True):
+            degraded = [*degraded, "model_auth"]
+
         return web.json_response(
             {
                 "status": "degraded" if degraded else "ok",
                 "version": str(THOMAS_VERSION),
+                # The version alone cannot tell two instances apart -- several
+                # worktrees here sit on the same version string at once -- so
+                # health also names the commit it was built from.
+                "build": _build_identity(),
                 "uptime_s": round(time.time() - boot_time, 1) if boot_time else 0,
                 "pid": os.getpid(),
                 "features": diag,
                 "degraded": degraded,
+                "model_auth": auth_health,
                 "crash_count": request.app.get(APP_CRASH_COUNT, 0),
                 "security": {"protected_mode": protected_mode},
             }
@@ -419,18 +450,20 @@ def create_app(config: AppConfig | None = None):
         configured = app.get(APP_BOOT_DOCTOR_ROOT)
         try:
             return Path(configured).resolve() if configured else Path(__file__).resolve().parents[2]
-        except Exception:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            log.debug("Configured boot-doctor root is invalid: %s", exc)
             return Path(__file__).resolve().parents[2]
 
     def _bootdoctor_current_port(request: web.Request) -> int:
         try:
             if request.url.port:
                 return int(request.url.port)
-        except Exception:
-            pass
+        except (AttributeError, TypeError, ValueError) as exc:
+            log.debug("Request URL did not expose a usable port: %s", exc)
         try:
             return int(getattr(config.server, "port", 8899) or 8899)
-        except Exception:
+        except (AttributeError, TypeError, ValueError) as exc:
+            log.debug("Configured server port is invalid: %s", exc)
             return 8899
 
     def _bootdoctor_default_actions(severity_raw: str, *, report_available: bool) -> list[str]:
@@ -582,7 +615,8 @@ def create_app(config: AppConfig | None = None):
 
         try:
             payload = await request.json()
-        except Exception:
+        except (UnicodeDecodeError, TypeError, ValueError) as exc:
+            log.debug("Boot-doctor action body is not valid JSON: %s", exc)
             payload = {}
         action = str((payload or {}).get("action") or "").strip().lower()
         if action not in {"retry_repair", "restart", "open_rescue", "dismiss_notice"}:
@@ -642,6 +676,37 @@ def create_app(config: AppConfig | None = None):
             raise web.HTTPServiceUnavailable(text="advanced rescue unavailable")
         return web.json_response({"ok": True, "action": action, "message": "Advanced rescue opened."})
 
+    # Issue ledger: "watch it like a report" — GET the failure summary, POST a
+    # client-side (UI) failure. See thomas/server/issue_ledger.py.
+    async def api_issues(request: web.Request) -> web.Response:
+        from thomas.server.issue_ledger import summarize
+
+        try:
+            hours = max(1, min(24 * 14, int(request.query.get("hours", "24"))))
+        except (TypeError, ValueError):
+            hours = 24
+        return web.json_response({"ok": True, **summarize(hours=hours)})
+
+    async def api_issues_report(request: web.Request) -> web.Response:
+        from thomas.server.issue_ledger import record_issue
+
+        try:
+            body = await request.json()
+        except (ValueError, TypeError):
+            body = {}
+        record_issue(
+            surface=str((body or {}).get("surface") or "ui"),
+            kind=str((body or {}).get("kind") or "client_error"),
+            message=str((body or {}).get("message") or ""),
+            context=body.get("context") if isinstance((body or {}).get("context"), dict) else {},
+        )
+        return web.json_response({"ok": True})
+
+    app.router.add_get("/api/issues", api_issues)
+    app.router.add_post("/api/issues", api_issues_report)
+    from thomas.server.routes.self_review import handle_self_review
+
+    app.router.add_get("/api/self-review", handle_self_review)
     app.router.add_get("/api/health", api_health)
     app.router.add_get("/healthz", api_health)
     app.router.add_get("/api/bootdoctor/recovery_notice", api_bootdoctor_recovery_notice)

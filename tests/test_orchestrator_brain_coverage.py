@@ -9,7 +9,8 @@ from thomas.chat.conversation import ConversationManager
 from thomas.chat.memory_layers import MemoryContext
 from thomas.marketplace.orchestrator import brain as brain_mod
 from thomas.marketplace.orchestrator.brain import OrchestratorBrain
-from thomas.marketplace.orchestrator.protocol import DelegationResult, RouteDecision, SpecialistStatus
+from thomas.marketplace.orchestrator.protocol import DelegationResult, SpecialistStatus
+from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 
 
 class _Dispatcher:
@@ -56,14 +57,6 @@ class _Registry:
         return f"route this: {prompt}"
 
 
-class _ChatDictLLM:
-    async def chat(self, *, messages: list[dict[str, object]]) -> dict[str, object]:
-        _ = messages
-        return {
-            "text": '{"specialists":["tools","missing"],"parallel":true,"reasoning":"json route","confidence":0.93}'
-        }
-
-
 class _CompleteLLM:
     async def complete(self, *, prompt: str) -> str:
         return f"completed:{prompt.splitlines()[0]}"
@@ -90,6 +83,32 @@ class _ErrorSpecialist:
         yield  # pragma: no cover
 
 
+class _TransientErrorSpecialist:
+    capabilities = {"read"}
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    async def execute(self, **kwargs: object):
+        _ = kwargs
+        self.attempts += 1
+        yield {"type": "thinking", "text": "starting"}
+        if self.attempts == 1:
+            yield {"type": "error", "error": "temporary model connection failure"}
+            return
+        yield {"type": "text", "text": "recovered answer"}
+        yield {"type": "done", "iterations": 1}
+
+
+class _BoundSpecialist:
+    specialist_id = "reasoning"
+    description = "bound specialist"
+    capabilities = {"reasoning"}
+
+    def __init__(self, llm: object) -> None:
+        self.llm = llm
+
+
 class _MemoryCoordinator:
     def __init__(self, *args: object, **kwargs: object) -> None:
         _ = args
@@ -104,43 +123,32 @@ class _MemoryCoordinator:
         self.captured.append(dict(kwargs))
 
 
-@pytest.mark.asyncio
-async def test_classify_and_route_uses_llm_json_and_default_fallbacks() -> None:
-    brain = OrchestratorBrain(
-        config=None,
-        llm=_ChatDictLLM(),
-        memory_engine=None,
-        registry=_Registry(["reasoning", "tools"]),
-    )
+def test_registry_binds_request_scoped_specialist_copies() -> None:
+    original_llm = object()
+    request_llm = object()
+    registry = SpecialistRegistry()
+    registry.register(_BoundSpecialist(original_llm))
 
-    routed = await brain._classify_and_route("inspect the repo", ConversationManager(), MemoryContext())
-    assert routed.specialists == ["tools"]
-    assert routed.parallel is True
-    assert routed.reasoning == "json route"
+    bound = registry.bound_to_llm(request_llm)
 
-    empty = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=_Registry([]))
-    fallback = await empty._classify_and_route("anything", ConversationManager(), MemoryContext())
-    assert fallback.specialists == ["reasoning"]
-    assert "No specialists available" in fallback.reasoning
+    assert bound is not registry
+    assert bound.get("reasoning") is not registry.get("reasoning")
+    assert registry.get("reasoning").llm is original_llm
+    assert bound.get("reasoning").llm is request_llm
+
+    bound.record_execution("reasoning")
+    assert registry.get_stats()["reasoning"]["executions"] == 1
 
 
-@pytest.mark.asyncio
-async def test_classify_and_route_falls_back_when_llm_output_is_bad_json() -> None:
-    class _BadLLM:
-        async def chat(self, *, messages: list[dict[str, object]]) -> dict[str, object]:
-            _ = messages
-            return {"text": "not-json"}
+def test_chat_failure_message_explains_auth_and_transient_failures() -> None:
+    auth = brain_mod._chat_failure_message("ChatGPT OAuth is not connected. Sign in first.")
+    transient = brain_mod._chat_failure_message("connection reset")
+    unknown = brain_mod._chat_failure_message("broken")
 
-    brain = OrchestratorBrain(
-        config=None,
-        llm=_BadLLM(),
-        memory_engine=None,
-        registry=_Registry(["reasoning", "coding"]),
-    )
-
-    routed = await brain._classify_and_route("write code", ConversationManager(), MemoryContext())
-    assert routed.specialists == ["reasoning"]
-    assert routed.confidence == 0.5
+    assert "ChatGPT model isn't connected" in auth
+    assert "Local model" in auth
+    assert "retried once" in transient
+    assert "retried once" in unknown
 
 
 @pytest.mark.asyncio
@@ -220,6 +228,33 @@ async def test_dispatch_single_handles_missing_specialist_validation_and_timeout
 
 
 @pytest.mark.asyncio
+async def test_dispatch_single_retries_one_zero_output_transient_failure() -> None:
+    specialist = _TransientErrorSpecialist()
+    registry = _Registry(["reasoning"], {"reasoning": specialist})
+    brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=registry)
+    dispatcher = _Dispatcher()
+    thinking = SimpleNamespace(start=lambda *a, **k: None, append=lambda *a, **k: None, end=lambda *a, **k: None)
+
+    result = await brain._dispatch_single(
+        session_id="sess-retry",
+        specialist_id="reasoning",
+        prompt="hello",
+        conversation=ConversationManager(),
+        memory_ctx=MemoryContext(),
+        dispatcher=dispatcher,
+        thinking=thinking,
+        mode="auto",
+        autonomy_level=1,
+        token_economy="optimal",
+    )
+
+    assert specialist.attempts == 2
+    assert result.status == SpecialistStatus.COMPLETED
+    assert result.content == "recovered answer"
+    assert result.error is None
+
+
+@pytest.mark.asyncio
 async def test_dispatch_parallel_and_synthesise_cover_fallback_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=_Registry(["a", "b"]))
     dispatcher = _Dispatcher()
@@ -282,7 +317,7 @@ async def test_dispatch_parallel_and_synthesise_cover_fallback_paths(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_handle_casual_and_actionable_emit_done_and_stream_output(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_model_owned_handler_emits_done_and_streams_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     created_coordinators: list[_MemoryCoordinator] = []
 
     def _fake_memory_coordinator(*args: object, **kwargs: object) -> _MemoryCoordinator:
@@ -298,6 +333,7 @@ async def test_handle_casual_and_actionable_emit_done_and_stream_output(monkeypa
         memory_ctx = kwargs["memory_ctx"]
         assert isinstance(memory_ctx, MemoryContext)
         assert "digest text" in memory_ctx.working
+        assert kwargs["images"] == [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]
         return DelegationResult(
             specialist_id="reasoning",
             status=SpecialistStatus.FAILED,
@@ -317,54 +353,23 @@ async def test_handle_casual_and_actionable_emit_done_and_stream_output(monkeypa
         turn_start=0.0,
         reply_kind="conversation",
         active_task_digest="digest text",
+        images=[{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}],
     )
-    assert "Sorry, I had trouble with that." in "".join(dispatcher.text_parts)
-    assert updated.last_assistant_message() == "Sorry, I had trouble with that."
+    expected_failure = (
+        "I couldn't get an answer from the selected model. I retried once; please try again or choose another model."
+    )
+    assert expected_failure in "".join(dispatcher.text_parts)
+    assert updated.last_assistant_message() == expected_failure
     assert created_coordinators[-1].captured
     assert dispatcher.done_payloads[-1]["thinking_summary"] == "conversation"
 
-    async def _routed(*args: object, **kwargs: object) -> RouteDecision:
-        _ = args
-        _ = kwargs
-        return RouteDecision(specialists=["reasoning"], parallel=False, reasoning="direct")
-
-    async def _successful_dispatch_single(**kwargs: object) -> DelegationResult:
-        return DelegationResult(
-            specialist_id="reasoning",
-            content='{"response":"clean answer"}',
-            tool_calls=[{"type": "tool_result", "name": "ls"}],
-            iterations=2,
-            tokens_used=17,
-        )
-
-    monkeypatch.setattr(brain, "_classify_and_route", _routed)
-    monkeypatch.setattr(brain, "_dispatch_single", _successful_dispatch_single)
-    dispatcher = _Dispatcher()
-    actionable = await brain._handle_actionable(
-        session_id="sess-2",
-        conversation=ConversationManager(),
-        prompt="Use your tools and answer.",
-        dispatcher=dispatcher,
-        mode="auto",
-        autonomy_level=3,
-        token_economy="optimal",
-        turn_start=0.0,
-    )
-    assert dispatcher.memory_refreshes
-    assert "".join(dispatcher.text_parts).startswith("Working on that")
-    assert "clean answer" in (actionable.last_assistant_message() or "")
-    assert dispatcher.done_payloads[-1]["tool_calls"] == 1
+    # There is intentionally no separate actionable handler. The same model
+    # path receives tools and decides whether to call them.
+    # No canned "Working on that —" prefix: the only visible text is the model's
+    # actual answer. The reply must not start with a templated acknowledgment.
 
 
-def test_background_status_helpers_cover_active_failed_and_mixed_states() -> None:
-    assert brain_mod._wants_background_status("what is the status?") is True
-    assert brain_mod._wants_background_status("tell me a joke") is False
-
-    assert (
-        brain_mod._should_answer_background_status_directly("what is the status of the background worker?", []) is True
-    )
-    assert brain_mod._should_answer_background_status_directly("tell me a joke", []) is False
-
+def test_background_status_formatter_covers_active_failed_and_mixed_states() -> None:
     active = brain_mod._summarize_background_status(
         [{"state": "running", "summary": "Build release", "last_progress": "Step 2"}]
     )
@@ -383,7 +388,18 @@ def test_background_status_helpers_cover_active_failed_and_mixed_states() -> Non
             {"state": "paused", "summary": "Three"},
         ]
     )
-    assert "mixed outcomes" in mixed.lower()
+    # Round-4 M1 guard: EVERY bucket is surfaced — the paused ("other") row is not
+    # dropped just because completed/failed rows coexist (the old early-return did).
+    assert "One" in mixed and "(completed)" in mixed
+    assert "Two" in mixed and "finished with issues" in mixed.lower()
+    assert "Three" in mixed and "needs attention" in mixed.lower()
+
+    # Only non-terminal/odd states present -> the mixed-outcomes label still applies.
+    only_other = brain_mod._summarize_background_status(
+        [{"state": "blocked", "summary": "Stuck"}, {"state": "awaiting_proof", "summary": "Pending"}]
+    )
+    assert "mixed outcomes" in only_other.lower()
+    assert "Stuck" in only_other and "Pending" in only_other
 
 
 @pytest.mark.asyncio
@@ -455,7 +471,12 @@ async def test_synthesise_and_casual_cover_empty_and_passthrough_cases(monkeypat
     monkeypatch.setattr("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _fake_memory_coordinator)
 
     async def _successful_dispatch_single(**kwargs: object) -> DelegationResult:
-        return DelegationResult(specialist_id="reasoning", content="direct answer", tokens_used=5)
+        return DelegationResult(
+            specialist_id="reasoning",
+            content="direct answer",
+            tokens_used=5,
+            tool_calls=[{"type": "tool_result", "name": "operate", "ok": True}],
+        )
 
     monkeypatch.setattr(brain, "_dispatch_single", _successful_dispatch_single)
     dispatcher = _Dispatcher()
@@ -473,4 +494,8 @@ async def test_synthesise_and_casual_cover_empty_and_passthrough_cases(monkeypat
     )
     assert updated.last_assistant_message() == "direct answer"
     assert created_coordinators[-1].captured
+    assert created_coordinators[-1].captured[-1]["tool_calls"] == [
+        {"type": "tool_result", "name": "operate", "ok": True}
+    ]
     assert dispatcher.done_payloads[-1]["thinking_summary"] == "casual"
+    assert dispatcher.done_payloads[-1]["tool_calls"] == 1

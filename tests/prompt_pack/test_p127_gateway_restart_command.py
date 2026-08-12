@@ -3,17 +3,36 @@ import io
 import sys
 
 import pytest
+from aiohttp import ClientError
 
 pytest.importorskip("aiohttp.pytest_plugin")
 
-if sys.platform == "win32":
+@pytest.fixture(autouse=True, scope="module")
+def _selector_loop_on_windows():
+    """Give aiohttp's test client a selector loop on Windows, then put it back.
+
+    This used to run at import time, which changed the policy for the WHOLE
+    pytest process. Every browser launch collected after this module then died
+    with NotImplementedError -- playwright drives its node transport through
+    asyncio subprocesses, and a SelectorEventLoop cannot spawn one. A module
+    that only needed the policy for its own eight tests was silently deciding
+    it for all 15,315, and the failure landed on an unrelated file.
+    """
+    if sys.platform != "win32":
+        yield
+        return
+    previous = asyncio.get_event_loop_policy()
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    try:
+        yield
+    finally:
+        asyncio.set_event_loop_policy(previous)
 
 
 async def _drain_response(resp) -> None:
     try:
         await resp.read()
-    except Exception:
+    except (ClientError, asyncio.TimeoutError, RuntimeError):
         resp.release()
 
 

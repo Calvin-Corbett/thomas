@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 
@@ -12,16 +11,12 @@ def _app_keys_source() -> str:
     return Path("thomas/server/app_keys.py").read_text(encoding="utf-8")
 
 
-def _chat_route_source() -> str:
-    return Path("thomas/server/routes/chat_aiohttp.py").read_text(encoding="utf-8")
+def _chat_handlers_source() -> str:
+    return Path("thomas/server/routes/chat_aiohttp_handlers.py").read_text(encoding="utf-8")
 
 
-def _chat_modes_source() -> str:
-    return Path("thomas/server/routes/chat_modes.py").read_text(encoding="utf-8")
-
-
-def _chat_batch_mode_source() -> str:
-    return Path("thomas/server/chat_batch_mode.py").read_text(encoding="utf-8")
+def _chat_streaming_source() -> str:
+    return Path("thomas/server/routes/chat_aiohttp_streaming.py").read_text(encoding="utf-8")
 
 
 def test_server_app_declares_per_session_lock_registry() -> None:
@@ -34,36 +29,21 @@ def test_server_app_declares_per_session_lock_registry() -> None:
     assert "async def _session_lock_for(session_id: str) -> asyncio.Lock:" in app_src
 
 
-def test_api_chat_wraps_mutating_paths_with_session_lock() -> None:
-    src = _chat_route_source()
-    modes_src = _chat_modes_source()
-    batch_src = _chat_batch_mode_source()
-    section = re.search(
-        r"async def api_chat\(request: web\.Request\).*?^\s*app\.router\.add_post\(\"/api/chat\", api_chat\)",
-        src,
-        flags=re.DOTALL | re.MULTILINE,
-    )
-    assert section is not None
-    body = section.group(0)
+def test_api_chat_serialises_runs_without_a_prose_control_shortcut() -> None:
+    handlers = _chat_handlers_source()
+    streaming = _chat_streaming_source()
+    combined = handlers + "\n" + streaming
 
-    assert "session_lock = await deps.session_lock_for(sid)" in body
-    assert "session.session_token_spend = int(session_tokens_used)" in body
-    assert "if not await deps.begin_session_run(sid):" in body
-    assert "session_run_guard_active = True" in body
-    assert "session is already processing another request" in body
+    assert "if not await deps.begin_session_run(sid):" in handlers
+    assert "session_run_guard_active = True" in handlers
+    assert "await deps.end_session_run(sid)" in handlers
+    assert "session_lock = await deps.session_lock_for(sid)" in handlers
+    assert "session is already processing another request" in handlers
 
-    control_guard = re.search(
-        r"if control_req is not None:\n(?:\s+try:\n)?\s+async with session_lock:\n\s+return await handle_ui_control_chat(?:_fn)?\(",
-        body,
-    )
-    assert control_guard is not None
-    cleanup_guard = re.search(r"if session_run_guard_active:\n\s+try:\n\s+await deps\.end_session_run\(sid\)", body)
-    assert cleanup_guard is not None
+    assert "resolve_ui_control_request" not in combined
+    assert "handle_ui_control_chat" not in combined
+    assert "control_req" not in combined
 
-    assert "swarm_response = await maybe_handle_swarm_mode(" in body
-
-    assert "maybe_handle_quick_casual_reply" in modes_src
-    assert 'session.conversation.append({"role": "user", "content": user_text})' in batch_src
-    assert 'session.conversation.append({"role": "assistant", "content": answer})' in batch_src
-    assert "response = await handle_batch_mode_chat(" in modes_src or "response = await batch_handler(" in modes_src
-    assert "return await handle_swarm_chat(" in modes_src
+    assert 'force_dispatch = _as_bool(payload.get("force_dispatch"))' in streaming
+    assert "if force_dispatch:" in streaming
+    assert "async with session_lock:" in streaming

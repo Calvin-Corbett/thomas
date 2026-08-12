@@ -2,8 +2,11 @@
 # See: README.md for quick start and configuration notes.
 
 # Default model profile to use.
-# Dev build default model profile.
-default_model = "codex"
+# openai_codex = ChatGPT-subscription OAuth (sign in, no API key) that calls the
+# Responses API and CAN use Thomas's own tools/skills (function-calling). The old
+# "codex" profile ran the Codex CLI as a closed agent that could NOT use Thomas's
+# tools — that's the root cause of months of Thomas "not working how I want".
+default_model = "openai_codex"
 # Maximum agent loop iterations per query
 max_agent_iterations = 10
 
@@ -60,9 +63,11 @@ timeout_s = 120.0
 #   thomas models list
 # to confirm what's available.
 
-[models.codex]
-provider = "codex"
-model = "gpt-5.5"
+[models.openai_codex]
+# ChatGPT-subscription OAuth (PKCE, no API key) -> Responses API WITH Thomas's tools.
+# This is the engine that lets the model actually use Thomas's skills/tools.
+provider = "openai_codex"
+model = "gpt-5.6-sol"
 reasoning_effort = "xhigh"
 max_tokens = 16384
 context_window = 200000
@@ -198,7 +203,8 @@ temperature = 0.1
 # Env override: THOMAS_MODELS_GLM_API_KEY=your_key_here
 #
 # Available models (change model = below to switch):
-#   glm-5          -- flagship, 744B MoE (40B active), released Feb 2026, best for coding/agents
+#   glm-5.2        -- latest flagship (recommended), strongest GLM for coding/agents
+#   glm-5          -- prior flagship, 744B MoE (40B active), released Feb 2026
 #   glm-4.5-air    -- fast, low-cost, strong tool-calling
 #   glm-4.5        -- previous full-power model
 #   glm-4.5-flash  -- ultra-fast, cheapest
@@ -209,7 +215,7 @@ temperature = 0.1
 provider = "openai_compat"
 base_url = "https://open.bigmodel.cn/api/paas/v4"
 api_key = ""
-model = "glm-5"
+model = "glm-5.2"
 max_tokens = 8192
 context_window = 128000
 temperature = 0.1
@@ -327,3 +333,37 @@ chat_auto_failover = false            # strict mode for primary chat runs: no si
 profiles = []                        # Optional ordered fallback model profiles (e.g. ["codex","openai","local"])
 cooldown_seconds = 300               # Failed profile cooldown before retry
 fallback_on_auth_error = false       # Usually keep false; true enables fallback on 401/403
+
+[evolve.funnel]
+# Multi-agent funnel evolve engine (additive). Selected per-run via
+# `thomas evolve loop --mode funnel`. `enabled` makes funnel the standing
+# default. Off/safe defaults: with no overrides the funnel wraps the classic
+# green-mirror builder and never touches the blue-owned promotion gate.
+enabled = false
+lanes = 5                            # isolated, naive, one-shot agents per stage
+survivors = 3                        # width after 5 -> 3 synthesis neck-down
+repair_budget_early = 3              # first-stage repair attempts
+repair_budget_late = 5               # later-stage repair attempts
+simplification = true                # add the deletion-perspective lane at synthesis
+graft_back = false                   # optional hybrid graft step (off until proven)
+independent_check_can_self_veto = true   # cross-family evaluator may only make promotion HARDER
+max_model_calls_per_goal = 40        # funnel-local cost backstop
+definition_profile = ""              # empty -> loop profile / default
+lane_profile = ""
+synth_profile = ""
+evaluator_candidates = ["anthropic", "gemini"]   # first family disjoint from the lanes wins
+
+[evolve.claude_bridge]
+# Claude-Code build bridge: lets Thomas-evolve dispatch a build task to an
+# external coding agent (Claude Code) by typing into it via desktop_operator.
+# MOST safety-sensitive capability — OFF by default and multi-gated. preview()
+# never controls the PC; actually typing requires enabled=true + explicit human
+# confirm + a matched window + no emergency-stop flag. Results are NEVER
+# auto-applied (the typed prompt says build-on-branch); the fail-closed
+# promotion gate still judges everything. Kill switch: create the file
+# ~/.thomas/evolve/claude_bridge.STOP to block all dispatch.
+enabled = false
+require_confirmation = true           # human approval required before any keystroke
+window_match = "Claude Code"          # only ever type into a window whose title contains this
+branch_only = true                    # typed prompt instructs build-on-branch, never merge
+max_prompt_chars = 8000               # refuse to type an unreasonably large blob

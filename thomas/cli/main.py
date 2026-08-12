@@ -52,6 +52,7 @@ for _module_name, _register_name in (
     ("thomas.cli.commands.updater", "register_update_commands"),
     ("thomas.cli.commands.release", "register_release_commands"),
     ("thomas.cli.commands.training", "register_training_commands"),
+    ("thomas.cli.commands.ship", "register_ship_commands"),
 ):
     try:
         _mod = __import__(_module_name, fromlist=[_register_name])
@@ -118,6 +119,13 @@ try:
     cli.add_command(heartbeat_command)
 except Exception as e:
     log.warning("Failed to register heartbeat command: %s", e)
+
+try:
+    from thomas.cli.consolidate_cmd import consolidate_command
+
+    cli.add_command(consolidate_command)
+except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError, TypeError) as e:
+    log.warning("Failed to register consolidate command: %s", e)
 
 try:
     from thomas.cli.commands.investigate import register_investigate_commands

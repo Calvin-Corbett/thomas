@@ -23,8 +23,17 @@ class _WorkflowChatAdapter:
         schema_hint=None,
         profile=None,
         model_id=None,
+        **controls,
     ):
-        self.calls.append({"system_prompt": system_prompt, "user_prompt": user_prompt, "profile": profile})
+        self.calls.append(
+            {
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "profile": profile,
+                "model_id": model_id,
+                **controls,
+            }
+        )
         if "You are an orchestrator. Decompose the goal" in system_prompt:
             return {"workers": [{"name": "w1", "prompt": "subtask 1"}]}
         if "parallel workflow worker" in system_prompt:
@@ -90,6 +99,53 @@ class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(int((result.get("telemetry") or {}).get("step_count") or 0), 2)
         self.assertEqual(int((result.get("workflow_policy") or {}).get("autonomy_level") or 0), 3)
 
+    async def test_workflow_task_propagates_work_controls_and_private_context(self):
+        markers = {
+            "model_id": "MODEL_Z9",
+            "reasoning_effort": "REASON_Z9",
+            "file_access": "ACCESS_Z9",
+            "thomas_guardrails": "GUARD_Z9",
+            "token_economy": "TOKEN_Z9",
+            "work_app_id": "APP_Z9",
+            "work_job_id": "JOB_Z9",
+            "private_skills": [{"name": "SKILL_Z9"}],
+            "job_memory": {"summary": "MEMORY_Z9"},
+            "connector_bindings": [{"provider": "PROVIDER_Z9", "label": "LABEL_Z9", "identity": "IDENTITY_Z9"}],
+        }
+        job = self.store.create_job(
+            name="work propagation",
+            kind="workflow_task",
+            payload={
+                "workflow": "chain",
+                "goal": "propagate controls",
+                "steps": ["one"],
+                **markers,
+            },
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            risk_class="low",
+            session_id="work:APP_Z9:JOB_Z9",
+        )
+        self.engine.wake_up()
+        for _ in range(80):
+            current = self.store.get_job(job.id)
+            if current.status in ("succeeded", "failed", "dead", "cancelled"):
+                break
+            await asyncio.sleep(0.05)
+
+        assert self.store.get_job(job.id).status == "succeeded"
+        call = self.chat.calls[-1]
+        assert call["model_id"] == "MODEL_Z9"
+        assert call["reasoning_effort"] == "REASON_Z9"
+        assert call["file_access"] == "ACCESS_Z9"
+        assert call["thomas_guardrails"] == "GUARD_Z9"
+        assert call["token_economy"] == "TOKEN_Z9"
+        assert call["work_app_id"] == "APP_Z9"
+        assert call["work_job_id"] == "JOB_Z9"
+        assert "SKILL_Z9" in call["system_prompt"]
+        assert "MEMORY_Z9" in call["system_prompt"]
+        assert "IDENTITY_Z9" in call["system_prompt"]
+
     async def test_workflow_task_autonomy_preset_applies_to_orchestrator(self):
         job = self.store.create_job(
             name="workflow orchestrator",
@@ -118,7 +174,7 @@ class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
         prompts = [str(c.get("user_prompt") or "") for c in self.chat.calls]
         self.assertTrue(any("Create up to 1 workers" in p for p in prompts))
 
-    async def test_workflow_task_compiles_natural_language_payload(self):
+    async def test_workflow_task_uses_neutral_single_task_for_prose_payload(self):
         job = self.store.create_job(
             name="workflow nl compile",
             kind="workflow_task",
@@ -138,12 +194,12 @@ class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
         done = self.store.get_job(job.id)
         self.assertEqual(done.status, "succeeded")
         result = done.result or {}
-        self.assertEqual(result.get("pattern"), "parallel")
+        self.assertEqual(result.get("pattern"), "chain")
         self.assertIn("workflow_compile", result)
-        workers = result.get("workers") or []
-        self.assertGreaterEqual(len(workers), 1)
+        self.assertEqual(len(result.get("steps") or []), 1)
+        self.assertFalse(result.get("workers"))
 
-    async def test_workflow_task_max_coding_routes_to_coding_pipeline(self):
+    async def test_workflow_task_max_coding_prose_does_not_select_pipeline(self):
         job = self.store.create_job(
             name="workflow max coding",
             kind="workflow_task",
@@ -165,8 +221,31 @@ class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
         done = self.store.get_job(job.id)
         self.assertEqual(done.status, "succeeded")
         result = done.result or {}
-        self.assertEqual(result.get("pattern"), "coding_pipeline")
+        self.assertEqual(result.get("pattern"), "chain")
         mode_policy = result.get("workflow_mode_policy") or {}
-        self.assertTrue(bool(mode_policy.get("applied")))
-        self.assertEqual(str(mode_policy.get("effective_workflow") or ""), "coding_pipeline")
-        self.assertEqual(str(mode_policy.get("task_class") or ""), "coding")
+        self.assertFalse(bool(mode_policy.get("applied")))
+        self.assertEqual(str(mode_policy.get("effective_workflow") or ""), "chain")
+        self.assertEqual(str(mode_policy.get("task_class") or ""), "general")
+
+    async def test_orchestrator_defaults_to_one_worker_without_explicit_count(self):
+        job = self.store.create_job(
+            name="workflow neutral orchestrator",
+            kind="workflow_task",
+            payload={
+                "workflow": "orchestrator_worker",
+                "goal": "Prepare the result",
+                "autonomy_level": 4,
+            },
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            risk_class="low",
+        )
+        self.engine.wake_up()
+        for _ in range(80):
+            current = self.store.get_job(job.id)
+            if current.status in ("succeeded", "failed", "dead", "cancelled"):
+                break
+            await asyncio.sleep(0.05)
+        result = self.store.get_job(job.id).result or {}
+        self.assertEqual((result.get("workflow_policy") or {}).get("worker_count"), 1)
+        self.assertTrue(any("Create up to 1 workers" in str(call.get("user_prompt")) for call in self.chat.calls))

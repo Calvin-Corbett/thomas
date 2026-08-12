@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.chat.conversation import ConversationManager
+from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 
 log = logging.getLogger(__name__)
 
@@ -32,11 +33,14 @@ class SessionMeta:
     """Metadata about a chat session."""
 
     session_id: str
+    surface_mode: str = "chat"
+    context_id: str | None = None
     profile: str = ""
     model_id: str | None = None
-    autonomy_level: int = 3
+    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL  # L2 Assist — ask before acting (Calvin law)
     system_prompt: str | None = None
     reasoning_effort: str | None = None
+    memory_enabled: bool = True
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     total_turns: int = 0
@@ -45,11 +49,14 @@ class SessionMeta:
     def to_dict(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
+            "surface_mode": self.surface_mode,
+            "context_id": self.context_id,
             "profile": self.profile,
             "model_id": self.model_id,
             "autonomy_level": self.autonomy_level,
             "system_prompt": self.system_prompt,
             "reasoning_effort": self.reasoning_effort,
+            "memory_enabled": self.memory_enabled,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "total_turns": self.total_turns,
@@ -60,11 +67,14 @@ class SessionMeta:
     def from_dict(cls, data: dict[str, Any]) -> SessionMeta:
         return cls(
             session_id=data.get("session_id", ""),
+            surface_mode=str(data.get("surface_mode") or "chat"),
+            context_id=(str(data.get("context_id")) if data.get("context_id") else None),
             profile=data.get("profile", ""),
             model_id=data.get("model_id"),
-            autonomy_level=data.get("autonomy_level", 3),
+            autonomy_level=data.get("autonomy_level", DEFAULT_AUTONOMY_LEVEL),
             system_prompt=data.get("system_prompt"),
             reasoning_effort=data.get("reasoning_effort"),
+            memory_enabled=bool(data.get("memory_enabled", True)),
             created_at=data.get("created_at", time.time()),
             updated_at=data.get("updated_at", time.time()),
             total_turns=data.get("total_turns", 0),

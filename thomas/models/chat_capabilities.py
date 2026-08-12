@@ -18,29 +18,28 @@ def _option(value: str, label: str) -> dict[str, str]:
 
 def _normalize_reasoning_effort(value: str) -> str:
     raw = str(value or "").strip().lower()
-    if raw == "max":
-        return "xhigh"
-    return raw if raw in {"low", "medium", "high", "xhigh"} else ""
+    return raw if raw in {"none", "low", "medium", "high", "xhigh", "max"} else ""
 
 
 def profile_chat_control_map(cfg: ModelConfig) -> dict[str, Any]:
     """Return chat control metadata for a profile."""
     provider = str(getattr(cfg, "provider", "") or "").strip().lower()
     reasoning_default = _normalize_reasoning_effort(getattr(cfg, "reasoning_effort", ""))
-    supports_reasoning_effort = bool(provider == "codex" or reasoning_default)
+    supports_reasoning_effort = bool(provider in {"openai_codex", "openai-codex"} or reasoning_default)
 
     model_controls: dict[str, Any] = {}
     if supports_reasoning_effort:
         model_controls["reasoning_effort"] = {
             "supported": True,
-            "label": "Reasoning" if provider == "codex" else "Reasoning Effort",
-            "default_value": reasoning_default or ("medium" if provider == "codex" else ""),
+            "label": "Reasoning" if provider in {"openai_codex", "openai-codex"} else "Reasoning Effort",
+            "default_value": reasoning_default or ("medium" if provider in {"openai_codex", "openai-codex"} else ""),
             "options": [
-                _option("", "Auto"),
+                _option("none", "None"),
                 _option("low", "Low"),
                 _option("medium", "Medium"),
                 _option("high", "High"),
                 _option("xhigh", "xHigh"),
+                _option("max", "Max"),
             ],
         }
 

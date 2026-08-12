@@ -293,4 +293,204 @@ def test_router_text_output_surfaces_unread_inbox() -> None:
 
     assert "inbox: agent=codex; unread=1" in text
     assert "msg-1: from=claude priority=p0 ESCALATED; stop before touching scripts" in text
-    assert "inbox_action: python scripts/crew/workboard/message.py --list --agent codex" in text
+    assert "inbox_action: python scripts/crew/workboard/message.py --inbox --agent codex" in text
+
+
+def test_router_text_output_surfaces_current_thread_context() -> None:
+    payload = {
+        "lane": "chat",
+        "workflow_mode": "guided",
+        "edit_intent": False,
+        "workboard_required": False,
+        "workboard": {
+            "path": "plans/thomas/WORKBOARD.md",
+            "active_claims": 0,
+            "matching_claims": [],
+            "claim_conflict": False,
+            "stale": False,
+            "updated_at": "2026-06-02",
+        },
+        "bootstrap_command": "",
+        "gate_handling": {},
+        "flags": {
+            "ui_proof": False,
+            "benchmark_mode": False,
+            "tracked_work": False,
+            "multi_agent": False,
+            "long_running": False,
+            "risky_paths": [],
+        },
+        "paths": [],
+        "required_reads": [],
+        "required_checks": [],
+        "escalation_triggers": [],
+        "preflight": {},
+        "inbox": {
+            "ok": True,
+            "agent": "codex",
+            "unread_count": 0,
+            "messages": [],
+        },
+        "current_thread": {
+            "ok": True,
+            "agent": "codex",
+            "peer": "claude",
+            "message_count": 2,
+            "awaiting_me": 0,
+            "awaiting_peer": 1,
+            "messages": [
+                {
+                    "msg_id": "msg-review",
+                    "direction": "outgoing",
+                    "awaiting": "peer",
+                    "state": "open",
+                    "summary": "waiting on Claude review",
+                },
+                {
+                    "msg_id": "msg-context",
+                    "direction": "incoming",
+                    "awaiting": "thread",
+                    "state": "acked",
+                    "summary": "acked but relevant context",
+                },
+            ],
+        },
+    }
+
+    text = mod._text_output(payload)
+
+    assert "current_thread: agent=codex; peer=claude; active=2; awaiting_me=0; awaiting_peer=1" in text
+    assert "msg-review: outgoing awaiting=peer state=open; waiting on Claude review" in text
+    assert "msg-context: incoming awaiting=thread state=acked; acked but relevant context" in text
+    assert (
+        "current_thread_action: python scripts/crew/workboard/message.py --current --agent codex --peer claude" in text
+    )
+
+
+def test_router_text_output_surfaces_message_audit_warnings() -> None:
+    payload = {
+        "lane": "chat",
+        "workflow_mode": "guided",
+        "edit_intent": False,
+        "workboard_required": False,
+        "workboard": {
+            "path": "plans/thomas/WORKBOARD.md",
+            "active_claims": 0,
+            "matching_claims": [],
+            "claim_conflict": False,
+            "stale": False,
+            "updated_at": "2026-06-02",
+        },
+        "bootstrap_command": "",
+        "gate_handling": {},
+        "flags": {
+            "ui_proof": False,
+            "benchmark_mode": False,
+            "tracked_work": False,
+            "multi_agent": False,
+            "long_running": False,
+            "risky_paths": [],
+        },
+        "paths": [],
+        "required_reads": [],
+        "required_checks": [],
+        "escalation_triggers": [],
+        "preflight": {},
+        "inbox": {
+            "ok": True,
+            "agent": "codex",
+            "unread_count": 0,
+            "messages": [],
+        },
+        "current_thread": {
+            "ok": True,
+            "agent": "codex",
+            "peer": "claude",
+            "message_count": 0,
+            "awaiting_me": 0,
+            "awaiting_peer": 0,
+            "messages": [],
+        },
+        "message_audit": {
+            "ok": False,
+            "problem_count": 1,
+            "canonical_inbox_count": 0,
+            "canonical_current_count": 0,
+            "awaiting_me": 0,
+            "awaiting_peer": 0,
+            "diagnosis": "message section contains noncanonical agent mentions that inbox/current views ignore",
+            "parse_errors": [],
+            "candidate_mentions": [
+                {
+                    "line": 52,
+                    "text": "Claude -> Codex: waiting for your reply.",
+                }
+            ],
+        },
+    }
+
+    text = mod._text_output(payload)
+
+    assert "message_audit: warning; problems=1; inbox=0; current=0" in text
+    assert "candidate_mention line 52: Claude -> Codex: waiting for your reply." in text
+
+
+def test_router_text_output_trims_long_current_thread_summaries() -> None:
+    long_summary = "Claude coordination context " * 20
+    payload = {
+        "lane": "chat",
+        "workflow_mode": "guided",
+        "edit_intent": False,
+        "workboard_required": False,
+        "workboard": {
+            "path": "plans/thomas/WORKBOARD.md",
+            "active_claims": 0,
+            "matching_claims": [],
+            "claim_conflict": False,
+            "stale": False,
+            "updated_at": "2026-06-02",
+        },
+        "bootstrap_command": "",
+        "gate_handling": {},
+        "flags": {
+            "ui_proof": False,
+            "benchmark_mode": False,
+            "tracked_work": False,
+            "multi_agent": False,
+            "long_running": False,
+            "risky_paths": [],
+        },
+        "paths": [],
+        "required_reads": [],
+        "required_checks": [],
+        "escalation_triggers": [],
+        "preflight": {},
+        "inbox": {
+            "ok": True,
+            "agent": "codex",
+            "unread_count": 0,
+            "messages": [],
+        },
+        "current_thread": {
+            "ok": True,
+            "agent": "codex",
+            "message_count": 1,
+            "awaiting_me": 0,
+            "awaiting_peer": 1,
+            "messages": [
+                {
+                    "msg_id": "msg-long",
+                    "direction": "outgoing",
+                    "awaiting": "peer",
+                    "state": "open",
+                    "summary": long_summary,
+                }
+            ],
+        },
+    }
+
+    text = mod._text_output(payload)
+
+    assert "msg-long: outgoing awaiting=peer state=open; Claude coordination context" in text
+    assert long_summary not in text
+    assert "..." in text

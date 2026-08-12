@@ -24,6 +24,14 @@ class TurnoverAnalysis:
         if employee.termination_date:
             self.terminations.append(employee)
 
+    @staticmethod
+    def _tenure_at_termination(employee: Employee) -> float:
+        """Return service duration at termination, independent of today's date."""
+
+        if employee.termination_date is None:
+            return 0.0
+        return max(0.0, (employee.termination_date - employee.hire_date).days / 365.25)
+
     def calculate_turnover_rate(
         self,
         start_date: date,
@@ -65,7 +73,7 @@ class TurnoverAnalysis:
         ]
 
         # Simple heuristic: tenure < 2 years often indicates voluntary
-        voluntary = sum(1 for e in period_terminations if e.years_of_service() < 2)
+        voluntary = sum(1 for employee in period_terminations if self._tenure_at_termination(employee) < 2)
         involuntary = len(period_terminations) - voluntary
 
         return (voluntary, involuntary)
@@ -109,7 +117,7 @@ class TurnoverAnalysis:
 
         for emp in self.terminations:
             if emp.termination_date and start_date <= emp.termination_date <= end_date:
-                tenure = emp.years_of_service()
+                tenure = self._tenure_at_termination(emp)
 
                 if tenure < 0.5:
                     by_tenure["0-6 months"] += 1

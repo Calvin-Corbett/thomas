@@ -32,8 +32,8 @@
 </div>
 <div class="easy-setup-path-grid" id="easySetupPathGrid">
 <button type="button" class="easy-setup-path-card" data-path="codex">
-<strong>ChatGPT / Codex</strong>
-<span>Use ChatGPT OAuth and pull Codex models.</span>
+<strong>ChatGPT (OpenAI)</strong>
+<span>Sign in with your ChatGPT account (OpenAI) — no CLI needed.</span>
 </button>
 <button type="button" class="easy-setup-path-card" data-path="manual">
 <strong>Manual API Key</strong>
@@ -55,7 +55,7 @@
 <div class="easy-setup-connection-meta" id="easySetupConnectionMeta">
 </div>
 <div class="easy-setup-block hidden" id="easySetupCodexBlock">
-<p class="easy-setup-note">We will check sign-in, run login if needed, list Codex models, and validate a Codex profile.</p>
+<p class="easy-setup-note">We will check sign-in, run ChatGPT login if needed, list your available models, and validate your ChatGPT profile.</p>
 <div class="easy-setup-inline-meta" id="easySetupCodexMeta">
 </div>
 </div>

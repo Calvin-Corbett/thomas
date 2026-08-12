@@ -23,8 +23,10 @@ except ImportError:
     from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
 from thomas.core.config import ModelConfig
-from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage
-from thomas.core.llm_streaming import stream_anthropic, stream_openai
+from thomas.core.llm_budget import LLMBudgetMixin
+from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage, callable_accepts_keyword
+from thomas.core.llm_streaming import stream_anthropic, stream_openai, stream_openai_codex
+from thomas.core.structured_output import StructuredResult, request_structured
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ def _get_cooldown(key: str) -> _ProviderCooldown:
     return _PROVIDER_COOLDOWNS[key]
 
 
-class LLMClient:
+class LLMClient(LLMBudgetMixin):
     """Async LLM client with streaming, retries, and multi-provider support."""
 
     def __init__(
@@ -109,7 +111,6 @@ class LLMClient:
         self._client: httpx.AsyncClient | None = None
         self._anthropic_tool_name_map: dict[str, str] = {}  # sanitized→original
         self._openai_tool_name_map: dict[str, str] = {}  # sanitized→original
-        self._codex_provider: Any | None = None  # lazy CodexProvider
         self._fallback_configs = list(fallback_configs or [])
         self._failover_enabled = bool(failover_enabled) and len(self._fallback_configs) > 0
         self._failover_cooldown_s = max(0, int(failover_cooldown_s))
@@ -119,6 +120,7 @@ class LLMClient:
         self._session_pinned_key: str | None = None  # set on first success
         self._request_overrides = dict(request_overrides or {})
         self._attempt_trace: list[dict[str, Any]] = []
+        self._runtime_attempt_trace: list[dict[str, Any]] = []
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -147,9 +149,6 @@ class LLMClient:
         return self._client
 
     async def close(self) -> None:
-        if self._codex_provider is not None:
-            await self._codex_provider.close()
-            self._codex_provider = None
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
@@ -246,11 +245,25 @@ class LLMClient:
             "base_url": str(cfg.base_url or ""),
         }
 
+    def reset_runtime_trace(self) -> None:
+        """Start a new turn-level attribution scope."""
+
+        self._runtime_attempt_trace = []
+
     def runtime_trace(self) -> dict[str, Any]:
-        """Runtime model trace for the most recent stream_chat() call."""
+        """Runtime model trace aggregated across the current turn scope."""
         primary = self._cfg_snapshot(self._primary_config)
-        active = self._cfg_snapshot(self.config)
-        attempts = [dict(a) for a in self._attempt_trace]
+        # An empty turn scope is meaningful: after reset, never fall back to a
+        # previous call's trace and falsely attest a model that did not run.
+        attempts = [dict(a) for a in self._runtime_attempt_trace]
+        active = next(
+            (
+                {key: attempt.get(key) for key in ("profile", "provider", "model", "base_url")}
+                for attempt in reversed(attempts)
+                if str(attempt.get("status") or "") == "success"
+            ),
+            {},
+        )
         failover_used = any(
             str(a.get("status") or "") == "success" and str(a.get("profile") or "") != str(primary.get("profile") or "")
             for a in attempts
@@ -279,6 +292,7 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = True,
+        max_output_tokens: int | None = None,
     ) -> dict[str, Any]:
         # Reset per-request tool name map
         self._openai_tool_name_map = {}
@@ -287,7 +301,9 @@ class LLMClient:
             "model": self.config.model,
             "messages": messages,
             "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": min(self.config.max_tokens, max_output_tokens)
+            if max_output_tokens
+            else self.config.max_tokens,
             "stream": stream,
         }
         if self.config.top_p < 1.0:
@@ -328,6 +344,7 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         stream: bool = True,
+        max_output_tokens: int | None = None,
     ) -> dict[str, Any]:
         # Reset per-request state
         self._anthropic_tool_name_map = {}
@@ -449,7 +466,9 @@ class LLMClient:
         body: dict[str, Any] = {
             "model": self.config.model,
             "messages": anthropic_messages,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": min(self.config.max_tokens, max_output_tokens)
+            if max_output_tokens
+            else self.config.max_tokens,
             "temperature": self.config.temperature,
             "stream": stream,
         }
@@ -514,19 +533,19 @@ class LLMClient:
                 continue
         return out
 
-    async def _get_codex_provider(self) -> Any:
-        if self._codex_provider is None:
-            from thomas.marketplace.codex.provider import CodexProvider
-
-            self._codex_provider = CodexProvider(self.config)
-        return self._codex_provider
-
     async def stream_chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        turn_user_content: Any = None,
     ) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion, yielding events as they arrive."""
+        provider_kwargs = (
+            {"turn_user_content": turn_user_content}
+            if callable_accepts_keyword(self._stream_current_provider, "turn_user_content")
+            else {}
+        )
         self._attempt_trace = []
         if not self._failover_enabled:
             rem = self._rate_limit_remaining(self.config)
@@ -537,6 +556,7 @@ class LLMClient:
                     "cooldown_remaining_s": int(rem),
                 }
                 self._attempt_trace.append(attempt)
+                self._runtime_attempt_trace.append(attempt)
                 raise LLMError(
                     f"Rate-limit cooldown active for profile '{self.config.name}' ({int(rem)}s remaining).",
                     status=429,
@@ -547,8 +567,13 @@ class LLMClient:
                 "status": "running",
             }
             self._attempt_trace.append(attempt)
+            self._runtime_attempt_trace.append(attempt)
             try:
-                async for event in self._stream_current_provider(messages, tools):
+                async for event in self._stream_current_provider(
+                    messages,
+                    tools,
+                    **provider_kwargs,
+                ):
                     yield event
                 attempt["status"] = "success"
                 return
@@ -586,6 +611,7 @@ class LLMClient:
                 "status": "running",
             }
             self._attempt_trace.append(attempt)
+            self._runtime_attempt_trace.append(attempt)
             rate_limited_for = self._rate_limit_remaining(cfg)
             if rate_limited_for > 0:
                 attempt["status"] = "skipped_rate_limited"
@@ -613,7 +639,11 @@ class LLMClient:
             await self._switch_config(cfg)
 
             try:
-                async for event in self._stream_current_provider(messages, tools):
+                async for event in self._stream_current_provider(
+                    messages,
+                    tools,
+                    **provider_kwargs,
+                ):
                     yield event
                 attempt["status"] = "success"
                 # On success, clear backoff and pin provider for this session.
@@ -665,16 +695,22 @@ class LLMClient:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        turn_user_content: Any = None,
     ) -> AsyncIterator[StreamEvent]:
-        if self.config.provider == "codex":
-            provider = await self._get_codex_provider()
+        provider_name = str(self.config.provider or "").strip().lower().replace("-", "_")
+        if provider_name == "openai_codex":
             stream_obj = await _coerce_async_iterator(
-                provider.stream_chat(messages, tools),
-                source="provider.stream_chat",
+                self._stream_openai_codex(
+                    messages,
+                    tools,
+                    turn_user_content=turn_user_content,
+                ),
+                source="stream_openai_codex",
             )
             async for event in stream_obj:
                 yield event
-        elif self.config.provider == "anthropic":
+        elif provider_name == "anthropic":
             stream_obj = await _coerce_async_iterator(
                 self._stream_anthropic(messages, tools),
                 source="stream_anthropic",
@@ -697,6 +733,25 @@ class LLMClient:
         stream_obj = await _coerce_async_iterator(
             stream_openai(self, messages, tools),
             source="stream_openai",
+        )
+        async for event in stream_obj:
+            yield event
+
+    async def _stream_openai_codex(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        turn_user_content: Any = None,
+    ) -> AsyncIterator[StreamEvent]:
+        stream_obj = await _coerce_async_iterator(
+            stream_openai_codex(
+                self,
+                messages,
+                tools,
+                turn_user_content=turn_user_content,
+            ),
+            source="stream_openai_codex",
         )
         async for event in stream_obj:
             yield event
@@ -748,3 +803,31 @@ class LLMClient:
             "tool_calls": tool_calls,
             "usage": usage,
         }
+
+    async def chat_structured(
+        self,
+        messages: list[dict[str, Any]],
+        schema: dict[str, Any],
+        max_repair_attempts: int = 2,
+    ) -> StructuredResult:
+        """Non-streaming chat returning JSON validated against a caller schema.
+
+        Delegates to thomas.core.structured_output.request_structured, using
+        this client's chat() as the LLM adapter. Validation failures are fed
+        back to the model and retried up to ``max_repair_attempts`` times.
+
+        Raises SchemaValidationError for a malformed caller schema and
+        StructuredOutputError (with a per-attempt trace) when the model cannot
+        produce conforming output within the bounded repair loop.
+        """
+
+        async def _adapter(msgs: list[dict[str, Any]]) -> str:
+            result = await self.chat(msgs)
+            return str(result.get("text") or "")
+
+        return await request_structured(
+            _adapter,
+            messages,
+            schema,
+            max_repair_attempts=max_repair_attempts,
+        )

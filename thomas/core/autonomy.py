@@ -21,11 +21,11 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
         level=1,
         name="Chat",
         ui_label="chat",
-        summary="Conversation only — no tool use",
+        summary="Conversation, memory, and read-only observation — no mutation or delegation",
         system_directive=(
-            "Autonomy Level 1 (Chat): you are in chat-only mode. "
-            "Do not call tools, execute commands, or make any changes. "
-            "Just have a conversation with the user."
+            "Autonomy Level 1 (Chat): converse, remember, recall, and use bounded "
+            "read-only observation when it helps. Do not mutate state, delegate work, "
+            "execute commands, or make external changes."
         ),
         force_tools_policy="never",
         prefers_extended_iterations=False,
@@ -34,7 +34,7 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
         level=2,
         name="Assist",
         ui_label="assist",
-        summary="Assist with work — requires manual approval for every tool action",
+        summary="Assist with work — confirm before mutation or delegation",
         system_directive=(
             "Autonomy Level 2 (Assist): help the user with their work. "
             "Before every tool call or action, describe what you want to do "
@@ -76,7 +76,12 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
     ),
 }
 
-DEFAULT_AUTONOMY_LEVEL = 3
+# Default = L2 Assist (asks for approval before acting), NOT L3 Agent. Calvin
+# design law (2026-06-14): the system must not act autonomously "by default" — the
+# user opts UP into hands-off autonomy; it is never on out of the box. The autonomy
+# levels themselves are unchanged; only the default is. Do not raise this back
+# to 3 without Calvin.
+DEFAULT_AUTONOMY_LEVEL = 2
 
 
 def clamp_autonomy_level(value: object, *, default: int = DEFAULT_AUTONOMY_LEVEL) -> int:
@@ -110,6 +115,53 @@ def autonomy_level_summary(level: object) -> str:
 
 def autonomy_system_directive(level: object) -> str:
     return autonomy_spec(level).system_directive
+
+
+def chat_delegation_directive(level: object) -> str:
+    """Autonomy-aware instruction for Thomas's governed conversation surface.
+
+    Identity remains constant. The level changes which bounded actions may run,
+    which require confirmation, and when heavy work may be delegated.
+    """
+    lv = clamp_autonomy_level(level)
+    if lv <= 1:
+        return (
+            "AUTONOMY (Level 1 — Chat): converse, remember, recall, and use read-only "
+            "observation. You cannot mutate state or hand work off at this level; if the user "
+            "wants that, offer the action and explain that Assist or higher is required."
+        )
+    if lv == 2:
+        return (
+            "AUTONOMY (Level 2 — Assist): read-only observation can run directly. Before "
+            "mutating even bounded local state or handing work to the task manager, confirm "
+            "with the user first. After confirmation, use operate for a bounded action or "
+            "send_task for heavy work."
+        )
+    if lv == 3:
+        return (
+            "AUTONOMY (Level 3 — Agent): use operate directly for supported bounded local "
+            "actions. When the request is heavier or outside that allowlist, hand it to the "
+            "task manager immediately via send_task. Do NOT "
+            "ask permission first — that 'want me to hand this off?' question does not "
+            "apply at this level. Just hand it off and tell them you've done so. Only "
+            "pause to ask if the request is genuinely ambiguous."
+        )
+    return (
+        "AUTONOMY (Level 4 — Full Autonomy / Max): the user wants autopilot. Use operate "
+        "for supported bounded local actions; hand heavier actionable requests to the task "
+        "manager immediately and WITHOUT asking — never "
+        "say 'want me to hand this off?' at this level. Hand it off via send_task and "
+        "then tell them you've done so. Only pause if the request is genuinely "
+        "ambiguous; do not seek routine confirmation. "
+        "CAPABILITY GAPS — this is the whole point of Full Autonomy: if the user asks "
+        "for something you cannot currently do because a tool or capability is missing "
+        "(for example live web search, an integration, or an action you have no tool "
+        "for), do NOT just decline and stop. Acknowledge it isn't wired up yet, then "
+        "IMMEDIATELY hand the job of BUILDING that capability to the task manager via "
+        "send_task — the worker crew can add it. Your organic response should be 'I "
+        "can't do that yet — but I'm building it now' followed by an actual hand-off, "
+        "never a dead-end 'I don't have that.' Extend yourself to meet the request."
+    )
 
 
 def parse_autonomy_level(value: object, *, default: int = DEFAULT_AUTONOMY_LEVEL) -> int:

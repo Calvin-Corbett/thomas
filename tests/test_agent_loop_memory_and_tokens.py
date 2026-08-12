@@ -1,11 +1,12 @@
 import asyncio
+import threading
 import unittest
 from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
 from thomas.agent.loop import AgentLoop
-from thomas.agent.loop_streaming import apply_memory_policy, validate_memory_relevance
+from thomas.agent.loop_streaming import apply_memory_policy, retrieve_memory
 from thomas.agent.routing import RouteDecision
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.events import EventType
@@ -53,6 +54,22 @@ class DummyMemory:
         return dict(self.thread_policies.get(thread_id, {}))
 
 
+class _InterruptibleSlowMemory(DummyMemory):
+    def __init__(self) -> None:
+        super().__init__()
+        self.release = threading.Event()
+        self.interrupt_calls = 0
+
+    def retrieve(self, query: str, thread: str, budget: int, mode: str) -> _Ctx:
+        self.release.wait(timeout=1.0)
+        return _Ctx(text="late memory")
+
+    def interrupt_retrieval(self) -> bool:
+        self.interrupt_calls += 1
+        self.release.set()
+        return True
+
+
 class DummyLLM:
     def __init__(self, prompt_tokens: int = 1500, completion_tokens: int = 300) -> None:
         self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=128)
@@ -94,6 +111,20 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
 
         self.assertGreaterEqual(len(memory.retrieve_calls), 1)
         self.assertEqual(memory.retrieve_calls[0]["mode"], "auto")
+
+    def test_memory_timeout_interrupts_the_underlying_query(self) -> None:
+        agent, _memory = self._build_agent()
+        slow = _InterruptibleSlowMemory()
+        agent._memory = slow
+
+        with (
+            patch("thomas.agent.loop_streaming._MEMORY_RETRIEVAL_TIMEOUT_S", 0.01),
+            patch("thomas.agent.loop_streaming._MEMORY_INTERRUPT_JOIN_S", 0.2),
+        ):
+            result = retrieve_memory(agent, "long query", mode="auto")
+
+        self.assertEqual("", result)
+        self.assertEqual(1, slow.interrupt_calls)
 
     def test_benchmark_mode_skips_memory_read_and_write(self) -> None:
         agent, memory = self._build_agent()
@@ -158,9 +189,17 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertIn("prompt_to_completion_ratio", token_report)
         self.assertIn("suggestions", token_report)
         self.assertIn("route", token_report)
-        # Profile hints should be promoted to pins.
-        self.assertIn("user.name", memory.pins)
-        self.assertIn("user.preference", memory.pins)
+        # Free-form user prose is persisted as conversation memory, but it is
+        # not locally classified into profile pins.  A frontier-model tool
+        # call or an explicit structured memory action owns that semantic
+        # choice.
+        self.assertEqual({}, memory.pins)
+        self.assertTrue(
+            any(
+                event["etype"] == "user_message" and event["text"] == "my name is Alex and I prefer concise replies."
+                for event in memory.events
+            )
+        )
 
     def test_route_applies_thread_memory_policy_for_casual_chat(self) -> None:
         agent, memory = self._build_agent()
@@ -175,7 +214,8 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         policy = memory.thread_memory_policy("t1")
         self.assertTrue(policy.get("enabled"))
         self.assertTrue(policy.get("include_global"))
-        self.assertFalse(policy.get("include_profile"))
+        # The profile now rides along at every effort level (see above).
+        self.assertTrue(policy.get("include_profile"))
 
     def test_memory_policy_pref_overrides_apply_to_thread_settings(self) -> None:
         agent, memory = self._build_agent()
@@ -222,6 +262,55 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertAlmostEqual(float(policy.get("auto_optimize_waste_threshold") or 0.0), 0.33, places=6)
         self.assertAlmostEqual(float(policy.get("auto_optimize_min_interval_hours") or 0.0), 1.25, places=6)
 
+    def test_explicit_global_memory_false_survives_context_preservation(self) -> None:
+        agent, memory = self._build_agent()
+        agent._memory_include_global_pref = False
+        route = RouteDecision(
+            path="general",
+            confidence=1.0,
+            reasons=["test"],
+            mode="auto",
+            tools_policy="auto",
+            include_purpose=False,
+            memory_include_global=True,
+            memory_include_profile=False,
+            memory_budget_tokens=800,
+        )
+
+        apply_memory_policy(agent, route)
+
+        assert memory.thread_memory_policy("t1")["include_global"] is False
+
+    def test_pins_only_blocks_retrieval_when_backend_rejects_policy(self) -> None:
+        class RejectingMemory(DummyMemory):
+            def set_thread_memory_policy(self, thread_id: str, **patch: Any) -> dict[str, Any]:
+                raise RuntimeError("policy unavailable")
+
+            def retrieve(self, query: str, thread: str, budget: int, mode: str) -> _Ctx:
+                self.retrieve_calls.append({"query": query})
+                return _Ctx(text="UNPINNED_SECRET_FROM_BROAD_MEMORY")
+
+        agent, _memory = self._build_agent()
+        rejecting = RejectingMemory()
+        agent._memory = rejecting
+        agent._memory_pins_only_pref = True
+        route = RouteDecision(
+            path="general",
+            confidence=1.0,
+            reasons=["test"],
+            mode="auto",
+            tools_policy="auto",
+            include_purpose=False,
+            memory_include_global=True,
+            memory_include_profile=True,
+            memory_budget_tokens=800,
+        )
+
+        apply_memory_policy(agent, route)
+
+        assert retrieve_memory(agent, "show my memory") == ""
+        assert rejecting.retrieve_calls == []
+
     def test_memory_policy_respects_token_economy_profile_cap(self) -> None:
         agent, memory = self._build_agent()
         agent._memory_include_profile_economy_cap = False
@@ -249,13 +338,19 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         optimal = runtime_overhead_policy("balanced")
         max_policy = runtime_overhead_policy("max")
 
-        self.assertFalse(cheap.include_autonomy_profile)
-        self.assertFalse(cheap.include_library_context)
-        self.assertEqual(cheap.runtime_skills_mode, "off")
+        # Effort no longer decides what Thomas is allowed to KNOW. "cheap" (the Brisk
+        # setting) used to switch off include_project_instructions, so choosing a
+        # faster reasoning setting made Thomas stop reading the project's own rules.
+        # Reasoning effort is native to the model and is the honest place to spend
+        # less; context the model needs to be correct is not.
+        self.assertTrue(cheap.include_autonomy_profile)
+        self.assertTrue(cheap.include_project_instructions)
+        self.assertTrue(cheap.include_library_context)
+        self.assertEqual(cheap.runtime_skills_mode, "explicit")
 
         self.assertTrue(optimal.include_autonomy_profile)
         self.assertTrue(optimal.include_project_instructions)
-        self.assertFalse(optimal.include_memory_profile)
+        self.assertTrue(optimal.include_memory_profile)
         self.assertEqual(optimal.runtime_skills_mode, "explicit")
 
         self.assertTrue(max_policy.include_memory_profile)
@@ -300,19 +395,6 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertIn("Purpose Brief", enabled_text)
         self.assertIn("Project Instructions", enabled_text)
         self.assertIn("SKILLS", enabled_text)
-
-    def test_validate_memory_relevance_prefers_query_term_coverage(self) -> None:
-        strong = validate_memory_relevance(
-            "deployment target cloudflare workers",
-            "Durable memory: deployment target is Cloudflare Workers.",
-        )
-        weak = validate_memory_relevance(
-            "deployment target cloudflare workers",
-            "Durable memory: favorite pizza toppings are mushrooms and olives.",
-        )
-
-        self.assertGreater(strong, 0.5)
-        self.assertEqual(weak, 0.0)
 
     def test_agent_loop_generates_unique_fallback_ids_when_not_provided(self) -> None:
         cfg = AppConfig(
