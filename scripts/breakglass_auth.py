@@ -1287,7 +1287,14 @@ def authorize_breakglass(
     # error falls back to the normal Windows sign-in prompt below.
     try:
         window = active_window(_REPO_ROOT, current_user)
-    except Exception:  # noqa: BLE001 - never let a window error block the real prompt
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        RuntimeError,
+    ):  # JSONDecodeError subclasses ValueError
         window = None
     if window:
         return BreakglassAuthorization(
@@ -1367,6 +1374,13 @@ def authorize_breakglass(
             window_enabled, window_hours = _breakglass_window_prefs()
             if window_enabled:
                 mint_window(_REPO_ROOT, result.actor or current_user, window_hours)
-        except Exception:  # noqa: BLE001 - window is a convenience, never fail the auth
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            RuntimeError,
+        ):  # JSONDecodeError subclasses ValueError
             pass
     return result

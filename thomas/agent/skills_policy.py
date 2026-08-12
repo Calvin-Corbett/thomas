@@ -67,11 +67,11 @@ def _is_enabled_env(name: str, default: bool = True) -> bool:
 def _path_prefix(child: Path, parent: Path) -> bool:
     try:
         c = child.resolve()
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         c = child
     try:
         p = parent.resolve()
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         p = parent
     child_key = str(c).lower()
     parent_key = str(p).lower().rstrip("\\/")
@@ -152,7 +152,9 @@ def load_runtime_skill_trust_policy(config: Any, *, cwd: Path | None = None) -> 
     if policy_path.exists():
         try:
             raw = json.loads(policy_path.read_text(encoding="utf-8"))
-        except Exception:
+        # An unreadable or malformed trust policy falls back to an empty
+        # policy, which is the RESTRICTIVE default -- never a permissive one.
+        except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
             raw = {}
         if isinstance(raw, dict):
             source_file = str(policy_path)
@@ -208,7 +210,7 @@ def load_runtime_skill_trust_policy(config: Any, *, cwd: Path | None = None) -> 
     for root in trusted_roots:
         try:
             resolved = root.resolve()
-        except Exception:
+        except (OSError, ValueError, RuntimeError):
             resolved = root
         key = str(resolved).lower()
         if key in seen_roots:

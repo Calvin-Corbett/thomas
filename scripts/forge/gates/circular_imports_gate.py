@@ -183,14 +183,14 @@ def run(argv: list[str] | None = None) -> int:
         if ok:
             print(f"Circular imports gate: PASS ({len(python_files)} file(s) scanned)")
         else:
-            print("❌ SAFETY GATE FAILED: Forbidden Circular Imports Detected")
+            print("SAFETY GATE FAILED: Forbidden Circular Imports Detected")
             print("=" * 70)
             print(f"Found {len(violations)} forbidden import(s):")
             print()
             print("WHAT YOU DID WRONG:")
             for v in violations:
                 print(f"  - {v['file']}")
-                print(f"    {v['source_module']} → {v['forbidden_import']}  (FORBIDDEN)")
+                print(f"    {v['source_module']} -> {v['forbidden_import']}  (FORBIDDEN)")
             print()
             print("HOW TO FIX IT:")
             print("1. Remove the direct import.")

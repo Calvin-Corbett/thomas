@@ -97,7 +97,7 @@ def run(argv: list[str] | None = None) -> int:
                 )
             )
         else:
-            print("Type safety gate: PASS (mypy not installed — install with: pip install mypy)")
+            print("Type safety gate: PASS (mypy not installed - install with: pip install mypy)")
         return 0
 
     try:
@@ -140,7 +140,7 @@ def run(argv: list[str] | None = None) -> int:
                 )
             )
         else:
-            print("Type safety gate: PASS (mypy timed out — check manually)")
+            print("Type safety gate: PASS (mypy timed out - check manually)")
         return 0
 
     errors = [line.strip() for line in proc.stdout.splitlines() if line.strip() and ": error:" in line]
@@ -164,7 +164,7 @@ def run(argv: list[str] | None = None) -> int:
         if ok:
             print(f"Type safety gate: PASS ({len(enabled_files)} file(s) checked)")
         else:
-            print("❌ SAFETY GATE FAILED: Type Errors in Type-Checked Modules")
+            print("SAFETY GATE FAILED: Type Errors in Type-Checked Modules")
             print("=" * 70)
             print(f"Found {len(errors)} type error(s) in opted-in modules:")
             print()

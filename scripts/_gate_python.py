@@ -45,7 +45,9 @@ def _find_venv_python() -> Path | None:
                 common = (here / common).resolve()
             main_root = common.parent  # <main>/.git -> <main>
             cands += _candidates(main_root)
-    except Exception:
+    # Locating the main worktree is best effort: on failure the candidate
+    # loop below still tries every other interpreter it knows about.
+    except (OSError, subprocess.SubprocessError, ValueError):
         pass
     for c in cands:
         if c.exists():

@@ -368,7 +368,10 @@ def run(argv: Sequence[str] | None = None) -> int:
             workboard=Path(args.workboard),
             problem_root=str(args.problem_root),
         )
-    except Exception as exc:
+    # The CLI boundary: every fault must leave as {ok: false} plus exit 1,
+    # because callers parse that. Named rather than bare so a genuine bug
+    # (an ImportError, say) still escapes as a traceback.
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError, json.JSONDecodeError) as exc:
         _print_payload({"ok": False, "error": str(exc)}, json_output=bool(args.json))
         return 1
 

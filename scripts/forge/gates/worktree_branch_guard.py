@@ -282,7 +282,9 @@ def run(_argv: Sequence[str] | None = None) -> int:
     # a recognized base.) The fix — rebase — is cheap; there is no reason to skip.
     try:
         _fresh_branch = _branch_name()
-    except Exception:
+    # _branch_name shells out to git; an unreadable branch must leave the
+    # freshness check skipped, never crash the guard that protects the tree.
+    except (OSError, subprocess.SubprocessError, ValueError):
         _fresh_branch = ""
     if _fresh_branch:
         freshness_failure = _branch_freshness_failure(_fresh_branch)
