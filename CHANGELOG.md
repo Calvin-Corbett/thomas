@@ -40,8 +40,8 @@ Versioning: Semantic Versioning.
 
   `thomas/core/system_map.py` reads all of it from git and the filesystem in
   about three seconds: stdlib only, no network, no LLM, and nothing that
-  writes -- no prune, no drop, no delete. It reports; clearing up stays the
-  owner's decision. Every item gets a status in words that mean something
+  writes -- no prune, no drop, no delete. It reports; clearing up stays your
+  decision. Every item gets a status in words that mean something
   without a glossary (`active` / `idle` / `forgotten`), and every list is
   sorted **oldest first**, the reverse of every other git tool, because the
   newest branch is the one you already remember.
@@ -60,6 +60,16 @@ Versioning: Semantic Versioning.
   canvas rather than by pulling three.js off a CDN at runtime, so it works
   offline, adds no third-party code, and follows all five themes from
   `tokens.css`.
+
+  Verified on a throwaway server on port 8903, so nothing touched the one you
+  run: `/api/system-map` returns 200 with the real headline, `/system-map`
+  serves 48,304 bytes, and both routes register in a real boot (714 routes
+  total). The drawing was then confirmed in an actual browser -- 24,375 painted
+  pixels, 4.12% of the canvas, zero console errors. That last check needed a
+  real browser specifically: the review pane in this session keeps pages hidden,
+  `requestAnimationFrame` never fires on a hidden page, and the canvas measured
+  0.00% ink. A working feature read as a dead one, and only running it somewhere
+  visible told the difference.
 
 ### Added (nothing was watching the total)
 

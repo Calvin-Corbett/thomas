@@ -1013,6 +1013,10 @@
       // the MODERN list, not through /classic -- the page styles itself from
       // tokens.css alone and carries none of the legacy component CSS.
       agent_ops: '/agent-ops?embed=1',
+      // System Map: what exists in this project and what has been forgotten.
+      // Same reasoning as Agent Operations -- it styles itself from tokens.css
+      // alone, so it belongs in the MODERN list rather than behind /classic.
+      system_map: '/system-map?embed=1',
     };
     const CLASSIC_WORKSPACE_ROUTE = '/classic?embed=1';
     function workspaceFrame(mode) {
@@ -1140,6 +1144,17 @@
         // Icons are drawn (ThomasIcons); the ph-* names here were Unicode
         // stand-ins — Library rendered as "▤", Mission Control as "⊕".
         { icon: 'mission',  label: 'Mission Control', mode: 'mission' },
+        // System Map sits high because its whole purpose is being FOUND:
+        // nothing in the product showed 591 changes piled up across 57 copies.
+        // The icon is a REUSE and needs explaining. ThomasIcons draws exactly
+        // eleven glyphs and an unlisted name renders nothing at all -- silently
+        // -- so a new surface has to share. 'channels' was the first pick and
+        // it was wrong: it put two identical radar glyphs in this list four
+        // rows apart. 'trading' is the only name nothing else in this sidebar
+        // is currently drawing, and a line rising over an axis is at least the
+        // right shape for a map of the project measured over time. A dedicated
+        // glyph in thomas_icons.js is the real fix.
+        { icon: 'trading',  label: 'System Map',      mode: 'system_map' },
         { icon: 'search',   label: 'Agent Ops',       mode: 'agent_ops' },
         { icon: 'office',   label: 'Virtual Office',  mode: 'office' },
         { icon: 'canvas',   label: 'Canvas',          mode: 'app_builder' },

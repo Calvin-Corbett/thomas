@@ -1,0 +1,1051 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Map — Thomas</title>
+<link rel="stylesheet" href="/static/css/tokens.css">
+<style>
+  /* Embedded as a workspace (?embed=1): the shell already shows the product
+     name and the workspace title, so this page's own masthead would be a
+     second, competing header. Same contract /agent-ops uses. */
+  html.tcw-embed body .masthead { display: none !important; }
+  html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+</style>
+<script>
+  (function () {
+    try {
+      if (new URLSearchParams(window.location.search).get('embed') === '1') {
+        document.documentElement.classList.add('tcw-embed');
+      }
+    } catch (e) {}
+  })();
+</script>
+<script>
+  /* Apply the unified theme before first paint (mission.html pattern). */
+  (function () {
+    var theme = 'nebula';
+    try { theme = String(localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase(); } catch (e) {}
+    var de = document.documentElement;
+    de.dataset.thomasTheme = theme;
+    de.dataset.theme = theme;
+  })();
+</script>
+<style>
+  /* ─────────────────────────────────────────────────────────────────────
+     System Map — the project's own anatomy, drawn as a spine and its threads.
+
+     Everything is aliased onto tokens.css so the page follows all five
+     themes and carries none of the legacy component stylesheets.
+
+     The one colour decision this page makes is a TEMPERATURE SCALE. Age is
+     what the page is about, so age gets the colour:
+       success -> worked on this week   (lit, alive)
+       warn    -> a week to three weeks (cooling)
+       danger  -> untouched for longer  (cold, forgotten)
+     Nothing else is allowed those three, so a colour always means one thing.
+     ───────────────────────────────────────────────────────────────────── */
+  :root {
+    --page: var(--c-bg);
+    --panel: var(--c-menu-bg);
+    --ink: var(--c-text);
+    --ink-soft: var(--c-dim);
+    --ink-faint: var(--c-muted);
+    --rule: var(--c-border);
+    --rule-strong: var(--c-border-2);
+
+    --live: var(--c-success);
+    --cooling: var(--c-warn);
+    --cold: var(--c-danger);
+
+    --sans: var(--font-sans);
+    --serif: var(--font-serif);
+    --mono: var(--font-mono);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; font-family: var(--sans); color: var(--ink);
+    background: var(--page); line-height: 1.55; font-size: 15px;
+  }
+
+  .masthead { border-bottom: 1px solid var(--rule); padding: 14px 20px; }
+  .masthead-inner {
+    max-width: 1180px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+  }
+  .wordmark {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em;
+    text-transform: uppercase; font-weight: 600; margin: 0;
+  }
+  .masthead p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  /* ── The verdict. Serif, because this page talks in sentences rather than
+     in metrics — it is Thomas explaining himself, not a control panel. ── */
+  .verdict { margin: 0 0 22px; }
+  .verdict .eyebrow {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 10px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  .verdict h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(23px, 3.6vw, 35px); line-height: 1.22;
+    letter-spacing: -0.015em; margin: 0; max-width: 22ch;
+  }
+  .verdict h2 b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .verdict .sub { margin: 12px 0 0; font-size: 14.5px; color: var(--ink-soft); max-width: 64ch; }
+
+  .pill {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-soft);
+    background: transparent; border: 1px solid var(--rule);
+    border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  }
+  .pill:hover { color: var(--ink); border-color: var(--rule-strong); }
+  .pill[aria-pressed="true"] {
+    color: var(--c-accent); border-color: var(--c-accent-line); background: var(--c-accent-soft);
+  }
+  .pill[disabled] { opacity: .5; cursor: default; }
+
+  /* ── SIGNATURE: the spine and its threads. ─────────────────────────────
+     Not a constellation. Every coordinate carries a fact:
+
+       along the spine   = WHEN a version was last worked on
+       distance out      = HOW MUCH unlanded work it carries (commits ahead)
+       droop             = how long it has been left alone
+       colour            = the same age scale as the rest of the page
+       returning curve   = its work already reached the shared copy
+
+     A healthy project is a lit spine with short threads curving back into
+     it. This one is a spine that stops moving two thirds of the way along,
+     with a forest of threads that never come back. That reads before a
+     single number does, which is the entire point. ── */
+  .stage-wrap {
+    position: relative; border: 1px solid var(--rule); border-radius: 12px;
+    background: var(--panel); overflow: hidden; margin: 0 0 14px;
+  }
+  #stage { display: block; width: 100%; height: 520px; cursor: grab; touch-action: none; }
+  #stage:active { cursor: grabbing; }
+  #stage:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+
+  .stage-controls {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
+  }
+  .stage-legend {
+    position: absolute; left: 14px; bottom: 12px;
+    display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px;
+    color: var(--ink-soft); pointer-events: none; max-width: calc(100% - 28px);
+  }
+  .stage-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .stage-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  .stage-hint {
+    position: absolute; left: 14px; top: 12px; font-size: 11.5px;
+    color: var(--ink-faint); pointer-events: none;
+  }
+
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; max-width: 300px;
+    background: var(--c-bg); border: 1px solid var(--rule-strong);
+    border-radius: 8px; padding: 9px 11px; font-size: 12.5px;
+    color: var(--ink); box-shadow: var(--c-shadow); opacity: 0; transition: opacity .1s;
+  }
+  .tip b { display: block; font-family: var(--mono); font-size: 12px; margin-bottom: 3px; overflow-wrap: anywhere; }
+  .tip span { color: var(--ink-soft); }
+
+  .stage-note { margin: 0 0 30px; font-size: 12.5px; color: var(--ink-faint); }
+
+  /* ── Findings: the "I did not know that" list. ── */
+  .findings { margin: 0 0 34px; }
+  .findings > h3 {
+    font-size: 11px; font-family: var(--mono); letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 12px; font-weight: 600;
+  }
+  .finding { border-left: 2px solid var(--rule-strong); padding: 2px 0 2px 15px; margin-bottom: 17px; }
+  .finding[data-level="act"] { border-left-color: var(--cold); }
+  .finding[data-level="watch"] { border-left-color: var(--cooling); }
+  .finding h4 { margin: 0 0 4px; font-size: 15.5px; font-weight: 600; line-height: 1.35; letter-spacing: -0.008em; }
+  .finding p { margin: 0; font-size: 13.5px; color: var(--ink-soft); max-width: 74ch; }
+
+  /* ── Shelves: the full inventory in words, oldest first. Also the place
+     the data lives when the drawing cannot be shown at all. ── */
+  .shelf { margin: 0 0 34px; }
+  .shelf-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+    padding-bottom: 9px; border-bottom: 1px solid var(--rule-strong);
+  }
+  .shelf-head h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.012em; }
+  .shelf-count { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .shelf-what { margin: 9px 0 0; font-size: 13.5px; color: var(--ink-soft); max-width: 72ch; }
+  .shelf-what dfn {
+    font-style: normal; font-family: var(--mono); font-size: 12.5px;
+    color: var(--ink); border-bottom: 1px dotted var(--rule-strong);
+  }
+  .shelf-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 4px; }
+  .shelf-showing { font-size: 12.5px; color: var(--ink-faint); }
+
+  .rows { margin-top: 10px; }
+  .rows.is-scroll { max-height: 560px; overflow-y: auto; padding-right: 4px; }
+
+  .row {
+    display: grid; grid-template-columns: 3px minmax(0, 1fr) auto;
+    gap: 0 13px; align-items: baseline;
+    padding: 10px 0; border-bottom: 1px solid var(--rule);
+  }
+  .row-bar { align-self: stretch; border-radius: 2px; background: var(--rule-strong); }
+  .row[data-status="active"] .row-bar { background: var(--live); }
+  .row[data-status="idle"] .row-bar { background: var(--cooling); }
+  .row[data-status="forgotten"] .row-bar { background: var(--cold); }
+
+  .row-name { font-family: var(--mono); font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; margin: 0 0 2px; }
+  .row-say { font-size: 13px; color: var(--ink-soft); margin: 0; }
+  .row-where { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 3px 0 0; overflow-wrap: anywhere; }
+  .row-age { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; color: var(--ink-soft); font-variant-numeric: tabular-nums; text-align: right; }
+  .row[data-status="forgotten"] .row-age { color: var(--cold); }
+
+  .flag {
+    display: inline-block; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.07em; text-transform: uppercase; padding: 1px 6px;
+    border-radius: 3px; margin-left: 6px; vertical-align: 1px;
+    border: 1px solid var(--rule-strong); color: var(--ink-faint);
+  }
+  .flag.is-risk { color: var(--cold); border-color: color-mix(in srgb, var(--c-danger) 45%, transparent); }
+  .flag.is-safe { color: var(--live); border-color: color-mix(in srgb, var(--c-success) 45%, transparent); }
+
+  .note, .empty { font-size: 13px; color: var(--ink-soft); margin: 10px 0 0; }
+  .problem {
+    border: 1px solid color-mix(in srgb, var(--c-danger) 40%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 8%, transparent);
+    border-radius: 8px; padding: 14px 16px; font-size: 14px;
+  }
+  .skeleton { color: var(--ink-faint); font-size: 14px; }
+
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+  @media (max-width: 720px) {
+    #stage { height: 360px; }
+    .stage-legend { position: static; padding: 10px 14px 12px; }
+    .row { grid-template-columns: 3px minmax(0, 1fr); }
+    .row-age { grid-column: 2; text-align: left; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <h1 class="wordmark">Thomas &middot; System Map</h1>
+    <p>Everything this project contains, and what has been forgotten.</p>
+  </div>
+</header>
+
+<main id="app">
+  <p class="skeleton" id="loading">Reading what is in your project&hellip;</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var app = document.getElementById("app");
+  var REDUCED = false;
+  try { REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+
+  function esc(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // Age in words, never a date. "168 days ago" makes the reader do arithmetic
+  // to feel it; "about 6 months ago" lands immediately.
+  function ageWords(days) {
+    if (days === null || days === undefined) return "at an unknown time";
+    var whole = Math.floor(days);
+    if (whole < 1) return "today";
+    if (whole === 1) return "yesterday";
+    if (whole < 14) return whole + " days ago";
+    if (whole < 60) return "about " + Math.max(2, Math.round(days / 7)) + " weeks ago";
+    return "about " + Math.round(days / 30) + " months ago";
+  }
+  function ageShort(days) {
+    if (days === null || days === undefined) return "unknown";
+    var whole = Math.floor(days);
+    if (whole < 1) return "today";
+    if (whole < 14) return whole + "d";
+    if (whole < 60) return Math.round(days / 7) + "w";
+    return Math.round(days / 30) + "mo";
+  }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     THE STAGE — a hand-built perspective projection on a 2D canvas.
+
+     Deliberately not three.js. three.js is not vendored in this repo; the one
+     place that uses it pulls it from cdn.jsdelivr.net at runtime, which is a
+     supply-chain hole and simply fails offline — and this is a desktop app.
+     Adding a second copy of that problem to make a spine, some curves and a
+     few dozen small solids would be the wrong trade: this scene is a fixed,
+     structured layout rather than a general 3D world, so the projection is
+     about eighty lines and stays same-origin, offline-proof and dependency-
+     free. Colours are read from tokens.css at draw time, so all five themes
+     work and none of them are hardcoded here.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  var SPINE_HALF = 520;   // world units from oldest end to today end
+  // The opening view is a compromise found by looking at it, not by taste.
+  // Turned hard (yaw -0.6+), the spine recedes into a diagonal across an empty
+  // box. Turned flat (yaw -0.3), the spine reads beautifully but every fan
+  // collapses edge-on into a blade, because the threads spread in depth. This
+  // sits between the two and adds pitch, so the fans are seen from slightly
+  // above and their spread projects as real width.
+  var VIEW = { yaw: -0.46, pitch: 0.38, dist: 1520, fov: 1240 };
+
+  function project(p, cam, W, H) {
+    // cam.ty recentres the whole scene vertically. Without it the fans grow
+    // upward off the top of the frame while the bottom half sits empty, and
+    // the owner has to drag before he can see his own project — which the
+    // brief rules out: it has to read before any interaction.
+    var x = p.x, y = p.y - cam.ty, z = p.z;
+    var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+    var x1 = x * cy - z * sy, z1 = x * sy + z * cy;
+    var cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    var y1 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+    var zc = z2 + cam.dist;
+    if (zc < 1) return null;
+    var f = cam.fov / zc;
+    return { x: W / 2 + x1 * f, y: H / 2 - y1 * f, depth: zc, scale: f };
+  }
+
+  // Time -> position along the spine. Square root, not linear: linear would
+  // pile most of the project into the last few percent of the spine and leave
+  // the rest empty. The axis ticks use the same function, so the compression
+  // is stated rather than hidden.
+  function makeTimeAxis(maxDays) {
+    var span = Math.max(maxDays, 1);
+    return function (days) {
+      var d = Math.max(0, Math.min(days === null || days === undefined ? span : days, span));
+      return SPINE_HALF - Math.sqrt(d / span) * (SPINE_HALF * 2);
+    };
+  }
+
+  function tokens() {
+    var cs = getComputedStyle(document.documentElement);
+    var read = function (name, fallback) {
+      var v = (cs.getPropertyValue(name) || "").trim();
+      return v || fallback;
+    };
+    return {
+      live: read("--c-success", "#47d7ac"),
+      cooling: read("--c-warn", "#e2b25f"),
+      cold: read("--c-danger", "#ff9a9a"),
+      accent: read("--c-accent", "#8b8cff"),
+      ink: read("--c-text", "#eef0fb"),
+      dim: read("--c-dim", "#9aa"),
+      faint: read("--c-muted", "#778"),
+      rule: read("--c-border", "rgba(255,255,255,.1)"),
+      panel: read("--c-menu-bg", "#15142b")
+    };
+  }
+
+  function statusPaint(t, status) {
+    if (status === "active") return t.live;
+    if (status === "idle") return t.cooling;
+    if (status === "forgotten") return t.cold;
+    return t.faint;
+  }
+
+  function Stage(canvas, tip) {
+    var ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    var cam = { yaw: VIEW.yaw, pitch: VIEW.pitch, dist: VIEW.dist, fov: VIEW.fov, ty: 0 };
+    var scene = { spine: null, items: [], axis: [] };
+    var W = 0, H = 0, dpr = 1;
+    var pickable = [];          // refilled each draw with on-screen positions
+    var queued = false;
+    var reveal = REDUCED ? 1 : 0;
+    var revealTimer = null;
+
+    function resize() {
+      var rect = canvas.getBoundingClientRect();
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = Math.max(1, Math.round(rect.width));
+      H = Math.max(1, Math.round(rect.height));
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      request();
+    }
+
+    // Draw only when something changed — no idle render loop. A workspace that
+    // quietly burns the GPU in a background tab is a real cost on the machine
+    // that is also running the server.
+    function request() {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; draw(); });
+    }
+
+    function build(data, showRemote) {
+      var branches = (data.branches || []).filter(function (b) {
+        return showRemote || b.scope === "local";
+      });
+      var worktrees = data.worktrees || [];
+      var stashes = data.stashes || [];
+
+      var ages = [].concat(branches, worktrees, stashes)
+        .map(function (i) { return i.days_since; })
+        .filter(function (d) { return d !== null && d !== undefined; });
+      var maxDays = ages.length ? Math.max.apply(null, ages) : 1;
+      var X = makeTimeAxis(maxDays);
+      var maxAhead = Math.max(1, (data.summary && data.summary.max_ahead) || 1);
+
+      var items = [];
+
+      // ── Threads. Angle around the spine separates the two populations, so
+      // even the angle carries a fact: work on this machine rises, work that
+      // is only on the server hangs below.
+      var groups = { local: [], remote: [] };
+      branches.forEach(function (b) { (groups[b.scope] || groups.local).push(b); });
+
+      Object.keys(groups).forEach(function (scope) {
+        var list = groups[scope];
+        var up = scope === "local";
+        list.forEach(function (b, i) {
+          var spread = list.length > 1 ? (i / (list.length - 1)) : 0.5;
+          // Upper fan for local, lower fan for remote.
+          var theta = up
+            ? (-1.15 + spread * 2.30)
+            : (Math.PI - 1.15 + spread * 2.30);
+          var ahead = b.ahead === null || b.ahead === undefined ? 0 : b.ahead;
+          var len = 26 + Math.sqrt(ahead / maxAhead) * 196;
+          var stale = Math.min(1, (b.days_since || 0) / 90);
+          var x0 = X(b.days_since);
+
+          var pts = [];
+          var STEPS = 9;
+          for (var s = 0; s <= STEPS; s++) {
+            var u = s / STEPS;
+            if (b.merged) {
+              // Landed work is absorbed: out and back to the spine. A closed
+              // loop is what "finished" should look like.
+              var r = Math.sin(u * Math.PI) * Math.min(len, 120);
+              pts.push({
+                x: x0 + u * 78,
+                y: Math.cos(theta) * r,
+                z: Math.sin(theta) * r
+              });
+            } else {
+              // Never came back. It reaches out, and droops with age.
+              var r2 = u * len;
+              var droop = stale * len * 0.55 * u * u;
+              pts.push({
+                x: x0 + u * 26,
+                y: Math.cos(theta) * r2 - droop,
+                z: Math.sin(theta) * r2
+              });
+            }
+          }
+          items.push({
+            kind: "branch", data: b, pts: pts,
+            tipEnd: pts[pts.length - 1],
+            merged: !!b.merged, status: b.status
+          });
+        });
+      });
+
+      // ── Separate copies. Each one is a solid object, because that is what it
+      // is: a whole second checkout sitting in a folder on the disk.
+      var byBranch = {};
+      items.forEach(function (it) { if (it.kind === "branch") byBranch[it.data.name] = it; });
+
+      worktrees.forEach(function (w, i) {
+        var host = byBranch[w.scope];
+        var anchor;
+        if (host) {
+          anchor = host.tipEnd;
+        } else {
+          // Its branch is not on screen (or it is on none), so it gets its own
+          // short stub rather than being silently dropped.
+          var theta2 = -1.3 + (i / Math.max(1, worktrees.length - 1)) * 2.6;
+          var x0 = X(w.days_since);
+          anchor = { x: x0, y: Math.cos(theta2) * 120, z: Math.sin(theta2) * 120 };
+          items.push({
+            kind: "stub", data: w, status: w.status,
+            pts: [{ x: x0, y: 0, z: 0 }, anchor]
+          });
+        }
+        items.push({
+          kind: "worktree", data: w, status: w.status,
+          at: { x: anchor.x, y: anchor.y - 10, z: anchor.z },
+          size: 5.4
+        });
+      });
+
+      // ── Set-aside piles: motes drifting just above the spine at their date.
+      stashes.forEach(function (s, i) {
+        var x0 = X(s.days_since);
+        items.push({
+          kind: "stash", data: s, status: s.status,
+          at: { x: x0, y: 26 + (i % 5) * 13, z: ((i % 7) - 3) * 11 },
+          size: 4.4
+        });
+      });
+
+      // ── The spine. Two segments: the stretch where the shared copy was
+      // still moving, and the stretch since it stopped. That dead length is
+      // the 64 days nobody could see.
+      var stalled = (data.summary && data.summary.days_since_default_moved) || null;
+      scene.spine = {
+        from: { x: X(maxDays), y: 0, z: 0 },
+        to: { x: X(0), y: 0, z: 0 },
+        stallX: stalled === null ? null : X(stalled),
+        stalledDays: stalled
+      };
+
+      // ── Axis ticks, same scale as everything else.
+      scene.axis = [
+        { d: 0, label: "today" }, { d: 7, label: "1 week" }, { d: 21, label: "3 weeks" },
+        { d: 60, label: "2 months" }, { d: 120, label: "4 months" }, { d: 180, label: "6 months" }
+      ].filter(function (a) { return a.d <= maxDays * 1.02; })
+       .map(function (a) { return { x: X(a.d), label: a.label }; });
+
+      scene.items = items;
+      scene.maxDays = maxDays;
+
+      // Frame the scene: sit the camera at the middle of everything that was
+      // actually built, so the default view always contains the whole project
+      // whether that is 59 threads or 239.
+      var lo = 0, hi = 0;
+      items.forEach(function (it) {
+        var ys = it.pts ? it.pts.map(function (q) { return q.y; }) : [it.at.y];
+        ys.forEach(function (y) { if (y < lo) lo = y; if (y > hi) hi = y; });
+      });
+      cam.ty = (lo + hi) / 2;
+      VIEW.ty = cam.ty;
+
+      if (!REDUCED) {
+        // One short reveal so the spine reads as a spine before the threads
+        // arrive. Not decoration: it establishes what everything is measured
+        // against. Skipped entirely under reduced-motion.
+        reveal = 0;
+        var t0 = performance.now();
+        if (revealTimer) cancelAnimationFrame(revealTimer);
+        var step = function (now) {
+          reveal = Math.min(1, (now - t0) / 620);
+          draw();
+          if (reveal < 1) revealTimer = requestAnimationFrame(step);
+        };
+        revealTimer = requestAnimationFrame(step);
+      } else {
+        reveal = 1;
+        request();
+      }
+    }
+
+    function draw() {
+      if (!W || !H) return;
+      var t = tokens();
+      ctx.clearRect(0, 0, W, H);
+      pickable = [];
+
+      var drawables = [];
+
+      // Spine first so it is always the reference, even at the back.
+      if (scene.spine) {
+        var a = project(scene.spine.from, cam, W, H);
+        var b = project(scene.spine.to, cam, W, H);
+        if (a && b) {
+          var stall = scene.spine.stallX === null ? null
+            : project({ x: scene.spine.stallX, y: 0, z: 0 }, cam, W, H);
+          drawables.push({ depth: 1e9, paint: function () {
+            // Living stretch.
+            ctx.lineCap = "round";
+            ctx.strokeStyle = t.ink;
+            ctx.globalAlpha = 0.85;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(stall ? stall.x : b.x, stall ? stall.y : b.y);
+            ctx.stroke();
+            // The stretch since the shared copy last moved: drawn, but dashed
+            // and dim. A gap would read as "no data"; this reads as "nothing
+            // happened here", which is the truth.
+            if (stall) {
+              ctx.globalAlpha = 0.5;
+              ctx.strokeStyle = t.cold;
+              ctx.lineWidth = 2;
+              ctx.setLineDash([5, 7]);
+              ctx.beginPath();
+              ctx.moveTo(stall.x, stall.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            ctx.globalAlpha = 1;
+          }});
+        }
+      }
+
+      scene.items.forEach(function (item) {
+        if (item.pts) {
+          var pts = [], sum = 0, n = 0;
+          // Threads grow out of the spine during the reveal.
+          var upto = Math.max(1, Math.ceil((item.pts.length - 1) * reveal));
+          for (var i = 0; i <= upto; i++) {
+            var p = project(item.pts[i], cam, W, H);
+            if (!p) return;
+            pts.push(p); sum += p.depth; n++;
+          }
+          if (pts.length < 2) return;
+          var mid = sum / n;
+          var paintCol = item.kind === "stub" ? t.faint : statusPaint(t, item.status);
+          var merged = item.merged;
+          drawables.push({ depth: mid, paint: function () {
+            ctx.globalAlpha = merged ? 0.3 : (item.kind === "stub" ? 0.35 : 0.78);
+            ctx.strokeStyle = paintCol;
+            ctx.lineWidth = merged ? 1 : 1.6;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }});
+          if (item.kind === "branch" && reveal >= 1) {
+            var last = pts[pts.length - 1];
+            pickable.push({ x: last.x, y: last.y, r: 11, item: item });
+          }
+        } else if (item.at) {
+          var q = project(item.at, cam, W, H);
+          if (!q) return;
+          var size = item.size * q.scale * 1.9;
+          var col = statusPaint(t, item.status);
+          var panelPaint = t.panel;
+          var isWorktree = item.kind === "worktree";
+          var alpha = reveal;
+          drawables.push({ depth: q.depth, paint: function () {
+            ctx.globalAlpha = (isWorktree ? 0.92 : 0.6) * alpha;
+            ctx.fillStyle = col;
+            if (isWorktree) {
+              // A small solid, drawn as a diamond so it never reads as a dot:
+              // a separate copy of the project is a thing, not a point. The
+              // outline is the PANEL colour, not the fill — 39 of these land
+              // on adjacent thread-ends, and without a gap between them they
+              // fused into one orange slab that no one could count.
+              ctx.beginPath();
+              ctx.moveTo(q.x, q.y - size);
+              ctx.lineTo(q.x + size * 0.82, q.y);
+              ctx.lineTo(q.x, q.y + size);
+              ctx.lineTo(q.x - size * 0.82, q.y);
+              ctx.closePath();
+              ctx.fill();
+              ctx.globalAlpha = alpha * 0.9;
+              ctx.strokeStyle = panelPaint;
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+            } else {
+              ctx.beginPath();
+              ctx.arc(q.x, q.y, Math.max(1.4, size), 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+          }});
+          if (reveal >= 1) pickable.push({ x: q.x, y: q.y, r: Math.max(8, size + 4), item: item });
+        }
+      });
+
+      drawables.sort(function (p, q) { return q.depth - p.depth; });
+      drawables.forEach(function (d) { d.paint(); });
+
+      // Axis labels last, always on top, always legible.
+      ctx.globalAlpha = 1;
+      ctx.font = '10px ' + (getComputedStyle(document.documentElement).getPropertyValue("--font-mono") || "monospace");
+      ctx.fillStyle = t.faint;
+      ctx.textAlign = "center";
+      scene.axis.forEach(function (a) {
+        var p = project({ x: a.x, y: 0, z: 0 }, cam, W, H);
+        if (!p) return;
+        ctx.fillText(a.label, p.x, p.y + 16);
+      });
+
+      // The spine says its own name, so nothing has to be guessed. It flips to
+      // the other side of the head rather than running off the canvas — at the
+      // opening view the head sits near the right edge, and the label was
+      // being cut mid-word.
+      if (scene.spine) {
+        var head = project(scene.spine.to, cam, W, H);
+        if (head) {
+          var label = "main — the shared copy";
+          ctx.font = '11px ' + (getComputedStyle(document.documentElement).getPropertyValue("--font-mono") || "monospace");
+          var tw = ctx.measureText(label).width;
+          var fits = head.x + 8 + tw < W - 6;
+          var lx = head.x + (fits ? 8 : -8);
+          var ly = head.y - 8;
+          // A backing plate: this label lands on top of the thread fans at
+          // several camera angles, and unreadable is the same as absent.
+          ctx.globalAlpha = 0.82;
+          ctx.fillStyle = t.panel;
+          ctx.fillRect((fits ? lx : lx - tw) - 4, ly - 11, tw + 8, 15);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = t.ink;
+          ctx.textAlign = fits ? "left" : "right";
+          ctx.fillText(label, lx, ly);
+        }
+      }
+    }
+
+    // ── Inspection. Everything on the stage answers in plain English.
+    function describe(item) {
+      var d = item.data;
+      if (item.kind === "worktree") {
+        return {
+          title: d.name,
+          body: "A separate copy of your project, last touched " + ageWords(d.days_since) +
+                ", in " + (d.place_label || "an unknown place") + "." +
+                (d.scope ? " It is on the version called " + d.scope + "." : "") +
+                (d.path ? "\n" + d.path : "")
+        };
+      }
+      if (item.kind === "stash") {
+        return {
+          title: d.name,
+          body: "Work you set aside " + ageWords(d.days_since) +
+                (d.scope ? " from a version called " + d.scope + "." : ".") +
+                (d.subject ? "\n" + d.subject : "")
+        };
+      }
+      if (item.kind === "stub") {
+        return { title: d.name, body: "A separate copy of your project, last touched " + ageWords(d.days_since) + "." };
+      }
+      var ahead = d.ahead === null || d.ahead === undefined ? null : d.ahead;
+      var line = "A version of your project, last worked on " + ageWords(d.days_since) + ".";
+      if (d.merged) line += " Its work is already safe on the shared copy.";
+      else if (ahead !== null) line += " It is carrying " + plural(ahead, "saved change") + " that the shared copy does not have.";
+      else line += " Its work has not reached the shared copy.";
+      line += d.scope === "remote" ? " It lives on the server." : " It lives on this machine.";
+      return { title: d.name, body: line };
+    }
+
+    function pick(mx, my) {
+      var best = null, bestD = Infinity;
+      for (var i = 0; i < pickable.length; i++) {
+        var p = pickable[i];
+        var dx = p.x - mx, dy = p.y - my;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= p.r && dist < bestD) { bestD = dist; best = p; }
+      }
+      return best;
+    }
+
+    // ── Camera control. Drag to orbit, wheel to zoom, arrows for keyboard,
+    // and a reset that always returns to the view the page opens with.
+    var dragging = false, lastX = 0, lastY = 0, moved = false;
+
+    canvas.addEventListener("pointerdown", function (e) {
+      dragging = true; moved = false; lastX = e.clientX; lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", function (e) {
+      var rect = canvas.getBoundingClientRect();
+      if (dragging) {
+        moved = true;
+        cam.yaw += (e.clientX - lastX) * 0.006;
+        cam.pitch = Math.max(-1.2, Math.min(1.2, cam.pitch + (e.clientY - lastY) * 0.005));
+        lastX = e.clientX; lastY = e.clientY;
+        tip.style.opacity = "0";
+        request();
+        return;
+      }
+      var hit = pick(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) { tip.style.opacity = "0"; return; }
+      var info = describe(hit.item);
+      tip.innerHTML = "<b>" + esc(info.title) + "</b><span>" + esc(info.body).replace(/\n/g, "<br>") + "</span>";
+      var tw = tip.offsetWidth || 240, th = tip.offsetHeight || 60;
+      var lx = Math.min(Math.max(6, hit.x + 14), rect.width - tw - 6);
+      var ly = Math.min(Math.max(6, hit.y - th - 12), rect.height - th - 6);
+      tip.style.left = lx + "px";
+      tip.style.top = ly + "px";
+      tip.style.opacity = "1";
+    });
+    var release = function (e) {
+      dragging = false;
+      if (e && e.pointerId !== undefined && canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
+        canvas.releasePointerCapture(e.pointerId);
+      }
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("pointerleave", function () { tip.style.opacity = "0"; });
+    canvas.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      cam.dist = Math.max(500, Math.min(3200, cam.dist + e.deltaY * 1.1));
+      request();
+    }, { passive: false });
+    canvas.addEventListener("keydown", function (e) {
+      var step = 0.09;
+      if (e.key === "ArrowLeft") cam.yaw -= step;
+      else if (e.key === "ArrowRight") cam.yaw += step;
+      else if (e.key === "ArrowUp") cam.pitch = Math.max(-1.2, cam.pitch - step);
+      else if (e.key === "ArrowDown") cam.pitch = Math.min(1.2, cam.pitch + step);
+      else if (e.key === "+" || e.key === "=") cam.dist = Math.max(500, cam.dist - 120);
+      else if (e.key === "-") cam.dist = Math.min(3200, cam.dist + 120);
+      else return;
+      e.preventDefault();
+      request();
+    });
+
+    function reset() {
+      cam.yaw = VIEW.yaw; cam.pitch = VIEW.pitch; cam.dist = VIEW.dist;
+      cam.ty = VIEW.ty || 0;
+      request();
+    }
+
+    window.addEventListener("resize", resize);
+    // Nothing renders while the tab is hidden; one redraw when it returns.
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) request(); });
+
+    resize();
+    return { build: build, reset: reset, redraw: request, resize: resize };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     The written half of the page. It is the detail view, and it is also what
+     is left when the drawing cannot be shown at all — so it always renders,
+     with every count, whether or not the canvas works.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  function findingsHtml(data) {
+    var list = data.findings || [];
+    if (!list.length) return "";
+    return '<section class="findings"><h3>What you probably did not know</h3>' +
+      list.map(function (f) {
+        return '<div class="finding" data-level="' + esc(f.level) + '">' +
+          "<h4>" + esc(f.title) + "</h4>" + (f.detail ? "<p>" + esc(f.detail) + "</p>" : "") + "</div>";
+      }).join("") + "</section>";
+  }
+
+  function rowHtml(item, say, where, flags) {
+    return '<div class="row" data-status="' + esc(item.status) + '">' +
+      '<div class="row-bar"></div><div>' +
+        '<p class="row-name">' + esc(item.name) + (flags || "") + "</p>" +
+        '<p class="row-say">' + say + "</p>" +
+        (where ? '<p class="row-where">' + esc(where) + "</p>" : "") +
+      '</div><div class="row-age">' + esc(ageShort(item.days_since)) + "</div></div>";
+  }
+
+  function worktreeRow(w) {
+    var flags = "";
+    if (w.place === "temp") flags += '<span class="flag is-risk">may be deleted</span>';
+    if (!w.exists) flags += '<span class="flag is-risk">folder is gone</span>';
+    var say = "Last worked on " + esc(ageWords(w.days_since)) + ", in " + esc(w.place_label || "an unknown place") + ".";
+    if (w.scope) say += " It is on the version called <b>" + esc(w.scope) + "</b>.";
+    return rowHtml(w, say, w.path, flags);
+  }
+  function branchRow(b) {
+    var flags = b.merged
+      ? '<span class="flag is-safe">already landed</span>'
+      : '<span class="flag is-risk">exists nowhere else</span>';
+    flags += '<span class="flag">' + (b.scope === "remote" ? "on the server" : "on this machine") + "</span>";
+    var say = "Last worked on " + esc(ageWords(b.days_since)) + ".";
+    if (b.ahead !== null && b.ahead !== undefined && !b.merged) {
+      say += " Carrying " + esc(plural(b.ahead, "saved change")) + " the shared copy does not have.";
+    }
+    return rowHtml(b, say, "", flags);
+  }
+  function stashRow(s) {
+    var say = "Parked " + esc(ageWords(s.days_since));
+    say += s.scope ? " from a version called <b>" + esc(s.scope) + "</b>." : ".";
+    if (s.subject) say += " Labelled &ldquo;" + esc(s.subject) + "&rdquo;";
+    return rowHtml(s, say, "", "");
+  }
+
+  var SHELVES = [
+    { id: "worktrees", title: "Separate copies of your project", render: worktreeRow,
+      what: 'A <dfn>worktree</dfn> is a whole second copy of this project in another folder on your computer, ' +
+            'sitting on its own version of the code. Work saved there is not visible from any other copy.' },
+    { id: "branches", title: "Versions of your project", render: branchRow,
+      what: 'A <dfn>branch</dfn> is a named line of work. Anything marked <b>exists nowhere else</b> holds ' +
+            'changes that have not reached the shared copy of the project.' },
+    { id: "stashes", title: "Set-aside work", render: stashRow,
+      what: 'A <dfn>stash</dfn> is a pile of edits parked mid-thought. It is not on any version and not in ' +
+            'any copy, so nothing else in this project can show it to you.' }
+  ];
+
+  function shelfHtml(shelf, items, forgottenOnly) {
+    var forgotten = items.filter(function (i) { return i.status === "forgotten"; });
+    var shown = forgottenOnly ? forgotten : items;
+    var showing = forgottenOnly
+      ? "Showing " + forgotten.length + " of " + items.length + ", the ones untouched for over three weeks."
+      : "Showing all " + items.length + ", oldest first.";
+    var body = shown.length
+      ? '<div class="rows' + (shown.length > 10 ? " is-scroll" : "") + '">' + shown.map(shelf.render).join("") + "</div>"
+      : '<p class="empty">Nothing here has been untouched for that long.</p>';
+    return '<section class="shelf"><div class="shelf-head"><h3>' + esc(shelf.title) + "</h3>" +
+      '<span class="shelf-count">' + items.length + " total &middot; " + forgotten.length + " forgotten</span></div>" +
+      '<p class="shelf-what">' + shelf.what + "</p>" +
+      '<div class="shelf-tools"><button class="pill" type="button" data-filter="' + esc(shelf.id) +
+        '" aria-pressed="' + (forgottenOnly ? "true" : "false") + '">Only what was forgotten</button>' +
+      '<span class="shelf-showing">' + esc(showing) + "</span></div>" + body + "</section>";
+  }
+
+  var state = { data: null, filters: {}, showRemote: false, stage: null };
+
+  function render() {
+    var data = state.data;
+    if (!data) return;
+
+    if (!data.ok) {
+      app.innerHTML = '<div class="problem">' + esc(data.headline || "Thomas could not read this project.") +
+        (data.notes && data.notes.length ? " " + esc(data.notes.join(" ")) : "") + "</div>";
+      return;
+    }
+
+    var s = data.summary || {};
+    var when = data.checked_at ? new Date(data.checked_at * 1000).toLocaleTimeString() : "";
+    var headHtml = esc(String(data.headline || "")).replace(/^(\d[\d,]*)/, "<b>$1</b>");
+
+    var sub = "Nothing on this page changes anything. It only shows you what is there.";
+    if (s.unsaved_files) {
+      sub = plural(s.unsaved_files, "file") + (s.unsaved_files === 1 ? " has" : " have") +
+            " edits that are not saved into this project's history at all. " + sub;
+    }
+
+    var localCount = s.branches_local || 0, remoteCount = s.branches_remote || 0;
+
+    app.innerHTML =
+      '<section class="verdict">' +
+        '<p class="eyebrow"><span>Surveyed ' + esc(when) + "</span>" +
+          '<button class="pill" type="button" id="refresh">Check again</button></p>' +
+        "<h2>" + headHtml + "</h2>" +
+        '<p class="sub">' + esc(sub) + "</p>" +
+      "</section>" +
+      '<div class="stage-wrap">' +
+        '<canvas id="stage" tabindex="0" role="img" aria-label="' +
+          esc("A drawing of your project: the shared copy runs through the middle, and every version, " +
+              "separate copy and set-aside pile hangs off it by age. The same information is listed in " +
+              "words further down this page.") + '"></canvas>' +
+        '<div class="stage-hint">Drag to turn it. Hover anything to see what it is.</div>' +
+        '<div class="stage-controls">' +
+          '<button class="pill" type="button" id="toggle-remote" aria-pressed="' + (state.showRemote ? "true" : "false") + '">' +
+            "Include the server&rsquo;s " + remoteCount + "</button>" +
+          '<button class="pill" type="button" id="reset-view">Reset view</button>' +
+        "</div>" +
+        '<div class="stage-legend">' +
+          '<span><i style="background:var(--live)"></i>This week</span>' +
+          '<span><i style="background:var(--cooling)"></i>Up to three weeks</span>' +
+          '<span><i style="background:var(--cold)"></i>Longer than that</span>' +
+          '<span><i style="background:var(--c-text)"></i>The shared copy</span>' +
+        "</div>" +
+        '<div class="tip" id="tip"></div>' +
+      "</div>" +
+      '<p class="stage-note" id="stage-note"></p>' +
+      findingsHtml(data) +
+      SHELVES.map(function (shelf) {
+        var items = data[shelf.id] || [];
+        if (!(shelf.id in state.filters)) {
+          var f = items.filter(function (i) { return i.status === "forgotten"; }).length;
+          state.filters[shelf.id] = items.length > 12 && f > 0;
+        }
+        return shelfHtml(shelf, items, state.filters[shelf.id]);
+      }).join("") +
+      (data.notes && data.notes.length ? '<p class="note">' + data.notes.map(esc).join(" ") + "</p>" : "");
+
+    var canvas = document.getElementById("stage");
+    var tip = document.getElementById("tip");
+    var note = document.getElementById("stage-note");
+
+    state.stage = Stage(canvas, tip);
+    if (!state.stage) {
+      // No 2D context: the drawing is impossible, so say so and let the
+      // written half carry the whole job rather than showing a blank box.
+      document.querySelector(".stage-wrap").style.display = "none";
+      note.textContent = "This browser could not draw the map, so everything is listed in words below instead.";
+    } else {
+      state.stage.build(data, state.showRemote);
+      note.textContent = describeScene(s, state.showRemote, localCount, remoteCount);
+    }
+    wire();
+  }
+
+  function describeScene(s, showRemote, localCount, remoteCount) {
+    var shown = showRemote ? (localCount + remoteCount) : localCount;
+    var txt = "Showing " + plural(shown, "version") + ", " + plural(s.worktrees || 0, "separate copy", "separate copies") +
+              " and " + plural(s.stashes || 0, "set-aside pile") + ". " +
+              "Distance out from the middle is how much saved work a version is carrying; the line sags the " +
+              "longer it has been left alone.";
+    if (!showRemote && remoteCount) {
+      txt += " " + remoteCount + " more versions live only on the server and are hidden until you ask for them.";
+    }
+    if (s.days_since_default_moved) {
+      txt += " The dashed end of the middle line is the " + Math.round(s.days_since_default_moved) +
+             " days since the shared copy last moved.";
+    }
+    return txt;
+  }
+
+  function wire() {
+    var refresh = document.getElementById("refresh");
+    if (refresh) refresh.addEventListener("click", function () { load(refresh); });
+
+    var reset = document.getElementById("reset-view");
+    if (reset) reset.addEventListener("click", function () { if (state.stage) state.stage.reset(); });
+
+    var remote = document.getElementById("toggle-remote");
+    if (remote) remote.addEventListener("click", function () {
+      state.showRemote = !state.showRemote;
+      remote.setAttribute("aria-pressed", state.showRemote ? "true" : "false");
+      if (state.stage) state.stage.build(state.data, state.showRemote);
+      var s = state.data.summary || {};
+      document.getElementById("stage-note").textContent =
+        describeScene(s, state.showRemote, s.branches_local || 0, s.branches_remote || 0);
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-filter]"), function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-filter");
+        state.filters[id] = !state.filters[id];
+        render();
+      });
+    });
+  }
+
+  // The shell tells embedded workspaces when the theme changes; the drawing
+  // reads its colours from tokens, so it has to be told to repaint.
+  window.addEventListener("message", function (e) {
+    if (e.origin !== location.origin) return;
+    var type = e.data && e.data.type;
+    if (type && String(type).indexOf("theme") !== -1 && state.stage) {
+      setTimeout(function () { state.stage.redraw(); }, 60);
+    }
+  });
+
+  function load(button) {
+    if (button) { button.disabled = true; button.textContent = "Checking…"; }
+    fetch("/api/system-map", { cache: "no-store", credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("The server answered " + res.status + ".");
+        return res.json();
+      })
+      .then(function (data) { state.data = data; render(); })
+      .catch(function (err) {
+        app.innerHTML = '<div class="problem">Thomas could not read what is in your project. ' +
+          esc(err && err.message ? err.message : String(err)) +
+          " Nothing has been changed. Try again in a moment.</div>";
+      });
+  }
+
+  load(null);
+})();
+</script>
+
+</body>
+</html>

@@ -258,6 +258,24 @@ def _setup_routes_and_handlers(
         health = await asyncio.to_thread(collect_landing_health)
         return web.json_response(health.as_dict())
 
+    async def api_system_map(request: web.Request) -> web.Response:
+        """Return the inventory of what exists in this project.
+
+        Every other check in this repo compares one change to the one before
+        it. This one counts the SUM -- the branches, the separate working
+        copies, the set-aside piles -- because that is the number that reached
+        591 commits across 57 copies with nothing watching it.
+
+        Like its landing-health sibling, the git work is blocking, so it runs
+        in a thread and never stalls the event loop. It reads only; nothing
+        here prunes, drops or deletes.
+        """
+        _require_api_access(request)
+        from thomas.core.system_map import collect_system_map
+
+        system_map = await asyncio.to_thread(collect_system_map)
+        return web.json_response(system_map.as_dict())
+
     async def api_engines(request: web.Request) -> web.Response:
         """Return engine manager status and results."""
         _require_api_access(request)
@@ -1312,8 +1330,24 @@ def _setup_routes_and_handlers(
             raise web.HTTPNotFound()
         return web.FileResponse(page, headers={"Cache-Control": "no-store"})
 
+    async def system_map_page(request: web.Request) -> web.StreamResponse:
+        """The System Map -- what exists in this project, and what was forgotten.
+
+        Nothing in the product could show that 591 changes had piled up across
+        57 separate working copies for 64 days. Checking meant running a dozen
+        git commands and knowing which dozen; there was no answer inside Thomas
+        at all. This page is that answer.
+        """
+        _ = request
+        page = (web_dir / "system_map.html").resolve()
+        if not page.is_relative_to(web_dir.resolve()) or not page.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(page, headers={"Cache-Control": "no-store"})
+
     app.router.add_get("/agent-ops", agent_ops_page)
     app.router.add_get("/agent-ops/", agent_ops_page)
+    app.router.add_get("/system-map", system_map_page)
+    app.router.add_get("/system-map/", system_map_page)
     app.router.add_get("/my_stuff", my_stuff_page)
     app.router.add_get("/my_stuff/", my_stuff_page)
 
@@ -1324,6 +1358,7 @@ def _setup_routes_and_handlers(
     app.router.add_get("/api/security/mutating_routes", api_security_mutating_routes)
     app.router.add_get("/api/security/mutating-routes", api_security_mutating_routes)
     app.router.add_get("/api/landing-health", api_landing_health)
+    app.router.add_get("/api/system-map", api_system_map)
     app.router.add_get("/api/engines", api_engines)
     app.router.add_get("/api/tools", api_tools)
     app.router.add_get("/api/chats", api_chats)
