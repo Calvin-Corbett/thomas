@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed (how this project writes about the person who owns it)
+
+- **You found out from a code review that the commit log had been describing
+  you.** 69 times across the landing branch, the messages said "the owner"
+  rather than addressing you; once, one of them stated you are not a programmer;
+  and in two places this file assumed pronouns nobody had ever stated. None of
+  that was a decision anyone made — it was a register that crept in and was
+  never checked, because 58 gates guard the code and none of them read the prose
+  wrapped around it. This file now addresses you directly, and `CLAUDE.md`
+  carries the rule going forward: second person, quote the request rather than
+  judge the requester, never characterize what you do or do not know, and do not
+  infer pronouns. Worth stating plainly, since a merged pull request keeps its
+  commit list on GitHub permanently: the individual messages on PR #66 are
+  already public and stay that way, so this changes what gets written from here,
+  not what was already published.
+
 ### Added (a place to see what you own)
 
 - **A System Map, because "I didn't know that was there" is not a personal
