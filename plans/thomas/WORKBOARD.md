@@ -29,7 +29,7 @@ Last updated: 2026-03-01
 
 ## Task Problems
 - task_id=agent-coordination-hardening-2026-05-28; problem=plans/thomas/problems/agent-coordination-hardening-2026-05-28/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-07-28T22:30:19+00:00; summary=agent-coordination-hardening-2026-05-28
-- task_id=audit-24h-backstop; problem=plans/thomas/problems/audit-24h-backstop/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-08-11T22:37:09+00:00; summary=ensure every major module is audited in last 24h and fix findings
+- task_id=audit-24h-backstop; problem=plans/thomas/problems/audit-24h-backstop/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-08-12T15:32:20+00:00; summary=ensure every major module is audited in last 24h and fix findings
 - task_id=bible-public-system-2026-05-22; problem=plans/thomas/problems/bible-public-system-2026-05-22/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-07-28T22:30:19+00:00; summary=bible-public-system-2026-05-22
 - task_id=ci-recovery-2026-05-20; problem=plans/thomas/problems/ci-recovery-2026-05-20/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-07-28T22:30:19+00:00; summary=ci-recovery-2026-05-20
 - task_id=hardening-2026-06-12; problem=plans/thomas/problems/hardening-2026-06-12/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-07-28T22:30:19+00:00; summary=hardening-2026-06-12

@@ -35,6 +35,30 @@ class _ServerRestartRequested(Exception):
     pass
 
 
+async def _log_landing_heartbeat() -> None:
+    """Read the landing heartbeat once, after the port is open, and log it.
+
+    This is the whole trigger. It is deliberately NOT a scheduler: people walk
+    away from machines and hard-power them off, so anything that fires on a
+    clock is exactly the thing that gets missed. Starting Thomas is the
+    trigger, because starting Thomas is what actually happens.
+
+    The reading itself is blocking git work, so it goes to a thread -- the
+    event loop stays free and boot is never held up waiting for it.
+    """
+    try:
+        from thomas.core.landing_health import collect_landing_health
+    except ImportError:
+        log.debug("Landing heartbeat unavailable: thomas.core.landing_health did not import")
+        return
+
+    # collect_landing_health() is contractually incapable of raising: every
+    # failure comes back as severity 'unknown' with a sentence saying so.
+    health = await asyncio.to_thread(collect_landing_health)
+    for line in health.log_lines():
+        log.info(line)
+
+
 async def serve_async(
     config: AppConfig,
     *,
@@ -107,6 +131,12 @@ async def serve_async(
 
         stale_sweeper = asyncio.create_task(run_stale_execution_sweeper())
 
+    # Tell the owner, in plain English, whether their work is safely landed or
+    # piling up. Scheduled here rather than run here: create_task only queues
+    # it, so the port is already open and the startup summary still prints
+    # first. It cannot delay boot.
+    landing_heartbeat: asyncio.Task[None] = asyncio.create_task(_log_landing_heartbeat())
+
     # ── Startup summary ──
     diag = app.get(APP_DIAGNOSTICS, {})
     # The plain string "APP_BOOT_DURATION" never matched the web.AppKey the value
@@ -132,6 +162,9 @@ async def serve_async(
             stale_sweeper.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await stale_sweeper
+        landing_heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await landing_heartbeat
         await runner.cleanup()
         if preview_service is not None:
             await preview_service.stop()

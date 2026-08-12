@@ -245,6 +245,19 @@ def _setup_routes_and_handlers(
         snapshot = app.get(APP_MUTATING_ROUTE_POLICY_SNAPSHOT, {})
         return web.json_response(snapshot)
 
+    async def api_landing_health(request: web.Request) -> web.Response:
+        """Return the landing heartbeat: is the owner's work landed, or piling up?
+
+        The same reading the server logs at startup, so the UI can show it
+        rather than relying on anyone having read the log. The git work is
+        blocking, so it runs in a thread and never stalls the event loop.
+        """
+        _require_api_access(request)
+        from thomas.core.landing_health import collect_landing_health
+
+        health = await asyncio.to_thread(collect_landing_health)
+        return web.json_response(health.as_dict())
+
     async def api_engines(request: web.Request) -> web.Response:
         """Return engine manager status and results."""
         _require_api_access(request)
@@ -1310,6 +1323,7 @@ def _setup_routes_and_handlers(
     app.router.add_get("/api/task-ledger/history", api_task_ledger_history)
     app.router.add_get("/api/security/mutating_routes", api_security_mutating_routes)
     app.router.add_get("/api/security/mutating-routes", api_security_mutating_routes)
+    app.router.add_get("/api/landing-health", api_landing_health)
     app.router.add_get("/api/engines", api_engines)
     app.router.add_get("/api/tools", api_tools)
     app.router.add_get("/api/chats", api_chats)

@@ -7,6 +7,51 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (nothing was watching the total)
+
+- **A landing heartbeat, so "my work is piling up" is something you can see
+  rather than something you find out.** `main` had not moved since 2026-06-09.
+  576 commits accumulated on a working branch over two months. Every painful
+  thing about landing that pile followed from that one fact -- 127 broad
+  exception handlers got through because the gate compared each commit to the
+  one before it and nobody was watching the cumulative total; a merge silently
+  resurrected deleted code, including a permission check with a known bypass,
+  because the two branches had drifted for two months; ten CI checks failed at
+  once because they were built for a normal-sized change; and the result was a
+  1,890-file pull request that no human or AI can review. Not one of those was
+  a bug. They were all the same missing instrument: nothing ever asked "how big
+  is the pile now?"
+
+  `thomas/core/landing_health.py` asks it, in English, in the register of a
+  fuel gauge rather than a nag: *"Everything is on main. You're ready to
+  work."* -- or, for this repo today, *"Too much work is stacked up outside
+  main. This is the point where landing it safely stops being easy."* It reads
+  five facts straight out of git (changes waiting to land, files that differ,
+  how long since main moved, how long since this branch moved, and how many
+  edits are not saved anywhere yet) and turns them into sentences that do not
+  require knowing what a commit is.
+
+  It triggers on **both** size and time, because each covers the other's blind
+  spot. Size catches accumulation -- you have built more than can be landed
+  safely. Time catches abandonment -- three changes untouched for three weeks
+  is a real problem that no size threshold will ever notice. June's pile was
+  both at once.
+
+  It runs on **server startup**, in a background task created after the port is
+  already open, and never on a timer. A scheduler is precisely the wrong shape
+  for this: people walk away from machines and switch them off at the wall, so
+  anything that fires on a clock is the thing that gets missed. Using Thomas is
+  the trigger, because using Thomas is what actually happens. The reading is
+  logged at INFO on every boot and served at `GET /api/landing-health` so the
+  UI can show it without anyone having to read a log.
+
+  The module is built so it can never be the reason something breaks: it makes
+  no LLM calls, never touches the network, holds every git command to a
+  timeout and the whole check to a total budget, and degrades to severity
+  `unknown` with an honest sentence -- never a crash, never an invented number
+  -- when git is missing, the folder is not a project, there is no shared copy
+  configured, or the checkout is in a detached state.
+
 ### Fixed (the suite could not run, and the gate could not tell)
 
 - **The whole test suite died during collection, before a single test ran.**
