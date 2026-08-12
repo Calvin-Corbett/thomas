@@ -101,7 +101,9 @@ def _resolve_default_profile(root: Path) -> str:
 async def _json_body(request: web.Request) -> dict[str, Any]:
     try:
         body = await request.json()
-    except Exception:  # noqa: BLE001 - a malformed body is treated as empty
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        # A malformed body is treated as empty; only decode faults belong here,
+        # a transport failure should still surface.
         return {}
     return body if isinstance(body, dict) else {}
 
@@ -207,7 +209,11 @@ def build_canvas_studio_handlers(
         ]
         try:
             result = await llm.chat(messages)
-        except Exception as exc:  # noqa: BLE001 - surface as a clean error, never 500
+        # The set every other model call in the server names: transport/auth
+        # faults arrive as OSError, provider and failover faults as RuntimeError,
+        # and a malformed provider payload as TypeError/ValueError. Surfaced as a
+        # clean 502, never a 500.
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             log.warning("UI Studio template LLM call failed: %s", exc)
             return web.json_response({"ok": False, "error": "llm call failed"}, status=502)
         spec = _extract_spec_json(result.get("text", ""))
@@ -236,7 +242,7 @@ def build_canvas_studio_handlers(
         messages = [{"role": "user", "content": user_content}]
         try:
             result = await llm.chat(messages)
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:  # same set as the template call above
             log.warning("UI Studio sketch LLM call failed: %s", exc)
             return web.json_response({"ok": False, "error": "llm call failed"}, status=502)
         spec = _extract_spec_json(result.get("text", ""))

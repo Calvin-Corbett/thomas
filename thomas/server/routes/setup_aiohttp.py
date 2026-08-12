@@ -179,7 +179,11 @@ def register_setup_routes(
                     from thomas.server.openai_codex_oauth import has_openai_codex_token
 
                     has_key = bool(m.api_key or has_openai_codex_token(secrets_store, name))
-                except Exception:
+                # Reading a stored OAuth token: ImportError if the OAuth module is
+                # absent, OSError for the secret file, ValueError/TypeError/KeyError
+                # for a token blob that will not parse. Fall back to the plain key.
+                except (ImportError, OSError, ValueError, TypeError, KeyError):
+                    log.debug("openai_codex token probe failed for profile %s", name, exc_info=True)
                     has_key = bool(m.api_key)
                 openai_codex_ready = openai_codex_ready or bool(has_key)
             else:

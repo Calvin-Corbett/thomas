@@ -6,6 +6,7 @@ import asyncio
 import csv
 import json
 import logging
+import sqlite3
 from collections.abc import Callable
 from io import StringIO
 from typing import Any
@@ -40,7 +41,11 @@ def _current_runtime_profile() -> dict[str, Any]:
         rt = getattr(advanced, "runtime", None)
         economy = str(getattr(rt, "default_token_economy", economy) or economy)
         autonomy = int(getattr(rt, "autonomy_level", autonomy) or autonomy)
-    except Exception:
+    # The preferences store is sqlite behind an optional import: ImportError when
+    # the module is absent, OSError/sqlite3.Error for the file and the query, and
+    # TypeError/ValueError/AttributeError for a row that is not shaped like the
+    # runtime prefs. Any of those means "use the defaults above".
+    except (ImportError, OSError, sqlite3.Error, TypeError, ValueError, AttributeError):
         log.debug("Runtime profile: preferences unavailable; using defaults", exc_info=True)
 
     return resolve_runtime_profile(

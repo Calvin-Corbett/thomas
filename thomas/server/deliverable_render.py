@@ -243,8 +243,11 @@ def render_markdown_to_pdf(md_path: str | Path, pdf_path: str | Path | None = No
         f"<body>{body}</body></html>"
     )
     try:
+        from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import sync_playwright
-    except Exception:
+    # Playwright is an optional extra: ImportError when it is not installed,
+    # OSError when the package is present but its driver files are not.
+    except (ImportError, OSError):
         return None
     try:
         with sync_playwright() as pw:
@@ -260,6 +263,10 @@ def render_markdown_to_pdf(md_path: str | Path, pdf_path: str | Path | None = No
                 )
             finally:
                 browser.close()
-    except Exception:
+    # PlaywrightError is the one every browser fault arrives as (no Chromium
+    # installed, launch refused, sync API called from inside an event loop, page
+    # timeout). OSError covers writing the PDF, and RuntimeError/ValueError/
+    # TypeError cover the driver handshake. The caller keeps the .md as fallback.
+    except (PlaywrightError, OSError, RuntimeError, ValueError, TypeError):
         return None
     return pdf_path if pdf_path.is_file() else None

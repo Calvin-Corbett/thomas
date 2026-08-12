@@ -45,7 +45,11 @@ def _spawn_presence_monitor(repo: Path, session_id: str, parent_pid: int, interv
         kwargs["start_new_session"] = True
     try:
         subprocess.Popen(cmd, **kwargs)  # noqa: S603 - fixed argv, no shell
-    except Exception:  # noqa: BLE001 - monitor is best-effort; never break register
+    # Spawning the heartbeat daemon is best-effort and must NEVER break
+    # `presence register`: a missing interpreter or permission fault (OSError),
+    # bad argv (ValueError), or a platform spawn failure (SubprocessError) only
+    # costs this session its liveness lease, which then expires normally.
+    except (OSError, ValueError, subprocess.SubprocessError):
         pass
 
 

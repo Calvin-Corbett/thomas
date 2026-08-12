@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import sqlite3
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -87,7 +88,11 @@ def _embed_secrets(model_cfg: Any, profile: str, secret_store: Any) -> Any:
             if access_token:
                 cfg_copy.api_key = access_token
             cfg_copy._openai_codex_token_ready = bool(access_token or has_openai_codex_token(secret_store, name))
-        except Exception as exc:  # pragma: no cover - defensive token resolution
+        # Reading a stored OAuth token: ImportError if the OAuth module is absent,
+        # OSError for the secret file, ValueError/TypeError/KeyError/AttributeError
+        # for a token blob or config object that is not the shape we expect. The
+        # worker then runs with whatever api_key the config already carried.
+        except (ImportError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             log.debug("worker: failed to resolve openai_codex token for %s: %s", profile, exc)
     return cfg_copy
 
@@ -106,7 +111,11 @@ def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = Non
         from thomas.preferences.store import get_db_path
 
         db_path = get_db_path()
-    except Exception:  # pragma: no cover - prefs store unavailable
+    # Locating the prefs DB: ImportError when the preferences package is absent,
+    # OSError when the home/app directory cannot be resolved, ValueError/
+    # AttributeError when it hands back something unusable. None means "resolve
+    # the model without stored preferences", which every step below tolerates.
+    except (ImportError, OSError, ValueError, AttributeError):
         db_path = None
 
     # 1. Per-specialist (role) override.
@@ -121,7 +130,11 @@ def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = Non
             role_profile = resolve_model_profile_name(cfg, role_profile)
             if role_profile:
                 return role_profile
-        except Exception as exc:  # pragma: no cover - falls through to chat default
+        # A sqlite read behind an optional import, then a name lookup in config:
+        # ImportError, OSError/sqlite3.Error for the DB, and TypeError/ValueError/
+        # KeyError/AttributeError for a stored preference that no longer matches
+        # any configured profile. Falls through to the chat default.
+        except (ImportError, OSError, sqlite3.Error, TypeError, ValueError, KeyError, AttributeError) as exc:
             log.debug("worker: role model pref lookup failed for role=%s: %s", role, exc)
 
     # 2. The chat's selected model is the pipeline default.
@@ -142,7 +155,9 @@ def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = Non
         )
         if resolved_profile in cfg.models:
             return resolved_profile
-    except Exception as exc:  # pragma: no cover - falls back to default_model
+    # Same shape as the role lookup above -- env var, sqlite preferences, then a
+    # config lookup. Falls back to cfg.default_model.
+    except (ImportError, OSError, sqlite3.Error, TypeError, ValueError, KeyError, AttributeError) as exc:
         log.debug("worker: resolve_effective_model failed: %s", exc)
     fallback = str(cfg.default_model or "").strip()
     if fallback not in cfg.models and cfg.models:
@@ -162,8 +177,11 @@ def _apply_tool_deny(tools: Any, deny: frozenset[str]) -> None:
         if any(name == tok or name.startswith(f"{tok}.") or category == tok for tok in deny):
             try:
                 tools.unregister(name)
-            except Exception:  # pragma: no cover - best-effort pruning
-                pass
+            # A registry that does not implement unregister the way we assume
+            # (AttributeError/TypeError) or a name already gone (KeyError). Say
+            # so: a tool that survives a deny list is worth a line in the log.
+            except (AttributeError, TypeError, KeyError):
+                log.warning("worker: could not unregister denied tool %s", name, exc_info=True)
 
 
 async def run_agent_worker_events(
@@ -236,8 +254,17 @@ async def run_agent_worker_events(
         # dynamically-attached _openai_codex_token_ready attribute.
         try:
             model_cfg.reasoning_effort = override.reasoning_effort
-        except Exception:  # pragma: no cover - field present but not settable
-            pass
+        # A single attribute assignment: the field reads back but is not settable
+        # (frozen dataclass raises FrozenInstanceError, a subclass of
+        # AttributeError; __slots__ or a property raise AttributeError/TypeError;
+        # a validating setter raises ValueError). The worker runs at the model's
+        # own default effort instead.
+        except (AttributeError, TypeError, ValueError):
+            log.debug(
+                "worker: reasoning_effort override not settable on %s",
+                getattr(model_cfg, "provider", "?"),
+                exc_info=True,
+            )
 
     # Failover chain, with secrets embedded the same way (provider-blind).
     configured_fallbacks = list(cfg.failover_chain(resolved_profile))

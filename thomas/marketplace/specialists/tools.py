@@ -16,10 +16,35 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
+import httpx
+
+from thomas.core.llm_shared import LLMError
 from thomas.marketplace.orchestrator.protocol import CapabilityToken, DelegationContract
 from thomas.marketplace.specialists.base import BaseSpecialist
 
 log = logging.getLogger(__name__)
+
+# What a provider call can realistically fail with. BaseSpecialist._call_llm logs
+# and re-raises whatever it got, and LLMClient.stream_chat deliberately lets
+# LLMError (rate limit / provider error) and raw httpx transport faults through
+# unwrapped -- so both have to be named here or a routine rate-limit would crash
+# the specialist stream instead of degrading to "no tool plan". The rest covers
+# parsing the model's plan. asyncio.CancelledError is a BaseException and was
+# never caught by the `except Exception` this replaces.
+_LLM_CALL_FAULTS = (
+    LLMError,
+    httpx.HTTPError,
+    OSError,
+    NotImplementedError,
+    LookupError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
+# Reading the tool registry: a registry that does not implement list_tools or
+# yields odd rows. The catalog is a prompt nicety -- never worth a crash.
+_REGISTRY_READ_FAULTS = (AttributeError, LookupError, RuntimeError, TypeError, ValueError)
 
 
 # Categories most useful for chat-driven actions get listed first so the
@@ -120,7 +145,8 @@ class ToolSpecialist(BaseSpecialist):
             return "(no tools registered)"
         try:
             tool_list = list(self.tools.list_tools())
-        except Exception:
+        except _REGISTRY_READ_FAULTS:
+            log.warning("Tool catalog unavailable; the model will be prompted without it", exc_info=True)
             return "(tool catalog unavailable)"
         if not tool_list:
             return "(no tools registered)"
@@ -215,8 +241,8 @@ class ToolSpecialist(BaseSpecialist):
         try:
             plan = await self._call_llm(messages, max_tokens=1_000)
             tool_calls = _extract_tool_calls(plan)
-        except Exception as exc:
-            log.warning("Tool plan generation/parse failed: %s", exc)
+        except _LLM_CALL_FAULTS as exc:
+            log.warning("Tool plan generation/parse failed: %s", exc, exc_info=True)
             tool_calls = []
 
         # The issued token's allowed_tools holds the specialist's *capability
@@ -248,7 +274,12 @@ class ToolSpecialist(BaseSpecialist):
                             "phase": "tool_selection",
                         }
                 exec_token = replace(token, allowed_tools=allowed)
-        except Exception:
+        # Reading the registry, coercing token.autonomy_level, and rebuilding the
+        # token dataclass. Falling back to the unscoped token is deliberate and
+        # safe: the registry is still the security boundary, and only
+        # sandbox-safe tools are ever registered.
+        except _REGISTRY_READ_FAULTS:
+            log.warning("Could not scope the execution token; using the issued token", exc_info=True)
             exec_token = token
 
         results = []

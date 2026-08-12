@@ -7,6 +7,8 @@ Thomas's memory engine so future proposals are informed by past calls.
 
 from __future__ import annotations
 
+import logging
+import sqlite3
 from typing import Any
 
 from thomas.marketplace.paper_trading._types import (
@@ -15,8 +17,25 @@ from thomas.marketplace.paper_trading._types import (
     TrackRecord,
 )
 
+log = logging.getLogger(__name__)
+
 # A move smaller than this (in %) is treated as noise, not a validated thesis.
 _NOISE_PCT = 0.5
+
+# What a duck-typed memory engine can realistically fail with: a missing or
+# mis-shaped add_event (AttributeError/TypeError), a rejected payload
+# (ValueError/LookupError), its SQLite store (sqlite3.Error), the files behind it
+# (OSError), or an engine that reports its own failure as RuntimeError. Matches
+# the tuple orchestrator/brain.py already uses for the same memory writes.
+_MEMORY_WRITE_FAULTS = (
+    AttributeError,
+    LookupError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    sqlite3.Error,
+)
 
 
 def score_open_entry(
@@ -132,5 +151,6 @@ def record_lesson(memory_engine: Any, entry: JournalEntry, *, thread: str = "pap
             },
         )
         return True
-    except Exception:
+    except _MEMORY_WRITE_FAULTS:
+        log.debug("paper-trading lesson write failed for %s", entry.proposal_id, exc_info=True)
         return False

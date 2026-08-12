@@ -189,6 +189,9 @@ async def analyze_text(config: Any, text: str, *, local_now: str = "") -> dict[s
     finally:
         try:
             await llm.close()
-        except Exception:  # noqa: BLE001 - close failures must not mask results
+        # Tearing down the HTTP session: a socket fault is OSError, closing an
+        # already-closed/never-opened client is RuntimeError/AttributeError.
+        # Close failures must not mask the result we already have.
+        except (OSError, RuntimeError, AttributeError):
             log.debug("Inkwell LLM client close failed", exc_info=True)
     return normalize_analysis(_extract_json_object(str(result.get("text") or "")))

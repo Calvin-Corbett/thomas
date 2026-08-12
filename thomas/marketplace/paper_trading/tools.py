@@ -25,6 +25,29 @@ def _engine() -> PaperTradingEngine:
     return PaperTradingEngine.build()
 
 
+# Everything the engine path can realistically raise, reported to the model as a
+# failed ToolResult instead of killing its turn:
+#   PaperTradingError  - the module's own errors (broker unreachable, bad config,
+#                        live-endpoint block, risk rejection, approval refused,
+#                        unknown proposal id)
+#   LookupError        - a missing key in the model-supplied ``args`` dict
+#   TypeError/ValueError - args of the wrong shape (int(args["limit"]) on prose)
+#   ArithmeticError    - price/qty maths on a zero or absent reference price
+#   OSError            - the JSON state file and the sim positions file
+#   AttributeError     - a broker object missing part of the duck-typed interface
+# Anything outside this set (ImportError from a bad refactor, a NameError) is a
+# genuine bug and must surface rather than be reported as a tool failure.
+_TOOL_FAULTS = (
+    PaperTradingError,
+    ArithmeticError,
+    AttributeError,
+    LookupError,
+    OSError,
+    TypeError,
+    ValueError,
+)
+
+
 def _err(exc: Exception) -> ToolResult:
     return ToolResult(ok=False, error=f"{type(exc).__name__}: {exc}")
 
@@ -42,7 +65,7 @@ class PaperTradingAccountTool(Tool):
         try:
             acct = await _engine().account()
             return ToolResult(ok=True, data=acct.to_dict())
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -56,7 +79,7 @@ class PaperTradingPositionsTool(Tool):
         try:
             positions = await _engine().positions()
             return ToolResult(ok=True, data=[p.to_dict() for p in positions])
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -76,7 +99,7 @@ class PaperTradingQuoteTool(Tool):
         try:
             q = await _engine().quote(args["symbol"])
             return ToolResult(ok=True, data=q.to_dict())
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -105,7 +128,7 @@ class PaperTradingBarsTool(Tool):
                 limit=int(args.get("limit") or 30),
             )
             return ToolResult(ok=True, data={"symbol": args["symbol"], "bars": bars})
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -172,7 +195,7 @@ class PaperTradingProposeTool(Tool):
                 else "Proposal was BLOCKED by risk rules — see risk.violations."
             )
             return ToolResult(ok=True, data=data)
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -197,7 +220,7 @@ class PaperTradingListProposalsTool(Tool):
             status = str(args.get("status") or "").strip() or None
             proposals = _engine().store.list_proposals(status=status)
             return ToolResult(ok=True, data=[p.to_dict() for p in proposals])
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -225,7 +248,7 @@ class PaperTradingSubmitTool(Tool):
             return ToolResult(ok=False, error=str(exc))
         except (ProposalNotFound, PaperTradingError) as exc:
             return _err(exc)
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -244,7 +267,7 @@ class PaperTradingReviewTool(Tool):
             engine = _engine()
             await engine.reconcile()
             return ToolResult(ok=True, data=engine.review())
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 
@@ -272,7 +295,7 @@ class PaperTradingRecallTool(Tool):
         try:
             data = _engine().recall(str(args.get("symbol") or ""))
             return ToolResult(ok=True, data=data)
-        except Exception as exc:
+        except _TOOL_FAULTS as exc:
             return _err(exc)
 
 

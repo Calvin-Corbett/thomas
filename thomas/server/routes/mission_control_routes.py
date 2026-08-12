@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import math
 from collections.abc import Callable
 from typing import Any
@@ -22,6 +23,8 @@ from thomas.core import task_bot_runtime
 from thomas.core.task_bot_runtime import TERMINAL_STATES
 from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
+
+log = logging.getLogger(__name__)
 
 # Map a task_bot delegation state to a Mission Control (room, status) so live chat
 # delegations (the named worker bots — Nova, Taylor, …) show up on the board the
@@ -471,7 +474,12 @@ def build_mission_control_routes(
         # agents even while a bot is actively building in the background.
         try:
             delegations = list(task_bot_runtime.list_executions(refresh=True) or [])
-        except Exception:
+        # Reads the delegation summary off disk and re-shapes it: OSError for the
+        # files, ValueError for JSON that will not parse, TypeError/KeyError/
+        # AttributeError for a summary that is not the shape we expect. Say so --
+        # an empty board because the read failed must not look like an idle board.
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            log.warning("Mission Control: could not read live delegations", exc_info=True)
             delegations = []
         # Drop stale rows entirely: a non-terminal task no agent has touched in a
         # while is a dead orphan, not live or recently-finished work — it should not

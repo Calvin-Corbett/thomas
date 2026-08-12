@@ -119,7 +119,11 @@ def build_effective_guardrails(preset: str = "", modes: dict | None = None) -> G
         from thomas.server.guardrails_policy_store import load_guardrails_policy
 
         return load_guardrails_policy()
-    except Exception:
+    # The store is imported lazily to keep this module free of a server-layer
+    # dependency at import time: ImportError if it is not there, OSError for the
+    # policy file, ValueError/TypeError for a file that will not parse or
+    # normalize. All-standard defaults are the safe answer for a guardrail policy.
+    except (ImportError, OSError, ValueError, TypeError):
         return GuardrailsState()
 
 

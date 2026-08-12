@@ -8,6 +8,7 @@ directly to disk.
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import os
 import time
@@ -69,7 +70,11 @@ def decode_jwt_payload(jwt: str | None) -> dict[str, Any]:
         raw = base64.urlsafe_b64decode(payload.encode("ascii"))
         obj = json.loads(raw.decode("utf-8"))
         return obj if isinstance(obj, dict) else {}
-    except Exception:
+    # An untrusted JWT segment: binascii.Error for bad base64 padding/alphabet,
+    # UnicodeError for a segment that is not ASCII or whose payload is not UTF-8,
+    # JSONDecodeError for a payload that is not JSON, TypeError if the segment is
+    # not string-like. An undecodable token simply has no claims.
+    except (binascii.Error, UnicodeError, json.JSONDecodeError, TypeError):
         return {}
 
 
@@ -333,7 +338,10 @@ async def exchange_code_for_tokens(
         raise OpenAICodexOAuthError(f"Token exchange failed with HTTP {int(resp.status_code)}.")
     try:
         obj = resp.json()
-    except Exception as e:
+    # Decoding the provider's response body: JSONDecodeError for a non-JSON body,
+    # UnicodeDecodeError for one that is not decodable text, ValueError/TypeError
+    # for anything else the JSON decoder rejects.
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError) as e:
         raise OpenAICodexOAuthError(f"Token exchange returned invalid JSON: {e}") from e
     if not isinstance(obj, dict):
         raise OpenAICodexOAuthError("Token exchange returned a non-object response.")
@@ -372,7 +380,7 @@ async def refresh_openai_codex_token(
         )
     try:
         obj = resp.json()
-    except Exception as e:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError) as e:  # same set as the exchange above
         raise OpenAICodexOAuthError(f"Token refresh returned invalid JSON: {e}") from e
     if not isinstance(obj, dict):
         raise OpenAICodexOAuthError("Token refresh returned a non-object response.")

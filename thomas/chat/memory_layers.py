@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -245,7 +246,14 @@ class MemoryCoordinator:
                 """,
                 (self._session_id, int(limit)),
             ).fetchall()
-        except Exception as exc:
+        # ``db`` is duck-typed above (anything with ``.execute``); in practice it is
+        # memory.v2 SqliteDB, so a missing ``episodes`` table, a closed connection or
+        # a locked file all arrive as sqlite3.Error. The three builtins cover a db
+        # object that is NOT sqlite-backed: no ``.fetchall`` on the result
+        # (AttributeError), a different execute() signature (TypeError), or a bad
+        # bind value (ValueError). This is a recall *fallback* -- an unknown failure
+        # mode should surface rather than silently degrade recall.
+        except (sqlite3.Error, AttributeError, TypeError, ValueError) as exc:
             log.debug("Recent thread memory fallback failed: %s", exc)
             return ""
 

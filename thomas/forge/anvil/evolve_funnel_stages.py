@@ -15,6 +15,7 @@ isolation). A ``CallBudget`` caps total model calls per goal.
 from __future__ import annotations
 
 import concurrent.futures as cf
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,6 +41,8 @@ from .evolve_funnel_synthesis import (
     reverse_no_scoring_violations,
     union_items,
 )
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -100,7 +103,14 @@ def _run_lanes(
     def _one(_i: int) -> str:
         try:
             return model_call(system, user, profile)
-        except Exception:  # noqa: BLE001 - a dead lane must not kill the stage
+        # A dead lane must not kill the stage -- the survivors still synthesise.
+        # ``model_call`` is injected: the real adapter can fail on the transport
+        # (OSError), on client/config guards (RuntimeError, ImportError), on an
+        # unknown profile (KeyError) or on a mis-shaped response (AttributeError,
+        # TypeError, ValueError -- which covers json.JSONDecodeError). Returning ""
+        # drops the lane, which _run_lanes already filters out.
+        except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            log.debug("funnel lane failed (dropped): %s", exc)
             return ""
 
     with cf.ThreadPoolExecutor(max_workers=min(max_workers, runnable)) as ex:

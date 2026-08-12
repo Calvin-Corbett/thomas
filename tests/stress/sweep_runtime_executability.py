@@ -21,6 +21,15 @@ from _harness import Recorder
 
 A = "runtime-load-verification"
 
+# This is a sweep, not a unit test: `run_all.main()` calls every sweep's `run()`
+# with no handler of its own, so an escaping exception kills the whole scorecard.
+# Both probes below therefore RECORD an absent/unwired capability as a failed row
+# and keep sweeping. Named rather than broad: ImportError means the module is
+# absent, AttributeError that a symbol was renamed, and OSError/RuntimeError/
+# KeyError/TypeError/ValueError cover a module whose import-time setup fails.
+# Anything else is a harness defect and should stop the run loudly.
+_PROBE_SETUP_ERRORS = (ImportError, AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError)
+
 
 def _mk(files: dict[str, str]) -> Path:
     d = Path(tempfile.mkdtemp())
@@ -36,7 +45,7 @@ def run() -> Recorder:
     try:
         from thomas.server.deliverable_runtime_verify import runtime_smoke_load
         from thomas.server.deliverable_verify import verify_web_deliverable
-    except Exception as e:  # noqa: BLE001
+    except _PROBE_SETUP_ERRORS as e:
         rec.add(
             case="runtime smoke-load capability exists",
             dimension=A,
@@ -108,7 +117,7 @@ def run() -> Recorder:
 
         wired = callable(runtime_executability_warning)
         actual = f"runtime_executability_warning callable={wired}"
-    except Exception as e:  # noqa: BLE001
+    except _PROBE_SETUP_ERRORS as e:  # "not wired" is the finding this row reports
         wired = False
         actual = f"not wired: {type(e).__name__}: {e}"
     rec.add(

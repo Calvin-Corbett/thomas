@@ -13,6 +13,7 @@ Usage: python scripts/persona_e2e_sweep.py [port] [limit_per_persona]
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import time
@@ -62,8 +63,8 @@ def _stream_chat(task: str, sid: str) -> dict:
                     continue
                 try:
                     evt = json.loads(line)
-                except Exception:
-                    continue
+                except (json.JSONDecodeError, TypeError):
+                    continue  # a non-JSON keepalive/framing line: skip it
                 et = str(evt.get("type") or "")
                 event_types.append(et)
                 chunk = evt.get("text") or evt.get("delta") or evt.get("content")
@@ -71,7 +72,12 @@ def _stream_chat(task: str, sid: str) -> dict:
                     if first_text_at is None:
                         first_text_at = time.monotonic() - t0
                     reply_parts.append(chunk)
-    except Exception as exc:  # noqa: BLE001
+    # Per-case error boundary: one unreachable/slow/half-streamed case must be
+    # recorded and the sweep must continue, so this degrade is load-bearing.
+    # urllib's URLError/HTTPError and socket timeouts are OSError; a truncated
+    # chunked body is http.client.HTTPException; ValueError covers a bad URL and
+    # json.JSONDecodeError (a ValueError subclass) a malformed event.
+    except (OSError, http.client.HTTPException, ValueError, TypeError) as exc:
         return {"error": f"{type(exc).__name__}: {exc}", "elapsed_s": round(time.monotonic() - t0, 2)}
     return {
         "reply": "".join(reply_parts).strip(),

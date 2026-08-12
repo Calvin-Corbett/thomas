@@ -27,6 +27,18 @@ from aiohttp import ClientError, ClientSession, CookieJar, web
 
 A = "deliverable-executability"
 
+# This is a sweep, not a unit test: `run_all.main()` calls every sweep's `run()`
+# with no handler of its own, so an escaping exception kills the whole scorecard.
+# The probes below therefore RECORD a setup failure as a failed row and keep
+# sweeping -- which is why they catch at all. The set is deliberately generous but
+# named: importing a capability under audit gives ImportError (absent) or
+# AttributeError (renamed); driving it gives OSError (temp files, sockets),
+# RuntimeError (event-loop/state guards), and KeyError/TypeError/ValueError for a
+# signature or payload that has drifted. Anything outside this set is a defect in
+# the harness itself and should stop the run loudly rather than be filed as a
+# probe result about Thomas.
+_PROBE_SETUP_ERRORS = (ImportError, AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError)
+
 
 def _extract_security_middleware():
     """Attach the REAL middleware stack to a throwaway app and return the
@@ -186,7 +198,7 @@ def run() -> Recorder:
     rec = Recorder("deliverable_executability")
     try:
         mw = _extract_security_middleware()
-    except Exception as e:  # noqa: BLE001 — record the failure as a probe result
+    except _PROBE_SETUP_ERRORS as e:  # record the failure as a probe result
         rec.add(
             case="construct real security_headers middleware",
             dimension=A,
@@ -236,7 +248,7 @@ def run() -> Recorder:
 def _verify_probes(rec: Recorder) -> None:
     try:
         from thomas.server.deliverable_verify import verify_web_deliverable
-    except Exception as e:  # noqa: BLE001 — capability absent is itself the finding
+    except _PROBE_SETUP_ERRORS as e:  # capability absent is itself the finding
         rec.add(
             case="a deliverable verifier capability exists (verify before 'done')",
             dimension=A,
@@ -358,7 +370,7 @@ def _verify_probes(rec: Recorder) -> None:
             warn_good = executability_warning(good, ["index.html", "styles.css", "src/game.js"])
             wired = bool(warn_broken) and ("game.js" in warn_broken) and (warn_good == "")
             actual = f"broken_warning={warn_broken!r} good_warning={warn_good!r}"
-        except Exception as e:  # noqa: BLE001
+        except _PROBE_SETUP_ERRORS as e:  # "not wired" is the finding this row reports
             wired = False
             actual = f"not wired: {type(e).__name__}: {e}"
         rec.add(

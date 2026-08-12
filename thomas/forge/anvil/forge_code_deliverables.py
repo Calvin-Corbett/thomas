@@ -184,7 +184,14 @@ def register_from_run(
         kept.insert(0, entry)
         _write(root, kept[:_MAX_DELIVERABLES])
         return entry
-    except Exception:  # noqa: BLE001 - registration must never crash a build
+    # Registration must never crash a build. The block detects artifacts from the
+    # run's changed-file list, builds one JSON row, and rewrites the registry file:
+    # so an unwritable/full/locked registry path is OSError, an unserialisable entry
+    # is TypeError or ValueError (which also covers a bad UTF-8 path component), and
+    # a changed_files list or artifact dict that is not the expected shape is
+    # AttributeError, KeyError, IndexError or TypeError. Logged with exc_info so the
+    # non-fatal path is still traceable.
+    except (OSError, AttributeError, IndexError, KeyError, TypeError, ValueError):
         logger.warning("forge code deliverable registration failed (non-fatal)", exc_info=True)
         return None
 

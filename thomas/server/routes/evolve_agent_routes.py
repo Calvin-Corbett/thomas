@@ -214,9 +214,30 @@ def _chosen_project(requested: Any, *, picked: bool = False) -> Any:
 # What a page may pull in while it runs. Keeping the preview to web assets
 # means previewing a page cannot serve source or secrets from the project.
 _PREVIEWABLE_SUFFIXES = {
-    ".html", ".htm", ".js", ".mjs", ".cjs", ".css", ".json", ".map",
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
-    ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".ogg", ".wav", ".webm", ".mp4",
+    ".html",
+    ".htm",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".css",
+    ".json",
+    ".map",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".ico",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".mp3",
+    ".ogg",
+    ".wav",
+    ".webm",
+    ".mp4",
 }
 
 # Directories the preview walk must never even ENTER. The old rglob("*")
@@ -246,6 +267,7 @@ def _preview_allowlist(root: Path) -> set[str]:
             rel = Path(dirpath, filename).relative_to(root)
             allowed.add(rel.as_posix())
     return allowed
+
 
 # How many Code runs may execute concurrently across conversations.
 # Raised from the old hard cap of 3 and made live-configurable via
@@ -400,7 +422,9 @@ def build_evolve_agent_handlers(
         require_api_access(request)
         try:
             body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            # missing/invalid body -> treat as empty (same set the other body
+            # readers in this module name).
             body = {}
         message = str((body or {}).get("message") or "").strip()
         if not message:
@@ -509,9 +533,7 @@ def build_evolve_agent_handlers(
                     )
                     _repo = forge_code_projects.thomas_source_repo_root()
                     if _repo is not None and project_root == _repo:
-                        project_root = await loop.run_in_executor(
-                            None, _new_task_project_root, catalog_root, message
-                        )
+                        project_root = await loop.run_in_executor(None, _new_task_project_root, catalog_root, message)
                 else:
                     if requested_project:
                         try:
@@ -998,7 +1020,6 @@ def build_evolve_agent_handlers(
         )
     )
     return handlers
-
 
 
 # The failures a run-store write can realistically produce. Named rather than a bare

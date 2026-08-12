@@ -18,11 +18,21 @@ with the specific reason, not silently assert success.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+# What feeding untrusted HTML to html.parser can realistically end on: the
+# stdlib parser asserts on a few malformed constructs, our own handlers do dict
+# and string work (AttributeError/TypeError/ValueError), and deeply nested junk
+# can exhaust the stack. A parse that stops early is still a usable partial
+# answer -- anything outside this set is our bug and should surface.
+_PARSE_FAULTS = (AssertionError, AttributeError, TypeError, ValueError, RecursionError)
 
 # Reference attributes that point at a loadable sub-resource.
 _REF_ATTRS = {
@@ -254,12 +264,14 @@ def verify_web_deliverable(root: str | Path, entry: str = "index.html") -> Verif
     signal = _ContentSignal()
     try:
         collector.feed(html)
-    except Exception:  # noqa: BLE001 — malformed HTML still yields the refs parsed so far
-        pass
+    except _PARSE_FAULTS:
+        # Malformed HTML still yields the refs parsed so far -- keep them and say
+        # the parse stopped early rather than dropping the check silently.
+        log.debug("deliverable_verify: ref parse stopped early on %s", entry, exc_info=True)
     try:
         signal.feed(html)
-    except Exception:  # noqa: BLE001
-        pass
+    except _PARSE_FAULTS:
+        log.debug("deliverable_verify: content-signal parse stopped early on %s", entry, exc_info=True)
 
     problems: list[str] = []
     # A non-empty file that renders nothing (no app element, no visible body text)

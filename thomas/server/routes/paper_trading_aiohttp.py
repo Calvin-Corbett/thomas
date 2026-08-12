@@ -9,6 +9,7 @@ a proposal to ``approved`` and optionally submit it.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -36,7 +37,9 @@ def _data_dir(app: web.Application) -> Path:
 def _memory(app: web.Application) -> Any:
     try:
         return app.get(APP_MEMORY)
-    except Exception:
+    # A keyed lookup on the app mapping: KeyError/TypeError if the key was never
+    # installed or is not the AppKey type this aiohttp version expects.
+    except (KeyError, TypeError, AttributeError):
         return None
 
 
@@ -59,7 +62,8 @@ def _require_enabled(app: web.Application) -> None:
 async def _json_body(request: web.Request) -> dict[str, Any]:
     try:
         payload = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        # A body that will not decode is treated as no body at all.
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -83,7 +87,13 @@ def _default_step_up_provider():
         )
 
         return build_local_step_up_auth_provider()
-    except Exception:
+    # Building the platform provider touches an optional import and the native
+    # auth stack: ImportError when the security module is absent, OSError when
+    # the OS credential API cannot be reached, and RuntimeError/AttributeError/
+    # TypeError/ValueError when this platform has no usable implementation.
+    # None here means "no human gate available", which the caller fails closed on.
+    except (ImportError, OSError, RuntimeError, AttributeError, TypeError, ValueError):
+        _log.warning("paper-trading: local step-up auth provider unavailable", exc_info=True)
         return None
 
 
@@ -98,7 +108,8 @@ async def _require_human_step_up(app: web.Application, *, action: str, reason: s
     """
     try:
         provider = app.get(APP_LOCAL_STEP_UP_AUTH_PROVIDER)
-    except Exception:
+    # Same keyed-lookup faults as _memory(): the provider is simply not installed.
+    except (KeyError, TypeError, AttributeError):
         provider = None
     if provider is None:
         # Not installed at boot -> build the native provider on demand.
@@ -118,8 +129,13 @@ async def _require_human_step_up(app: web.Application, *, action: str, reason: s
     try:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, provider.authorize, action, reason)
-    except Exception as exc:
-        raise web.HTTPForbidden(text=f"Local authorization failed: {exc}")
+    # The native prompt is an OS call behind ctypes/subprocess: OSError for the
+    # syscall, RuntimeError for a provider that cannot run here, and
+    # AttributeError/TypeError/ValueError for a provider that does not implement
+    # the authorize() contract. Every one of them denies -- this gate fails closed.
+    except (OSError, RuntimeError, AttributeError, TypeError, ValueError) as exc:
+        _log.warning("paper-trading: local step-up authorization failed", exc_info=True)
+        raise web.HTTPForbidden(text=f"Local authorization failed: {exc}") from exc
     if not getattr(result, "authorized", False):
         code = getattr(result, "error_code", None) or "denied"
         raise web.HTTPForbidden(text=f"Local authorization not granted ({code}).")

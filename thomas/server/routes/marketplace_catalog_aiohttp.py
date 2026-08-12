@@ -106,7 +106,11 @@ def _remove_retired_local_module_installs(config: Any, plugin: dict[str, Any] | 
             continue
         try:
             uninstall_plugin(config, plugin_id)
-        except Exception:
+        # Uninstall is a filesystem delete plus a JSON manifest rewrite: OSError
+        # for the files, ValueError/TypeError/KeyError for a manifest that is not
+        # shaped the way we expect. A retired plugin that will not budge is a
+        # debug note, not a failed catalog request.
+        except (OSError, ValueError, TypeError, KeyError):
             log.debug("Unable to remove retired marketplace plugin '%s'", plugin_id, exc_info=True)
 
 

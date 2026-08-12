@@ -18,9 +18,34 @@ task and never produces a user-facing chat reply.
 
 from __future__ import annotations
 
+import asyncio
 import re
 
+import aiohttp
+
+from thomas.core.llm_shared import LLMError
+
 _MAX_TITLE_WORDS = 9
+
+# ``llm`` is injected and duck-typed, so this names every way a *model call* can
+# fail rather than every way code can fail: Thomas' own wrapper (LLMError), the
+# transport (aiohttp.ClientError, OSError, asyncio.TimeoutError -- not an alias of
+# the builtin until 3.11 and this package supports 3.10), a provider SDK raising
+# a plain RuntimeError, and the shape faults of talking to an arbitrary object
+# (AttributeError / KeyError / TypeError / ValueError, the last of which also
+# covers json.JSONDecodeError). asyncio.CancelledError is BaseException and was
+# never caught here, so shutdown still cancels cleanly.
+_TITLE_MODEL_ERRORS = (
+    LLMError,
+    aiohttp.ClientError,
+    OSError,
+    asyncio.TimeoutError,
+    AttributeError,
+    KeyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 # Leading conversational scaffolding to peel off before we find the real ask.
 # Order matters: longest / most-specific phrases first.
@@ -258,7 +283,22 @@ def derive_task_title(prompt: str, *, max_words: int = _MAX_TITLE_WORDS) -> str:
     was_truncated = len(words) > len(truncated)
     # Don't end a truncated title on a dangling article/preposition ("... needs a").
     if was_truncated:
-        _trailing_stopwords = {"a", "an", "the", "of", "for", "to", "with", "and", "my", "in", "on", "that", "this", "your"}
+        _trailing_stopwords = {
+            "a",
+            "an",
+            "the",
+            "of",
+            "for",
+            "to",
+            "with",
+            "and",
+            "my",
+            "in",
+            "on",
+            "that",
+            "this",
+            "your",
+        }
         while len(truncated) > 1 and truncated[-1].lower().strip(",.:;") in _trailing_stopwords:
             truncated = truncated[:-1]
     title = " ".join(truncated).rstrip(" ,.:;-")
@@ -299,7 +339,7 @@ async def generate_task_title(
         if gen is not None:
             result = await gen(_LLM_TITLE_INSTRUCTION + text)
             raw = str(getattr(result, "text", result) or "").strip()
-    except Exception:
+    except _TITLE_MODEL_ERRORS:
         raw = ""
 
     candidate = raw.strip().strip("\"'").splitlines()[0].strip() if raw else ""

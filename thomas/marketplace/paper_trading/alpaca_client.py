@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,8 @@ from thomas.marketplace.paper_trading.config import (
     PaperTradingConfig,
     assert_paper,
 )
+
+log = logging.getLogger(__name__)
 
 _TIMEOUT_S = 20
 
@@ -92,7 +95,16 @@ class AlpacaPaperClient:
                     return json.loads(text)
         except BrokerError:
             raise
-        except Exception as exc:  # network, JSON, etc.
+        except Exception as exc:
+            # Deliberately broad, logged, and re-raised as the module's own error.
+            # This is the adapter boundary between an arbitrary HTTP/JSON transport
+            # stack and BrokerError: aiohttp client faults, socket/TLS errors,
+            # timeouts, decode failures and malformed JSON must ALL arrive at the
+            # engine as one type, because the engine's fail-closed risk checks key
+            # on BrokerError. Naming a narrow tuple here would let an unnamed
+            # transport fault escape as itself and crash a live reconciliation
+            # instead of blocking a proposal, so the catch stays broad.
+            log.warning("Alpaca %s %s failed: %s", method, path, exc, exc_info=True)
             raise BrokerError(f"Alpaca request failed: {type(exc).__name__}: {exc}") from exc
 
     async def get_account(self) -> AccountSnapshot:

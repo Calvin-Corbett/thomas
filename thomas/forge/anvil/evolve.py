@@ -1000,7 +1000,24 @@ def run_evolve_session(
                         _pr["returncode_original"] = _pr.get("returncode")
                         _pr["returncode"] = 0
                         _pr["superseded_by_cli_fallback"] = True
-        except Exception as exc:  # noqa: BLE001 - fallback is best-effort; never crash the session
+        # The fallback spawns the `claude` CLI and reads its stream-json output, so
+        # the transport faults are OSError (spawn/pipe) and subprocess.SubprocessError
+        # (TimeoutExpired). Parsing that stream and the tree delta gives ValueError
+        # (covers json.JSONDecodeError and UnicodeDecodeError), TypeError, KeyError,
+        # IndexError and AttributeError; the bridge's own guards raise RuntimeError;
+        # the lazy import can raise ImportError. Recorded as a failed pass rather
+        # than raised because the session is judged on the verified tree delta.
+        except (
+            ImportError,
+            OSError,
+            subprocess.SubprocessError,
+            AttributeError,
+            IndexError,
+            KeyError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             pass_results.append(
                 {"pass_index": len(pass_results) + 1, "phase": "cli_fallback", "returncode": 1, "error": str(exc)}
             )

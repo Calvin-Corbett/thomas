@@ -7,6 +7,7 @@ back by the routes module.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from aiohttp import web
@@ -30,7 +31,8 @@ async def read_json_object(request: web.Request) -> dict[str, Any]:
         return {}
     try:
         payload = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        # A body that will not decode is treated as no body at all.
         return {}
     return payload if isinstance(payload, dict) else {}
 

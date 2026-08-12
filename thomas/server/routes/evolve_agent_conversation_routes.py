@@ -234,7 +234,7 @@ def build_evolve_agent_conversation_handlers(
         cid = request.match_info.get("cid", "")
         try:
             body = await request.json()
-        except Exception:  # noqa: BLE001 - missing/invalid body -> treat as empty
+        except _EMPTY_BODY_ERRORS:  # missing/invalid body -> treat as empty
             body = {}
         title = str((body or {}).get("title") or "").strip()
         if not title:

@@ -21,7 +21,15 @@ def _responses_content(value: Any) -> Any:
         return value
     try:
         return json.dumps(value, ensure_ascii=False)
-    except Exception:
+    # json.dumps over an arbitrary tool/message payload: TypeError is the common
+    # one (no default encoder for that object), ValueError covers "Circular
+    # reference detected" and out-of-range floats, RecursionError a payload nested
+    # past the interpreter limit, OverflowError an int too large to convert, and
+    # AttributeError a dict-like whose mapping protocol misbehaves mid-encode.
+    # str(value) is the documented degraded form. Deliberately NOT broad: a bare
+    # `except Exception` here also swallowed StopAsyncIteration, and this module's
+    # callers drive an async Responses stream where that must never be eaten.
+    except (TypeError, ValueError, OverflowError, RecursionError, AttributeError):
         return str(value)
 
 

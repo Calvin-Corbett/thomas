@@ -187,7 +187,10 @@ def _register_self_extend(registry) -> None:
         from thomas.tools.self_extend import register_self_extend_tools
 
         register_self_extend_tools(registry)
-    except Exception as exc:  # pragma: no cover - defensive: never break startup
+    # The same set _try_import names for an optional tool module: the import can
+    # be missing or broken, and registration itself is dict/name work. Never
+    # break startup over it.
+    except (ImportError, AttributeError, OSError, RuntimeError, SyntaxError, TypeError, ValueError) as exc:
         _log.debug("Skipping self_extend tools: %s", exc)
 
 
@@ -203,7 +206,11 @@ def _register_email_calendar(registry) -> None:
     try:
         from thomas.tools.base import Tool, ToolResult
         from thomas.tools.email_calendar import get_tools as _email_get_tools
-    except Exception as exc:  # pragma: no cover - defensive
+
+        # The same httpx (or vendored shim) the email tools actually call with,
+        # so the adapter below can name its transport errors precisely.
+        from thomas.tools.email_calendar import httpx as _httpx
+    except (ImportError, AttributeError, OSError, RuntimeError, SyntaxError, TypeError, ValueError) as exc:
         _log.debug("Skipping email/calendar tools: %s", exc)
         return
 
@@ -221,9 +228,20 @@ def _register_email_calendar(registry) -> None:
         async def execute(self, args: dict) -> "ToolResult":
             try:
                 data = await self._legacy.run(None, **(args or {}))
-            except Exception as exc:
-                # ToolError (missing creds, API failures) surfaces as a clear
-                # actionable message rather than a silent failure.
+            # ToolError (missing creds, provider refusals) is a RuntimeError;
+            # the provider calls go out over httpx, and a mis-shaped response or
+            # a bad argument set arrives as ValueError/TypeError/KeyError/
+            # AttributeError. Every one of them becomes a clear actionable
+            # message rather than a silent failure or a dead agent turn.
+            except (
+                _httpx.HTTPError,
+                OSError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+            ) as exc:
                 return ToolResult(ok=False, error=f"{type(exc).__name__}: {exc}")
             return ToolResult(ok=True, data=data)
 
@@ -235,7 +253,10 @@ def _register_email_calendar(registry) -> None:
         try:
             registry.register(_LegacyToolAdapter(legacy_tool))
             registered += 1
-        except Exception as exc:  # pragma: no cover - defensive
+        # register() rejects a nameless tool with ValueError; building the
+        # adapter reads attributes off the legacy tool (AttributeError/TypeError)
+        # and copies its schema dict (TypeError/KeyError).
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
             _log.debug("Skipping email tool %s: %s", name, exc)
     if registered:
         _log.info("Registered %d email/calendar tools", registered)

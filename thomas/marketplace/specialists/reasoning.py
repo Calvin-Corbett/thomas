@@ -306,7 +306,11 @@ class ReasoningSpecialist(BaseSpecialist):
             directive = str(autonomy.get("directive") or "").strip()
             if directive:
                 system += directive + "\n\n"
-        except Exception:
+        # input_context is model/caller-shaped: a non-mapping has no .get
+        # (AttributeError), a non-dict "autonomy" fails the same way or raises
+        # TypeError, and str() on an odd value can raise ValueError. Missing
+        # autonomy just means the default posture, so it is not worth a raise.
+        except (AttributeError, LookupError, TypeError, ValueError):
             pass
         # Repo & self awareness + read-only capability (Calvin: "he has no idea who he
         # is" / "should be able to read the repo, not write"). Injected every turn.
@@ -377,7 +381,10 @@ class ReasoningSpecialist(BaseSpecialist):
             recall = _ctx.get("recall")
             operate = _ctx.get("operate")
             work_onboarding_update = _ctx.get("work_onboarding_update")
-        except Exception:
+        # Only mapping access on a caller-supplied input_context: a non-mapping
+        # has no .get (AttributeError) or rejects the key (TypeError/LookupError).
+        # With no callbacks Thomas simply talks instead of dispatching.
+        except (AttributeError, LookupError, TypeError):
             send_task = None
             update_task = None
             remember = None
@@ -515,7 +522,20 @@ class ReasoningSpecialist(BaseSpecialist):
                                     handed_off = True
                                     yield {"type": "task_request", "title": title}
                                     result_text = f"Task '{title}' created and handed to the task manager."
-                                except Exception as exc:
+                                # Same surface the operate/work-onboarding catches
+                                # below already name, plus AttributeError for a
+                                # callback of the wrong shape. The failure has to
+                                # come back as tool output the model can tell the
+                                # user about -- silently claiming a hand-off that
+                                # did not happen is the exact bug this reports.
+                                except (
+                                    AttributeError,
+                                    LookupError,
+                                    OSError,
+                                    RuntimeError,
+                                    TypeError,
+                                    ValueError,
+                                ) as exc:
                                     result_text = f"Task hand-off failed: {exc}"
                             elif name == UPDATE_TASK_TOOL_NAME and update_task:
                                 # Re-direct a RUNNING task: the model picked which one by
@@ -534,7 +554,16 @@ class ReasoningSpecialist(BaseSpecialist):
                                     else:
                                         err = (outcome or {}).get("error", "could not match a running task")
                                         result_text = f"Could not update that task: {err}"
-                                except Exception as exc:
+                                # The update_task callback plus the .get() walk of
+                                # whatever it returns.
+                                except (
+                                    AttributeError,
+                                    LookupError,
+                                    OSError,
+                                    RuntimeError,
+                                    TypeError,
+                                    ValueError,
+                                ) as exc:
                                     result_text = f"Task update failed: {exc}"
                             elif name == REMEMBER_TOOL_NAME and remember:
                                 # Thomas's OWN memory — stored inline, no task. Not a hand-off.
@@ -542,7 +571,18 @@ class ReasoningSpecialist(BaseSpecialist):
                                 if _mtext:
                                     try:
                                         _saved = await remember(text=_mtext)
-                                    except Exception as exc:
+                                    # The memory-write callback: its store (OSError,
+                                    # RuntimeError), a rejected payload
+                                    # (TypeError/ValueError/LookupError), or a
+                                    # callback missing the expected shape.
+                                    except (
+                                        AttributeError,
+                                        LookupError,
+                                        OSError,
+                                        RuntimeError,
+                                        TypeError,
+                                        ValueError,
+                                    ) as exc:
                                         _saved = False
                                         result_text = f"Couldn't save that to memory: {exc}"
                                     else:
@@ -560,7 +600,16 @@ class ReasoningSpecialist(BaseSpecialist):
                                 _q = str(args.get("query") or "").strip()
                                 try:
                                     _hit = await recall(query=_q)
-                                except Exception as exc:
+                                # The memory-read callback, same store surface as
+                                # the write above.
+                                except (
+                                    AttributeError,
+                                    LookupError,
+                                    OSError,
+                                    RuntimeError,
+                                    TypeError,
+                                    ValueError,
+                                ) as exc:
                                     result_text = f"Memory lookup failed: {exc}"
                                 else:
                                     result_text = (
@@ -626,7 +675,19 @@ class ReasoningSpecialist(BaseSpecialist):
                                         payload = getattr(res, "data", None) if ok else getattr(res, "error", None)
                                         result_text = str(payload if payload is not None else "")[:6000]
                                         yield {"type": "tool_result", "name": name, "ok": ok}
-                                    except Exception as exc:
+                                    # The registry already funnels tool faults into
+                                    # ToolResult(ok=False); what can still escape is
+                                    # the read itself (OSError), an undecodable file
+                                    # or bad args (ValueError/TypeError/LookupError),
+                                    # and a registry without .execute (AttributeError).
+                                    except (
+                                        AttributeError,
+                                        LookupError,
+                                        OSError,
+                                        RuntimeError,
+                                        TypeError,
+                                        ValueError,
+                                    ) as exc:
                                         result_text = f"Read failed: {exc}"
                                 else:
                                     result_text = "No read-only grounding tools are available right now."

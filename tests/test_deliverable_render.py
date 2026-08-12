@@ -16,14 +16,25 @@ from thomas.server.deliverable_render import markdown_to_html, render_markdown_t
 
 
 def _browser_ok() -> bool:
+    # Mirrors the tuple render_markdown_to_pdf() itself uses, so this gate skips
+    # exactly when the renderer would return None. Playwright is an optional extra:
+    # ImportError when absent, OSError when the package is there but its driver
+    # files are not.
     try:
+        from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import sync_playwright
+    except (ImportError, OSError):
+        return False
 
+    # PlaywrightError is how every browser fault arrives (no Chromium installed,
+    # launch refused, sync API called from inside an event loop); OSError/
+    # RuntimeError/ValueError/TypeError cover the driver handshake.
+    try:
         with sync_playwright() as p:
             b = p.chromium.launch(headless=True)
             b.close()
         return True
-    except Exception:
+    except (PlaywrightError, OSError, RuntimeError, ValueError, TypeError):
         return False
 
 

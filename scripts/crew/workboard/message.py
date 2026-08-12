@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from collections.abc import Sequence
@@ -41,8 +42,6 @@ def _canonical_repo_root() -> Path:
     """
     local_root = Path(__file__).resolve().parents[3]
     try:
-        import subprocess
-
         out = subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             cwd=str(local_root),
@@ -57,7 +56,12 @@ def _canonical_repo_root() -> Path:
             # checkout and every linked worktree.
             if common.name == ".git" and common.parent.exists():
                 return common.parent
-    except Exception:
+    # git unavailable / not a repo / slow (OSError, SubprocessError) or an
+    # unparseable path (ValueError) -> fall back to this script's own worktree
+    # root. This MUST NOT raise: it runs at module import time, so an exception
+    # here would make every `message` command -- the inter-agent delivery
+    # path -- unimportable rather than merely worktree-local.
+    except (OSError, ValueError, subprocess.SubprocessError):
         pass
     return local_root
 
@@ -507,7 +511,12 @@ def _load_messages(lines: Sequence[str], section: tuple[int, int]) -> tuple[list
             continue
         try:
             rows.append(_normalize_message_fields(fields))
-        except Exception as exc:
+        # _normalize_message_fields validates through _format_message, which
+        # raises ValueError for a bad state/priority/kind/decision or a missing
+        # required field; the rest guard a malformed field mapping. A malformed
+        # bullet must be RECORDED and skipped, never crash the reader that
+        # surfaces inbound agent directives.
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
             errors.append(f"line {idx + 1}: {exc}")
     return rows, errors
 
@@ -773,7 +782,12 @@ def audit_messages(
                 continue
             try:
                 rows.append(_normalize_message_fields(fields))
-            except Exception as exc:
+            # Same contract as _load_messages: _format_message raises ValueError
+            # for an invalid state/priority/kind/decision or a missing required
+            # field. The audit must record a malformed bullet as a parse error
+            # and keep scanning -- raising would blind the inbox audit to every
+            # message below the first bad line.
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
                 parse_errors.append({"line": idx + 1, "error": str(exc), "text": stripped})
                 if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
                     candidate_mentions.append({"line": idx + 1, "kind": "invalid_bullet", "text": stripped})

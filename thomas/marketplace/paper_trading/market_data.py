@@ -9,6 +9,7 @@ This is read-only market data; it is SSRF-guarded and pinned to the Yahoo hosts.
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.request
@@ -61,7 +62,12 @@ def _fetch_yahoo(symbol: str, rng: str) -> list[Bar]:
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (host-pinned)
             payload = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
+    # The whole urllib surface: URLError/HTTPError, socket timeouts and TLS
+    # failures are OSError subclasses; a truncated or malformed response arrives
+    # as http.client.HTTPException; a bad body decodes into UnicodeDecodeError or
+    # json.JSONDecodeError, both ValueError subclasses. Every one of these is an
+    # expected remote-data fault and has to reach the caller as MarketDataError.
+    except (OSError, http.client.HTTPException, ValueError) as exc:
         raise MarketDataError(f"fetch failed for {symbol}: {type(exc).__name__}: {exc}") from exc
 
     try:

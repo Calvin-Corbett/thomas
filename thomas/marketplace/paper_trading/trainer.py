@@ -14,6 +14,8 @@ deterministic; an LLM-driven Trader can be supplied via the ``decide`` hook.
 
 from __future__ import annotations
 
+import logging
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -34,7 +36,36 @@ from thomas.marketplace.paper_trading.market_data import load_daily_bars
 from thomas.marketplace.paper_trading.replay import ReplayBroker
 from thomas.marketplace.paper_trading.store import PaperTradingStore
 
+log = logging.getLogger(__name__)
+
 DecideFn = Callable[..., Awaitable[None]]
+
+# What one simulated decision day can fail with: the module's own errors (risk
+# rejection, invalid symbol, the sim-only assertion), the replay broker's bar
+# lookups (LookupError) and its price maths (ArithmeticError), argument-shape
+# faults from a caller-supplied Trader, and the per-run state file (OSError).
+# A bad day must not abort a backtest -- but an ImportError or a NameError in the
+# Trader is a bug in the code under test and has to surface as one.
+_DECIDE_FAULTS = (
+    PaperTradingError,
+    ArithmeticError,
+    AttributeError,
+    LookupError,
+    OSError,
+    TypeError,
+    ValueError,
+)
+
+# Same duck-typed memory-engine surface scoring.record_lesson names.
+_MEMORY_WRITE_FAULTS = (
+    AttributeError,
+    LookupError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    sqlite3.Error,
+)
 
 
 def _assert_sim(broker: Any) -> None:
@@ -148,8 +179,11 @@ async def run_training(
         if step % max(cadence_days, 1) == 0:
             try:
                 await decide(engine, broker, symbol=symbol)
-            except Exception:
-                pass  # one bad decision day must not abort the whole run
+            except _DECIDE_FAULTS:
+                # One bad decision day must not abort the whole run -- but say so,
+                # otherwise a Trader that fails every single day still produces a
+                # clean-looking grade with an untouched equity curve.
+                log.debug("training decide step failed on %s day %s", symbol, step, exc_info=True)
         acct = await broker.get_account()
         equity_curve.append({"date": broker.current_date(), "equity": acct.equity})
         if not broker.advance():
@@ -183,8 +217,8 @@ async def run_training(
                     lessons.headline,
                     {"symbol": symbol.upper(), "alpha_pct": grade.alpha_pct, "grade": grade.grade_letter},
                 )
-        except Exception:
-            pass
+        except _MEMORY_WRITE_FAULTS:
+            log.debug("coach grade not written to memory for %s", symbol, exc_info=True)
 
     return {
         "run_id": run_id,

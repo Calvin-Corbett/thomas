@@ -54,7 +54,14 @@ def _run_git(root: str | Path, args: list[str], timeout: int = _DEFAULT_TIMEOUT)
             errors="replace",
         )
         return proc.returncode, (proc.stdout or ""), (proc.stderr or "")
-    except Exception as exc:  # noqa: BLE001 -- git must never crash the server.
+    # git must never crash the server. subprocess.run against the git binary fails
+    # in exactly three shapes: the process cannot be spawned (OSError -- git not on
+    # PATH, root not a directory, no fd/handle available), it runs but misbehaves
+    # (subprocess.SubprocessError, whose TimeoutExpired is the one that actually
+    # fires here), or its output cannot be decoded (UnicodeDecodeError, a ValueError
+    # subclass -- named because errors="replace" makes it unlikely, not impossible,
+    # and ValueError also covers an invalid argument combination).
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError, ValueError) as exc:
         return 1, "", str(exc)
 
 
@@ -218,7 +225,11 @@ def commit_run_snapshot(root: str | Path, *, run_id: str = "", reason: str = "")
         from thomas.forge.anvil.forge_code_projects import is_task_born_project, shield_thomas_dir
 
         if not is_task_born_project(root):
-            return {"committed": False, "commit": "", "reason": "not a task-born project; its history belongs to the user"}
+            return {
+                "committed": False,
+                "commit": "",
+                "reason": "not a task-born project; its history belongs to the user",
+            }
         # Task-born projects minted before the shield existed still show their
         # own stamp as `?? .thomas/...`; planting it here self-heals them, and
         # it is what leaves the tree fully CLEAN after the commit below -- the

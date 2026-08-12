@@ -177,7 +177,13 @@ def _test_persistence_survival() -> tuple[float, str]:
         if read == val:
             return 100.0, "Round-trip OK."
         return 0.0, f"Mismatch: wrote {val!r}, read {read!r}"
-    except Exception as e:
+    # PersistenceEngine is JSON-file backed: the store failing to load or save is
+    # OSError, a corrupt/unserialisable payload is ValueError (json.JSONDecodeError)
+    # or TypeError, the singleton failing to construct is RuntimeError, and the lazy
+    # import not resolving is ImportError. AttributeError/KeyError cover a
+    # persistence API that has drifted from what this probe calls. All of them are
+    # legitimately "score 0 with a reason" -- that is what this function reports.
+    except (ImportError, OSError, AttributeError, KeyError, RuntimeError, TypeError, ValueError) as e:
         return 0.0, f"Error: {e}"
 
 
@@ -346,7 +352,11 @@ class TestingSuite:
         try:
             with RESULTS_FILE.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(r.to_dict()) + "\n")
-        except Exception as e:
+        # Opening/appending the results file is OSError; serialising the cycle
+        # result is TypeError (a non-JSON value in the dict) or ValueError (a
+        # NaN/inf score, or a circular reference). Losing one results line must
+        # not stop the background cycle, which is why this is caught at all.
+        except (OSError, TypeError, ValueError) as e:
             log.warning("TestingSuite: write failed: %s", e)
 
         if r.complete_composite is None:

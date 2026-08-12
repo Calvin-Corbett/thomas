@@ -69,7 +69,11 @@ def main() -> int:
                 redirect_uri=start.redirect_uri,
             )
         )
-    except Exception as exc:  # noqa: BLE001 - surface the auth error plainly
+    # exchange_code_for_tokens funnels every transport/HTTP/JSON fault into
+    # OpenAICodexOAuthError (a RuntimeError subclass); asyncio.run contributes
+    # RuntimeError, and a mangled paste can surface OSError/ValueError. Surface
+    # the auth error plainly instead of a traceback -- a human is at this prompt.
+    except (RuntimeError, OSError, ValueError) as exc:
         print(f"\n[error] Token exchange failed: {exc}")
         return 1
 

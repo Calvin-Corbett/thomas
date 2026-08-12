@@ -64,6 +64,32 @@ Versioning: Semantic Versioning.
   they were meant to be. Identical at runtime, but the raw bytes made grep,
   ripgrep and diff classify the file as binary and refuse to show its contents.
 
+### Changed (broad exception handlers named instead of catching everything)
+
+- Merging this branch would have added **127 broad `except Exception:` handlers**
+  to `main`. Each had slipped past a ratchet that compares against the previous
+  commit; nothing enforced the cumulative view until a landing PR forced it. The
+  policy in `agent_safety.toml` allows a broad catch only with BOTH logging and
+  re-raise, so these are now narrowed to named types.
+- **Nothing starts raising.** Every one of these is a deliberate degrade -- fail
+  closed, best effort, record-and-continue -- so the tuples are wide rather than
+  clever. The point is to name what is caught, not to change which paths survive.
+  Where a re-raise would have converted a controlled degrade into a crash, it was
+  not added: the spend governor would have abandoned a running child process that
+  is still spending money, and the stress harnesses would have lost the whole
+  scorecard on the first bad sample, because `run_all.main()` has no handler of
+  its own.
+- Six PROBLEM.md records that existed on disk but had **never been committed** --
+  the oldest from 2026-05-29 -- are now tracked. The workboard gate had been
+  passing locally (file present) and failing in CI (file absent from the repo);
+  the gate was right and the thing that writes those records simply never staged
+  them.
+- Left alone deliberately: `thomas/core/model_resolution.py`. Its
+  `thomas.core -> thomas.server` import predates this work and is **allowed by
+  `_architecture.py` while forbidden by `agent_safety.toml`**, so any commit
+  touching that file is blocked by one rule and blessed by the other. Resolving
+  it is an architecture decision, not a cleanup.
+
 ### Removed (1,829 lines of front-end code nothing could reach)
 
 - The chat presence layer (the robot that walked around the chat): every entry

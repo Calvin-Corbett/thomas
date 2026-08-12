@@ -17,6 +17,7 @@ from thomas.server.app_keys import APP_CONFIG, APP_SECRETS
 from thomas.server.openai_codex_oauth import (
     OPENAI_CODEX_REDIRECT_URI,
     OAuthStart,
+    OpenAICodexOAuthError,
     clear_openai_codex_token,
     exchange_code_for_tokens,
     has_openai_codex_token,
@@ -100,12 +101,15 @@ class _OAuthCallbackServer:
             await runner.setup()
             site = web.TCPSite(runner, "localhost", 1455)
             await site.start()
-        except Exception as e:
+        # Binding the fixed loopback callback port: OSError covers "address in
+        # use" and permission refusals, RuntimeError covers a runner/loop that is
+        # already set up or shutting down. Sign-in then falls back to paste-the-URL.
+        except (OSError, RuntimeError) as e:
             log.warning("Native ChatGPT OAuth callback server unavailable: %s", e)
             try:
                 await runner.cleanup()
-            except Exception:
-                pass
+            except (OSError, RuntimeError):  # tearing down a runner that never came up
+                log.debug("OAuth callback runner cleanup failed", exc_info=True)
             self._runner = None
             self._site = None
             return
@@ -218,7 +222,12 @@ def register_openai_codex_routes(
             raise web.HTTPBadRequest(text="OAuth code is required")
         try:
             return await _exchange_pending(request, pending, code)
-        except Exception as e:
+        # The exchange raises OpenAICodexOAuthError for every provider-side
+        # refusal; the surrounding work is a secret-store write (OSError) and
+        # response shaping (ValueError/TypeError/KeyError). Report the reason to
+        # the sign-in UI instead of a bare 500 page.
+        except (OpenAICodexOAuthError, OSError, ValueError, TypeError, KeyError) as e:
+            log.warning("ChatGPT OAuth token exchange failed: %s", e)
             return web.json_response({"ok": False, "error": str(e), "profile": pending.flow.profile}, status=500)
 
     async def api_login(request: web.Request) -> web.Response:
@@ -254,7 +263,8 @@ def register_openai_codex_routes(
             return web.json_response({"ok": False, "error": pending.error, "profile": profile}, status=500)
         try:
             return await _exchange_pending(request, pending, pending.code)
-        except Exception as e:
+        except (OpenAICodexOAuthError, OSError, ValueError, TypeError, KeyError) as e:  # same set as login_complete
+            log.warning("ChatGPT OAuth token exchange failed: %s", e)
             return web.json_response({"ok": False, "error": str(e), "profile": profile}, status=500)
 
     async def api_logout(request: web.Request) -> web.Response:

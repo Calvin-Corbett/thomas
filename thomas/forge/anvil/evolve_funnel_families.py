@@ -12,6 +12,15 @@ from collections.abc import Callable
 
 __all__ = ["family_of", "lane_families", "select_independent_evaluator", "ModelInfo"]
 
+# ``model_info`` is injected: the default implementation loads thomas.toml and looks
+# a profile up. An unknown or stale profile name surfaces as KeyError, a mis-shaped
+# config entry as AttributeError/TypeError/ValueError (the last also covering the
+# ``provider, model = ...`` unpack of a wrong-length return), an unreadable config
+# as OSError, and a missing provider package as ImportError. Every one of those
+# means "this profile contributes no family", which is what both callers assume --
+# they skip it. Kept named so a real bug in the injected callable still surfaces.
+_MODEL_INFO_ERRORS = (AttributeError, ImportError, KeyError, OSError, TypeError, ValueError)
+
 
 def family_of(provider: str, model: str) -> str:
     """Coarse model-family identity from a provider name + model id."""
@@ -44,7 +53,7 @@ def lane_families(lane_profiles: list[str], model_info: ModelInfo) -> set[str]:
     for prof in lane_profiles:
         try:
             provider, model = model_info(prof)
-        except Exception:  # noqa: BLE001 - unknown profile -> skip, do not crash selection
+        except _MODEL_INFO_ERRORS:  # unknown profile -> skip, do not crash selection
             continue
         fams.add(family_of(provider, model))
     return fams
@@ -64,7 +73,7 @@ def select_independent_evaluator(
     for prof in candidates or []:
         try:
             provider, model = model_info(prof)
-        except Exception:  # noqa: BLE001
+        except _MODEL_INFO_ERRORS:  # unusable candidate -> try the next one
             continue
         fam = family_of(provider, model)
         if fam and fam not in used_families:

@@ -12,6 +12,7 @@ Local model path (profile=local) so it runs without the flaky codex bridge.
 Usage: python persona_sweep.py [base_url]
 """
 
+import http.client
 import json
 import sys
 import time
@@ -71,8 +72,8 @@ def post_chat(session_id, message, autonomy):
                 continue
             try:
                 evt = json.loads(line)
-            except Exception:
-                continue
+            except (json.JSONDecodeError, TypeError):
+                continue  # a non-JSON keepalive/framing line: skip it
             t = evt.get("type")
             if t == "text":
                 text_parts.append(str(evt.get("text") or ""))
@@ -89,7 +90,12 @@ def card_title(session_id):
             d = json.load(r)
         rows = d.get("delegations") or []
         return rows[0].get("summary") if rows else ""
-    except Exception:
+    # A missing card is reported as "" so the sweep row still scores; this
+    # probe must never abort the sweep. urllib's URLError/HTTPError and socket
+    # timeouts are OSError, a truncated body is http.client.HTTPException,
+    # ValueError covers json.JSONDecodeError, and AttributeError/TypeError an
+    # unexpected payload shape.
+    except (OSError, http.client.HTTPException, ValueError, TypeError, AttributeError):
         return ""
 
 
@@ -99,7 +105,11 @@ def main():
         sid = f"sweep-{persona}-{i}"
         try:
             reply, dispatched, done, ms = post_chat(sid, msg, autonomy)
-        except Exception as exc:
+        # Per-case error boundary: one failing case is recorded and the sweep
+        # continues, so this degrade is load-bearing. Same fault set as
+        # card_title -- transport/timeout (OSError), truncated stream
+        # (http.client.HTTPException), bad payload (ValueError/TypeError).
+        except (OSError, http.client.HTTPException, ValueError, TypeError) as exc:
             rows.append({"persona": persona, "msg": msg, "error": str(exc)})
             continue
         low = reply.lower()

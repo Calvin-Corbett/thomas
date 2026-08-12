@@ -17,13 +17,22 @@ from _harness import Recorder
 
 A = "readable-deliverables"
 
+# This is a sweep, not a unit test: `run_all.main()` calls every sweep's `run()`
+# with no handler of its own, so an escaping exception kills the whole scorecard.
+# The capability probe below therefore RECORDS an absent renderer as a failed row
+# and keeps sweeping. Named rather than broad: ImportError means the module is
+# absent, AttributeError that a symbol was renamed, and OSError/RuntimeError/
+# KeyError/TypeError/ValueError cover a module whose import-time setup fails.
+# Anything else is a harness defect and should stop the run loudly.
+_PROBE_SETUP_ERRORS = (ImportError, AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError)
+
 
 def run() -> Recorder:
     rec = Recorder("readable_deliverables")
     try:
         from thomas.server.chat_delegation_deliverable import render_report_pdfs
         from thomas.server.deliverable_render import markdown_to_html, render_markdown_to_pdf
-    except Exception as e:  # noqa: BLE001
+    except _PROBE_SETUP_ERRORS as e:
         rec.add(
             case="markdown->PDF render capability exists",
             dimension=A,
@@ -63,7 +72,15 @@ def run() -> Recorder:
     try:
         markdown_to_html("```\nunclosed\n\n| a |\n| - |\n> > deep\n" + "#" * 80)
         robust = True
-    except Exception:  # noqa: BLE001
+    # markdown_to_html is pure string work over `html` + `re` -- it touches no I/O
+    # and calls nothing external, so the ways malformed input can break it are:
+    # indexing past a truncated table row or fence (IndexError), a missing group or
+    # key while walking the parse state (KeyError, AttributeError), a coercion on a
+    # part that is not the expected type (TypeError, ValueError), and blowing the
+    # stack on the deeply-nested blockquote/heading input above (RecursionError).
+    # That is the claim this probe makes -- narrowing keeps it honest instead of
+    # letting an unrelated crash be filed as "not robust".
+    except (AttributeError, IndexError, KeyError, RecursionError, TypeError, ValueError):
         robust = False
     rec.add(
         case="renderer survives malformed markdown without raising",

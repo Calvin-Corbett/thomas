@@ -21,6 +21,7 @@ This module is the public facade: the data model lives in
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,8 @@ __all__ = [
     "render_backlog_markdown",
     "dumps_backlog",
 ]
+
+log = logging.getLogger(__name__)
 
 
 def plan_backlog(
@@ -97,7 +100,14 @@ def plan_backlog(
     if ranker is not None:
         try:
             reordered = ranker(list(candidates), focus_category)
-        except Exception:  # noqa: BLE001 - best-effort refinement must not break planning
+        # Best-effort refinement must not break planning -- the deterministic order
+        # already stands. ``ranker`` is a caller-injected seam that may reach a model,
+        # so this names the transport (OSError), the client/config guards
+        # (RuntimeError, ImportError) and the shape faults of an arbitrary callable
+        # over the goal objects (AttributeError, IndexError, KeyError, TypeError,
+        # ValueError -- the last covering json.JSONDecodeError on a model ranking).
+        except (AttributeError, ImportError, IndexError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            log.debug("evolve planner ranker failed; keeping deterministic order: %s", exc)
             reordered = None
         if reordered:
             candidates = list(reordered)

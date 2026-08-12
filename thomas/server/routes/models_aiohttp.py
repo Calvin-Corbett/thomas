@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import sqlite3
 from collections.abc import Callable
 from typing import Any
 
@@ -16,6 +18,8 @@ from thomas.models.discovery import discover_models_async, handshake_models_asyn
 from thomas.models.protocol import validate_model_profile_async
 from thomas.server.app_keys import APP_CONFIG, APP_RUNTIME_GUARD_STATE, APP_SECRETS
 from thomas.server.secrets import SecretStore
+
+log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ModelCfgFn = Callable[[str], Any]
@@ -176,7 +180,12 @@ def _model_preferences_payload() -> dict[str, Any]:
             "role_profiles": dict(getattr(model_prefs, "role_profiles", {}) or {}),
             "role_model_ids": dict(getattr(model_prefs, "role_model_ids", {}) or {}),
         }
-    except Exception:
+    # The preferences store is sqlite behind an optional import: ImportError if the
+    # module is absent, OSError/sqlite3.Error for the file and the query, and
+    # TypeError/ValueError/AttributeError for a row that is not shaped like the
+    # model prefs. Defaults are a legitimate answer, but say why they were used.
+    except (ImportError, OSError, sqlite3.Error, TypeError, ValueError, AttributeError):
+        log.warning("Model preferences unavailable; reporting defaults", exc_info=True)
         return {
             "active_profile": "",
             "model_id": "",
@@ -206,7 +215,11 @@ def register_models_routes(
                     from thomas.server.openai_codex_oauth import has_openai_codex_token
 
                     has_key = bool(m.api_key or has_openai_codex_token(secrets, name))
-                except Exception:
+                # Reading a stored OAuth token: ImportError if the OAuth module is
+                # absent, OSError for the secret file, ValueError/TypeError/KeyError
+                # for a token blob that will not parse. Fall back to the plain key.
+                except (ImportError, OSError, ValueError, TypeError, KeyError):
+                    log.debug("openai_codex token probe failed for profile %s", name, exc_info=True)
                     has_key = bool(m.api_key)
             else:
                 has_key = bool(secrets.get(name) or m.api_key)
@@ -301,11 +314,11 @@ def register_models_routes(
 
         try:
             handshake_timeout_s = float(request.query.get("timeout", "3.0"))
-        except Exception:
+        except (TypeError, ValueError):  # a query string that is not a number -> use the default
             handshake_timeout_s = 3.0
         try:
             tool_timeout_s = float(request.query.get("tool_timeout", "20.0"))
-        except Exception:
+        except (TypeError, ValueError):
             tool_timeout_s = 20.0
 
         profile_cfg = model_cfg_with_secrets(profile)

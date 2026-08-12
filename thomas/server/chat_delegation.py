@@ -426,7 +426,22 @@ async def _start_canvas_worker_delegation(
                 record_runtime=_record_runtime,
                 runtime_policy=runtime_policy,
             )
-        except Exception as exc:  # noqa: BLE001 - surface as a failed card, don't crash anything
+        # Deliberately wide, and named rather than blanket. run_canvas_worker
+        # funnels its own failures into RuntimeError (_CanvasStall, _CanvasCancelled
+        # and ChatBudgetError are all RuntimeError subclasses), but underneath it
+        # writes files (OSError), waits on a provider stream (asyncio.TimeoutError)
+        # and reshapes model output (ValueError/TypeError/KeyError/AttributeError).
+        # This is a background task: its whole job is to turn a failure into a
+        # failed card, so re-raising here would only orphan the exception.
+        except (
+            OSError,
+            RuntimeError,
+            asyncio.TimeoutError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+        ) as exc:
             log.exception("Canvas worker failed for %s (%s)", execution_id, type(exc).__name__)
             canvas_finish(execution_id, "failed")
             safe_error = "Canvas generation failed before a verified result was produced."

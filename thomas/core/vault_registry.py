@@ -35,10 +35,13 @@ here are ones the filesystem guard refuses regardless.
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 
 import tomllib
+
+log = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,8 +72,20 @@ def _load() -> tuple[frozenset[str], tuple[str, ...]]:
         rp = data.get("runtime_protection") or {}
         files.update(_norm(f) for f in (rp.get("protected_files") or []))
         dirs.extend(_norm(d) for d in (rp.get("protected_dirs") or []))
-    except Exception:  # pragma: no cover - missing/malformed config -> empty Vault, fs layer still guards
-        pass
+    # A missing/unreadable agent_safety.toml is OSError; a malformed one is
+    # tomllib.TOMLDecodeError and a non-UTF-8 one UnicodeDecodeError -- both
+    # ValueError subclasses. If a key holds a scalar where a table was expected,
+    # ``rp.get`` raises AttributeError; if it holds a non-iterable where a list was
+    # expected, the comprehensions raise TypeError. All four leave an empty Vault,
+    # which is the documented fail-open behaviour above (the filesystem guard in
+    # thomas/tools/filesystem.py keeps its own hardcoded copy and fails closed).
+    # Logged rather than silent so a corrupt config is visible, not just inert.
+    except (OSError, AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
+        log.warning(
+            "Vault registry could not read %s; reporting an empty Vault",
+            _REPO_ROOT / "agent_safety.toml",
+            exc_info=True,
+        )
     return frozenset(f for f in files if f), tuple(d for d in dirs if d)
 
 

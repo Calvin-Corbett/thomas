@@ -208,7 +208,13 @@ def _mark_completion_reported(execution_id: str) -> None:
             execution_id,
             reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         )
-    except Exception:
+    # The runtime ledger is a JSON file: a missing execution record raises
+    # FileNotFoundError and a read/write fault raises OSError; a rejected state
+    # transition, an unparseable ledger, or a bad row shape raise
+    # ValueError/LookupError/TypeError; the lazy import can raise ImportError.
+    # Dedup is still correct without the flag -- the in-memory set holds for this
+    # process -- so none of these may break the chat turn.
+    except (ImportError, OSError, ValueError, LookupError, TypeError, AttributeError):
         log.debug("Could not persist reported_to_chat flag for %s", execution_id, exc_info=True)
 
 
@@ -888,7 +894,11 @@ class OrchestratorBrain:
                     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                         log.debug("remember promotion failed", exc_info=True)
                 return True
-            except Exception:
+            # Same memory-store surface the promotion catch above names, plus
+            # AttributeError for an engine missing add_event. Returning False is
+            # load-bearing: reasoning.py only claims "Saved to your memory" when
+            # this returns True, so a failure here must stay a False, not a raise.
+            except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 log.debug("remember failed", exc_info=True)
                 return False
 
@@ -914,7 +924,13 @@ class OrchestratorBrain:
                     )
                 res = _mem.retrieve(query=str(query or ""), thread=_mem_thread)
                 return str(getattr(res, "text", None) or res or "").strip()
-            except Exception:
+            # Retrieval hits the same store as the write path above (OSError,
+            # sqlite3.Error, RuntimeError), plus the int() coercions of the
+            # runtime memory policy (TypeError/ValueError), a policy setter or
+            # retrieve() the engine does not implement (AttributeError), and a
+            # missing key in whatever it returns (LookupError). An empty string
+            # is the honest answer for all of them.
+            except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 log.debug("recall failed", exc_info=True)
                 return ""
 

@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 # A model call: (system_prompt, user_prompt, profile) -> response text.
 # Injected everywhere so the orchestration is fully testable without a real LLM.
@@ -214,6 +217,14 @@ async def _collect_text(client: Any, messages: list[dict[str, str]]) -> str:
         if close is not None:
             try:
                 await close()
-            except Exception:  # noqa: BLE001 - best-effort cleanup
-                pass
+            # Best-effort cleanup, and it runs in a `finally`: anything raised here
+            # would REPLACE a real streaming error from the try above, so the set is
+            # deliberately generous. Closing an aiohttp-backed client after the loop
+            # has gone gives RuntimeError, a socket/file teardown gives OSError, and
+            # ``client`` is duck-typed (Any, injectable in tests) so a close() that
+            # is not awaitable or takes arguments gives TypeError/AttributeError.
+            # Logged at debug rather than swallowed silently -- a close failure is
+            # noise on a healthy path but must still be discoverable.
+            except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+                log.debug("funnel model client close failed (non-fatal): %s", exc)
     return "".join(parts).strip()

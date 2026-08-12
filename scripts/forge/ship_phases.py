@@ -67,7 +67,12 @@ def quickbuilder_active() -> bool:
         from scripts.forge.gates._quickbuilder_guard import quickbuilder_active as _qb
 
         return bool(_qb(_REPO_ROOT))
-    except Exception:
+    # Fail CLOSED to "not active" so every gate runs: an absent or unreadable
+    # guard module must never be able to *enable* QuickBuilder, and must never
+    # abort `thomas ship` either. The guard already swallows its own IO/parse
+    # faults internally, so ImportError is the realistic case here; OSError,
+    # ValueError and AttributeError cover a damaged install of it.
+    except (ImportError, OSError, ValueError, AttributeError):
         return False
 
 

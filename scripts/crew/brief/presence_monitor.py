@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -36,14 +37,19 @@ def _parent_alive(pid: int) -> bool:
         return True
     try:
         import psutil  # type: ignore
-
-        return bool(psutil.pid_exists(pid))
-    except Exception:  # noqa: BLE001 - psutil optional; fall back to OS probes
-        pass
+    except ImportError:
+        pass  # psutil is optional; fall through to the OS probes below
+    else:
+        try:
+            return bool(psutil.pid_exists(pid))
+        # psutil.Error is the base of every psutil fault; OSError/ValueError
+        # cover a platform probe failure or a non-integral pid. Falling through
+        # to the OS probes is load-bearing -- raising here would kill the
+        # monitor and strand this agent's claim as permanently "live".
+        except (psutil.Error, OSError, ValueError):
+            pass
     try:
         if os.name == "nt":
-            import subprocess
-
             out = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {int(pid)}"],
                 capture_output=True,
@@ -53,7 +59,11 @@ def _parent_alive(pid: int) -> bool:
             return str(int(pid)) in (out or "")
         os.kill(int(pid), 0)
         return True
-    except Exception:  # noqa: BLE001 - any probe failure -> treat as gone (fail safe to offline)
+    # Any probe failure -> treat as gone (fail SAFE to offline, which lets the
+    # claim expire). tasklist missing/unrunnable and os.kill faults are OSError,
+    # a timeout is subprocess.SubprocessError, a bad pid is ValueError. This
+    # must not raise: an exception would stop the heartbeat loop uncleanly.
+    except (OSError, ValueError, subprocess.SubprocessError):
         return False
 
 

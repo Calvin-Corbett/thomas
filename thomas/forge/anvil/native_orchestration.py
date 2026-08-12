@@ -408,7 +408,12 @@ def _git_dirty_paths(project_root: Path) -> list[str]:
             encoding="utf-8",
             errors="replace",
         )
-    except Exception:  # noqa: BLE001 - status is advisory for planning
+    # `git status` here is advisory for planning, so an empty list is a valid
+    # answer. Spawning git fails with OSError (not on PATH, project_root missing),
+    # the run itself with subprocess.SubprocessError (TimeoutExpired at 20s), and
+    # decoding its output with UnicodeDecodeError -- a ValueError subclass, named
+    # because errors="replace" makes it unlikely rather than impossible.
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError, ValueError):
         return []
     paths: list[str] = []
     for raw in (proc.stdout or "").splitlines():

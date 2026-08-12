@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import functools
 import http.server
+import logging
 import re
 import socket
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -130,8 +133,11 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
         entry = entry_path.name
 
     try:
+        from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import sync_playwright
-    except Exception as e:  # noqa: BLE001
+    # Playwright is an optional extra: ImportError when it is not installed,
+    # OSError when the package is present but its driver files are not.
+    except (ImportError, OSError) as e:
         return RuntimeResult(ok=True, skipped=True, entry=entry, reason=f"playwright unavailable: {e}")
 
     port = _free_port()
@@ -152,8 +158,12 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
         try:
             if resp.status >= 400 and resp.url.startswith(base):
                 failed_assets.append(f"{resp.status} {resp.url[len(base) :]}")
-        except Exception:  # noqa: BLE001
-            pass
+        # A response handle whose page already closed raises PlaywrightError;
+        # a response object without the attributes we read raises
+        # AttributeError/TypeError/ValueError. One unreadable response must not
+        # take down the listener that is collecting the rest.
+        except (PlaywrightError, AttributeError, TypeError, ValueError):
+            log.debug("runtime verify: unreadable response event", exc_info=True)
 
     sig: dict = {}
     try:
@@ -189,7 +199,12 @@ def runtime_smoke_load(root: str | Path, entry: str = "index.html", *, timeout_m
                 sig = best or {}
             finally:
                 browser.close()
-    except Exception as e:  # noqa: BLE001 — a check failure must never block finalize
+    # A check failure must never block finalize, so this stays deliberately wide:
+    # PlaywrightError for every browser and page fault, OSError for the loopback
+    # server and the driver pipe, and RuntimeError/ValueError/TypeError/
+    # AttributeError/KeyError for the probe's own JSON coming back mis-shaped.
+    # The result is reported as skipped, never as a failed deliverable.
+    except (PlaywrightError, OSError, RuntimeError, ValueError, TypeError, AttributeError, KeyError) as e:
         return RuntimeResult(ok=True, skipped=True, entry=entry, reason=f"runtime check error: {type(e).__name__}: {e}")
     finally:
         httpd.shutdown()

@@ -22,7 +22,11 @@ def _policy_path() -> Path:
         from thomas.preferences._utils import get_db_path
 
         base = Path(get_db_path()).expanduser().parent
-    except Exception:
+    # ImportError if the preferences package is absent, OSError when the home
+    # directory cannot be resolved, and ValueError/TypeError when get_db_path
+    # hands back something Path() will not take. Any of those means "use the
+    # default location" -- the policy still has somewhere to live.
+    except (ImportError, OSError, ValueError, TypeError):
         base = Path.home() / ".thomas"
     return base / "guardrails_policy.json"
 

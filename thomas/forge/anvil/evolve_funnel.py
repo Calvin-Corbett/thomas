@@ -115,7 +115,13 @@ def _run_external_evaluator(
             findings=list(obj.get("findings") or []),
             reason=str(obj.get("reason", "")),
         )
-    except Exception as exc:  # noqa: BLE001 - evaluator failure must not crash the run
+    # Two failure surfaces: reaching the evaluator model (OSError for the transport,
+    # RuntimeError for a client/config guard) and reading what it said back. Model
+    # output is untrusted and malformed constantly, so parse_json_block plus the
+    # dict/str coercions above give ValueError (json.JSONDecodeError included),
+    # TypeError, KeyError, IndexError and AttributeError. The evaluator is advisory
+    # and fail-closed-only, so its failure is recorded as verdict="error".
+    except (AttributeError, IndexError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         check.update(verdict="error", broke_it=False, findings=[], reason=f"evaluator error: {exc}")
     return check
 
@@ -164,7 +170,12 @@ def run_funnel_session(
     try:
         mc = model_call or DefaultModelCall(root, lane_profile)
         minfo = model_info or _default_model_info(root)
-    except Exception as exc:  # noqa: BLE001
+    # Setup only builds the model-call adapters: it loads thomas.toml (OSError,
+    # ValueError for a malformed file) and looks up a profile (KeyError,
+    # AttributeError, TypeError for a missing/mis-shaped entry, RuntimeError from
+    # the client's own guards, ImportError if a provider package is absent). Any of
+    # those means "the funnel cannot run", which is exactly the classic fallback.
+    except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         return _classic(None, {"mode": "funnel", "fallback": f"setup_failed: {exc}"})
 
     budget = CallBudget(limit=max(1, cfg.max_model_calls_per_goal))
@@ -190,7 +201,14 @@ def run_funnel_session(
             profile=lane_profile,
             budget=budget,
         )
-    except Exception as exc:  # noqa: BLE001 - any stage failure falls back to classic
+    # Each stage fans out model calls in a thread pool and then parses what comes
+    # back. A dead lane is already swallowed inside _run_lanes, so what reaches here
+    # is a synthesis/scoring failure: malformed model output (ValueError -- which
+    # covers json.JSONDecodeError -- TypeError, KeyError, IndexError, AttributeError)
+    # or the transport/executor giving out (OSError, RuntimeError, which is also the
+    # base of concurrent.futures.BrokenExecutor). The classic builder still runs, so
+    # the loop never breaks -- that is the documented contract of this module.
+    except (AttributeError, IndexError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
         return _classic(None, {"mode": "funnel", "fallback": f"stage_failed: {exc}", "calls": budget.used})
 
     enriched_goal = (

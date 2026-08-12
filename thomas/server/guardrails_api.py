@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from aiohttp import web
 
 from thomas.agent.approval import ApprovalBroker
+
+# What a request body can realistically fail with. Only decode faults are the
+# client's fault and answerable with a 400; a transport failure is not.
+_JSON_BODY_ERRORS = (json.JSONDecodeError, TypeError, UnicodeDecodeError)
 
 
 def _parse_decision(payload: dict[str, Any], *, default: bool | None = None) -> bool | None:
@@ -53,7 +58,7 @@ def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -
             return web.json_response({"ok": False, "error": "localhost only"}, status=403)
         try:
             data = await request.json()
-        except Exception:
+        except _JSON_BODY_ERRORS:
             return web.json_response({"ok": False, "error": "invalid json"}, status=400)
         if not isinstance(data, dict):
             data = {}
@@ -92,7 +97,7 @@ def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -
             return web.json_response({"ok": False, "error": "localhost only"}, status=403)
         try:
             data = await request.json()
-        except Exception:
+        except _JSON_BODY_ERRORS:
             return web.json_response({"ok": False, "error": "invalid json"}, status=400)
         if not isinstance(data, dict):
             return web.json_response({"ok": False, "error": "expected object"}, status=400)

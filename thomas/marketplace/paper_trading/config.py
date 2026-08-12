@@ -9,12 +9,15 @@ no "live mode" flag — going live would be a deliberate, reviewed code change.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from thomas.marketplace.paper_trading._exceptions import LiveTradingBlocked
 from thomas.marketplace.paper_trading._types import RiskRules
+
+log = logging.getLogger(__name__)
 
 # --- Locked endpoints -------------------------------------------------------
 PAPER_TRADING_BASE_URL = "https://paper-api.alpaca.markets"
@@ -98,7 +101,13 @@ def resolve_data_dir(explicit: Path | str | None = None) -> Path:
 
         root = load_config().memory.root_path
         return Path(root) / _PLUGIN_RELATIVE
-    except Exception:
+    # Importing the core config module, reading thomas.toml off disk (a TOML/JSON
+    # decode error is a ValueError subclass), and walking .memory.root_path. A
+    # config that will not load must not stop the plugin from resolving a data
+    # dir -- it falls back to ~/.thomas. Anything outside this set is a real bug
+    # and should surface rather than silently relocate the owner's state file.
+    except (ImportError, OSError, ValueError, TypeError, AttributeError, LookupError):
+        log.debug("core config unavailable; using the ~/.thomas paper-trading dir", exc_info=True)
         return Path.home() / _PLUGIN_RELATIVE
 
 

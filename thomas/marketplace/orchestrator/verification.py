@@ -83,7 +83,11 @@ def run_ruff_check(work_dir: str, result_text: str = "") -> VerificationResult:
             text=True,
             timeout=120,
         )
-    except Exception as exc:  # pragma: no cover - environment dependent
+    # Launching and reading a child process: a missing/unexecutable binary or a
+    # permissions refusal is OSError, the 120s cap and other process faults are
+    # subprocess.SubprocessError, and undecodable output is a ValueError subclass.
+    # None of those mean the workspace is bad, so they must not fail the task.
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:  # pragma: no cover - environment dependent
         return VerificationResult(True, "code", f"lint runner error: {exc}", ("error",))
     ok = proc.returncode == 0
     output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
