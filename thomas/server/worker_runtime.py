@@ -122,7 +122,7 @@ def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = Non
     if role:
         try:
             from thomas.core.model_resolution import resolve_model_profile_name
-            from thomas.server.model_preferences import read_user_model_role_preferences
+            from thomas.preferences.model_prefs import read_user_model_role_preferences
 
             role_profile, _role_model_id = read_user_model_role_preferences(
                 user_id="default", role=role, db_path=db_path

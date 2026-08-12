@@ -177,7 +177,7 @@ class ThomasREPLRuntimeMixin:
         if not resolved_profile:
             return
         try:
-            from thomas.server.model_preferences import persist_user_model_preferences
+            from thomas.preferences.model_prefs import persist_user_model_preferences
 
             persist_user_model_preferences(
                 user_id="default",

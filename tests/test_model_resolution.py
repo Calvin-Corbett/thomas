@@ -4,7 +4,7 @@ from pathlib import Path
 
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.model_resolution import resolve_effective_model, resolve_effective_model_for_role
-from thomas.server.model_preferences import (
+from thomas.preferences.model_prefs import (
     persist_user_model_preferences,
     persist_user_model_role_preference,
 )

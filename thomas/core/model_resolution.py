@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+import logging
+import sqlite3
+
 from thomas.core.config import AppConfig
+
+logger = logging.getLogger(__name__)
+
+# The preference read is imported lazily so loading core never pulls in the
+# sqlite-backed preferences store. These are the failures that path can actually
+# produce: the optional dependency is missing, the sqlite file is unreadable, or
+# the stored key fails to decrypt (thomas/preferences/_db.py raises ValueError on
+# a key mismatch).
+_PREFERENCE_READ_ERRORS = (ImportError, OSError, sqlite3.Error, ValueError)
 
 
 def resolve_model_profile_name(config: AppConfig, profile_name: str | None) -> str:
@@ -38,10 +50,11 @@ def _read_user_model_prefs(config: AppConfig, *, user_id: str, db_path: str | No
     if not user_id:
         return "", ""
     try:
-        from thomas.server.model_preferences import read_user_model_preferences
+        from thomas.preferences.model_prefs import read_user_model_preferences
 
         preferred_profile, preferred_model_id = read_user_model_preferences(user_id=user_id, db_path=db_path)
-    except Exception:
+    except _PREFERENCE_READ_ERRORS:
+        logger.debug("model preference read failed for user %s; using fallback", user_id, exc_info=True)
         return "", ""
 
     preferred_profile = resolve_model_profile_name(config, preferred_profile)
@@ -61,14 +74,20 @@ def _read_user_model_role_prefs(
     if not user_id or not resolved_role:
         return "", ""
     try:
-        from thomas.server.model_preferences import read_user_model_role_preferences
+        from thomas.preferences.model_prefs import read_user_model_role_preferences
 
         preferred_profile, preferred_model_id = read_user_model_role_preferences(
             user_id=user_id,
             role=resolved_role,
             db_path=db_path,
         )
-    except Exception:
+    except _PREFERENCE_READ_ERRORS:
+        logger.debug(
+            "role model preference read failed for user %s role %s; using fallback",
+            user_id,
+            resolved_role,
+            exc_info=True,
+        )
         return "", ""
 
     preferred_profile = resolve_model_profile_name(config, preferred_profile)

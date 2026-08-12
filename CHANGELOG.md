@@ -7,6 +7,44 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+### Added (a place to see what you own)
+
+- **A System Map, because "I didn't know that was there" is not a personal
+  failing when there was no instrument.** The landing heartbeat below answers
+  *is my work safely landed?* It cannot answer the question that came next:
+  *what else is lying around?* Nothing could. Checking meant knowing a dozen
+  git commands, which for you is the same as it being
+  unknowable. The real answer, measured today: 59 versions of the project on
+  this machine and 178 more on the server, **57 separate working copies**
+  scattered across `C:/t/`, `Documents/Codex` and one inside a Windows temp
+  folder that gets cleared without warning, 70 piles of set-aside work whose
+  oldest is still labelled `On master` -- a branch name this project stopped
+  using -- and 592 saved changes that have never reached `main`, which last
+  moved 64 days ago.
+
+  `thomas/core/system_map.py` reads all of it from git and the filesystem in
+  about three seconds: stdlib only, no network, no LLM, and nothing that
+  writes -- no prune, no drop, no delete. It reports; clearing up stays the
+  owner's decision. Every item gets a status in words that mean something
+  without a glossary (`active` / `idle` / `forgotten`), and every list is
+  sorted **oldest first**, the reverse of every other git tool, because the
+  newest branch is the one you already remember.
+
+  `GET /api/system-map` serves it and `/system-map` draws it, reachable from
+  the sidebar rather than by typing a URL. The drawing is the project's own
+  shape: the shared copy runs through the middle as a spine that turns dashed
+  for the 64 days it stopped moving, and every version hangs off it as a
+  thread -- placed along the spine by when it was last touched, reaching out
+  by how much unlanded work it carries, sagging the longer it has been left
+  alone, and curving back in when its work already landed. Separate copies sit
+  as solids on the ends of their threads; set-aside piles drift near the
+  spine. Nothing floats at a coordinate that means nothing, which is why it is
+  a map and not a constellation. Hovering anything says what it is in a full
+  sentence. It is drawn with a hand-built perspective projection on a plain
+  canvas rather than by pulling three.js off a CDN at runtime, so it works
+  offline, adds no third-party code, and follows all five themes from
+  `tokens.css`.
+
 ### Added (nothing was watching the total)
 
 - **A landing heartbeat, so "my work is piling up" is something you can see
@@ -51,6 +89,21 @@ Versioning: Semantic Versioning.
   `unknown` with an honest sentence -- never a crash, never an invented number
   -- when git is missing, the folder is not a project, there is no shared copy
   configured, or the checkout is in a detached state.
+
+### Fixed (a failed preference read was indistinguishable from having no preference)
+
+- **Choosing a model, then silently getting a different one.** Both functions
+  that read your saved model preference wrapped the whole read in
+  `except Exception: return "", ""`. An empty answer is also exactly what the
+  code returns when you have genuinely never picked a model -- so a corrupted
+  preferences database, a missing server extra, or a stale encryption key
+  (`thomas/preferences/_db.py` raises on a key mismatch) all resolved to *use
+  the default model* with nothing written anywhere. The setting appeared to be
+  ignored, and there was no way to find out why. Both handlers now catch only
+  what that path can actually raise -- `ImportError` from the deferred
+  `core -> server` import, `OSError` and `sqlite3.Error` from the database,
+  `ValueError` from the decryption failure -- and record the reason before
+  falling back, so the failure is discoverable instead of invisible.
 
 ### Fixed (the suite could not run, and the gate could not tell)
 
@@ -284,7 +337,7 @@ Versioning: Semantic Versioning.
 - `thomas.webmanifest`, `thomas-icon.svg` and a maskable variant, linked from
   `chat.html`. Without a manifest, `msedge --app=` runs under EDGE's app
   identity, so Windows groups the window with Edge and pins Edge's icon --
-  which is what the owner saw on his taskbar. With one, Thomas installs as his
+  which is what you saw on your taskbar. With one, Thomas installs as your
   own app: own name, own icon, own taskbar slot, `display: standalone` so there
   is no tab strip or address bar. The maskable icon is full-bleed with the eyes
   inside the central safe zone, because the OS applies its own corner radius and
@@ -456,7 +509,7 @@ Versioning: Semantic Versioning.
   deliverable while a VISION model looks at each frame and decides the next
   move. Nothing is scripted to one game; it reads whatever is on screen, so
   it works for anything that plays by looking and pressing. Live frames
-  stream to the viewer over SSE so the owner WATCHES it play, and the run
+  stream to the viewer over SSE so you WATCH it play, and the run
   ends in a verdict — does it work, is it any good, difficulty, bugs — with
   1-3 recommendation buttons Thomas wrote from what he saw. Clicking one
   starts the fix; "or tell Thomas…" hands the composer back. A build that
@@ -481,7 +534,7 @@ Versioning: Semantic Versioning.
 
 ### Added (ui: point at the interface and ask Thomas to change it)
 
-- The Redesign flow lets the owner select a real element in Thomas's own UI
+- The Redesign flow lets you select a real element in Thomas's own UI
   and hand it to Code as a task: `thomas/tools/ui_redesign.py` resolves the
   selector to the source that draws it, `routes/ui_redesign_runtime.py`
   serves the handoff, and `ui_redesign_select.js` / `ui_redesign_target.js`
@@ -547,7 +600,7 @@ Versioning: Semantic Versioning.
   surface points at. Skills copy into the user skills root with a
   provenance sidecar (collisions get a plugin-name prefix, never an
   overwrite); MCP servers register DISABLED with provenance - nothing a
-  community bundle ships runs until the owner enables it. The signed
+  community bundle ships runs until you enable it. The signed
   desktop-plugin path is untouched and always wins detection.
   `tests/test_agent_plugins_adapter.py` pins the whole contract.
 - `POST /api/marketplace/import` accepts the new bundles from file upload
@@ -777,7 +830,7 @@ Versioning: Semantic Versioning.
 - A file-access POLICY refusal's remedy ("Raise the file-access level (e.g. to
   'Your PC') to write here.") now reaches the user-facing result instead of
   dying inside the dropped tool output — measured live: the Desktop-file ask
-  got a true boundary answer that never mentioned the lever the owner controls.
+  got a true boundary answer that never mentioned the lever you control.
   The worker also stops retrying the byte-identical refused call (a policy
   refusal is deterministic; a different path starts fresh — no gate).
 - Chat deliverable wording scopes its claim to what ran: render-only proof
@@ -1394,8 +1447,8 @@ Versioning: Semantic Versioning.
   stops asking for tools, and an iteration cap exists only as an opt-in safety net,
   off by default. Cost is capped in dollars, not in steps.
 - Rationing steps does not save money, it wastes it. A run cut off at pass 15 has
-  already paid for 15 passes and produced a half-finished edit, and the owner then
-  spends more asking it to continue. Reported by the owner within minutes of using
+  already paid for 15 passes and produced a half-finished edit, and you then
+  spends more asking it to continue. Reported by you within minutes of using
   it: *"it told me he ran out of passes, just really unusable."*
 - What remains is a **runaway guard** — 400 passes at every level, far above any real
   task, so it only ever catches a genuine infinite loop. Repair attempts were the same
@@ -1610,7 +1663,7 @@ Versioning: Semantic Versioning.
   models and silent outside Code mode. A warning that always showed would be its own
   lie.
 - What RUNS is unchanged. Whether to keep offering models Code cannot run is a
-  product decision, flagged in `unified_code_lifecycle.js` and left to the owner.
+  product decision, flagged in `unified_code_lifecycle.js` and left to you.
 - The node harness for this module gained a real `querySelectorAll` and an
   `innerHTML` setter that clears children. Without the latter the shared sheet
   accumulated notes between renders, so "must be silent" could never have passed --
@@ -1854,7 +1907,7 @@ Versioning: Semantic Versioning.
 
 ### Added (a run you stopped reads as stopped, not failed)
 
-- The transcript card had two endings — `delegation_failed` and `delegation_completed` — so a run the owner **stopped** was filed as a crash. I left that open twice today and said why at the line: telling the truth about a deliberate stop needs a third result type and a renderer that draws it, and calling it "completed" would have been just as false as calling it "failed".
+- The transcript card had two endings — `delegation_failed` and `delegation_completed` — so a run you **stopped** was filed as a crash. I left that open twice today and said why at the line: telling the truth about a deliberate stop needs a third result type and a renderer that draws it, and calling it "completed" would have been just as false as calling it "failed".
 - `delegation_cancelled` now routes to its own ending with its own word throughout. Driven through the real functions with `state='cancelled'`:
 
   ```
@@ -1896,7 +1949,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed (a run is credited to the engine that actually ran it)
 
-- Both turn recorders in `evolve_agent_routes` passed `settings.model_id or settings.dispatch_model` — the owner's pick winning over the executor — and `capability_report` reported `status: "applied"` for the entire `claude` family. So a run the **Claude CLI** performed was labelled `qwen2.5-coder:7b`, and the `claude exited 1` failure was attributed to a model that had no part in it.
+- Both turn recorders in `evolve_agent_routes` passed `settings.model_id or settings.dispatch_model` — your pick winning over the executor — and `capability_report` reported `status: "applied"` for the entire `claude` family. So a run the **Claude CLI** performed was labelled `qwen2.5-coder:7b`, and the `claude exited 1` failure was attributed to a model that had no part in it.
 - `ForgeCodeSettings.recorded_model()` now reports the executor, and the model dial reads **`substituted`** with a reason naming what ran instead. Genuine Claude requests still read `applied`; an unselected model is not called a substitution; GPT keeps its exact model; and `octopus-7b` is not mistaken for `opus`.
 - Verified through the live route with the real drift payload: `effective.model = claude:qwen2.5-coder:7b`, `status = substituted`. The stored turn and its on-screen byline both read `claude:qwen2.5-coder:7b`.
 - **Nothing about what runs changed** — only what Thomas says ran. Still open, and still a product decision: whether to keep offering models Code cannot run, and whether to name the engine *before* the request is sent rather than after.
@@ -1913,7 +1966,7 @@ Versioning: Semantic Versioning.
 ### Fixed (Thomas tells you again when a deliverable has nothing to do with what you asked)
 
 - The changelog promised this and it stopped being true on 2026-07-27: `6cc89af2` shipped the artifact-intent check **with** its call site, and `87ae37e5` replaced that whole file with a branch version written before the check existed, taking the call with it. Four days of the guarantee being advertised and absent.
-- **Reconnected as a report, not as a gate** — and that is the design, not a compromise. The measurement is a token overlap. A verification probe that rejects a run on that basis grades the model instead of reporting honestly, and restoring the original wiring (where a mismatch scored the completion review 0.0) flips a real recorded case from pass to fail. `verified_success` is deliberately not computed from it; the owner is simply told, in the run summary, beside the executability warning that already works this way.
+- **Reconnected as a report, not as a gate** — and that is the design, not a compromise. The measurement is a token overlap. A verification probe that rejects a run on that basis grades the model instead of reporting honestly, and restoring the original wiring (where a mismatch scored the completion review 0.0) flips a real recorded case from pass to fail. `verified_success` is deliberately not computed from it; you are simply told, in the run summary, beside the executability warning that already works this way.
 - Measured on the request *"make me a graph of current technology adoption trends"*, answered two ways: an arcade game now yields *"⚠ This may not be what you asked for — game.html does not appear to be about what was asked (matched 0 of the requested subject: adoption, current, graph, technology, trends)"*, and a genuine trend page stays silent.
 - Silence still means "not checkable", never "checked and fine" — four controls pin it: a vague request, no request, no artifacts, no workspace.
 - The wave-2 guard that asserted *nothing* imported this module fired the moment this landed, which is exactly what it was for. It now pins the narrower truth: the only importer is the reporting path, and that call must not touch the verdict.
@@ -1922,7 +1975,7 @@ Versioning: Semantic Versioning.
 
 - The same silent-capability-removal shape as the artifact sandbox, but **one layer above it**. Sandbox tokens were already correct after the four earlier fixes — an inventory of every artifact CSP and every artifact iframe found no remaining token mismatch. `fullscreen` and the async clipboard are **Permissions Policy** features whose default allowlist is `self`, so the *embedding page* must delegate them with `allow=`.
 - `/deliverable/` 302s an HTML artifact onto its own ephemeral `127.0.0.1:PORT`, which makes every artifact frame **cross-origin** to the shell. Neither interactive frame delegated anything and the server sends no `Permissions-Policy` header — so the same bytes that work perfectly in a browser tab were dead inside Thomas, with no error surfaced.
-- Two of the owner's own deliverables hit it. `colortoy.html`'s Copy button awaits `navigator.clipboard.writeText` with no `catch`, so the `NotAllowedError` aborted the handler before its "Copied!" label and the button simply did nothing. `snake.html` advertises "F fullscreen" on its own start screen, and `requestFullscreen()` was rejected with *"Disallowed by permissions policy"*. The model's code was correct both times.
+- Two of your own deliverables hit it. `colortoy.html`'s Copy button awaits `navigator.clipboard.writeText` with no `catch`, so the `NotAllowedError` aborted the handler before its "Copied!" label and the button simply did nothing. `snake.html` advertises "F fullscreen" on its own start screen, and `requestFullscreen()` was rejected with *"Disallowed by permissions policy"*. The model's code was correct both times.
 - Census across the 414 generated HTML/JS files: `clipboard.writeText` 3, `requestFullscreen` 2, and zero uses of `getDisplayMedia`, geolocation, `window.open` or `target=_blank` — so exactly these two capabilities were delegated and nothing wider.
 - Both the Code viewer stage and Chat's canvas frame now carry `allow="fullscreen; clipboard-write"`. Verified both directions: stripping the attribute fails three guards.
 
@@ -2086,7 +2139,7 @@ Versioning: Semantic Versioning.
 - All three asserted prompt-classifier behaviour that "land model-owned routing, removing the prompt classifiers" deleted on purpose. Confirmed at the source, not just from the commit message: `record_chat_task_finished` says *"Persist success from the runtime terminal event, never from reply prose"*, and `derive_active_goal` says *"Prompt wording never decides whether a turn is an acknowledgement or a follow-up."*
 - Two are rewritten to assert the **current** contract — prose must not move the ledger, and each turn re-titles the goal from its own text — with the rationale and the commit reference recorded at the assertion. Neither was deleted; the contract they guard is worth stating out loud.
 - **Known gap recorded, not papered over:** a turn where Thomas stops and asks for something is now recorded `complete`, because the structured replacement (a tool the model calls to declare itself blocked) does not exist yet. Re-adding a regex over the reply would recreate exactly what was removed, so the fix belongs on the tool side.
-- The third — Max review staying `in_progress` while background work is pending — is held as `unittest.expectedFailure` and deliberately **not** loosened, because unlike the other two it describes something the owner wants back: *"record_chat_task_pending currently has no caller."* Unexpected success is reported as a failure (verified), so the day someone wires that caller, the test says so instead of sitting silently green.
+- The third — Max review staying `in_progress` while background work is pending — is held as `unittest.expectedFailure` and deliberately **not** loosened, because unlike the other two it describes something you want back: *"record_chat_task_pending currently has no caller."* Unexpected success is reported as a failure (verified), so the day someone wires that caller, the test says so instead of sitting silently green.
 - Also observed: `test_chat_route_failure_records_safe_blocked_state_without_leaking_detail` passes in isolation but fails in a full-suite run — order-dependent, not investigated here.
 
 ### Fixed (an honesty guard that had been red for eleven days over phrasing)
@@ -2113,9 +2166,9 @@ Versioning: Semantic Versioning.
 
 - A Code run failed with `Not logged in — Please run /login` and `claude exited 1`, wrote nothing — while the turn was labelled **`qwen2.5-coder:7b`**, the local profile's configured model, which had no part in it.
 - Mechanism, traced end to end: the chat profile had drifted to `local` with an empty `model_id` → the shell had no model to put in the payload → `from_payload` defaults an unspecified model to **`claude:sonnet`** → `family` is read off that prefix → the run dispatched to the **Claude CLI**, which is not logged in on this machine.
-- So the report names the *profile's* model while `family` decides the *executor*, and nothing reconciles the two. The owner is told a local qwen model produced a failure that came from Claude.
+- So the report names the *profile's* model while `family` decides the *executor*, and nothing reconciles the two. You are told a local qwen model produced a failure that came from Claude.
 - **The labelling half is now fixed** (see *Fixed — a run is credited to the engine that actually ran it*, above): the turn records the dispatched model. The other candidate — refusing to invent a model when the caller sent none, surfacing "no model selected" instead of silently choosing Claude — is still open, because it changes what executes. Recorded at the exact line with the full trace.
-- **The failure reporting itself held up.** On screen the owner sees the actionable cause — `Not logged in · Please run /login`, `claude exited 1` in red, and an honest *"Nothing was checked · 3 open risks"*. Nothing was overstated; the only false note was the model label.
+- **The failure reporting itself held up.** On screen you see the actionable cause — `Not logged in · Please run /login`, `claude exited 1` in red, and an honest *"Nothing was checked · 3 open risks"*. Nothing was overstated; the only false note was the model label.
 - Separately: the default model had drifted to `Local` with an empty `model_id`, which is what set this off. Restored to `openai_codex` / `gpt-5.6-sol`.
 
 ### Verified (the hardest deliverable yet, and what my own driver missed)
@@ -2171,7 +2224,7 @@ Versioning: Semantic Versioning.
 - Every entry into a preview went through `__enter/<token>`, which sent `Clear-Site-Data: "cache", "storage"`. The storage clear ran on **every load**, so any deliverable using `localStorage` forgot everything the moment the panel was reopened. **29 of 442** generated files use it — about one deliverable in fifteen.
 - Measured, same origin throughout: navigating straight to the resolved preview URL twice **keeps** the value; the same page through the redirect **loses** it every time. After the change the redirect keeps it too.
 - Dropped only `"storage"`. The cache clear stays — a stale build served after an edit is a correctness problem, not a privacy one.
-- **The trade, stated plainly:** the preview port is reused between grants, so the clear stopped one deliverable reading keys another left on the same origin. What remains is that risk — a later preview landing on a recycled ephemeral port could see the previous deliverable's keys. Both are the owner's own generated apps on loopback.
+- **The trade, stated plainly:** the preview port is reused between grants, so the clear stopped one deliverable reading keys another left on the same origin. What remains is that risk — a later preview landing on a recycled ephemeral port could see the previous deliverable's keys. Both are your own generated apps on loopback.
 - **I got this wrong first and reverted it.** I blamed the CSP `sandbox` directive on a three-way comparison where the two passing cases were navigated *directly* and the failing one went through the redirect — two variables, one conclusion. Removing the directive changed nothing (served CSP clean, `window.origin` real, `Storage.prototype` in place, value still gone) and cost the call-site-independent containment backstop, so it went straight back. The wrong turn is recorded at the line.
 - Also corrected: a comment of mine asserting *"there is no Clear-Site-Data header on any response in the chain"*. There is — my header dump filtered to a fixed list of names and never printed it.
 - An existing contract test pinned the old header exactly; updated with the reason rather than relaxed. 364 deliverable/artifact/smoke tests green.
@@ -2193,7 +2246,7 @@ Versioning: Semantic Versioning.
 
   **Apps wrongly reported dead: 0.**
 - Two runs that previously proved nothing now carry real evidence the app responds. The point is not catching more failures — it is being able to say something **true** about whether the thing works.
-- Deliberately narrow: exactly one text entry plus a non-destructive submit-ish control. A form needing a date format, a chosen category, or two fields is not driven, because guessing there is what produced three wrong answers last time. Destructive labels are excluded by name — verification must not destroy the owner's data to learn that a button works.
+- Deliberately narrow: exactly one text entry plus a non-destructive submit-ish control. A form needing a date format, a chosen category, or two fields is not driven, because guessing there is what produced three wrong answers last time. Destructive labels are excluded by name — verification must not destroy your data to learn that a button works.
 - **Also fixed a permanently-red test I had just authored.** The earlier guard forbade the phrase `"nothing on the page changed"` outright, and went red against this correct successor. A guard that fails on the fix is exactly the failure mode that suite exists to prevent; it now pins the specific reverted wording instead. 280 smoke/verify/artifact tests green.
 
 ### Fixed ("boot only" hid how much of the app was never checked)
@@ -2224,7 +2277,7 @@ Versioning: Semantic Versioning.
 ### Fixed (A multi-file app rendered as unstyled text in Thomas's own panel)
 
 - Thomas builds plenty of apps as `index.html` + `styles.css` + `game.js`. The Code viewer stage — the panel beside the chat, and the main way anyone looks at a result — framed them **without `allow-same-origin`**. The document then has an opaque origin, so `default-src 'self'` matches nothing and every relative subresource is refused.
-- The owner saw unstyled Times New Roman over a dead 300×150 canvas, while the thumbnail beside it and the same file in a new tab showed the finished app.
+- You saw unstyled Times New Roman over a dead 300×150 canvas, while the thumbnail beside it and the same file in a new tab showed the finished app.
 - Isolated on a standalone page that never re-renders, after a 9s settle, so an aborted re-render could not explain it: `window.origin` **`'null'` → real**, `cssRules` **SecurityError → 154**, `fetch('styles.css')` **TypeError → 200**, canvas **300×150 → 1280×800**.
 - Two traps worth recording. Chromium reports those refusals as `net::ERR_ABORTED`, not `csp`, which reads like a cancelled request — that is why it first looked like a rendering race. And **`location.origin` returns the URL's origin even in an opaque document**; only `window.origin` reports `'null'`. My first probe read the wrong one and nearly sent me after the wrong cause.
 - The two decorative previews already carried the token; the interactive stage was the **only** frame without it — the same "every sibling but one" shape as `project_delta_since` and `--c-danger`.
@@ -2278,7 +2331,7 @@ Versioning: Semantic Versioning.
 ### Fixed (A generated first-person game could shoot but not turn)
 
 - From a game Thomas built today: `if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();` and mouse-look gated on `document.pointerLockElement === canvas`. The artifact CSP sandbox did not grant `allow-pointer-lock`, so that is **never true** — the player can shoot, but cannot look around. Nothing raises; the request is refused silently.
-- **Third instance of one shape**, each found by using the app rather than by a failing test: `'unsafe-eval'` missing made a correct calculator print `Error`; `allow-modals` missing made every confirm-before-delete button dead; `allow-pointer-lock` missing makes every first-person game unplayable. Two of the owner's own deliverables call `requestPointerLock`.
+- **Third instance of one shape**, each found by using the app rather than by a failing test: `'unsafe-eval'` missing made a correct calculator print `Error`; `allow-modals` missing made every confirm-before-delete button dead; `allow-pointer-lock` missing makes every first-person game unplayable. Two of your own deliverables call `requestPointerLock`.
 - Verified with a control, because pointer lock also needs a user gesture and might not engage headless — a bare "BLOCKED" could have meant any of three things. Removing the token again: control (unsandboxed shell) **still LOCKED**, artifact **BLOCKED**, guard red. The control holding constant across both directions is what makes it evidence.
 - `allow-popups` deliberately **not** granted: no deliverable calls `window.open(`, so there is no defect behind it. A test pins that, so widening later has to be justified by a measured failure.
 - The same-origin `/deliverable/` route was **not** updated, and that is recorded as a known gap at the exact line rather than fixed blind: nothing in the unified shell requests it, so there is no surface to verify the change on, and an unverified header change on a security boundary is worse than a written-down inconsistency.
@@ -2289,7 +2342,7 @@ Versioning: Semantic Versioning.
 - The artifact CSP carried `sandbox allow-scripts allow-forms allow-same-origin` with **no `allow-modals`**, which makes `confirm()` return false and show nothing, so the guard clause took the early exit every time. Because it is a CSP `sandbox` directive it applied to the **top-level** document too: "open in a new tab" gave the same dead button.
 - The control is what makes it evidence: real click **2 checked → 2**, no dialog; with `window.confirm` forced true, the same click **2 → 0**. The page's logic was correct throughout — this was the machinery breaking a correct deliverable.
 - Same shape as the missing `'unsafe-eval'` that made a correct calculator print `Error`: the sandbox silently removing a capability ordinary pages rely on, with no diagnostic. It is very likely a large part of why generated apps "barely work" — every confirm-before-delete in every app Thomas has ever built was dead.
-- The grant is **asymmetric on purpose**. The effective sandbox is the intersection of the CSP ceiling and each iframe's own attribute, so the ceiling was raised but only the viewer stage — the surface the owner actually uses — opts in. Verified live: top level *dialog fires, clears*; viewer stage *dialog fires, clears*; transcript thumbnail *`confirm()` → false, no dialog*. A 168px decorative picture still cannot interrupt you.
+- The grant is **asymmetric on purpose**. The effective sandbox is the intersection of the CSP ceiling and each iframe's own attribute, so the ceiling was raised but only the viewer stage — the surface you actually use — opts in. Verified live: top level *dialog fires, clears*; viewer stage *dialog fires, clears*; transcript thumbnail *`confirm()` → false, no dialog*. A 168px decorative picture still cannot interrupt you.
 - Removing `allow-modals` again brings Reset straight back to **2 → 2** with no dialog and turns the guard red.
 - **I broke all of Code mode on the way** and caught it by measuring rather than assuming: the explanatory comment quoted a code snippet in backticks, inside a JS template literal, which closed the literal and made the rest a syntax error (`Unexpected token 'if'`). Zero page errors after the fix; the comment now says why it carries no backticks.
 
@@ -2318,7 +2371,7 @@ Versioning: Semantic Versioning.
 ### Fixed (A silent failure says how it ended, and that nothing said why)
 
 - Four consecutive runs of the same goal (15:42, 15:44, 15:46, 15:48) each recorded exactly **three** events — Thomas stating its plan, the project structure, `(empty directory)` — then exited 1 with **no error event at all**. Nothing changed, zero validations, one generic risk.
-- Every one of them told the owner **"The Code task stopped before it finished."** and nothing more, four times over, while `turn.reason` held `exited 1` throughout. The exit code was known and unsaid.
+- Every one of them told you **"The Code task stopped before it finished."** and nothing more, four times over, while `turn.reason` held `exited 1` throughout. The exit code was known and unsaid.
 - Now reads *"The Code task stopped before it finished — exited 1, with no error recorded."* **"No error was recorded" is the part worth saying out loud**: it separates a run that failed silently from one whose reason is being withheld, which is the difference between hunting for a message and knowing there isn't one.
 - **No invented cause** — there genuinely wasn't one, and the guard asserts that too: called without a `reason`, the message must not mention an exit or an error at all. Restoring the old text turns it red.
 - Also worth recording from those four runs: each created its own project folder (`Code task 2026-07-30 1042/1046/1048`) and left it empty. So the 24 empty project folders found earlier are not only abandoned "New code task" clicks — failed runs make them too.
@@ -2459,7 +2512,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed (A run that was cut off says so, instead of blaming a check)
 
-- A Code run that hits its pass budget was summarised on screen as **"Thomas changed the project, but the final verification still failed after its repair attempts. Open the activity details for the failing check."** It never finished those attempts — it ran out of passes mid-work. The summary sent the owner to inspect a check when the useful action was to ask Thomas to carry on.
+- A Code run that hits its pass budget was summarised on screen as **"Thomas changed the project, but the final verification still failed after its repair attempts. Open the activity details for the failing check."** It never finished those attempts — it ran out of passes mid-work. The summary sent you to inspect a check when the useful action was to ask Thomas to carry on.
 - `failureSummary` is an ordered chain and the verification branch matched first. Being truncated is the **cause**; the failing check is the **symptom**, so the budget branch now runs ahead of it.
 - **The sentence that says what to do already existed and reached nobody.** `loop_execution.py` records *"Pass budget exhausted after 10 passes while work was still active. The task is incomplete; continue it in the same conversation."* — and it was filed as an open risk headed `error surfaced during the run`, behind a collapsed **Show details**, as one of *two* rows sharing that same generic heading. Confirmed by looking: `document.body.innerText` on the rendered page did not contain the words "Pass budget exhausted" at all.
 - The screen now reads **"Thomas ran out of passes while still working, so this task is unfinished. Ask it to continue in this same conversation."** Verified on the real study-planner run, before and after, by screenshot.
@@ -2644,7 +2697,7 @@ Versioning: Semantic Versioning.
 
 ### Fixed (A run cannot call itself passed on requirements it never checked)
 
-- **The owner's "Nova" calculator shipped with a green ✅ `Checks passed`, and almost nothing in it worked.** Driving it by hand: the five left-nav destinations (Conversions, Graph studio, History, Saved formulas, Calculator) do nothing at all, the advertised `Ctrl+K` "calculate in plain English" palette does not exist, both header icon buttons are inert, `Clear` on Recent calculations does nothing, the three "recent calculations" are hard-coded HTML, the `Growth rate` chip returns `Error`, and `200 + 10 %` returns **2.1** because `%` divides the whole expression instead of the last operand. The keypad arithmetic is correct — which is why testing only arithmetic found nothing.
+- **Your "Nova" calculator shipped with a green ✅ `Checks passed`, and almost nothing in it worked.** Driving it by hand: the five left-nav destinations (Conversions, Graph studio, History, Saved formulas, Calculator) do nothing at all, the advertised `Ctrl+K` "calculate in plain English" palette does not exist, both header icon buttons are inert, `Clear` on Recent calculations does nothing, the three "recent calculations" are hard-coded HTML, the `Growth rate` chip returns `Error`, and `200 + 10 %` returns **2.1** because `%` divides the whole expression instead of the last operand. The keypad arithmetic is correct — which is why testing only arithmetic found nothing.
 - **The report was honest; the headline was not.** Its two engine checks did pass, the second with evidence reading `browser boot clean; boot only` — it loaded the page and clicked nothing. Its own `rubric_mapping` carried `status: unverified`, saying no individual requirement had been extracted or checked. But the verdict was computed from `validations` alone, so the one honest signal in the report never reached the face of the card and sat inside a collapsed section instead.
 - The verdict now reads **`Not checked against your ask`** with the muted "we don't know" tone, over `2/2 checks passed · 1 requirement unverified · no open risks`. What *did* pass is still said — this is a truthful verdict, not an alarming one. A failed check still outranks it, and open risks still show regardless of which headline wins.
 - **It discriminates rather than blanket-warns.** Across the 43 real run reports on this machine it moves **7** off a false green, leaves the **5** that genuinely verified their requirements reading `Checks passed`, and does not touch the 24 already reading `Nothing was checked` or the 7 already reading failure. A green verdict stays reachable, which is what makes the new state mean something.
@@ -2662,7 +2715,7 @@ Versioning: Semantic Versioning.
 
 - **The line that answers "did the thing I asked for actually work" was a 301×28 grey strip**, styled exactly like the technical log rows around it. It read as a footnote when it is the headline.
 - **It also counted without concluding.** `Run report · 1 pass · 2 checks · 0 open risks` — "1 pass" means one *edit* pass, and reads as one test passing. It now leads with a verdict: **Checks passed** / **Some checks failed** / **Checks failed** / **Passed, with things to look at**, then the numbers underneath as `2/2 checks passed · no open risks`.
-- **"Nothing was checked" is its own state**, and the point of the change. A run with no validations at all must not look like a run that passed — that confusion is the whole reason the report exists. Seen live on the owner's failed calculator run: it now reads `Nothing was checked · 3 open risks` where it used to say `1 pass · 0 checks · 3 open risks` and bury it.
+- **"Nothing was checked" is its own state**, and the point of the change. A run with no validations at all must not look like a run that passed — that confusion is the whole reason the report exists. Seen live on your failed calculator run: it now reads `Nothing was checked · 3 open risks` where it used to say `1 pass · 0 checks · 3 open risks` and bury it.
 - Given a card with a coloured state rail (accent / amber / red / muted) and its own mark, so the verdict is legible before a word of it is read. 680×62 instead of 301×28, sitting directly under the result it describes.
 - Verified live on both real conversations: the passing calculator run renders `is-good` with "Checks passed / 2/2 checks passed · no open risks"; the provider-overloaded run renders `is-unknown` with "Nothing was checked / 3 open risks".
 
@@ -2692,7 +2745,7 @@ Versioning: Semantic Versioning.
 
 ### Changed (Code mode: pick any model, see what Thomas built, open it in a tab)
 
-Four things the owner named while using Code, each measured on a 1920×1080 screen rather than a narrow pane.
+Four things you named while using Code, each measured on a 1920×1080 screen rather than a narrow pane.
 
 - **You could only reach one model.** The picker was one flat row per model across every profile — 19 rows, 15 of them unusable — so the four OpenAI models that *do* work were buried and the menu read as "you have one model". It is now grouped by **family** (OpenAI, Anthropic, Google, xAI, Meta Llama, Mistral, On this PC, Other providers), each collapsed with a `4 ready` / `needs key` count, expanding as an accordion so opening one closes the rest and the menu keeps its height. The family holding the current model is opened once, when the menu is first drawn.
   - Families are matched on the profile **name**, never on `provider`: `openai_compat` is a wire protocol, not a vendor, and Gemini, Mistral, Groq and xAI all speak it — matching the provider filed every one of them under "OpenAI". Caught by reading the rendered list rather than the code.
@@ -2704,20 +2757,20 @@ Four things the owner named while using Code, each measured on a 1920×1080 scre
 
 ### Fixed (Thomas verified a page, then served it under rules that broke it)
 
-- **The owner asked for a calculator. Thomas built one, verification returned `completed`, and `12 + 8` showed `Error` on screen.** Neither the maths nor the markup was wrong. `Function('return (12+8)')()` — the ordinary way a calculator evaluates a typed expression — threw `EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive`, and the page's own `catch` turned that into `Error`.
+- **You asked for a calculator. Thomas built one, verification returned `completed`, and `12 + 8` showed `Error` on screen.** Neither the maths nor the markup was wrong. `Function('return (12+8)')()` — the ordinary way a calculator evaluates a typed expression — threw `EvalError: Evaluating a string as JavaScript violates the following Content Security Policy directive`, and the page's own `catch` turned that into `Error`.
 - **The checker and the viewer disagreed.** `web_artifact_smoke_assets.py` serves pages to the verifying browser with `script-src ... 'unsafe-eval' 'wasm-unsafe-eval'`, so the calculator genuinely worked while being certified. `deliverable_aiohttp.py` and the `/artifact/` route then served the same file **without** it. A build could pass every check and be broken the instant it was opened, and nothing anywhere was wrong to report — both halves did exactly what they were configured to do.
 - **Diagnosed by injecting an inline `<script>` into the live preview**, which CSP governs. Running the identical call from devtools reported success, because the devtools console is *not* subject to CSP — so the obvious probe confirms the page works and hides the defect. That false reassurance is why this survived.
 - Both viewers now grant `'unsafe-eval' 'wasm-unsafe-eval'`, matching the policy the page was verified under. **It concedes nothing:** both already allow `'unsafe-inline'`, so a hostile page can run any JavaScript it likes by writing it out directly — refusing to evaluate a *string* removes no capability it does not already have, and only breaks honest pages. The directives that actually contain a generated page are untouched: `connect-src 'self'` in the preview and `connect-src 'none'` on the artifact route, plus `object-src 'none'`, `base-uri 'none'`, `form-action`, and the sandbox.
-- Verified end to end after relaunching from the owner's desktop shortcut: `12 + 8 = 20`, `9 × 7 = 63`, `100 ÷ 8 = 12.5`, `45 − 17 = 28`, `2.5 × 4 = 10`, `1234 × 9 = 11,106`, and `7 ÷ 0` correctly reports `Error` because the result is not finite.
+- Verified end to end after relaunching from your desktop shortcut: `12 + 8 = 20`, `9 × 7 = 63`, `100 ÷ 8 = 12.5`, `45 − 17 = 28`, `2.5 × 4 = 10`, `1234 × 9 = 11,106`, and `7 ÷ 0` correctly reports `Error` because the result is not finite.
 - `tests/test_preview_does_not_break_what_verification_passed.py` states the invariant rather than the constant: **the serving policy may not be stricter than the verifying policy.** It also pins the premise (the smoke really does allow eval) and asserts the containment directives are still refused, so widening one directive cannot quietly widen the rest. Both viewer tests were confirmed failing before the change.
 
 ### Fixed (Thomas knew why a run failed and told you to go find out yourself)
 
-- **The owner asked for a calculator app and was shown "Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error."** The actual reason was already recorded, in plain English: *"Our servers are currently overloaded. Please try again later."* It was thrown away before it reached the screen.
+- **You asked for a calculator app and was shown "Thomas hit a technical problem and stopped before finishing. Open the technical details for the raw error."** The actual reason was already recorded, in plain English: *"Our servers are currently overloaded. Please try again later."* It was thrown away before it reached the screen.
 - **Why.** `failureSummary` in `thomas/server/web/js/unified_code_mode.js` took `errors.at(-1)` and only *then* asked whether it was worth showing. Errors arrive oldest-first and the last one is almost always a wrapper — `agent loop exited 1` follows whatever actually went wrong. So it inspected the wrapper every time, correctly rejected it as unhelpful, and fell back to the generic message, while the real cause sat one entry earlier. The recorded errors on that run were exactly `["Our servers are currently overloaded. Please try again later.", "agent loop exited 1"]`.
 - **The filter now runs before the selection**, so the last *usable* error wins rather than the last error. Three outcomes stay distinct: a usable error is shown verbatim; errors that exist but are all wrappers still fall back to the generic message; and no errors at all keeps its own separate wording.
-- **An overloaded or rate-limited provider is now named as such**: *"The model provider is busy right now — this is not a problem with your project or your request. Send it again in a moment."* The raw upstream text says "Our servers", which reads as **Thomas's** servers unless the message says whose, and sends the owner looking for a fault in their own project that is not there.
-- Verified against the owner's own failed run, re-rendered from the stored conversation with no data changed: the same turn that read "Thomas hit a technical problem…" now reads the provider-busy line. A later failure in the same conversation — OpenAI returning `An error occurred while processing your request. You can retry your request… request ID 03ee2ff9…` — is now shown **verbatim**, request ID included, because it is genuinely actionable.
+- **An overloaded or rate-limited provider is now named as such**: *"The model provider is busy right now — this is not a problem with your project or your request. Send it again in a moment."* The raw upstream text says "Our servers", which reads as **Thomas's** servers unless the message says whose, and sends you looking for a fault in a project that is not there.
+- Verified against your own failed run, re-rendered from the stored conversation with no data changed: the same turn that read "Thomas hit a technical problem…" now reads the provider-busy line. A later failure in the same conversation — OpenAI returning `An error occurred while processing your request. You can retry your request… request ID 03ee2ff9…` — is now shown **verbatim**, request ID included, because it is genuinely actionable.
 - Pinned in `tests/web_node/unified_code_mode_lifecycle.mjs` (`proveTheRealReasonSurvivesTheExitWrapper`), covering all four cases, and confirmed to fail against the old `.at(-1)`-then-filter ordering before landing.
 
 ### Changed (Housekeeping in the code that keeps track of background tasks — nothing changes for you)
@@ -2815,7 +2868,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 - **`/api/evolve/agent/deliverables` returned an empty list on a workspace holding 16 real builds.** `register_from_run` writes `deliverables.json` into the **project** a run worked in, and since every Code task now gets a folder of its own, that is almost never the catalog root. `deliverables_list` read the catalog root alone. Measured live before the change: endpoint `0`, disk `16` across 4 project roots — `~/.thomas/code_scratch` (13), `code_scratch_b` (1), and two projects built minutes earlier whose pages both open and work.
 - **Nothing reported this, because an empty list is what "you have not built anything" looks like.** `_read` returns `[]` for a missing file and the route wraps it in `{"ok": true}`. The Library rendered a shorter list and no error. Same shape as the conversation-open defect fixed in `521a67eb`: one reader walks the project roots, another asks only the catalog, and the two quietly disagree.
 - `list_deliverables_across` (new, in `thomas/forge/anvil/forge_code_deliverables.py`) merges the catalog root with the roots `conversation_roots` already reports, which is exactly what `conversations_list` walks. `available` is resolved **per entry against the root it was read from** — judging a project's file from the catalog root would mark every live artifact dangling and grey out the whole Library. Entries are deduplicated by id because those roots genuinely overlap.
-- Verified live on 127.0.0.1:8901 in the real UI, not just the API: the endpoint goes `0` → `16` with all 16 `available: true`, and the Library's "All Stuff" count goes **125 → 141**. The recovered items are the owner's actual builds — the Trey rogue-lite, star-catcher, 3D Pac-Man, the CSS museum and aquarium pages — none of which had been reachable from Library.
+- Verified live on 127.0.0.1:8901 in the real UI, not just the API: the endpoint goes `0` → `16` with all 16 `available: true`, and the Library's "All Stuff" count goes **125 → 141**. The recovered items are your actual builds — the Trey rogue-lite, star-catcher, 3D Pac-Man, the CSS museum and aquarium pages — none of which had been reachable from Library.
 - **Not fixed, and recorded at the line instead of guessed at:** the `deep_link` every deliverable carries (`/?forge_code=<cid>`) goes nowhere. Its only consumer lives in `web/js/runtime/039_module_rendering_dispatch_02.js`, loaded by `app_runtime_loader.js`, and `/` now serves the unified chat shell whose 13 script tags do not include that loader. Loading the URL live: the param is never stripped (that consumer strips it first thing, so it never ran), `forgeShowSide` and `forgeCodeOpenConversation` are `undefined`, `data-surface-mode` stays `chat`. The consumer also drives the retired Evolution shell rather than the Chat/Code/Work switcher. The honest fix is shell boot-order work; a guessed one would be wrong in a new way.
   - **Fixed since in `c53207cc`** (see *Fixed — A deliverable's link back to the conversation that built it now arrives*, above): `unified_code_mode.js` consumes the parameter on boot, strips it first so a failed load is not replayed on every refresh, and switches to Code mode on that conversation. One correction to the bullet above — the runtime consumer was **not** retired. It is live and works at `/classic?forge_code=<cid>`; the link named a path whose shell cannot read it, which is a different defect from a dead consumer.
 
@@ -2852,7 +2905,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 - **The chip was reporting that failure honestly.** Two independent browser checks had disagreed about the same feature; both were right. Clicking 16 sidebar tasks and reading the chip after each: 14 opens 404'd, so no load ever happened and the chip went on describing whatever was open before — twice "A new folder for this task" (nothing had opened yet), twelve times **another conversation's project name**. Whichever row you clicked first decided which wrong answer you saw. Two previous passes hunted this inside `projectDisplayLabel()`; the cause was never in that function, and both were reverted.
 - **A second, independent defect: `state.projectLabel` was one loose value, not a property of a project.** It was set when a project was picked and never cleared, so it printed that one name over every conversation opened afterwards. Proven rather than argued: the stored label was seeded with a marker string, and two conversations in two *different* projects both displayed the marker while their own tooltips showed their real, differing paths — the chip's name and its path contradicting each other on screen. Names are now filed per folder (`rememberProjectName`/`knownProjectName` in `thomas/server/web/js/unified_code_mode.js`, keyed on a normalised path so `C:\x` and `c:/x/` are one project), so a name can only appear over the folder it belongs to.
 - **Where the names come from, so the chip and the picker call a folder the same thing.** Entering Code mode loads `/api/local/projects` — the catalogue behind the project picker's cards — which is the only place the request that produced `~/.thomas/workspaces/exec-25fb7d1499a6` ("Make a small snake game i can play right…") is recorded. Failure is silent by design: every name has a folder basename behind it, so an unreachable catalogue costs specificity, not correctness.
-- **What an open conversation in the shared drawer is now called.** 95 of the 108 live there. `code_scratch` is a folder name that tells the owner nothing, and "A new folder for this task" is a promise about a folder that will never be made — that phrase is still correct for an unstarted task, and still shown for one, because the server does drop the drawer and give a new task its own folder. An open conversation reads **"Shared scratch folder"**: its work is already there, alongside everyone else's.
+- **What an open conversation in the shared drawer is now called.** 95 of the 108 live there. `code_scratch` is a folder name that tells you nothing, and "A new folder for this task" is a promise about a folder that will never be made — that phrase is still correct for an unstarted task, and still shown for one, because the server does drop the drawer and give a new task its own folder. An open conversation reads **"Shared scratch folder"**: its work is already there, alongside everyone else's.
 - **The chip is also repainted the moment a conversation's identity is known**, instead of after the changes and file-tree fetches that `render()` waits on. Sampling 900 ms after a click caught 4 of 36 conversations still showing the pre-load repaint from `clearContextState` — the unbound phrase over a task whose folder was already resolved and sitting in state.
 - Verified in a real browser at 127.0.0.1:8899 across **all 108** sidebar tasks, not a sample: each was clicked and its chip label and tooltip read, asserting the tooltip equals that row's own `project_root` and the label is neither unbound nor leaked from another project. 108 correct, 0 wrong. Names observed: `Shared scratch folder` (95), the project's own folder name for `~/.thomas/projects/...` tasks, the catalogue's request title for `exec-` workspaces, `Thomas` for tasks against the source checkout. Picking a project from the picker still names it, and a fresh Code entry with the drawer stored and nothing open still reads "A new folder for this task".
 - `tests/test_evolve_agent_routes.py` gains `test_unregistered_conversation_opens_from_the_project_the_list_found_it_in`, which writes a conversation into a known project with no registry row and pins list, open, rename and delete to the same answer. Confirmed to fail with a 404 against the old resolution before being confirmed to pass against the new one.
@@ -2867,9 +2920,9 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 
 ### Fixed (A new Code task gets its own folder instead of the one everybody shares)
 
-- **Every Code task started without a chosen project was pointed at the same directory.** Measured on the live workspace: 106 tasks bound to `~/.thomas/code_scratch`, 117 conversation files sitting in it, and `index.html` written by FIVE different conversations, each silently replacing the last. Four of the owner's builds are gone. The only surviving trace of one was `haunted-arcade.css`, an orphaned stylesheet whose page no longer exists. Making the overwrite visible (`files_written_by_another_task`) reported the collision; it could not prevent it.
+- **Every Code task started without a chosen project was pointed at the same directory.** Measured on the live workspace: 106 tasks bound to `~/.thomas/code_scratch`, 117 conversation files sitting in it, and `index.html` written by FIVE different conversations, each silently replacing the last. Four of your builds are gone. The only surviving trace of one was `haunted-arcade.css`, an orphaned stylesheet whose page no longer exists. Making the overwrite visible (`files_written_by_another_task`) reported the collision; it could not prevent it.
 - `thomas/forge/anvil/forge_code_projects.py` gains `project_for_new_task(task)`, which names a folder after what was actually asked for and creates it under `~/.thomas/projects/<name>`, git-initialised so the work can be reverted. `thomas/server/routes/evolve_agent_routes.py` uses it wherever a NEW conversation arrives with no project, replacing the shared-scratch fallback in both entry points (`/api/evolve/agent/send` with no conversation, and `/api/evolve/agent/conversations/new`). Verified in the live UI at 127.0.0.1:8899: a task typed as `build a haunted arcade landing page` landed in `~/.thomas/projects/build a haunted arcade landing page`, and the scratch drawer gained nothing.
-- **Nothing existing moves.** A conversation that is already bound is resolved from the registry before any of this is reached; opening the owner's real `make me a rogue lite game...` task still reports `code_scratch`, checked in the browser. A deliberately chosen project still wins, and a catalog root that genuinely is a separate repository is still honoured — only the absence of a choice stopped meaning "the shared drawer".
+- **Nothing existing moves.** A conversation that is already bound is resolved from the registry before any of this is reached; opening your real `make me a rogue lite game...` task still reports `code_scratch`, checked in the browser. A deliberately chosen project still wins, and a catalog root that genuinely is a separate repository is still honoured — only the absence of a choice stopped meaning "the shared drawer".
 - **The saved scratch root coming back is not a choice.** The Code UI persists whichever root it was handed and sends it again on the next new task, so `code_scratch` is already in browsers — the live UI's project chip read exactly that. Arriving as an explicit `project_root` it is indistinguishable from a pick, but it cannot be one: the picker offered 123 projects and the drawer was not among them. `is_shared_scratch()` now recognises it and a new task falls through to its own folder.
 - Two supporting repairs, both load-bearing rather than tidying. **Names can no longer collide or fail:** the folder is claimed with `mkdir(exist_ok=False)` in a retry loop instead of `exists()`-then-create, so two tasks named alike starting at the same instant take different numbers rather than one erroring — Code runs are parallel by design. And a task named after a Windows device (`con`, `nul`, `com1`) is given a usable folder, because a directory called `CON` can be created and then cannot be used at all: `git init` inside it fails with `.git: Invalid argument` and it cannot even be a subprocess working directory.
 - **One folder per task made project resolution a cost.** `validate_project_root` spawned `git rev-parse --show-toplevel` once per known project on every Code history listing — 0.3-0.7s per spawn here, 18.6s for the 14 existing roots, and that number was about to grow with every task. A directory that holds `.git` **is** its own toplevel, which is exactly what git would have answered, so it is answered from the filesystem; git is still asked whenever there is no `.git`, the only case where the answer can be a parent repository. The same 14 roots now resolve in 0.34s.
@@ -2938,7 +2991,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 - **Known losses, deliberate.** Charts no longer ship `chart.pdf`, `chart-data.csv` and `chart-data.xlsx` alongside the page — that export only ever ran because a pattern matched your wording. The replacement is Thomas choosing to export by calling an export tool. And the **Exhaustive** setting no longer runs the extra crew and fresh graders; that flag read the effort dial rather than your words and was removed as collateral, so it needs restoring on its own.
 - **Fixed while landing this:** a task could be marked **verified** on the strength of the worker's sentence alone. A worker that replied "Created game.html with the snake game", wrote nothing and ran no tool, produced a green verified card with no files attached — worse than an honest failure, which at least gets retried. A run that produced no files must now also have actually done something: at least one tool call that succeeded, and none that failed.
 
-### Fixed (What Code shows you is the real page, running)
+### Fixed (What Code shows you are the real page, running)
 
 - **A preview could not load anything the page fetches at runtime.** Results were rendered from an HTML string with no origin and no base URL, so only `<script src>` tags written literally in the file could be rewritten to work. Thomas's game loaded its renderer dynamically, which meant the preview asked *the Thomas server* for `trey-depth-renderer.js`, got a 404 fifty-one times, and the game quietly fell back to its old flat-canvas drawing. On screen this was indistinguishable from Thomas having written a broken renderer.
 - Code results now open from a real isolated loopback origin — the same mechanism Chat already uses for deliverables — so relative paths, dynamic imports and `fetch` behave exactly as they will for you. Browser console errors on the Code surface went from **108 to none** — the two that remained in the first measurement were caused by the diagnostic itself, not by the page. Only web assets are served, and the requested path is checked to stay inside the project, so previewing a page cannot hand out source or secrets sitting next to it.
@@ -3455,7 +3508,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 
 - Recorded the final local-only corrective proof and workboard handoff: eight routes, five themes, resident specialists, UI Edit Mode persistence, and repeated-route stability are complete for owner testing but remain unapproved for integration.
 
-- Finished the owner corrective route pass: Library is now a dense full-width tool, Marketplace separates proof-backed installs from Potential, Channels opens as a live signal workspace instead of an icon wall, Token Economy and Mission Control inherit the exact Chat world, and Settings no longer paints a competing embedded background.
+- Finished your corrective route pass: Library is now a dense full-width tool, Marketplace separates proof-backed installs from Potential, Channels opens as a live signal workspace instead of an icon wall, Token Economy and Mission Control inherit the exact Chat world, and Settings no longer paints a competing embedded background.
 
 - Completed the eight-workspace modernization against locked Thomas Chat tokens and identity: Mission Control, Virtual Office, Canvas, Library (internal `my_stuff`), Channels, Token Economy, Marketplace, and Settings now share Chat's exact five-theme contract and 30px eyes mark. Mission Control, Library, and Settings use bounded direct routes; the remaining classic loader fetches 96 split runtime files in parallel with declared-order execution; loaded workspaces remain mounted when returning to Chat; and UI Editor is now owner-facing Canvas.
 
@@ -3466,7 +3519,7 @@ Both faults surfaced from one organic Code task — *"read sales.csv and draw a 
 - Merged `dev` (land.py lane, gate-surface green, evolve monolith split) into the unified 0.19.0 branch; version resolves to 0.19.0, both monolith splits coexist (`evolve_charter`/`evolve_arch_sync`/`evolve_prompts` from dev + `evolve_charter_store`/`evolve_architecture_health` from the branch), enforcement manifest regenerated for the merged scripts, and the dropped dev-side debt annotations restored. `reasoning.py` slimmed under the soft limit by extracting `reasoning_task_briefs.py` (single source for raw-ask vs per-worker briefs).
 - Fresh chats default to Agent autonomy (dial 3) with a one-time migration for stored dial state, so an out-of-box ask executes instead of replying "raise autonomy and resend"; guardrails stay Guarded. (Thomas-Agent: claude)
 - Raised Code execution budgets to cheap 600s/balanced 1800s/max 3600s with fix iterations 1/2/3, single-sourced in `forge_code_settings.EXECUTION_TIMEOUTS_S`, so real builds stop dying at the wall mid-run.
-- Code's running action feed now shows every progress note inline (collapse engages only past the 120-event ring), matching the owner's Codex-style presentation spec; the mode-contract Node test asserts the new behavior.
+- Code's running action feed now shows every progress note inline (collapse engages only past the 120-event ring), matching your Codex-style presentation spec; the mode-contract Node test asserts the new behavior.
 - Test suites aligned with the repaired contracts: full-feed lifecycle assertions, CSS module-split references, new execution-budget dials, plus codex's announcement-retry and markdown-renderer Node harnesses.
 
 ### Fixed

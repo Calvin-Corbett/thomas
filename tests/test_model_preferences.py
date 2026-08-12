@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.server.model_preferences import (
+from thomas.preferences.model_prefs import (
     persist_user_model_preferences,
     persist_user_model_role_preference,
     read_user_model_preferences,
