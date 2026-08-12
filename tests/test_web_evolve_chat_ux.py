@@ -144,9 +144,9 @@ def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> Non
     #
     # Now pinned to the behaviour -- an unavailable model says so, in its own
     # status slot -- rather than to one spelling of the surrounding punctuation.
-    assert re.search(
-        r"m\.available === false\s*\?\s*'unavailable on this connection'", text
-    ), "an unavailable model must still say so in the picker"
+    assert re.search(r"m\.available === false\s*\?\s*'unavailable on this connection'", text), (
+        "an unavailable model must still say so in the picker"
+    )
     assert "${status}" in text, "the status must reach the row it describes"
     assert "['none', 'None']" in text
     assert "['xhigh', 'xHigh']" in text
