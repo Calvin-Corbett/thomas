@@ -252,7 +252,9 @@ def _coverage_env(candidate_root: Path) -> dict[str, str]:
 def _run_coverage_probe(candidate_root: Path, tests: list[str], *, timeout_seconds: int) -> tuple[Path | None, str]:
     try:
         import coverage  # noqa: F401
-    except Exception as exc:  # noqa: BLE001 - absence of coverage must fail closed.
+    # Absence (or a broken install) of coverage.py must FAIL CLOSED: the caller
+    # turns this string into a blast-radius failure, never a pass.
+    except ImportError as exc:
         return None, f"coverage.py unavailable: {exc}"
 
     temp_dir = Path(tempfile.mkdtemp(prefix="thomas-evolve-coverage-"))
@@ -336,11 +338,17 @@ def _run_pytest_probe(candidate_root: Path, tests: list[str], *, timeout_seconds
 def _executed_statement_lines(candidate_root: Path, data_file: Path, rel: str) -> tuple[set[int], set[int], str]:
     try:
         import coverage
-
+    except ImportError as exc:
+        return set(), set(), f"blast-radius coverage analysis failed for {rel}: {exc}"
+    try:
         cov = coverage.Coverage(data_file=str(data_file))
         cov.load()
         _filename, statements, _excluded, missing, _missing_text = cov.analysis2(str(Path(candidate_root) / rel))
-    except Exception as exc:  # noqa: BLE001 - coverage analysis must fail closed.
+    # Coverage analysis must FAIL CLOSED with a message, never propagate.
+    # CoverageException is the base of coverage.py's own faults (NoSource,
+    # NotPython, a corrupt or absent data file); OSError covers reading the
+    # source/data files; ValueError/TypeError a malformed path or result tuple.
+    except (coverage.CoverageException, OSError, ValueError, TypeError) as exc:
         return set(), set(), f"blast-radius coverage analysis failed for {rel}: {exc}"
     statement_lines = {int(line) for line in statements}
     missing_lines = {int(line) for line in missing}

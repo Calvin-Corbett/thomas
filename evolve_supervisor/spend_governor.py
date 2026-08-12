@@ -484,7 +484,14 @@ def monitor_process_with_spend_watchdog(
         except subprocess.TimeoutExpired as exc:
             try:
                 verdict = evaluator(root)
-            except Exception as check_exc:  # noqa: BLE001 - watchdog failures must fail closed.
+            # The watchdog must FAIL CLOSED: a config/ledger fault has to
+            # terminate the child, never abandon it mid-run. Re-raising here
+            # would leave the process running and still spending, so the
+            # degrade-to-verdict path is load-bearing. These are the faults
+            # evaluate_spend_governor can surface: path/IO (OSError), invalid
+            # TOML or ledger values (ValueError/TypeError), a malformed config
+            # mapping (KeyError/AttributeError), provider faults (RuntimeError).
+            except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError) as check_exc:
                 verdict = SpendGovernorVerdict(
                     ok=False,
                     enabled=True,
