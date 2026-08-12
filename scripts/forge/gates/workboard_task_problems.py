@@ -32,7 +32,10 @@ def _path_is_git_ignored(rel_path: str) -> bool:
     try:
         proc = subprocess.run(  # noqa: S603 - fixed binary, literal args
             ["git", "check-ignore", "-q", "--", rel_path],
-            cwd=str(ROOT), capture_output=True, timeout=20, check=False,
+            cwd=str(ROOT),
+            capture_output=True,
+            timeout=20,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return False
