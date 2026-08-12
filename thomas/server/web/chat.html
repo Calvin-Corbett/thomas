@@ -1081,6 +1081,52 @@
       inputEl.value = state.input; autosize(); inputEl.focus();
     }
     window.addEventListener('thomas:ui-ai-edit-request', stageUiAiEdit);
+    // ---------- Plugin workspace host ----------
+    // A marketplace plugin can claim a left-nav workspace. It declares the whole
+    // contract itself: mode_id, surface_url, surface_mode, icon,
+    // left_nav_behavior and default_nav_order. Hosting one is just reading that
+    // and pointing the modern workspace frame at its surface -- these are
+    // self-contained pages, so they need none of the legacy shell.
+    let pluginWorkspaces = [];
+
+    // Plugins name their icon in Phosphor terms; the shell draws its own. An
+    // unmapped name must not fall through to nothing, so anything unrecognised
+    // gets the marketplace glyph rather than an empty button.
+    const PLUGIN_ICON_GLYPHS = {
+      'ph-chart-line-up': 'trading', 'ph-chart-line': 'trading', 'ph-currency-dollar': 'trading',
+      'ph-users': 'office', 'ph-user': 'office', 'ph-buildings': 'office',
+      'ph-palette': 'canvas', 'ph-chat': 'channels', 'ph-coins': 'tokens',
+      'ph-books': 'library', 'ph-gear': 'settings',
+    };
+
+    async function loadPluginWorkspaces() {
+      try {
+        const res = await fetch('/api/marketplace/installed', { cache: 'no-store' });
+        if (!res.ok) return;
+        const body = await res.json();
+        const rows = Array.isArray(body && body.plugins) ? body.plugins : [];
+        pluginWorkspaces = rows
+          .filter(p => p && p.enabled && p.surface_url && p.mode_id
+                       && String(p.left_nav_behavior || 'workspace') === 'workspace')
+          .sort((a, b) => Number(a.default_nav_order || 999) - Number(b.default_nav_order || 999))
+          .map(p => {
+            const mode = String(p.mode_id);
+            // Register the surface so openWorkspace() takes the MODERN direct
+            // frame instead of falling through to /classic.
+            WORKSPACE_ROUTES[mode] = String(p.surface_url);
+            return {
+              icon: PLUGIN_ICON_GLYPHS[String(p.icon || '')] || 'market',
+              label: String(p.surface_title || p.display_name || mode),
+              mode,
+            };
+          });
+        if (pluginWorkspaces.length) renderWorkspaces();
+      } catch (error) {
+        // A marketplace that cannot be read must not cost you the built-in
+        // workspaces: the static list has already rendered by now.
+      }
+    }
+
     function renderWorkspaces() {
       const workspaces = [
         // Build and Work are first-class modes above search. Do not duplicate their
@@ -1095,8 +1141,14 @@
         { icon: 'channels', label: 'Channels',        mode: 'channels' },
         { icon: 'tokens',   label: 'Token Economy',   mode: 'token_economy' },
         { icon: 'market',   label: 'Marketplace',     mode: 'marketplace' },
-        { icon: 'trading',  label: 'Paper Trading',   mode: 'paper_trading' },
       ];
+      // Installed plugins that ask to be workspaces. Paper Trading used to be
+      // hardcoded here and opened through /classic; it is a marketplace plugin
+      // and already declares everything needed to place itself -- mode_id,
+      // surface_url, icon, left_nav_behavior and default_nav_order. The legacy
+      // shell read that contract and the modern one never did, which is why
+      // Workforce was installed and enabled with a live surface and no way in.
+      workspaces.push(...pluginWorkspaces);
       const wrap = document.getElementById('tc-workspaces');
       wrap.innerHTML = '';
       workspaces.forEach(w => {
@@ -2864,6 +2916,10 @@
     hydrateBots();
     renderChats();
     renderWorkspaces();
+    // Built-in workspaces paint first; plugin-claimed ones arrive when the
+    // marketplace answers and re-render. A slow or failing marketplace costs a
+    // moment, never the sidebar.
+    void loadPluginWorkspaces();
     renderCards();
     renderThemeMenu();
     applyTheme(state.theme);

@@ -64,6 +64,31 @@ Versioning: Semantic Versioning.
   they were meant to be. Identical at runtime, but the raw bytes made grep,
   ripgrep and diff classify the file as binary and refuse to show its contents.
 
+### Added (the modern shell hosts plugin workspaces)
+
+- **Two workspaces left `/classic`.** A marketplace plugin already declares
+  everything needed to place itself in the left nav -- `mode_id`, `surface_url`,
+  `surface_mode`, `icon`, `left_nav_behavior` and `default_nav_order`. The legacy
+  shell read that contract; the modern one never did. It does now, so a plugin
+  that claims a workspace opens through the modern frame instead of the old
+  application.
+- **Workforce appears for the first time.** It was installed, enabled, and
+  serving a live surface with no entry point anywhere in the product. Paper
+  Trading was a hardcoded sidebar row pointing at `/classic`; that row is gone
+  and it is now driven by the plugin's own declaration.
+- Plugin icons are named in Phosphor terms while the shell draws its own, so
+  names are mapped and anything unrecognised falls back to the marketplace glyph
+  -- an unmapped name must never render an iconless button.
+- A marketplace that cannot be read costs nothing: the built-in workspaces paint
+  first and plugin rows arrive on the second render.
+- Verified live: both open through `tc-direct-frame`, never `/classic`. Paper
+  Trading renders its `$100,000` simulator, Workforce renders its jobs surface.
+- **Found by giving it a door:** Workforce has **zero** registered backend
+  routes. Its frontend calls `/api/freedom-transit/overview`, which 404s, while
+  it declares `api_namespace: "freedom.transit"`. Paper Trading has 14 routes and
+  works. Workforce is half-installed, and nothing said so while it was
+  unreachable.
+
 ### Changed (broad exception handlers named instead of catching everything)
 
 - Merging this branch would have added **127 broad `except Exception:` handlers**
