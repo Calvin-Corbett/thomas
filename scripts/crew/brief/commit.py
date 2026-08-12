@@ -335,7 +335,24 @@ def _selected_paths(repo_root: Path, scope_selection: ScopeSelection, include_pa
         ]
         if outside:
             raise ValueError("requested include path(s) are outside the selected commit scope: " + ", ".join(outside))
-        in_scope = [path for path in include_norm if path in changed_set]
+        # `--include` accepts a DIRECTORY as well as a file, matched the same way
+        # claim scopes are matched in the else-branch below.
+        #
+        # This used to be `path in changed_set`, an exact-file membership test.
+        # A directory is never itself a changed path, so `--include server` or
+        # `--include evolve_supervisor` selected nothing and the caller was told
+        # `no_claimed_changes` -- "there is nothing to commit" -- when the truth
+        # was "your include matched no changed file". Three separate batches were
+        # silently dropped that way before anyone noticed the commit was smaller
+        # than the staging.
+        in_scope = [path for path in changed if any(_scope_matches_path(inc, path) for inc in include_norm)]
+        if not in_scope:
+            raise ValueError(
+                "requested include path(s) matched no changed file: "
+                + ", ".join(include_norm)
+                + ". Nothing was committed. (A path with no pending change selects nothing;"
+                " run without --include to commit everything in the claim scope.)"
+            )
     else:
         in_scope = [
             path for path in changed if any(_scope_matches_path(scope, path) for scope in scope_selection.scopes)
