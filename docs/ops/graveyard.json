@@ -7090,6 +7090,1476 @@
       "reason": "salvage-debris: duplicate split of the still-present, still-full globals.css (3666 lines); never wired up, never referenced by any import/link/build config in apps/site. Evidence: .superpowers/sdd/2026-08-25-phase2-recon/recon.md Section 3c, Section 4 #4. Root cause: 36ad0730 praxis-salvage snapshot of full (10613 files).",
       "by": "claude",
       "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-infinite-app-feasibility-8322xz-1",
+      "kind": "branch",
+      "name": "claude/infinite-app-feasibility-8322xz",
+      "dead_sha": "69d6c914198f121d3f0a5744e77976a0b08ef747",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/claude/infinite-app-feasibility-8322xz",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-repair-2026-08-11-1",
+      "kind": "branch",
+      "name": "claude/repair-2026-08-11",
+      "dead_sha": "bea8f48841855fa7828823c15b551d21b39fdefa",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/claude/repair-2026-08-11",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-thomas-lhtb-leaderboard-jpo8rm-1",
+      "kind": "branch",
+      "name": "claude/thomas-lhtb-leaderboard-jpo8rm",
+      "dead_sha": "62e23db474093a567b221400603f0ec58d54b74b",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/claude/thomas-lhtb-leaderboard-jpo8rm",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-main-native-orchestration-v1-1",
+      "kind": "branch",
+      "name": "codex/main-native-orchestration-v1",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/codex/main-native-orchestration-v1",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-privacy-public-release-audit-20260723-1",
+      "kind": "branch",
+      "name": "codex/privacy-public-release-audit-20260723",
+      "dead_sha": "5f8521798ceae2e11e1fcf840adb9e7c047c5f46",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/codex/privacy-public-release-audit-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-release-history-20260723-1",
+      "kind": "branch",
+      "name": "codex/release-history-20260723",
+      "dead_sha": "5f8521798ceae2e11e1fcf840adb9e7c047c5f46",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/codex/release-history-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-evolve-auto-mem-async-1",
+      "kind": "branch",
+      "name": "evolve/auto-mem-async",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/evolve/auto-mem-async",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-evolve-auto-stream-retry-1",
+      "kind": "branch",
+      "name": "evolve/auto-stream-retry",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/evolve/auto-stream-retry",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-evolve-auto-tool-risk-merge-1",
+      "kind": "branch",
+      "name": "evolve/auto-tool-risk-merge",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/evolve/auto-tool-risk-merge",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-fix-work-ux-and-organic-hardening-1",
+      "kind": "branch",
+      "name": "fix/work-ux-and-organic-hardening",
+      "dead_sha": "ddb00ea48d3fd1ee175fcbcb26970be4ba767620",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/fix/work-ux-and-organic-hardening",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-history-pre-squash-2026-08-12-1",
+      "kind": "branch",
+      "name": "history/pre-squash-2026-08-12",
+      "dead_sha": "564998e4cc7ae11d740c63e702f1d3d1188eb68e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/history/pre-squash-2026-08-12",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-integration-1",
+      "kind": "branch",
+      "name": "integration",
+      "dead_sha": "89d708d4e9d490f5aaf2145e9a21d687bb515e5e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/integration",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-land-clean-slate-20260722-1",
+      "kind": "branch",
+      "name": "land/clean-slate-20260722",
+      "dead_sha": "5f8521798ceae2e11e1fcf840adb9e7c047c5f46",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/land/clean-slate-20260722",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-proto-code-activity-1",
+      "kind": "branch",
+      "name": "proto/code-activity",
+      "dead_sha": "b74d8ff5e0064745eb33ff5f2604de1874bc73eb",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/proto/code-activity",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-1-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-1",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-1",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-10-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-10",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-2-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-2",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-2",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-3-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-3",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-3",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-4-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-4",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-4",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-5-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-5",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-5",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-6-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-6",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-6",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-7-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-7",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-7",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-8-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-8",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-8",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-1d065ed6-929-9-1",
+      "kind": "branch",
+      "name": "worktree-wf_1d065ed6-929-9",
+      "dead_sha": "043d737cc6baaf083d828ae9092fba63acaf058a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_1d065ed6-929-9",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-1-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-1",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-1",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-10-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-10",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-2-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-2",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-2",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-3-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-3",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-3",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-4-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-4",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-4",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-5-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-5",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-5",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-6-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-6",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-6",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-7-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-7",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-7",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-8-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-8",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-8",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-2dec1a77-79e-9-1",
+      "kind": "branch",
+      "name": "worktree-wf_2dec1a77-79e-9",
+      "dead_sha": "6f16ff21f6de25894da0f3a7fa7b62d3ea80710a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_2dec1a77-79e-9",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-1-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-1",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-1",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-10-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-10",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-2-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-2",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-2",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-3-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-3",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-3",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-4-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-4",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-4",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-5-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-5",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-5",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-6-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-6",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-6",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-7-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-7",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-7",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-8-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-8",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-8",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-509cec4d-50f-9-1",
+      "kind": "branch",
+      "name": "worktree-wf_509cec4d-50f-9",
+      "dead_sha": "de100601efbc10d51247e329a657160898281056",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_509cec4d-50f-9",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-61502bb7-8bd-6-1",
+      "kind": "branch",
+      "name": "worktree-wf_61502bb7-8bd-6",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_61502bb7-8bd-6",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-61502bb7-8bd-7-1",
+      "kind": "branch",
+      "name": "worktree-wf_61502bb7-8bd-7",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_61502bb7-8bd-7",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-1-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-1",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-1",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-10-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-10",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-2-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-2",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-2",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-3-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-3",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-3",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-4-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-4",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-4",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-5-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-5",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-5",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-6-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-6",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-6",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-8-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-8",
+      "dead_sha": "8da70ffd88175cce15b08d3d45be1187e8aab2da",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-8",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-worktree-wf-8e77dbc2-4d8-9-1",
+      "kind": "branch",
+      "name": "worktree-wf_8e77dbc2-4d8-9",
+      "dead_sha": "8ee07acbfe7c2d90fa0277214f7e848de5d37be0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: fully contained in dev, untouched 3+ days; archived at refs/archive/branch/worktree-wf_8e77dbc2-4d8-9",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-public-codex-main-agent-identity-cli-1",
+      "kind": "branch",
+      "name": "public/codex/main-agent-identity-cli",
+      "dead_sha": "6eee89370fdf05d8243a32846587745e76b17692",
+      "deleted_on": "2026-09-07",
+      "reason": "retired from the public repo 2026-09-07: June codex branch never merged in ten weeks; archived at refs/archive/branch/public/codex/main-agent-identity-cli",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-public-codex-main-ci-ssh-signing-verification-1",
+      "kind": "branch",
+      "name": "public/codex/main-ci-ssh-signing-verification",
+      "dead_sha": "86dd362945d435d7d1b7d36b713fbb5b285fd272",
+      "deleted_on": "2026-09-07",
+      "reason": "retired from the public repo 2026-09-07: June codex branch never merged in ten weeks; archived at refs/archive/branch/public/codex/main-ci-ssh-signing-verification",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-public-codex-main-workboard-claim-freshness-1",
+      "kind": "branch",
+      "name": "public/codex/main-workboard-claim-freshness",
+      "dead_sha": "7bb4e6af6aaad7c7fea031226ea737e88eacd124",
+      "deleted_on": "2026-09-07",
+      "reason": "retired from the public repo 2026-09-07: June codex branch never merged in ten weeks; archived at refs/archive/branch/public/codex/main-workboard-claim-freshness",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-public-codex-main-h3-non-python-promotion-1",
+      "kind": "branch",
+      "name": "public/codex/main-h3-non-python-promotion",
+      "dead_sha": "ba932101b25a35547ffcddde33a3e61bff4d5709",
+      "deleted_on": "2026-09-07",
+      "reason": "retired from the public repo 2026-09-07: June codex branch never merged in ten weeks; archived at refs/archive/branch/public/codex/main-h3-non-python-promotion",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-chore-release-v0-17-0-1",
+      "kind": "branch",
+      "name": "chore/release-v0.17.0",
+      "dead_sha": "176c0af7d9dd6a9ea7e0f6c546f297728bda6c7b",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/chore/release-v0.17.0",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-chore-wip-clean-2026-06-06-1",
+      "kind": "branch",
+      "name": "chore/wip-clean-2026-06-06",
+      "dead_sha": "cc4b332965f5247d2a9976d31130b6a051f735bc",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/chore/wip-clean-2026-06-06",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-baseline-gate-debt-2026-07-02-1",
+      "kind": "branch",
+      "name": "claude/baseline-gate-debt-2026-07-02",
+      "dead_sha": "9ee369679be4e214fc84ddc9ef6efe24988a12fc",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/baseline-gate-debt-2026-07-02",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-build-quality-task-update-2026-06-17-1",
+      "kind": "branch",
+      "name": "claude/build-quality-task-update-2026-06-17",
+      "dead_sha": "345cf9c4620f2f7a9f4993b585f74e11fe142aaa",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/build-quality-task-update-2026-06-17",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-cage-2026-06-02-1",
+      "kind": "branch",
+      "name": "claude/cage-2026-06-02",
+      "dead_sha": "03031e8cd12fc785560b698c86eb91f8b4a53362",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/cage-2026-06-02",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-chat-fixes-hardening-2026-06-17-1",
+      "kind": "branch",
+      "name": "claude/chat-fixes-hardening-2026-06-17",
+      "dead_sha": "9e1bb32ee0b2150f3e5334ac5bad962b9ff3fabc",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/chat-fixes-hardening-2026-06-17",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-chat-sweep-2026-06-27-1",
+      "kind": "branch",
+      "name": "claude/chat-sweep-2026-06-27",
+      "dead_sha": "eb5bb338ce24b72fd48eb5252a90dc9c8d343e39",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/chat-sweep-2026-06-27",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-chat-v2-guarded-runner-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/chat-v2-guarded-runner-2026-06-10",
+      "dead_sha": "555536c4298d0bdc0aa6aeb9d6b2502a888cf725",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/chat-v2-guarded-runner-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-checkpoint-2026-05-26-1",
+      "kind": "branch",
+      "name": "claude/checkpoint-2026-05-26",
+      "dead_sha": "9013c5fc423c0c8e334e15a58681bb29ae04d69a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/checkpoint-2026-05-26",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-control-plane-2026-06-15-1",
+      "kind": "branch",
+      "name": "claude/control-plane-2026-06-15",
+      "dead_sha": "590869c26cdce8f20f490bd3df117acaadfbb506",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/control-plane-2026-06-15",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-control-plane-p2-2026-06-15-1",
+      "kind": "branch",
+      "name": "claude/control-plane-p2-2026-06-15",
+      "dead_sha": "3c82e1680a1b735524edb0ee20c169f2faab8931",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/control-plane-p2-2026-06-15",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-deliverables-persist-on-reload-2026-06-17-1",
+      "kind": "branch",
+      "name": "claude/deliverables-persist-on-reload-2026-06-17",
+      "dead_sha": "9c4c65c32884828db982d66247c7cb0ae1df432b",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/deliverables-persist-on-reload-2026-06-17",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-dev-debt-fix-2026-06-02-1",
+      "kind": "branch",
+      "name": "claude/dev-debt-fix-2026-06-02",
+      "dead_sha": "395f03f14a1837b96326c9f9952fe879bbeade45",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/dev-debt-fix-2026-06-02",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-evolve-funnel-1",
+      "kind": "branch",
+      "name": "claude/evolve-funnel",
+      "dead_sha": "58a4710560344fa80281049c245ac1707375d2a4",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/evolve-funnel",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-evolve-loop-failclosed-learn-1",
+      "kind": "branch",
+      "name": "claude/evolve-loop-failclosed-learn",
+      "dead_sha": "c9a99a383220c31d439c2f68f178911423728cd2",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/evolve-loop-failclosed-learn",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-forge-evolve-tab-2026-07-02-1",
+      "kind": "branch",
+      "name": "claude/forge-evolve-tab-2026-07-02",
+      "dead_sha": "e08732a05419f26915fcac0fe0b97a093bf5ee10",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/forge-evolve-tab-2026-07-02",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-frontend-cleanup-2026-06-19-1",
+      "kind": "branch",
+      "name": "claude/frontend-cleanup-2026-06-19",
+      "dead_sha": "5464b46cd9bf938f9a4e284544b0abc361c4303c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/frontend-cleanup-2026-06-19",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-gate-architecture-2026-05-26-1",
+      "kind": "branch",
+      "name": "claude/gate-architecture-2026-05-26",
+      "dead_sha": "703b3011f747433c656808ed54d304abec76b669",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/gate-architecture-2026-05-26",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-gpu-citizenship-017-1",
+      "kind": "branch",
+      "name": "claude/gpu-citizenship-017",
+      "dead_sha": "0ec282b4dd7c5c1c5e3902600cfdc8bcd00eab8c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/gpu-citizenship-017",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-hardening-2026-06-12-1",
+      "kind": "branch",
+      "name": "claude/hardening-2026-06-12",
+      "dead_sha": "250bc2657bb827a4c566f5b3363009c9cfa01dd5",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/hardening-2026-06-12",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-inkwell-2026-06-11-1",
+      "kind": "branch",
+      "name": "claude/inkwell-2026-06-11",
+      "dead_sha": "a830a6531f572ff27e411ee5255b8d17873992db",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/inkwell-2026-06-11",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-journal-noise-gate-2026-07-02-1",
+      "kind": "branch",
+      "name": "claude/journal-noise-gate-2026-07-02",
+      "dead_sha": "fea3938d3be91638bdf5b4a6f4be8d3321fac72b",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/journal-noise-gate-2026-07-02",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-modular-worker-2026-06-15-1",
+      "kind": "branch",
+      "name": "claude/modular-worker-2026-06-15",
+      "dead_sha": "5232e75a4a9d6344fffb224d40b985c9772f7de5",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/modular-worker-2026-06-15",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-ops-status-card-2026-07-02-1",
+      "kind": "branch",
+      "name": "claude/ops-status-card-2026-07-02",
+      "dead_sha": "894a9ea4a4e5a746342f561731cc5bc9a87b9eb1",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/ops-status-card-2026-07-02",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-prod-readiness-fixes-2026-06-03-1",
+      "kind": "branch",
+      "name": "claude/prod-readiness-fixes-2026-06-03",
+      "dead_sha": "bb21ad4dd540444910178b4119118cfc36f5f317",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/prod-readiness-fixes-2026-06-03",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-prod-readiness-rescue-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/prod-readiness-rescue-2026-06-10",
+      "dead_sha": "33d50919e9630973439b8964bc56d3370b58086e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/prod-readiness-rescue-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-repo-repair-2026-06-09-1",
+      "kind": "branch",
+      "name": "claude/repo-repair-2026-06-09",
+      "dead_sha": "c26ef6d53d6dd37e045503a4e43b91ba68dd5257",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/repo-repair-2026-06-09",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-self-healing-clean-2026-06-04-1",
+      "kind": "branch",
+      "name": "claude/self-healing-clean-2026-06-04",
+      "dead_sha": "eb38a24aacb1aa67296e817dc0127c756b9eff97",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/self-healing-clean-2026-06-04",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-self-healing-recovered-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/self-healing-recovered-2026-06-10",
+      "dead_sha": "7a50a4c16e3b62873f6b5801aa0f493d26bd788e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/self-healing-recovered-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-site-headers-dev-sync-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/site-headers-dev-sync-2026-06-10",
+      "dead_sha": "8be8cfe556aa2a336fe2448cb3f805b5bb417faa",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/site-headers-dev-sync-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-task-checklists-clean-2026-06-04-1",
+      "kind": "branch",
+      "name": "claude/task-checklists-clean-2026-06-04",
+      "dead_sha": "6e531c316f0d543f102d24eddf144be9e700cdf4",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/task-checklists-clean-2026-06-04",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-task-checklists-recovered-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/task-checklists-recovered-2026-06-10",
+      "dead_sha": "5cd38c2f4581614050c9a57316cda144bcbd2350",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/task-checklists-recovered-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-test-isolation-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/test-isolation-2026-06-10",
+      "dead_sha": "d7b2dc078479775213388e255d2f95eb850ac3d9",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/test-isolation-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-thomas-identity-2026-06-10-1",
+      "kind": "branch",
+      "name": "claude/thomas-identity-2026-06-10",
+      "dead_sha": "69a3b0f0fc397333aa4e1ac74850bdd366bad713",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/thomas-identity-2026-06-10",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-claude-xfail-debt-2026-05-27-1",
+      "kind": "branch",
+      "name": "claude/xfail-debt-2026-05-27",
+      "dead_sha": "ef49bf7df7fa26e4f308cb437a34888bace60c3f",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/claude/xfail-debt-2026-05-27",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-agent-identity-cli-1",
+      "kind": "branch",
+      "name": "codex/agent-identity-cli",
+      "dead_sha": "e85ac2bf7969aebf396f4ccc69fa8f57b7b2e257",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/agent-identity-cli",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-code-gpt-provider-route-579b3c98-20260723-1",
+      "kind": "branch",
+      "name": "codex/code-gpt-provider-route-579b3c98-20260723",
+      "dead_sha": "579b3c9820fc9be841ff8d6def02a1afb232b327",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/code-gpt-provider-route-579b3c98-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-dead-legacy-phase-c-3a884c61-1",
+      "kind": "branch",
+      "name": "codex/dead-legacy-phase-c-3a884c61",
+      "dead_sha": "c679adee4f5f252fc7703b455c349abb51a92765",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/dead-legacy-phase-c-3a884c61",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-dead-legacy-retirement-20260723-1",
+      "kind": "branch",
+      "name": "codex/dead-legacy-retirement-20260723",
+      "dead_sha": "4e7bce5fa142357e6d7d8e604bd6fe01c6fbdafb",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/dead-legacy-retirement-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-gpt56-live-fix-20260714-1",
+      "kind": "branch",
+      "name": "codex/gpt56-live-fix-20260714",
+      "dead_sha": "dbfefc220660478d1f1d26c6579ba75d3a45b00c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/gpt56-live-fix-20260714",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-h3-non-python-promotion-verifier-1",
+      "kind": "branch",
+      "name": "codex/h3-non-python-promotion-verifier",
+      "dead_sha": "c50a83547cc32ef1893fc411bd82b89ab5560d32",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/h3-non-python-promotion-verifier",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-installer-hardening-candidate-2c84f452-1",
+      "kind": "branch",
+      "name": "codex/installer-hardening-candidate-2c84f452",
+      "dead_sha": "2c84f4524a953313d6170400afca61ce47791dd9",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/installer-hardening-candidate-2c84f452",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-installer-hardening-candidate-579b3c98-1",
+      "kind": "branch",
+      "name": "codex/installer-hardening-candidate-579b3c98",
+      "dead_sha": "579b3c9820fc9be841ff8d6def02a1afb232b327",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/installer-hardening-candidate-579b3c98",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-native-orchestration-v1-1",
+      "kind": "branch",
+      "name": "codex/native-orchestration-v1",
+      "dead_sha": "ab8746a5b1eee9690e9c8587b281efee9f3e4513",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/native-orchestration-v1",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-organic-profile-frontier-phaseb-20260723-1",
+      "kind": "branch",
+      "name": "codex/organic-profile-frontier-phaseb-20260723",
+      "dead_sha": "e6420c41592404952caec20ccb8b991b076f2e9e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/organic-profile-frontier-phaseb-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-organic-routing-no-regex-20260722-1",
+      "kind": "branch",
+      "name": "codex/organic-routing-no-regex-20260722",
+      "dead_sha": "e6420c41592404952caec20ccb8b991b076f2e9e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/organic-routing-no-regex-20260722",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-package-contract-docstrings-1",
+      "kind": "branch",
+      "name": "codex/package-contract-docstrings",
+      "dead_sha": "5f103087c4c8bc73f0435c716b81a61e21b80826",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/package-contract-docstrings",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-privacy-public-release-c679adee-1",
+      "kind": "branch",
+      "name": "codex/privacy-public-release-c679adee",
+      "dead_sha": "579b3c9820fc9be841ff8d6def02a1afb232b327",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/privacy-public-release-c679adee",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-privacy-public-release-candidate-e6420c41-1",
+      "kind": "branch",
+      "name": "codex/privacy-public-release-candidate-e6420c41",
+      "dead_sha": "e6420c41592404952caec20ccb8b991b076f2e9e",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/privacy-public-release-candidate-e6420c41",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-privacy-public-release-integration-4e7bce5f-1",
+      "kind": "branch",
+      "name": "codex/privacy-public-release-integration-4e7bce5f",
+      "dead_sha": "4e7bce5fa142357e6d7d8e604bd6fe01c6fbdafb",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/privacy-public-release-integration-4e7bce5f",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-private-marker-publish-guard-1",
+      "kind": "branch",
+      "name": "codex/private-marker-publish-guard",
+      "dead_sha": "0ee5bc60ebef708855f9daf2a5e492a489322a20",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/private-marker-publish-guard",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-release-preflight-repair-20260723-1",
+      "kind": "branch",
+      "name": "codex/release-preflight-repair-20260723",
+      "dead_sha": "3a884c61629a109782fb23bb78cd535ddf154598",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/release-preflight-repair-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-rubric-quality-20260629-dev-1",
+      "kind": "branch",
+      "name": "codex/self-improve-rubric-quality-20260629-dev",
+      "dead_sha": "45d696ab355d8e8cfca96be3579dea3a770ef192",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-rubric-quality-20260629-dev",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-rubric-quality-accepted-20260629-1",
+      "kind": "branch",
+      "name": "codex/self-improve-rubric-quality-accepted-20260629",
+      "dead_sha": "3452dc1f29430b47facd0f17e226d16eb64b7b85",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-rubric-quality-accepted-20260629",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-sir001-1",
+      "kind": "branch",
+      "name": "codex/self-improve-sir001",
+      "dead_sha": "2edfe86924516a8f901c195bc33c335a47ea19c0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-sir001",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-sir002-1",
+      "kind": "branch",
+      "name": "codex/self-improve-sir002",
+      "dead_sha": "d8c95ef048c76ab2d75939eb45f9f378ac5080fd",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-sir002",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-sir002-dev-1",
+      "kind": "branch",
+      "name": "codex/self-improve-sir002-dev",
+      "dead_sha": "281924e1d77af6792c56c1a7849ee3c86a4c805c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-sir002-dev",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-source-scout-20260629-1",
+      "kind": "branch",
+      "name": "codex/self-improve-source-scout-20260629",
+      "dead_sha": "d4a644928dda6a52bea0ad643563174615d574dc",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-source-scout-20260629",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-self-improve-source-scout-20260629b-1",
+      "kind": "branch",
+      "name": "codex/self-improve-source-scout-20260629b",
+      "dead_sha": "6bbec1635ab25f6133fa997b94ee9f18b26d7d14",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/self-improve-source-scout-20260629b",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-thomas-coherence-passage-1",
+      "kind": "branch",
+      "name": "codex/thomas-coherence-passage",
+      "dead_sha": "5b8a69fd1ea00002b19c97d0b9349902c2d3dcdf",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/thomas-coherence-passage",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-unified-chat-code-work-20260714-1",
+      "kind": "branch",
+      "name": "codex/unified-chat-code-work-20260714",
+      "dead_sha": "dbfefc220660478d1f1d26c6579ba75d3a45b00c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/unified-chat-code-work-20260714",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-unified-chat-code-work-clean-20260715-1",
+      "kind": "branch",
+      "name": "codex/unified-chat-code-work-clean-20260715",
+      "dead_sha": "df8b8071dd2a805924f85a2fca84f5edd6f3d0c8",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/unified-chat-code-work-clean-20260715",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-unified-chat-fix-20260714-1",
+      "kind": "branch",
+      "name": "codex/unified-chat-fix-20260714",
+      "dead_sha": "dbfefc220660478d1f1d26c6579ba75d3a45b00c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/unified-chat-fix-20260714",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-unified-permissions-artifact-2c84f452-20260723-1",
+      "kind": "branch",
+      "name": "codex/unified-permissions-artifact-2c84f452-20260723",
+      "dead_sha": "2c84f4524a953313d6170400afca61ce47791dd9",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/unified-permissions-artifact-2c84f452-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-unified-permissions-artifact-579b3c98-20260723-1",
+      "kind": "branch",
+      "name": "codex/unified-permissions-artifact-579b3c98-20260723",
+      "dead_sha": "579b3c9820fc9be841ff8d6def02a1afb232b327",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/unified-permissions-artifact-579b3c98-20260723",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-codex-workboard-quoted-fields-1",
+      "kind": "branch",
+      "name": "codex/workboard-quoted-fields",
+      "dead_sha": "4ba018d4943ce35c35e1340b8678b9ffef97c022",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/codex/workboard-quoted-fields",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-feat-evolve-agent-1",
+      "kind": "branch",
+      "name": "feat/evolve-agent",
+      "dead_sha": "99baa59645c9db7316dd9524b0d9f3d83a1c8705",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/feat/evolve-agent",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-fix-chat-ux-2026-06-07-1",
+      "kind": "branch",
+      "name": "fix/chat-ux-2026-06-07",
+      "dead_sha": "62522cf6e464b25c375cb297599a337797b460ab",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/fix/chat-ux-2026-06-07",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-improve-blast-radius-verify-1",
+      "kind": "branch",
+      "name": "improve/blast-radius-verify",
+      "dead_sha": "967589a516546c95ce02d170fb4e1433502f340d",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/improve/blast-radius-verify",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-journal-1",
+      "kind": "branch",
+      "name": "journal",
+      "dead_sha": "5dcf01865a1cfac2074ac379cc9496db1a61078b",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/journal",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-dev-sir002-1",
+      "kind": "branch",
+      "name": "local/dev-sir002",
+      "dead_sha": "d7702c1cfc6ecf68a75af7144bc9661fc8aadcc2",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/dev-sir002",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-evolve-browser-20260701-1309-1",
+      "kind": "branch",
+      "name": "local/evolve-browser-20260701-1309",
+      "dead_sha": "d74bfcab0b7f6c5297af048dae2fb13ef6d415e4",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/evolve-browser-20260701-1309",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-evolve-idea-tank-coord2-1",
+      "kind": "branch",
+      "name": "local/evolve-idea-tank-coord2",
+      "dead_sha": "c827fdd5c3e29ec6c1511a675d19e38b8e756a30",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/evolve-idea-tank-coord2",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-evolve-openai-codex-run-20260701-1338-1",
+      "kind": "branch",
+      "name": "local/evolve-openai-codex-run-20260701-1338",
+      "dead_sha": "9736e2583623ae4e08d0bc6b2cd96464f1ba8ad0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/evolve-openai-codex-run-20260701-1338",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-portable-gate-evidence-20260629-1",
+      "kind": "branch",
+      "name": "local/portable-gate-evidence-20260629",
+      "dead_sha": "1152327189119479c9ef6dd6fd56d93c5735ef26",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/portable-gate-evidence-20260629",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-rubric-quality-rules-1",
+      "kind": "branch",
+      "name": "local/rubric-quality-rules",
+      "dead_sha": "281924e1d77af6792c56c1a7849ee3c86a4c805c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/rubric-quality-rules",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-branch-policy-probe-sir007-1",
+      "kind": "branch",
+      "name": "local/self-improve-branch-policy-probe-sir007",
+      "dead_sha": "56bd6ec25dd314f70e550cdff28920bbd9349e5f",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-branch-policy-probe-sir007",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-commit-path-parity-sir014-1",
+      "kind": "branch",
+      "name": "local/self-improve-commit-path-parity-sir014",
+      "dead_sha": "f11ca11daf72e97796f96ae3afc61f9151dbef2c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-commit-path-parity-sir014",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-quality-applicability-sir020-1",
+      "kind": "branch",
+      "name": "local/self-improve-quality-applicability-sir020",
+      "dead_sha": "f66861034b4b69fb11458c7ab1b27caf3b0677c8",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-quality-applicability-sir020",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-rubric-landability-sir006-1",
+      "kind": "branch",
+      "name": "local/self-improve-rubric-landability-sir006",
+      "dead_sha": "4c0eb65976631c2c93c0cb1f1a2ebafc61192c2a",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-rubric-landability-sir006",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-sir003-1",
+      "kind": "branch",
+      "name": "local/self-improve-sir003",
+      "dead_sha": "281924e1d77af6792c56c1a7849ee3c86a4c805c",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-sir003",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-terminal-evidence-sir005-1",
+      "kind": "branch",
+      "name": "local/self-improve-terminal-evidence-sir005",
+      "dead_sha": "472fdb05005c747a4fc0d486a5cc5ddda1216636",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-terminal-evidence-sir005",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-self-improve-worker-capability-sir012-1",
+      "kind": "branch",
+      "name": "local/self-improve-worker-capability-sir012",
+      "dead_sha": "0ec229b674281fb6287ac8162dc4af1cec50d7c9",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/self-improve-worker-capability-sir012",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-sir023-routine-manifest-1",
+      "kind": "branch",
+      "name": "local/sir023-routine-manifest",
+      "dead_sha": "f959f2a654e3959288a3d65bc6df7d0c115ea21f",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/sir023-routine-manifest",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-sir025-tool-permission-manifest-1",
+      "kind": "branch",
+      "name": "local/sir025-tool-permission-manifest",
+      "dead_sha": "e28677917275c78aca17db931002f767ed4c0dc8",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/sir025-tool-permission-manifest",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-sir028-experience-reuse-eval-1",
+      "kind": "branch",
+      "name": "local/sir028-experience-reuse-eval",
+      "dead_sha": "6bf16e7d380771f3ebb0d69b5f9b34da9356ca0d",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/sir028-experience-reuse-eval",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-sir029-harness-change-cards-1",
+      "kind": "branch",
+      "name": "local/sir029-harness-change-cards",
+      "dead_sha": "d9786753e2c90f6773d4ba4a38cbfae131b304f0",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/sir029-harness-change-cards",
+      "by": "claude",
+      "refs": null
+    },
+    {
+      "id": "2026-09-07-local-source-scout-queue-20260629c-1",
+      "kind": "branch",
+      "name": "local/source-scout-queue-20260629c",
+      "dead_sha": "0ec229b674281fb6287ac8162dc4af1cec50d7c9",
+      "deleted_on": "2026-09-07",
+      "reason": "retired 2026-09-07: unmerged branch last touched before 2026-08-01, superseded by dev; archived at refs/archive/branch/local/source-scout-queue-20260629c",
+      "by": "claude",
+      "refs": null
     }
   ]
 }

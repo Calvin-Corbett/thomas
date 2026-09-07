@@ -7,6 +7,10 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.19.36] - 2026-09-07
+
+Published to GitHub as release v0.19.36: one squashed landing of the private `dev` branch on the public `main`, the README rewritten in Thomas's own terms, and both branches protected.
+
 ### Changed
 
 ### Fixed

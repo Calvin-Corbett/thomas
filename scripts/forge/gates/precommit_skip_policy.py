@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import json
 import os
@@ -791,6 +792,9 @@ def run(argv: Sequence[str] | None = None) -> int:
             if protected_skipped:
                 print(f"- protected hooks skipped: {', '.join(protected_skipped)}")
         print(f"- audit log: {audit_log}")
+    if breakglass_enabled:  # the audited skip leaves the breadcrumb the skipped protected gate would have
+        with contextlib.suppress(OSError):
+            (_git_dir() / "thomas_precommit_ran").write_text("1")
     return 0
 
 

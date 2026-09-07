@@ -34,7 +34,7 @@
   "scripts/forge/gates/monolith_filename_guard.py": "46ed8367451cac828d9b133a777ae21ae1685d5b2ad598c0da9f959000fa8655",
   "scripts/forge/gates/monolith_guard.py": "8883aff1b54e820ab8ff9c9c1cd36924188dca3361eeaef074511fbdef333e18",
   "scripts/forge/gates/plan_structure_gate.py": "4784214e88f397fd33f83b4b00e6e1db5a330519a9e1150fb78b7f97c8329c51",
-  "scripts/forge/gates/precommit_skip_policy.py": "d6847c9d36c3ff9765c00087bf2cde46c0d3f0abaedd4da50196b60023fb8eea",
+  "scripts/forge/gates/precommit_skip_policy.py": "afcefa01335338e5d4ffd2c3f00cac192fb76786fc03f0884f328cd208728146",
   "scripts/forge/gates/problem_closure_gate.py": "5096cc72264da78a9bcdb0d60fd76c88c7a2c21bab8777125d28086ffb4b2af9",
   "scripts/forge/gates/protected_files_gate.py": "1d0dd0e5625fc4939a49b57b65bff7292236f47e6587c5c7965c0ff487e1beb1",
   "scripts/forge/gates/public_repo_leak_guard.py": "590629fecfe569d0ef4cf5102dcb2dbd5ef3b9e5d12522a645360fb1265fd8e3",

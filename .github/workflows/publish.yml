@@ -46,7 +46,9 @@ jobs:
           python -m zipfile -l dist/*.whl | head -50
           echo ""
           # Fail if personal data leaked into package
-          if python -m zipfile -l dist/*.whl | grep -qE "(runtime/|\.thomas/|\.claude/|\.sqlite3)"; then
+          # Top-level runtime/, .thomas/ and .claude/ trees and any SQLite file are
+          # personal data; thomas/server/web/js/runtime/ is the shipped web runtime.
+          if python -m zipfile -l dist/*.whl | awk 'NR>1 {print $1}' | grep -qE "^(runtime/|\.thomas/|\.claude/)|\.sqlite3$"; then
             echo "ERROR: Personal data found in package!"
             exit 1
           fi

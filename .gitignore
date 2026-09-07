@@ -220,3 +220,10 @@ docs/ops/.graveyard.json.*.tmp
 # Not ignored until 2026-09-03, when building one for the first time left it
 # staged-able: any `git add -A` would have committed it.
 thomas_rag_index/
+
+# Run artifacts that kept reappearing as untracked clutter (cleanup 2026-09-07)
+demo/agentic-runs/
+indices/**/*.db-shm
+indices/**/*.db-wal
+thomas_test_report_*.md
+_*.log
