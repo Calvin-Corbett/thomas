@@ -27,6 +27,7 @@ except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore[assignment]
 
 from thomas.agent.loop import AgentLoop
+from thomas.cli.done_footer import print_done_footer
 from thomas.cli.main_chatops import register_chatops_commands
 from thomas.cli.main_library_commands import register_library_commands
 
@@ -71,6 +72,7 @@ def _repl_needs_codex_event_loop(config: AppConfig, active_profile: str) -> bool
     return False
 
 
+from thomas.cli.cli_browser_tools import register_cli_browser_tools
 from thomas.cli.headless_run_log import (
     OUTCOME_AGENT_ERROR,
     OUTCOME_SUCCESS,
@@ -196,6 +198,7 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_code_search_tools(registry, sandbox)
     register_diff_tools(registry, sandbox)
     register_ssh_tools(registry)
+    register_cli_browser_tools(registry)  # browser tools for headless and scheduled runs (2026-09-05)
 
     # Thomas can put the user into Redesign mode himself when they say they do
     # not like how something looks, instead of explaining where settings live.
@@ -422,14 +425,7 @@ async def _run_chat(
                 done_artifacts = event.data.get("artifacts")
                 if isinstance(done_artifacts, (list, tuple)):
                     run_artifacts.extend(str(item) for item in done_artifacts if item)
-                iters = event.data["iterations"]
-                tc = event.data["tool_calls"]
-                sys.stdout.write("\n")
-                if tc > 0:
-                    sys.stdout.write(
-                        f"\033[90m({iters} iteration{'s' if iters != 1 else ''}, "
-                        f"{tc} tool call{'s' if tc != 1 else ''})\033[0m\n"
-                    )
+                print_done_footer(event.data)  # blank line, verification trailer, iteration count
 
         # Print token usage
         usage = llm.session_usage
@@ -519,14 +515,18 @@ def cli(
     ctx.obj["data_dir"] = str(effective_data_dir)
     ctx.obj["data_profile"] = normalized_profile
 
-    # First-run nudge: suggest setup if no config exists
+    # First-run nudge: suggest setup only when nothing configures Thomas
+    # (no thomas.toml on disk and no THOMAS_* model config in the environment).
     if ctx.invoked_subcommand not in ("setup", "quickstart"):
         if not getattr(cli, "_first_run_checked", False):
             cli._first_run_checked = True  # type: ignore[attr-defined]
             try:
-                from thomas.cli.commands.setup_wizard import _detect_existing_config
+                from thomas.cli.commands.setup_wizard import (
+                    _detect_env_config,
+                    _detect_existing_config,
+                )
 
-                if _detect_existing_config() is None:
+                if _detect_existing_config() is None and not _detect_env_config():
                     click.echo(
                         click.style(
                             "  Thomas isn't configured yet. "
@@ -575,6 +575,17 @@ def cli(
     default=None,
     help="Append a machine-readable JSONL run summary to this path (THOMAS_RUN_LOG env var also works).",
 )
+@click.option(
+    "--max-iterations",
+    type=click.IntRange(min=1),
+    default=None,
+    hidden=True,
+)
+@click.option(
+    "--job-type",
+    default=None,
+    hidden=True,
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
@@ -582,6 +593,8 @@ def chat(
     model_name: str | None,
     autonomy_level: int,
     run_log_flag: str | None,
+    max_iterations: int | None,
+    job_type: str | None,
 ) -> None:
     """Send a single prompt and get a response.
 
@@ -603,7 +616,7 @@ def chat(
             click.echo(f"Config error: {e}", err=True)
         sys.exit(recorder.finish(OUTCOME_USAGE_ERROR, error="; ".join(errors)))
 
-    from thomas.core.model_resolution import resolve_effective_model
+    from thomas.preferences.model_resolution import resolve_effective_model
 
     try:
         resolved_profile, resolved_model_id = resolve_effective_model(
@@ -640,6 +653,8 @@ def chat(
                 prompt,
                 resolved_profile,
                 autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+                max_iterations=max_iterations,
+                job_type=job_type,
             )
         )
     except KeyboardInterrupt:

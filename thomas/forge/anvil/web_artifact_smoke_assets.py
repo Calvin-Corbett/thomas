@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from thomas.core.web_asset_policy import MAX_ASSET_BYTES, WEB_ASSET_SUFFIXES
+
 # What the smoke server will hand to a page it is checking. This is a security
 # boundary -- generated code runs against it -- so it stays an allowlist of
 # formats a browser PARSES rather than executes, plus the scripts and styles the
@@ -26,31 +28,10 @@ import re
 # dotfiles and databases stay refused -- widening this to "anything in the
 # folder" would turn verification into a way to read a project's private files
 # out of a page Thomas just generated.
-_WEB_ASSET_SUFFIXES = {
-    ".avif",
-    ".css",
-    ".csv",
-    ".gif",
-    ".html",
-    ".htm",
-    ".ico",
-    ".jpeg",
-    ".jpg",
-    ".js",
-    ".json",
-    ".md",
-    ".mjs",
-    ".png",
-    ".svg",
-    ".tsv",
-    ".txt",
-    ".wasm",
-    ".webp",
-    ".woff",
-    ".woff2",
-    ".xml",
-}
-_MAX_ASSET_BYTES = 16 * 1024 * 1024
+# The list itself lives in thomas.core.web_asset_policy so the playtest tool
+# serves exactly what this check serves; the names here are kept for callers.
+_WEB_ASSET_SUFFIXES = set(WEB_ASSET_SUFFIXES)
+_MAX_ASSET_BYTES = MAX_ASSET_BYTES
 _RECEIPT_RE = re.compile(r"\bdata-thomas-smoke=(?:\"([^\"]+)\"|'([^']+)')", re.IGNORECASE)
 _SMOKE_HOST = "thomas-smoke.invalid"
 _SMOKE_ORIGIN = f"http://{_SMOKE_HOST}"
@@ -168,10 +149,44 @@ _SMOKE_HARNESS = r"""
     }
     return `${clean(document.body?.innerText || "")}|${controls}|${canvasHash}`;
   };
+  // A <link rel=stylesheet> fires `error` when any @import inside it fails, and
+  // the event names the sheet that did the importing, not the URL that was
+  // refused. Two builds in a row lost fix passes to a local styles.css that had
+  // loaded fine and merely imported Google Fonts the sandbox blocks. Name the
+  // failed imports instead; the sheet is still listed when none can be found.
+  const failedImports = (sheetHref) => {
+    const found = [];
+    const walk = (sheet, depth) => {
+      if (!sheet || depth > 4) return;
+      let rules = [];
+      try { rules = Array.from(sheet.cssRules || []); } catch (_error) { return; }
+      for (const rule of rules) {
+        if (!(rule instanceof CSSImportRule)) continue;
+        // Measured in this harness: a blocked remote import still gets a sheet
+        // object, but reading its rules throws; a missing LOCAL import gets an
+        // empty sheet, and the server names that file as absent by itself.
+        let imported = null;
+        try { imported = rule.styleSheet ? Array.from(rule.styleSheet.cssRules || []) : null; } catch (_error) { imported = "refused"; }
+        if (imported === null || imported === "refused") found.push(rule.href || "");
+        else walk(rule.styleSheet, depth + 1);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      if (sheet.href === sheetHref) walk(sheet, 0);
+    }
+    return found.filter(Boolean);
+  };
   window.addEventListener("error", (event) => {
     if (event.target && event.target !== window) {
       const target = event.target;
-      pushUnique(state.resource_errors, `${target.tagName || "resource"}: ${target.src || target.href || "load failed"}`);
+      const tag = target.tagName || "resource";
+      const href = target.src || target.href || "load failed";
+      const imports = tag === "LINK" && target.href ? failedImports(target.href) : [];
+      if (imports.length) {
+        for (const blocked of imports) pushUnique(state.resource_errors, `LINK: ${blocked} (imported by ${href})`);
+      } else {
+        pushUnique(state.resource_errors, `${tag}: ${href}`);
+      }
       return;
     }
     pushUnique(state.errors, event.message || event.error || "window error");

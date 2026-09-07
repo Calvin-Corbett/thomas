@@ -143,7 +143,9 @@ class DelegationContract:
     specialist_id: str = ""
     task_description: str = ""
     input_context: dict[str, Any] = field(default_factory=dict)
-    success_criteria: dict[str, Any] = field(default_factory=dict)
+    success_criteria: dict[str, Any] = field(
+        default_factory=lambda: {"required_fields": ["content"], "min_content_length": 1}
+    )
     allowed_tools: set[str] = field(default_factory=set)
     timeout_seconds: int = 120
     max_iterations: int = 10
@@ -154,19 +156,28 @@ class DelegationContract:
 
         Returns True if output meets criteria.
         """
-        if not self.success_criteria:
-            return True  # no criteria = always valid
+        criteria = self.success_criteria
+        if not isinstance(output, dict) or not isinstance(criteria, dict) or not criteria:
+            return False
 
         # Check required fields
-        required = self.success_criteria.get("required_fields", [])
+        required = criteria.get("required_fields", [])
+        if not isinstance(required, (list, tuple, set)):
+            return False
+        has_effective_criterion = bool(required)
         for f in required:
-            if f not in output:
+            if not isinstance(f, str) or not f or f not in output:
                 return False
 
         # Check minimum content length
-        min_len = self.success_criteria.get("min_content_length", 0)
+        min_len = criteria.get("min_content_length", 0)
+        if isinstance(min_len, bool) or not isinstance(min_len, int) or min_len < 0:
+            return False
+        has_effective_criterion = has_effective_criterion or min_len > 0
+        if not has_effective_criterion:
+            return False
         content = output.get("content", "")
-        if isinstance(content, str) and len(content) < min_len:
+        if min_len and (not isinstance(content, str) or len(content.strip()) < min_len):
             return False
 
         return True
@@ -189,6 +200,7 @@ class DelegationResult:
     elapsed_ms: int = 0
     tokens_used: int = 0
     iterations: int = 0
+    attempts: int = 0
 
     @property
     def ok(self) -> bool:

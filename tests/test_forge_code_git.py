@@ -8,6 +8,8 @@ fixture and smoke-tests the argument shaping (``git -C <root> ...``).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from thomas.forge.anvil import forge_code_git
@@ -280,3 +282,37 @@ def test_git_diff_failure_is_never_reported_as_empty_evidence(tmp_path, monkeypa
 
     with pytest.raises(ForgeCodeGitError, match="diff evidence unavailable"):
         forge_code_git.unified_diff(repo, "tracked.txt")
+
+
+def test_thomas_own_index_inside_the_project_is_never_a_changed_file(tmp_path):
+    """Turn 5 of Calvin's Minecraft conversation (2026-09-05) crashed with
+    "could not fingerprint changed file thomas_rag_index/rag_fts.sqlite3-shm:
+    Permission denied": Thomas's own RAG index, written into the project folder,
+    counted as the person's changed files."""
+    from thomas.forge.anvil.forge_code_git import changed_files
+
+    repo = _new_repo(tmp_path)
+    index = repo / "thomas_rag_index"
+    index.mkdir()
+    (index / "rag_fts.sqlite3").write_bytes(b"sqlite")
+    (index / "manifest.json").write_text("{}", encoding="utf-8")
+    (repo / "game.js").write_text("window.ready = true;" + chr(10), encoding="utf-8")
+
+    assert changed_files(repo) == ["game.js"]
+    assert list(snapshot(repo)) == ["game.js"]
+
+
+def test_a_file_that_cannot_be_read_gets_a_fingerprint_instead_of_ending_the_run(tmp_path, monkeypatch):
+    repo = _new_repo(tmp_path)
+    locked = repo / "held.bin"
+    locked.write_bytes(b"x")
+    real_open = Path.open
+
+    def _refuse(self, *args, **kwargs):
+        if self.name == "held.bin":
+            raise PermissionError(13, "Permission denied")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", _refuse)
+    snap = snapshot(repo)
+    assert snap["held.bin"].endswith("unreadable:PermissionError")

@@ -19,10 +19,12 @@ def _normalize_usage(usage: Any, *, minimum_total: Any = 0) -> dict[str, int]:
         prompt = usage.get("prompt_tokens", 0)
         completion = usage.get("completion_tokens", 0)
         total = usage.get("total_tokens", 0)
+        cached = usage.get("cached_prompt_tokens", 0)
     else:
         prompt = getattr(usage, "prompt_tokens", 0)
         completion = getattr(usage, "completion_tokens", 0)
         total = getattr(usage, "total_tokens", 0)
+        cached = getattr(usage, "cached_prompt_tokens", 0)
     prompt_count = _nonnegative_int(prompt)
     completion_count = _nonnegative_int(completion)
     total_count = _nonnegative_int(total)
@@ -30,6 +32,7 @@ def _normalize_usage(usage: Any, *, minimum_total: Any = 0) -> dict[str, int]:
         "prompt_tokens": prompt_count,
         "completion_tokens": completion_count,
         "total_tokens": max(total_count, prompt_count + completion_count, _nonnegative_int(minimum_total)),
+        "cached_prompt_tokens": min(_nonnegative_int(cached), prompt_count),
     }
 
 
@@ -39,6 +42,7 @@ def _usage_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int
             "prompt_tokens": after["prompt_tokens"] - before["prompt_tokens"],
             "completion_tokens": after["completion_tokens"] - before["completion_tokens"],
             "total_tokens": after["total_tokens"] - before["total_tokens"],
+            "cached_prompt_tokens": after.get("cached_prompt_tokens", 0) - before.get("cached_prompt_tokens", 0),
         }
     )
 
@@ -48,14 +52,19 @@ def terminal_usage_fields(
     run_usage: Any = None,
     session_usage: Any = None,
     minimum_session_total: Any = 0,
-) -> dict[str, dict[str, int]]:
-    """Build the normalized usage contract shared by every V2 terminal event."""
+) -> dict[str, Any]:
+    """Build the normalized usage contract shared by every V2 terminal event.
+
+    ``usage_reported`` is False when no count reached the server for this
+    turn. A reply is never free; zeros mean the provider said nothing, and
+    the readout says that rather than pricing them.
+    """
     run = _normalize_usage(run_usage)
     session = _normalize_usage(
         session_usage,
         minimum_total=max(_nonnegative_int(minimum_session_total), run["total_tokens"]),
     )
-    return {"usage": run, "run_usage": run, "session_usage": session}
+    return {"usage": run, "run_usage": run, "session_usage": session, "usage_reported": run["total_tokens"] > 0}
 
 
 def session_usage_for_session(app: Any, session_id: str, *, persisted_total: Any = 0) -> dict[str, int]:

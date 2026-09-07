@@ -19,7 +19,7 @@ MODULES = {
         "tier": "core",
         "depends_on": ["tools", "server", "marketplace"],
         "health": "yellow",
-        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, llm_client.py exceeds 833 lines; core imports tools/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion",
+        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, llm_client.py exceeds 833 lines; core imports tools/server --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion; core->server is now down to ONE import (thomas.server.secrets.SecretStore, imported by the boot doctor) --remove that and 'server' can leave this list entirely; on 2026-08-12 the preference-aware model resolution moved out to the preferences package, which is why it is no longer a second one; system_map.py exceeds 800 lines",
         "description": "LLM client, persistence, config, events",
     },
     "agent": {
@@ -110,9 +110,10 @@ MODULES = {
             "skills",
             "marketplace",
             "desktop_operator",
+            "preferences",
         ],
         "health": "yellow",
-        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines",
+        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines; cli->preferences is repl_runtime.py persisting a model choice, which previously went through thomas.server.model_preferences --the store moved, the caller did not change what it does",
         "description": "Click CLI commands and entry points",
     },
     "memory": {
@@ -225,7 +226,7 @@ MODULES = {
         "tier": "infra",
         "depends_on": ["core", "investigation", "integrations"],
         "health": "yellow",
-        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines, filesystem.py exceeds 867 lines, voice.py exceeds 970 lines, context_review.py exceeds 811 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
+        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines, filesystem.py exceeds 867 lines, context_review.py exceeds 811 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
         "description": "Tool definitions, registry, sandbox",
     },
     # -- SUPPORT --smaller utility modules ---------------------------------
@@ -379,9 +380,9 @@ MODULES = {
     },
     "forge": {
         "tier": "infra",
-        "depends_on": ["core", "tools", "agent", "desktop_operator"],
+        "depends_on": ["core", "tools", "agent", "desktop_operator", "preferences"],
         "health": "yellow",
-        "debt": "anvil/evolve_verification.py exceeds 1133 lines; anvil/evolve.py exceeds 1335 lines (post-split remainder, dev 2026-07-15 ledger restored after merge); Anvil desktop and agent dispatch adapters import desktop_operator and agent",
+        "debt": "anvil/forge_code_self_edit.py exceeds 802 lines; anvil/evolve_verification.py exceeds 1133 lines; anvil/evolve.py exceeds 1335 lines (post-split remainder, dev 2026-07-15 ledger restored after merge); Anvil desktop and agent dispatch adapters import desktop_operator and agent; anvil/forge_code_projects.py exceeds 920 lines, anvil/native_orchestration.py exceeds 800 lines, anvil/run_report.py exceeds 835 lines",
         "description": "Praxis.Forge construction umbrella -- Anvil (self-mod / Doppelganger Protocol / Evolve runtime). Future sub-pieces: Gates, Intake, Publish.",
     },
     "work": {

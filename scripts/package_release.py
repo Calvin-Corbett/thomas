@@ -27,6 +27,106 @@ except ModuleNotFoundError:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# ---------------------------------------------------------------------------
+# WHAT SHIPS -- an allow-list, deliberately.
+#
+# This used to be a deny-list, which meant anything new shipped by default until
+# somebody remembered to exclude it. That is how scripts/crew (41 files of
+# workboard, claims and swarm tooling), all 57 process gates, .codex/,
+# prompt_pack/, AGENTS.md and PROJECT_MANAGEMENT_RULES.md ended up in a user
+# bundle. None of it was ever a decision -- a user's Thomas has no workboard,
+# files no claims, and has no peer agents.
+#
+# The failure mode is now inverted: a new top-level directory is invisible to
+# users until someone deliberately adds it here. Getting that wrong is a missing
+# file that the cold-boot check in Phase 3 catches loudly, rather than internal
+# state shipping silently.
+#
+# Classification lives in plans/thomas/tasks/RELEASE-BOUNDARY-20260812/
+# release_boundary_manifest.md -- every top-level path and all 59 gates, with a
+# justification each. Change that first, then change this.
+# ---------------------------------------------------------------------------
+
+INCLUDE_PREFIXES = (
+    "thomas/",  # the product package
+    "evolve_supervisor/",  # runtime supervisor; already in the wheel
+    "skills/",  # product skills, loaded by thomas/cli/repl_runtime.py
+    "extensions/",  # plugin surfaces read by desktop_plugins_manifest.py
+    "installer/",  # cold-install path
+    "assets/",  # application icons
+    "ollama/",  # local model system prompt shipped with the runtime
+    "web/",  # plugin surface target (agent_plugins_adapter.py -> web/about.html)
+)
+
+# Individual files inside a directory that is otherwise excluded.
+#
+# scripts/ is NOT an allowed prefix -- that is the whole point, it holds the crew
+# tooling and all 59 gates. But the launchers a user actually runs live at the
+# repo root and immediately delegate into it: run-ui.cmd calls scripts/run-ui.ps1,
+# setup.cmd calls scripts/setup.ps1, and so on. Shipping the .cmd files without
+# these produces a bundle that is clean and cannot start -- which is a worse
+# regression than shipping too much. Each entry below is here because something
+# a user runs references it by name.
+INCLUDE_EXACT_PATHS = frozenset(
+    {
+        "scripts/__init__.py",  # makes the rest importable
+        # launchers invoked directly by the root .cmd / .vbs entry points
+        "scripts/run-ui.ps1",
+        "scripts/run-repl.ps1",
+        "scripts/setup.ps1",
+        "scripts/repair.ps1",
+        "scripts/bootdoctor.ps1",
+        # referenced from inside those launchers
+        "scripts/run_boot_doctor_direct.py",
+        "scripts/oauth_signin.py",
+        # referenced by thomas/cli/commands/setup_wizard.py for the desktop shortcut
+        "scripts/create_shortcut.py",
+    }
+)
+
+# Individual top-level files. A file not named here does not ship, even if its
+# directory would otherwise be allowed.
+INCLUDE_EXACT_FILES = frozenset(
+    {
+        # identity and legal
+        "readme.md",
+        "license",
+        "security.md",
+        "changelog.md",
+        "deployment.md",
+        # runtime guidance sources read by thomas/agent/guidance.py -- these are
+        # product persona, not this repo's process. See finding F3 in the manifest.
+        "soul.md",
+        "identity.md",
+        # install and packaging
+        "pyproject.toml",
+        "requirements-lock.txt",
+        "manifest.in",
+        "sitecustomize.py",
+        # product configuration
+        "thomas.toml",
+        "thomas.prod.toml",
+        # spend caps read at runtime by evolve_supervisor/spend_governor.py.
+        # Dropping this would remove a spend limit from a shipped component.
+        "evolve_governor.toml",
+        # deployment
+        "dockerfile",
+        "docker-compose.yml",
+        ".dockerignore",
+        ".env.example",
+        ".env.thomas.production.example",
+        # entry points a user actually runs
+        "install.cmd",
+        "install.sh",
+        "setup.cmd",
+        "run-ui.cmd",
+        "run-repl.cmd",
+        "repair.cmd",
+        "bootdoctor.cmd",
+        "launch-thomas.vbs",
+    }
+)
+
 EXCLUDE_PREFIXES = (
     ".git/",
     ".venv/",
@@ -341,10 +441,37 @@ def _generate_third_party_notices(bundle_root: Path) -> Path:
     return path
 
 
+def _is_included(path: str) -> bool:
+    """True only for a path the allow-list names.
+
+    Directory membership comes from INCLUDE_PREFIXES. A top-level file must be
+    named individually in INCLUDE_EXACT_FILES -- being in the repo root is not a
+    qualification. Anything else is invisible to the bundle, which is the whole
+    point: a directory added next month does not ship until someone puts it here.
+    """
+    normalized = _normalize_path(path).lower()
+    if not normalized:
+        return False
+    if normalized in INCLUDE_EXACT_PATHS:
+        return True
+    for prefix in INCLUDE_PREFIXES:
+        p = prefix.lower().rstrip("/")
+        if normalized == p or normalized.startswith(f"{p}/"):
+            return True
+    if "/" not in normalized:
+        return normalized in INCLUDE_EXACT_FILES
+    return False
+
+
 def _is_excluded(path: str) -> str | None:
     normalized = _normalize_path(path).lower()
     if not normalized:
         return "empty"
+    # Allow-list first. Everything below is a SECOND filter that strips junk out
+    # of directories that are otherwise allowed -- caches, logs, databases -- so
+    # an included tree cannot smuggle a *.db or __pycache__ through.
+    if not _is_included(path):
+        return "not-in-allow-list"
     if normalized in EXCLUDE_PATHS:
         return f"exact:{normalized}"
     for prefix in EXCLUDE_PREFIXES:

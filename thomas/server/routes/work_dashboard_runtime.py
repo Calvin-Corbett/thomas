@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -354,6 +355,40 @@ async def design_job_dashboard(
     return validated, ""
 
 
+def fenced_paths_for(project_root: Path | str) -> list[str]:
+    """The self-edit fence: every scope other agents claim on the project's workboard.
+
+    Read at send time from plans/thomas/WORKBOARD.md under the project root.
+    THOMAS_REDESIGN_EXEMPT_AGENTS (comma list) in the server's own environment
+    names agents whose claims are not fenced; nothing a client sends can.
+    """
+    from thomas.server.routes.ui_redesign_runtime import board_fenced_paths
+
+    board = Path(project_root) / "plans" / "thomas" / "WORKBOARD.md"
+    try:
+        text = board.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    exempt = {a.strip() for a in os.environ.get("THOMAS_REDESIGN_EXEMPT_AGENTS", "").split(",") if a.strip()}
+    return board_fenced_paths(text, exempt_agents=exempt)
+
+
+def _applied_summary(plan: dict) -> list[str]:
+    """One line per change the overlay channels made, for the Code brief."""
+    out: list[str] = []
+    for row in plan.get("layout") or []:
+        if not isinstance(row, dict):
+            continue
+        parts = [f"{key}={row[key]}" for key in ("text", "width", "height", "hidden", "icon") if key in row]
+        style = row.get("style") if isinstance(row.get("style"), dict) else {}
+        parts += [f"style {k}={v}" for k, v in style.items()]
+        if parts:
+            out.append(f"{row.get('ui_id') or 'element'}: " + ", ".join(parts))
+    tokens = ((plan.get("theme") or {}).get("tokens") or {}) if isinstance(plan.get("theme"), dict) else {}
+    out += [f"token {k}={v}" for k, v in tokens.items()]
+    return out
+
+
 def register_work_dashboard_routes(
     app: Any,
     *,
@@ -449,7 +484,13 @@ def register_work_dashboard_routes(
         profile = _resolve_profile(str(body.get("profile") or "").strip())
         plan, error = await redesign_from_selection(root, profile, body, job_context=job_context)
         if plan is None:
-            status = 503 if "no model" in error else 400 if "nothing was selected" in error or "no instruction" in error else 502
+            status = (
+                503
+                if "no model" in error
+                else 400
+                if "nothing was selected" in error or "no instruction" in error
+                else 502
+            )
             return web.json_response({"ok": False, "error": error, "code": "redesign_failed"}, status=status)
         spec = (plan.get("dashboard") or {}).get("dashboard")
         # Persist ONLY when the diff says something actually moved. Writing an
@@ -465,15 +506,31 @@ def register_work_dashboard_routes(
 
         instruction = str(plan.get("instruction") or "").strip()
         targets = list(plan.get("targets") or [])
+        fenced = fenced_paths_for(root) if instruction and targets else []
         return ok(
             layout=plan.get("layout") or [],
             dashboard=plan.get("dashboard") or {"changed": 0, "applied": []},
+            # The theme channel: token and identity changes the browser records
+            # in the user's overlay (thomas/server/overlay); the server writes nothing here.
+            theme=plan.get("theme") or {"theme": "nebula", "tokens": {}, "identity": {}, "rejected": []},
             unsupported=plan.get("unsupported") or [],
             code_thread={
                 "title": f"Redesign: {instruction}"[:70],
                 "project_root": str(root),
-                "prompt": code_thread_prompt(instruction, targets, str(body.get("workspace") or "chat")),
-            } if instruction and targets else None,
+                # Every scope other agents claim on the board; the run's write tools refuse them.
+                "protected_paths": fenced,
+                "prompt": code_thread_prompt(
+                    instruction,
+                    targets,
+                    str(body.get("workspace") or "chat"),
+                    unsupported=list(plan.get("unsupported") or []),
+                    applied=_applied_summary(plan),
+                    server_url=f"{request.scheme}://{request.host}/",
+                    protected_paths=fenced,
+                ),
+            }
+            if instruction and targets
+            else None,
         )
 
     app.router.add_post(

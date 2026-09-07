@@ -2,11 +2,13 @@
 
 ## System Overview
 
-Thomas is a Python runtime for conversational automation with three primary entry surfaces:
+Thomas is a Python runtime for conversational automation with these primary
+operator and verification surfaces:
 
-- `thomas cli ...` for local operator workflows.
-- `thomas server` for HTTP/API web runtime.
-- `tests` for contract-driven behavior guarantees.
+- `thomas` starts the interactive REPL when attached to a terminal;
+  `thomas repl` is its explicit equivalent.
+- `thomas serve` starts the web UI and HTTP/API server.
+- `tests` provides contract-driven behavior guarantees.
 
 Core runtime objects are composed from shared modules in `thomas/core`, and all
 runtime state should flow through explicit configuration boundaries rather than
@@ -20,7 +22,10 @@ hard-coded global paths.
   - Must not own long-lived state logic; delegates to `server`/`agent` layers.
 - `thomas/server`
   - HTTP app factory `thomas/server/app.py` -> `create_app`.
-  - Route registration and web contracts.
+  - `thomas/server/routes/chat_v2_registration.py` is the exclusive live
+    registrar for both `/api/chat` and `/api/v2/chat`.
+    `thomas/server/routes/chat_aiohttp.py` is compatibility-only and does not
+    own either live route registration.
   - Wires tool registry, memory, secrets, policy, and diagnostics into aiohttp app.
 - `thomas/agent`
   - **Model-owned chat orchestration**: the frontier model receives the conversation
@@ -43,7 +48,7 @@ hard-coded global paths.
 - `thomas/core`
   - Configuration (`core/config.py`), persistence helpers, and app-wide primitives.
   - Central place for defaults, env overrides, and path derivation.
-- `thomas/chat_logger`
+- `thomas/chat_logger.py`
   - Event and observation logging (`BehaviorObservation`, `ChatEvent`) and optional
     on-disk log sinks.
 - `tests`
@@ -55,15 +60,30 @@ guards to make changes pass.
 
 ## Web Surface Contract
 
-- Native Thomas web sections must render inside the shared `module-workspace` shell (`#moduleWorkspace` in `thomas/server/web/index.html`); section rendering is driven by the numbered runtime modules in `thomas/server/web/js/runtime/` (001-045), not by the legacy `app_runtime_primary.mjs` monolith.
-- Reuse the shared workspace/panel/control language defined in `thomas/server/web/css/components_parts/` (e.g. `marketplace-workspace.css`, `content-panels.css`, `module-cards.css`) before adding mode-specific CSS.
+- Native Thomas web sections must render inside the shared `module-workspace`
+  shell (`#moduleWorkspace` in `thomas/server/web/index.html`).
+- Classic section rendering is driven by every module declared in the ordered
+  `RUNTIME_SCRIPTS` manifest in
+  `thomas/server/web/js/app_runtime_loader.js`. The manifest includes numbered
+  and descriptive filenames and changes over time; never copy its current count
+  or a numeric filename range into architecture guidance.
+- `RUNTIME_SCRIPTS` and the tracked JavaScript files under
+  `thomas/server/web/js/runtime/` must correspond one-to-one. Adding, removing,
+  or renaming a runtime module requires updating the manifest and its focused
+  contract test.
+- Reuse the design tokens and shared workspace/panel/control language in
+  `thomas/server/web/css/tokens.css`,
+  `thomas/server/web/css/component_styles/`, and
+  `thomas/server/web/css/layout_styles/` before adding mode-specific CSS.
 - Do not introduce nested full-page shells, page-inside-page layouts, or one-off color systems for native Thomas surfaces unless the feature is explicitly an external embedded app.
 
 ## Core Data Flow
 
 1. **User request**
    - REPL input: `thomas/cli/repl_runtime.py` parses slash/user text.
-   - Web request: `/api/chat` routes in `thomas/server/routes/chat_aiohttp.py`.
+   - Web requests: `/api/chat` and `/api/v2/chat` are registered exclusively by
+     `thomas/server/routes/chat_v2_registration.py` and handled by
+     `thomas/server/routes/chat_v2.py`.
 2. **Ingress normalization**
    - Configuration and profile context from `thomas/core/config.py`.
    - Route selection (direct/assistant mode, autonomy, policy gates).

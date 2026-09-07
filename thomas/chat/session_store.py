@@ -23,9 +23,24 @@ from pathlib import Path
 from typing import Any
 
 from thomas.chat.conversation import ConversationManager
+from thomas.core import capture_context
 from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
+from thomas.core.capture_context import CAPTURE_EXCEPTIONS, imported_payload
 
 log = logging.getLogger(__name__)
+
+# The top-level JSON key marking a session file's honesty-spine provenance:
+# {"log_born": True} for a session created after this feature landed (never
+# needs a history/imported event), or {"imported": True, "message_count": N}
+# once the first log-touch of a pre-existing session has fired one. Rebuilt
+# into every save()'s fresh payload (see _peek_session_log/_write_atomic) so
+# it survives across writes and process restarts -- the marker lives in the
+# session record on disk, never in process memory.
+_SESSION_LOG_KEY = "session_log"
+
+# Honesty spine: history/imported append (and marker-persist) failures are
+# counted here, never fatal to load()/save() -- see _fire_imported_event.
+IMPORTED_EVENT_FAILURES = 0
 
 
 @dataclass
@@ -127,6 +142,86 @@ class SessionStore:
                 self._locks[session_id] = asyncio.Lock()
             return self._locks[session_id]
 
+    # ── honesty spine: history/imported provenance ──────────────────
+
+    def _peek_session_log(self, target: Path) -> tuple[bool, dict[str, Any] | None, int]:
+        """Best-effort peek at an existing session file's marker + message count.
+
+        Returns (file_exists, marker_dict_or_None, legacy_message_count).
+        Never raises -- a missing, corrupt, or unreadable file reads the
+        same as "not yet marked" (marker=None) so save()/load() can still
+        proceed; a corrupt file's `exists` still reports True so a save()
+        does not mistake it for a brand-new (log-born) session.
+        """
+        if not target.exists():
+            return False, None, 0
+        try:
+            raw = target.read_text("utf-8")
+            data = json.loads(raw)
+        except (OSError, ValueError):
+            return True, None, 0
+        marker = data.get(_SESSION_LOG_KEY)
+        conv = data.get("conversation")
+        msgs = conv.get("messages") if isinstance(conv, dict) else None
+        count = len(msgs) if isinstance(msgs, list) else 0
+        return True, (marker if isinstance(marker, dict) else None), count
+
+    def _fire_imported_event(self, session_id: str, message_count: int) -> None:
+        """Append one history/imported event; never lets a capture failure
+
+        break the load()/save() call that triggered it. Correlates to
+        whatever run is current() (rare here -- this store has no AgentLoop
+        turn context of its own), else the per-process ambient run.
+        """
+        global IMPORTED_EVENT_FAILURES
+        try:
+            run_id = capture_context.current() or capture_context.ambient_run_id()
+            if run_id is None:
+                return
+            payload = imported_payload(message_count=message_count, source="session_store")
+            payload["session_id"] = session_id
+            # Reuses the writer-aware seq source from Task 2's capture hook
+            # instead of inventing a second seq source for this run_id.
+            capture_context._append_capture_event(run_id, payload)
+        except CAPTURE_EXCEPTIONS as e:
+            log.debug("Session store: history/imported append failed (%s): %s", type(e).__name__, e)
+            IMPORTED_EVENT_FAILURES += 1
+
+    def _write_session_log_marker(self, session_id: str, marker: dict[str, Any]) -> None:
+        """Patch just the `session_log` marker into an already-written session
+
+        file, atomically (used by load(), which has no in-flight write of
+        its own to piggyback the marker onto -- save()/`_write_atomic`
+        writes it as part of its normal payload instead). Best-effort: a
+        failure here is a capture failure, counted like any other, never a
+        reason to break load().
+        """
+        global IMPORTED_EVENT_FAILURES
+        target = self._session_path(session_id)
+        try:
+            raw = target.read_text("utf-8")
+            data = json.loads(raw)
+            data[_SESSION_LOG_KEY] = marker
+            fd, tmp_path = tempfile.mkstemp(dir=str(self._store_dir), prefix=".tmp_session_", suffix=".json")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(data, default=str, ensure_ascii=False))
+                os.replace(tmp_path, str(target))
+            except OSError:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+        except CAPTURE_EXCEPTIONS as e:
+            log.debug(
+                "Session store: could not persist session_log marker for %s (%s): %s",
+                session_id[:12],
+                type(e).__name__,
+                e,
+            )
+            IMPORTED_EVENT_FAILURES += 1
+
     # ── save ─────────────────────────────────────────────────────
 
     async def save(
@@ -159,6 +254,7 @@ class SessionStore:
     ) -> bool:
         """Write JSON via temp file + atomic rename."""
         target = self._session_path(session_id)
+        existed, existing_marker, existing_count = self._peek_session_log(target)
         payload: dict[str, Any] = {
             "session_id": session_id,
             "saved_at": time.time(),
@@ -166,6 +262,23 @@ class SessionStore:
         }
         if meta:
             payload["meta"] = meta.to_dict()
+
+        if existing_marker is not None:
+            # Every save() rebuilds the whole file from scratch, so the
+            # marker has to be carried forward explicitly or it vanishes on
+            # the next write.
+            payload[_SESSION_LOG_KEY] = existing_marker
+        elif not existed:
+            # No prior file for this session_id: born under the honesty
+            # spine, so it never needs a history/imported event.
+            payload[_SESSION_LOG_KEY] = {"log_born": True}
+        else:
+            # A pre-existing file with no marker that no load() call in this
+            # process has touched yet -- this save() IS the first log-touch.
+            # Use the OLD (pre-overwrite) message count: that is the legacy
+            # content being imported, not whatever is about to be written.
+            self._fire_imported_event(session_id, existing_count)
+            payload[_SESSION_LOG_KEY] = {"imported": True, "message_count": existing_count}
 
         try:
             data = json.dumps(payload, default=str, ensure_ascii=False)
@@ -227,11 +340,19 @@ class SessionStore:
                 raw = await asyncio.to_thread(target.read_text, "utf-8")
                 data = json.loads(raw)
                 conv_data = data.get("conversation", {})
-                return ConversationManager.from_dict(conv_data)
+                conversation = ConversationManager.from_dict(conv_data)
             except Exception:
                 # Broad catch: corrupt or incompatible session files should not block chat startup.
                 log.exception("Failed to load session %s", session_id[:12])
                 return None
+            marker = data.get(_SESSION_LOG_KEY)
+            if not isinstance(marker, dict) or not (marker.get("imported") or marker.get("log_born")):
+                # First log-touch of a pre-existing session (or a marker
+                # write from a prior touch never made it to disk) -- fire
+                # once, then persist the marker so it never fires again.
+                self._fire_imported_event(session_id, conversation.length)
+                self._write_session_log_marker(session_id, {"imported": True, "message_count": conversation.length})
+            return conversation
 
     async def load_meta(self, session_id: str) -> SessionMeta | None:
         """Load session metadata only."""

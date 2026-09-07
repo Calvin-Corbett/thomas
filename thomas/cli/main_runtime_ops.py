@@ -87,8 +87,6 @@ def git_status_porcelain_lines(repo_root: Path) -> list[str]:
 def status_cmd(
     ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool, repo_presence: bool = False
 ) -> None:
-    from scripts.forge.gates.repo_hygiene import evaluate_worktree_clean
-
     from thomas import __version__
 
     config: AppConfig = ctx.obj["config"]
@@ -97,6 +95,14 @@ def status_cmd(
     worktree_error = ""
     worktree: dict[str, Any]
     try:
+        # Imported inside the try on purpose. `scripts/` is a development tree --
+        # pyproject ships only `thomas*` and `evolve_supervisor*` -- so on an
+        # installed copy this raises ModuleNotFoundError. At module scope that
+        # took the whole `thomas status` command down for anyone who did not
+        # clone the repo. Here it lands in the same degraded branch already used
+        # when the check itself fails, and the rest of status still prints.
+        from scripts.forge.gates.repo_hygiene import evaluate_worktree_clean
+
         worktree_raw = evaluate_worktree_clean(git_status_porcelain_lines(repo_root_from_cli_file()))
         worktree = {
             "ok": bool(worktree_raw.get("ok", False)),
@@ -195,8 +201,6 @@ def status_cmd(
 
 
 def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bool) -> None:
-    from scripts.forge.gates.repo_hygiene import evaluate_worktree_clean
-
     repo_root = repo_root_from_cli_file()
     try:
         cleanup_payload = run_repo_cleanup(apply=bool(apply), include_ignored=bool(include_ignored))
@@ -214,6 +218,11 @@ def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bo
     cleanup_stderr = str(cleanup_payload.get("_stderr") or "").strip()
 
     try:
+        # See status_cmd: `scripts/` is a development tree and is not part of the
+        # installed package, so this import must fail into the error payload
+        # rather than escape as an unhandled ModuleNotFoundError.
+        from scripts.forge.gates.repo_hygiene import evaluate_worktree_clean
+
         worktree = evaluate_worktree_clean(git_status_porcelain_lines(repo_root))
     except Exception as exc:
         payload = {

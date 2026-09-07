@@ -4,6 +4,8 @@
 - `plans/thomas/tasks/thomas-coherence-passage-2026-07-12/PLAN.md` - canonical governed-operator migration across V2 chat, action, delegation, memory, and proof.
 
 - `plans/thomas/WORKBOARD.md` — active execution board.
+- `plans/thomas/ALIVENESS_DESIGN_2026-08-27.md` — design for an unprompted Thomas: drives, tiered loop, per-topic speak gate.
+- `plans/thomas/ALIVENESS_RESEARCH_LANDSCAPE_2026-08-27.md` — field check behind that design (ambient agents, proactivity benchmarks, attention ceiling).
 - `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
 - `plans/thomas/ui/UI_UPGRADE_PLAN.md`
 - `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
@@ -56,3 +58,4 @@
 - `plans/thomas/chatgpt_parity/BONUS_SCORECARD.md`
 - `plans/thomas/chatgpt_parity/GAP_LEDGER.md`
 - `plans/thomas/chatgpt_parity/RUBRIC.md`
+- `plans/thomas/companion/SURFACE_STORE_HARDENING_BRIEF.md` -- companion surface store hardening, landed from infinite-app-feasibility

@@ -156,9 +156,55 @@ def test_hold_records_how_many_need_a_human_decision(repo: Path) -> None:
     assert "2 need a decision" in result.hold.message()
 
 
+def test_hold_message_states_the_truth_not_a_fabricated_block(repo: Path) -> None:
+    """Fix round 1 (adversarial review IMP-2, 2026-08-27): ``message()``
+    used to say "To proceed, run `thomas consolidate`..." -- worded as if a
+    new branch push was genuinely blocked pending that remedy. It never was:
+    ``guard_new_branch`` (the only function that reads this hold to refuse a
+    branch) has zero callers anywhere in this codebase. The message must now
+    say that plainly, and name the mechanism that actually enforces at push
+    time (``branch_claim_gate.py``) instead of implying this hold does."""
+    audit(_many(20), repo, trunk=TRUNK, ceiling=5)
+    message = active_hold(repo).message()
+
+    assert "nothing" in message and "consults it at branch creation" in message
+    assert "branch_claim_gate" in message
+    # The old, false claim must be gone -- a reader must not come away
+    # believing a push was actually refused by this hold.
+    assert "new branches are blocked" not in message
+    assert "does not, by itself, block" in message
+    # Final-review fix wave (2026-08-27, IMP-3): naming branch_claim_gate.py
+    # as bare fact was itself an unqualified enforcement claim -- at HEAD the
+    # gate has no local pre-push hook, only a CI job. The message must say so.
+    assert "CI today" in message
+    assert "local pre-push wiring rides the prepared tap" in message
+
+
 def test_audit_payload_is_json_shaped_for_a_scheduler(repo: Path) -> None:
     payload = audit(_many(20), repo, trunk=TRUNK, ceiling=5).as_dict()
     assert payload["action"] == "placed"
     assert payload["over_ceiling"] is True
     assert isinstance(payload["notes"], list)
     json.dumps(payload)  # must be serialisable for a background job to log it
+
+
+def test_cli_hold_placed_line_states_the_truth_not_a_fabricated_block(repo: Path, capsys) -> None:
+    """Fix round 1 (adversarial review IMP-2, 2026-08-27): ``thomas
+    consolidate --audit`` used to print "Consolidation hold PLACED --
+    new branches are blocked until this clears." on every hold-placed run
+    -- nothing was ever blocked, because guard_new_branch has zero
+    callers. The CLI must now say what is true."""
+    from thomas.cli.consolidate_cmd import _run_audit
+
+    _run_audit(_many(20), repo=str(repo), trunk=TRUNK, ceiling=5, namespace="refs/heads", as_json=False)
+    out = capsys.readouterr().out
+
+    assert "Consolidation hold PLACED" in out
+    assert "new branches are blocked" not in out
+    assert "does not by itself block a new branch" in out
+    assert "branch_claim_gate" in out
+    # Final-review fix wave (2026-08-27, IMP-3): same qualifier as the
+    # library message -- naming branch_claim_gate.py bare was itself an
+    # unqualified enforcement claim.
+    assert "CI today" in out
+    assert "local pre-push wiring rides the prepared tap" in out

@@ -107,6 +107,19 @@ def _detect_existing_config() -> Path | None:
     return None
 
 
+def _detect_env_config() -> bool:
+    """True when the environment already configures a model.
+
+    `load_config` honours `THOMAS_DEFAULT_MODEL` and `THOMAS_MODELS_<profile>_<field>`
+    without any thomas.toml, so a deployment configured that way is not a first run.
+    """
+    import os
+
+    if os.environ.get("THOMAS_DEFAULT_MODEL"):
+        return True
+    return any(key.startswith("THOMAS_MODELS_") for key in os.environ)
+
+
 def _detect_ollama() -> bool:
     """Check if Ollama is running locally."""
     try:

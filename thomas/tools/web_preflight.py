@@ -25,6 +25,7 @@ written after a real build shipped broken and every existing check passed.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -47,6 +48,14 @@ SMOKE_DISCOVERY_MAX_BYTES = 2 * 1024 * 1024
 ORPHAN_CHECK_SUFFIXES = {".js", ".mjs", ".cjs", ".css"}
 ORPHAN_SCAN_SUFFIXES = {".html", ".htm", ".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx", ".json", ".css"}
 ORPHAN_SCAN_MAX_FILES = 2000
+# Never walked, never stat-ed: a project's own machinery. `runtime` and the
+# venv names are here because a self-edit run on the Thomas checkout died at
+# the start of every second pass on a Linux venv link copied onto Windows
+# (runtime/doppelganger/venvs/green/lib64, WinError 1920) -- the walk reached
+# it and `is_file()` raised before any pruning happened.
+ORPHAN_SCAN_PRUNED_DIRS = frozenset(
+    {".git", "node_modules", ".thomas", "runtime", ".venv", "venv", "venvs", "__pycache__"}
+)
 ORPHAN_SCAN_MAX_BYTES = 2 * 1024 * 1024
 
 # A caller with a changed-file list passes it. A caller holding only a finished
@@ -206,6 +215,21 @@ def javascript_syntax_error(source: str) -> str:
     return message[:200]
 
 
+def scan_project_files(root: Path):
+    """Regular files under ``root``, pruned folders never entered, a path that
+    cannot be stat-ed treated as absent rather than raising."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in ORPHAN_SCAN_PRUNED_DIRS]
+        for name in filenames:
+            path = Path(dirpath) / name
+            try:
+                if not path.is_file():
+                    continue
+            except OSError:
+                continue
+            yield path
+
+
 def orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
     """Find a web asset this run wrote that nothing in the project loads.
 
@@ -233,10 +257,10 @@ def orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
 
     haystack: list[tuple[Path, str]] = []
     scanned = 0
-    for path in root.rglob("*"):
+    for path in scan_project_files(root):
         if scanned >= ORPHAN_SCAN_MAX_FILES:
             break
-        if not path.is_file() or path.suffix.lower() not in ORPHAN_SCAN_SUFFIXES:
+        if path.suffix.lower() not in ORPHAN_SCAN_SUFFIXES:
             continue
         # RELATIVE parts. Testing the absolute path meant that for any project
         # living under ~/.thomas -- which is where Thomas keeps every project he
@@ -249,7 +273,7 @@ def orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
         # ran the file twice and died on "Identifier 'canvas' has already been
         # declared", and he burned 25 passes on it. The duplicate-include check
         # added alongside this catches that wreckage -- this is the cause of it.
-        if any(part in {".git", "node_modules", ".thomas"} for part in path.relative_to(root).parts):
+        if any(part in ORPHAN_SCAN_PRUNED_DIRS for part in path.relative_to(root).parts):
             continue
         # Candidate files stay IN the haystack, paired with their own path.
         #
@@ -429,15 +453,66 @@ def artifact_preflight_failures(cwd: str | Path, files: list[str]) -> list[str]:
     return failures
 
 
+def first_unresolved_root_link(root: Path, page: Path) -> str:
+    """The first root-absolute asset link in ``page`` that resolves to nothing under ``root``.
+
+    Such links (``/static/js/app.js``) only exist once a server mounts them, so
+    the page is an application shell, not a standalone artifact. Returns the
+    link as written, or an empty string when every link resolves or none is
+    root-absolute.
+    """
+
+    try:
+        source = page.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+    parser = LocalAssetReferenceParser()
+    try:
+        parser.feed(source)
+    except (ValueError, TypeError):
+        return ""
+    for raw_reference in parser.references:
+        parsed = urlsplit(raw_reference)
+        if parsed.scheme or parsed.netloc or raw_reference.startswith("//"):
+            continue
+        reference = unquote(parsed.path).replace("\\", "/")
+        if not reference.startswith("/"):
+            continue
+        if not (root / reference.lstrip("/")).exists():
+            return raw_reference
+    return ""
+
+
+def is_served_page(root: Path, page: Path) -> bool:
+    """A page whose root-absolute asset links resolve nowhere under ``root``.
+
+    The offline smoke would deny every one of them and fail for reasons
+    unrelated to the change. Thomas's own chat shell is the case that taught
+    this; a run that edited it spent hours adding "smoke-mode" branches to the
+    product so the page would boot with its modules missing. Served pages are
+    checked against the live server (web.playtest), never from disk.
+    """
+
+    return bool(first_unresolved_root_link(root, page))
+
+
 def browser_smoke_files(cwd: str | Path, changed_files: list[str]) -> list[str]:
-    """Include HTML entrypoints that load a changed local CSS/JS asset."""
+    """Include HTML entrypoints that load a changed local CSS/JS asset.
+
+    Served pages (see ``is_served_page``) are left out on every path in: as a
+    changed page, as a page found linking a changed asset, and as a page found
+    by mention.
+    """
 
     root = Path(cwd).resolve()
     changed_paths = [(root / name).resolve() for name in changed_files]
     html_paths = {
         path
         for path in changed_paths
-        if path.suffix.lower() in {".html", ".htm"} and path.is_file() and path.is_relative_to(root)
+        if path.suffix.lower() in {".html", ".htm"}
+        and path.is_file()
+        and path.is_relative_to(root)
+        and not is_served_page(root, path)
     }
     assets = [
         path
@@ -475,12 +550,17 @@ def browser_smoke_files(cwd: str | Path, changed_files: list[str]) -> list[str]:
                 if resolved.is_relative_to(root):
                     linked.add(resolved)
             if any(asset in linked for asset in assets):
-                html_paths.add(candidate.resolve())
                 claimed |= {asset for asset in assets if asset in linked}
+                if not is_served_page(root, candidate):
+                    html_paths.add(candidate.resolve())
         # Only widen the search for assets no page was found to reference. An
         # asset with a real owner is already covered precisely, and searching
         # for its name as text would drag in any page that merely mentions it.
-        html_paths |= owners_by_mention(root, [a for a in assets if a not in claimed], html_paths)
+        html_paths |= {
+            page
+            for page in owners_by_mention(root, [a for a in assets if a not in claimed], html_paths)
+            if not is_served_page(root, page)
+        }
     return sorted(str(path.relative_to(root)).replace("\\", "/") for path in html_paths)
 
 

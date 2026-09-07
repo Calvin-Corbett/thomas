@@ -361,7 +361,7 @@ def _runtime_model_error(*, as_json: bool, message: str, profile: str = "") -> N
 def _resolve_repl_profile_from_prefs(config: AppConfig) -> tuple[str, str]:
     """Resolve REPL startup profile and optional model-id override from shared resolver."""
     try:
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
 
         return resolve_effective_model(
             config,

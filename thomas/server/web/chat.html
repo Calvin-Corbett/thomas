@@ -465,7 +465,7 @@
     // Autonomy defaults to Agent (3): a fresh chat must be able to EXECUTE an
     // ask, not tell the owner to raise a dial and resend. Guardrails stay
     // 'guarded' — dangerous actions still gate on approval. (Calvin, 2026-07-18.)
-    const DIAL_DEFAULTS = { autonomy: 3, effort: 'medium', tokenEconomy: 'balanced', fileAccess: 'workspace', guardrails: 'guarded', memory: true };
+    const DIAL_DEFAULTS = { autonomy: 3, effort: 'medium', fileAccess: 'workspace', guardrails: 'guarded', memory: true };
     state.dials = (function () {
       try {
         const stored = JSON.parse(localStorage.getItem('thomas_dials') || '{}');
@@ -661,12 +661,24 @@
       wrap.innerHTML = '';
       // Build family -> [{profile, model}] in the declared order, so the list
       // does not reshuffle when a key is added.
+      const buildOnly = state.surfaceMode === 'code';
+      let hiddenForBuild = 0;
       const groups = new Map();
       profilesData.forEach(p => {
         const fam = modelFamilyOf(p);
         if (!groups.has(fam.id)) groups.set(fam.id, { label: fam.label, entries: [] });
-        profileModelOptions(p).forEach(m => groups.get(fam.id).entries.push({ p, m }));
+        profileModelOptions(p).forEach(m => {
+          if (buildOnly && !buildCanRunModel(p, m)) { hiddenForBuild += 1; return; }
+          groups.get(fam.id).entries.push({ p, m });
+        });
       });
+      if (buildOnly && hiddenForBuild) {
+        // Say what is missing and why, rather than letting the list look short.
+        const note = document.createElement('div');
+        note.style.cssText = 'padding:6px 10px 10px;font-size:11px;line-height:1.4;color:var(--c-muted);';
+        note.textContent = hiddenForBuildNote(hiddenForBuild);
+        wrap.appendChild(note);
+      }
       const ordered = [...MODEL_FAMILIES, { id: 'other', label: 'Other providers' }]
         .map(f => [f.id, groups.get(f.id)]).filter(([, g]) => g && g.entries.length);
 
@@ -1529,7 +1541,7 @@
           ${anyRunning ? `<button data-act-cancel aria-label="${a.cancelling ? 'Cancelling task' : 'Cancel task'}" title="${a.cancelling ? 'Cancelling task' : 'Cancel task'}" ${a.cancelling ? 'disabled' : ''} style="flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--c-border-2);background:transparent;color:var(--c-muted);display:grid;place-items:center;cursor:${a.cancelling ? 'wait' : 'pointer'};padding:0;"><i class="ph ${a.cancelling ? 'ph-circle-notch' : 'ph-x'}" style="font-size:12px;${a.cancelling ? 'animation:tc-spin 1s linear infinite;' : ''}"></i></button>` : ''}
           <i class="ph ph-caret-${a.expanded ? 'up' : 'down'}" style="font-size:13px;color:var(--c-muted);flex:0 0 auto;"></i>
         </div>
-        ${a.cancelError ? `<div role="alert" style="padding:0 12px 9px;color:#ff9a9a;font-size:11.5px;">${esc(a.cancelError)}</div>` : ''}
+        ${a.cancelError ? `<div role="alert" style="padding:0 12px 9px;color:var(--c-danger, #ff9a9a);font-size:11.5px;">${esc(a.cancelError)}</div>` : ''}
         <div style="display:${a.expanded ? 'block' : 'none'};padding:4px 12px 11px;border-top:1px solid var(--c-border);">${_stepsLog(steps, thinking)}${_activityDetail(a)}</div>
       </div>`;
       // The completion bubble presents the artifact; don't duplicate it here.
@@ -1650,7 +1662,7 @@
           <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--c-muted);margin-bottom:6px;">Step by step</div>
           ${tl.map(step => `<div style="display:flex;gap:8px;padding:3px 0;font-size:12px;color:var(--c-dim);line-height:1.5;">
             <span style="flex:0 0 auto;width:5px;height:5px;margin-top:6px;border-radius:50%;background:var(--c-accent);opacity:.7;"></span>
-            <span style="flex:1;min-width:0;">${esc(deMd(step.summary || ''))}${step.blocker ? ` <span style="color:#ff9a9a;">(${esc(step.blocker)})</span>` : ''}</span>
+            <span style="flex:1;min-width:0;">${esc(deMd(step.summary || ''))}${step.blocker ? ` <span style="color:var(--c-danger, #ff9a9a);">(${esc(step.blocker)})</span>` : ''}</span>
             ${step.at ? `<span style="flex:0 0 auto;font-size:10px;color:var(--c-muted);">${esc(_fmtStepTime(step.at))}</span>` : ''}
           </div>`).join('')}
         </div>`;
@@ -2063,7 +2075,6 @@
           model_id: state.modelId || undefined,
           autonomy_level: state.dials.autonomy,        // from the Tools panel
           file_access: state.dials.fileAccess,
-          token_economy: state.dials.tokenEconomy,
           thomas_guardrails: state.dials.guardrails,
           reasoning_effort: state.dials.effort,
           memory: !!state.dials.memory,
@@ -2640,12 +2651,41 @@
     }
     // ---------- Tools (AI settings), attachments (+), voice (mic) ----------
     function saveDials() { try { localStorage.setItem('thomas_dials', JSON.stringify(state.dials)); } catch (e) {} }
+    // Option shape: [value, label, description, meta]. The description is shown
+    // under the control when that option is selected, because a one-word label
+    // cannot carry the difference between "your home folder" and "every drive"
+    // — which is what "Full PC" and "Full" meant, sitting next to each other.
+    // meta.elevates asks for confirmation; meta.modes limits an option to
+    // certain surfaces (there is no "this project" in plain Chat).
+    //
+    // Token economy is deliberately absent: all three settings resolved to the
+    // same 400 passes and identical budgets, and the one function that differed
+    // by level has no caller, so it moved a log threshold and nothing else.
     const DIAL_FIELDS = [
-      { key: 'autonomy', label: 'Autonomy', num: true, opts: [[1, '1 · Chat'], [2, '2 · Assist'], [3, '3 · Agent'], [4, '4 · Full autonomy']] },
-      { key: 'effort', label: 'Reasoning effort', opts: [['none', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'xHigh'], ['max', 'Max']] },
-      { key: 'tokenEconomy', label: 'Token economy', opts: [['cheap', 'Cheap'], ['balanced', 'Balanced'], ['max', 'Max']] },
-      { key: 'fileAccess', label: 'File access', opts: [['read_only', 'Read only'], ['workspace', 'Workspace'], ['project', 'Project'], ['pc', 'Full PC'], ['full', 'Full']] },
-      { key: 'guardrails', label: 'Guardrails', opts: [['open', 'Open'], ['guarded', 'Guarded'], ['fortress', 'Fortress']] },
+      { key: 'autonomy', label: 'Autonomy', num: true, opts: [
+        [1, 'Chat only', 'Answers and drafts. Runs no tools.'],
+        [2, 'Assist', 'Uses tools when they are clearly needed, and checks in.'],
+        [3, 'Agent', 'Picks its own tools and can hand work to a background task.'],
+        [4, 'Full autonomy', 'Keeps going without checking in. Best for long jobs you are not watching.', { elevates: true }],
+      ] },
+      { key: 'effort', label: 'Reasoning effort', opts: [
+        ['none', 'None', 'Fastest. No extended thinking.'],
+        ['low', 'Low', 'A little thinking before answering.'],
+        ['medium', 'Medium', 'The usual balance of speed and care.'],
+        ['high', 'High', 'Thinks longer on hard problems.'],
+        ['xhigh', 'xHigh', 'Slower still, for genuinely difficult work.'],
+        ['max', 'Max', 'Thinks as long as it needs. Slowest and most expensive.'],
+      ] },
+      { key: 'fileAccess', label: 'Files Thomas can change', opts: [
+        ['workspace', "Thomas's own space", 'Only its own scratch folder. Nothing of yours can change.'],
+        ['project', 'This project', "Its own space plus the project you are working on.", { modes: ['code', 'work'] }],
+        ['pc', 'Anywhere on my PC', 'Your Desktop, Documents and Downloads too. Windows system files and Thomas’s own code always stay protected.', { elevates: true }],
+      ] },
+      { key: 'guardrails', label: 'Reaching the internet', opts: [
+        ['fortress', 'Off', 'No web, no browser, no remote calls. Local work only.'],
+        ['guarded', 'Normal', 'Can read the web. Cannot call out to remote machines.'],
+        ['open', 'Open', 'Full web and remote access. In Build mode this is also what unlocks a direct shell.', { elevates: true }],
+      ] },
     ];
     // The menus and inputs those controls open -- the AI-settings sheet, the
     // Thomas Library picker, the attachment chips and the mic -- now live in
@@ -2654,7 +2694,8 @@
     // read directly and returns them under the same names, so every call site
     // below is unchanged.
     const {
-      toggleToolsMenu, closeToolsMenu, toggleLibraryMenu, closeLibraryMenu,
+      toggleToolsMenu, closeToolsMenu, buildCanRunModel, hiddenForBuildNote,
+      toggleLibraryMenu, closeLibraryMenu,
       libraryVisibleProjects, libraryCardHTML, mountLibraryPreviews,
       chooseLibraryProject, onFiles, renderAttachments, setupMic,
     } = window.ThomasChatComposerPanels.create({

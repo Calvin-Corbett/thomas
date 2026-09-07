@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_036 = ROOT / "thomas/server/web/js/runtime/036_workbench_editors_08.js"
 RUNTIME_037 = ROOT / "thomas/server/web/js/runtime/037_workbench_editors_09.js"

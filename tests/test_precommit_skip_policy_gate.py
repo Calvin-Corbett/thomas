@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 import scripts.forge.gates.precommit_skip_policy as mod
+from scripts.forge.gates import breakglass_landed
 
 
 def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\corbe") -> None:
@@ -410,3 +411,83 @@ def test_github_actions_env_does_not_shortcut_human_breakglass_B4(tmp_path: Path
     assert calls["n"] == 1, "authorize_breakglass must be called despite GITHUB_ACTIONS=true"
     assert rc == 1
     assert "FAIL" in out
+
+
+def test_a_breakglass_attempt_that_landed_nothing_does_not_count_against_the_quota(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    """The audit row is written before the commit runs; a gate failure after it used to burn a tap."""
+    audit_log = tmp_path / "skip_audit.jsonl"
+    now = datetime(2026, 2, 27, 12, 0, tzinfo=timezone.utc)
+    dead_head = "a" * 40
+    rows = [
+        {
+            "gate": "precommit_skip_policy",
+            "timestamp_utc": "2026-02-27T09:00:00+00:00",
+            "agent": "Codex 3",
+            "breakglass_authorized_by": "WORKSTATION" + chr(92) + "corbe",
+            "breakglass_used": True,
+            "head": dead_head,
+            "staged_files": ["docs/monolith_guard_baseline.json"],
+        },
+        {
+            "gate": "precommit_skip_policy",
+            "timestamp_utc": "2026-02-27T10:00:00+00:00",
+            "agent": "Codex 3",
+            "breakglass_authorized_by": "WORKSTATION" + chr(92) + "corbe",
+            "breakglass_used": True,
+            "head": dead_head,
+            "staged_files": ["docs/monolith_guard_baseline.json"],
+        },
+    ]
+    audit_log.write_text(chr(10).join(json.dumps(row, sort_keys=True) for row in rows) + chr(10), encoding="utf-8")
+    monkeypatch.setenv("SKIP", "thomas-release-update-gate")
+    monkeypatch.setenv("AGENT_ID", "Codex 3")
+    monkeypatch.setenv("THOMAS_SKIP_REASON", "Need temporary bypass while investigating baseline.")
+    monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
+    monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2006")
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
+    monkeypatch.setattr(mod, "_now_utc", lambda: now)
+    monkeypatch.setattr(mod, "_run_git", lambda args: "")  # no commit ever sat on top of dead_head
+    breakglass_landed.clear_cache()
+    _approve_breakglass(monkeypatch)
+
+    rc = mod.run(
+        ["--audit-log", str(audit_log), "--breakglass-cooldown-minutes", "0", "--breakglass-max-per-agent-24h", "2"]
+    )
+    out = capsys.readouterr().out
+
+    assert rc == 0, out
+    assert "quota exceeded" not in out
+
+
+def test_retries_on_the_same_head_are_one_breakglass_use(tmp_path: Path, capsys, monkeypatch) -> None:
+    """Three gate failures and the landing that followed were four rows for one authorised change."""
+    audit_log = tmp_path / "skip_audit.jsonl"
+    now = datetime(2026, 2, 27, 12, 0, tzinfo=timezone.utc)
+    head = "b" * 40
+    rows = [
+        {
+            "gate": "precommit_skip_policy",
+            "timestamp_utc": f"2026-02-27T0{i}:00:00+00:00",
+            "agent": "Codex 3",
+            "breakglass_authorized_by": "WORKSTATION" + chr(92) + "corbe",
+            "breakglass_used": True,
+            "head": head,
+            "staged_files": ["docs/monolith_guard_baseline.json"],
+        }
+        for i in range(6, 10)
+    ]
+    audit_log.write_text(chr(10).join(json.dumps(row, sort_keys=True) for row in rows) + chr(10), encoding="utf-8")
+
+    def fake_git(args):  # noqa: ANN001
+        if args[0] == "log":
+            return "c" * 40 + " " + head
+        if args[0] == "diff-tree":
+            return "docs/monolith_guard_baseline.json"
+        return ""
+
+    monkeypatch.setattr(mod, "_run_git", fake_git)
+    breakglass_landed.clear_cache()
+    history = mod._load_breakglass_history(audit_log=audit_log, agent="WORKSTATION" + chr(92) + "corbe", now=now)
+    assert len(history) == 1

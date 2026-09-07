@@ -5,6 +5,7 @@ import importlib
 import json
 import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -88,13 +89,37 @@ def test_changelog_gate_allows_meaningful_changelog_entry(monkeypatch, capsys) -
     assert payload["changelog_staged"] is True
 
 
-def test_protected_files_gate_supports_diff_range(monkeypatch, capsys) -> None:
+SHA_A = "a" * 40
+SHA_B = "b" * 40
+SHA_C = "c" * 40
+
+
+def _wire_protected_range(
+    monkeypatch,
+    *,
+    commits: dict[str, list[str]],
+    messages: dict[str, str] | None = None,
+    waivers: list[dict] | None = None,
+    merge_only: list[str] | None = None,
+) -> None:
+    """Wire the diff-range mode onto a fake per-commit history.
+
+    ``commits`` maps sha -> files that ONE commit touched, in range order.
+    """
+    order = list(commits)
     monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setattr(
         protected_files_gate,
-        "_changed_files",
-        lambda *, base=None, head=None: ["agent_safety.toml"],
+        "_range_commits",
+        lambda base, head, *, include_merges=False: list(merge_only or []) + order if include_merges else order,
     )
+    monkeypatch.setattr(protected_files_gate, "_commit_changed_files", lambda sha: list(commits.get(sha, [])))
+    monkeypatch.setattr(protected_files_gate, "_commit_message", lambda sha: (messages or {}).get(sha, "chore: work"))
+    monkeypatch.setattr(protected_files_gate, "_load_waivers", lambda: list(waivers or []))
+
+
+def test_protected_files_gate_supports_diff_range(monkeypatch, capsys) -> None:
+    _wire_protected_range(monkeypatch, commits={SHA_A: ["agent_safety.toml"]})
 
     rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
     payload = json.loads(capsys.readouterr().out)
@@ -115,16 +140,10 @@ def test_protected_files_gate_supports_protected_prefixes() -> None:
 
 
 def test_protected_files_gate_diff_range_requires_non_empty_approval(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
-    monkeypatch.setattr(
-        protected_files_gate,
-        "_changed_files",
-        lambda *, base=None, head=None: ["scripts/forge/gates/protected_files_gate.py"],
-    )
-    monkeypatch.setattr(
-        protected_files_gate,
-        "_commit_messages",
-        lambda base, head: ["fix: gate\n\nThomas-Protected-Files-Approved:   \n"],
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_A: ["scripts/forge/gates/protected_files_gate.py"]},
+        messages={SHA_A: "fix: gate\n\nThomas-Protected-Files-Approved:   \n"},
     )
 
     rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
@@ -136,19 +155,15 @@ def test_protected_files_gate_diff_range_requires_non_empty_approval(monkeypatch
 
 
 def test_protected_files_gate_diff_range_allows_approval_trailer(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
-    monkeypatch.setattr(
-        protected_files_gate,
-        "_changed_files",
-        lambda *, base=None, head=None: ["agent_safety.toml", "thomas/server/app.py"],
-    )
-    monkeypatch.setattr(
-        protected_files_gate,
-        "_commit_messages",
-        lambda base, head: [
-            "fix: protected gate recovery\n\n"
-            "Thomas-Protected-Files-Approved: Calvin-approved hardening gate recovery 2026-05-28\n"
-        ],
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_A: ["agent_safety.toml", "thomas/server/app.py"]},
+        messages={
+            SHA_A: (
+                "fix: protected gate recovery\n\n"
+                "Thomas-Protected-Files-Approved: Calvin-approved hardening gate recovery 2026-05-28\n"
+            )
+        },
     )
 
     rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
@@ -159,6 +174,271 @@ def test_protected_files_gate_diff_range_allows_approval_trailer(monkeypatch, ca
     assert payload["violations"] == ["agent_safety.toml"]
     assert payload["approved_protected_files"] is True
     assert "Calvin-approved" in payload["approval_reason"]
+
+
+def _waiver(sha: str, *, expires: date, guard: str = "protected_files_gate", **overrides) -> dict:
+    row = {
+        "id": f"2026-08-12-{sha[:7]}-{guard}",
+        "commit": sha,
+        "guard": guard,
+        "approved_by": "core-platform",
+        "approved_on": "2026-08-12",
+        "expires_on": expires.isoformat(),
+        "reason": "Landed before the gate measured per commit; cannot be reworded retroactively.",
+    }
+    row.update(overrides)
+    return row
+
+
+# (a) A genuinely oversized, unapproved SINGLE commit must still FAIL.
+def test_protected_files_gate_single_unapproved_commit_still_fails(monkeypatch, capsys) -> None:
+    _wire_protected_range(
+        monkeypatch,
+        commits={
+            SHA_A: [
+                "GUARDRAILS.md",
+                "AGENTS.md",
+                "agent_safety.toml",
+                "tests/test_architecture.py",
+                "scripts/forge/gates/protected_files_gate.py",
+                "thomas/core/config.py",
+            ]
+        },
+        messages={SHA_A: "feat: relax the rules that were in my way\n"},
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["approved_protected_files"] is False
+    assert payload["commit_count"] == 1
+    # 5 protected paths; thomas/core/config.py is not protected and is not counted.
+    assert len(payload["violations"]) == 5
+    assert "thomas/core/config.py" not in payload["violations"]
+    assert [row["sha"] for row in payload["unapproved_commits"]] == [SHA_A]
+
+
+# (b) A trailer in commit A must NOT approve the violation in commit B.
+def test_protected_files_gate_trailer_does_not_approve_other_commits(monkeypatch, capsys) -> None:
+    _wire_protected_range(
+        monkeypatch,
+        commits={
+            SHA_A: ["agent_safety.toml"],
+            SHA_B: ["GUARDRAILS.md"],
+            SHA_C: ["thomas/core/config.py"],
+        },
+        messages={
+            SHA_A: ("fix: approved edit\n\nThomas-Protected-Files-Approved: Calvin approved TH-1 on 2026-08-12\n"),
+            SHA_B: "chore: sneak a rule change in behind the approved commit\n",
+            SHA_C: "chore: unrelated work\n",
+        },
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1, "one trailer in the range must not approve a different commit's violation"
+    assert payload["ok"] is False
+    assert payload["approved_protected_files"] is False
+    # A is approved on its own message; B is not; C touched nothing protected.
+    assert [row["sha"] for row in payload["unapproved_commits"]] == [SHA_B]
+    assert payload["unapproved_commits"][0]["files"] == ["GUARDRAILS.md"]
+    approved_shas = [row["sha"] for row in payload["offending_commits"] if row["approved"]]
+    assert approved_shas == [SHA_A]
+
+
+def test_protected_files_approval_rejects_a_sequence_of_messages() -> None:
+    # Structural guard: the range-wide shape must be impossible to pass in.
+    with pytest.raises(TypeError):
+        protected_files_gate._protected_files_approval(
+            ["fix: x\n\nThomas-Protected-Files-Approved: approved\n", "chore: y\n"]
+        )
+
+    ok, trailer, reason = protected_files_gate._protected_files_approval(
+        "fix: x\n\nThomas-Protected-Files-Approved: approved by Calvin\n"
+    )
+    assert ok is True
+    assert trailer == "thomas-protected-files-approved"
+    assert reason == "approved by Calvin"
+
+
+# (c) A valid waiver passes AND is reported as waived.
+def test_protected_files_gate_valid_waiver_passes_and_is_reported(monkeypatch, capsys) -> None:
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_B: ["GUARDRAILS.md"]},
+        messages={SHA_B: "chore: landed months ago, no trailer\n"},
+        waivers=[_waiver(SHA_B, expires=date.today() + timedelta(days=30))],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["waived"] is True
+    assert [row["sha"] for row in payload["waived_commits"]] == [SHA_B]
+    assert payload["waived_commits"][0]["waiver_id"] == f"2026-08-12-{SHA_B[:7]}-protected_files_gate"
+    assert payload["waived_commits"][0]["waiver_approved_by"] == "core-platform"
+    # The violation is still reported: a waived pass is not a clean pass.
+    assert payload["violations"] == ["GUARDRAILS.md"]
+
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_B: ["GUARDRAILS.md"]},
+        messages={SHA_B: "chore: landed months ago, no trailer\n"},
+        waivers=[_waiver(SHA_B, expires=date.today() + timedelta(days=30))],
+    )
+    rc_text = protected_files_gate.run(["--base", "base", "--head", "head"])
+    text = capsys.readouterr().out
+    assert rc_text == 0
+    assert "WAIVED" in text
+    assert "not a clean pass" in text
+    assert SHA_B[:12] in text
+
+
+# (d) An EXPIRED waiver must not pass.
+def test_protected_files_gate_expired_waiver_does_not_pass(monkeypatch, capsys) -> None:
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_B: ["GUARDRAILS.md"]},
+        messages={SHA_B: "chore: landed months ago, no trailer\n"},
+        waivers=[_waiver(SHA_B, expires=date.today() - timedelta(days=1))],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["waived"] is False
+    assert payload["waived_commits"] == []
+    assert [row["sha"] for row in payload["unapproved_commits"]] == [SHA_B]
+
+
+def test_protected_files_gate_waiver_expiring_today_is_not_in_the_future(monkeypatch, capsys) -> None:
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_B: ["GUARDRAILS.md"]},
+        waivers=[_waiver(SHA_B, expires=date.today())],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"commit": "*"},
+        {"commit": "all"},
+        {"commit": SHA_B[:12]},  # prefix form must not match
+        {"commit": SHA_A},  # a waiver for a different commit
+        {"guard": "commit_growth_guard"},  # right commit, wrong guard
+        {"approved_by": ""},
+        {"approved_on": ""},
+        {"reason": ""},
+        {"id": ""},
+        {"expires_on": ""},
+        {"expires_on": "not-a-date"},
+    ],
+)
+def test_protected_files_gate_rejects_non_matching_waiver_forms(monkeypatch, capsys, bad) -> None:
+    _wire_protected_range(
+        monkeypatch,
+        commits={SHA_B: ["GUARDRAILS.md"]},
+        waivers=[_waiver(SHA_B, expires=date.today() + timedelta(days=30), **bad)],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1, f"waiver override {bad} must not apply"
+    assert payload["ok"] is False
+    assert payload["waived"] is False
+
+
+def test_protected_files_gate_range_cannot_waive_itself(monkeypatch, capsys) -> None:
+    # A range may not both write the waiver registry and lean on it.
+    _wire_protected_range(
+        monkeypatch,
+        commits={
+            SHA_B: ["GUARDRAILS.md"],
+            SHA_C: ["docs/ops/landed_history_waivers.json"],
+        },
+        waivers=[_waiver(SHA_B, expires=date.today() + timedelta(days=30))],
+    )
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["reason"] == "self_waived_range"
+
+
+def test_protected_files_gate_empty_range_is_explicit_not_silent(monkeypatch, capsys) -> None:
+    # base == head: must not raise, must not look like a measured clean pass.
+    _wire_protected_range(monkeypatch, commits={})
+
+    rc = protected_files_gate.run(["--base", "same", "--head", "same", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["no_commits"] is True
+    assert payload["reason"] == "empty_range"
+    assert payload["commit_count"] == 0
+    assert payload["violations"] == []
+
+    _wire_protected_range(monkeypatch, commits={})
+    protected_files_gate.run(["--base", "same", "--head", "same"])
+    assert "nothing was measured" in capsys.readouterr().out
+
+
+def test_protected_files_gate_merge_only_range_fails_closed(monkeypatch, capsys) -> None:
+    # --no-merges left nothing measurable, but the range is not empty.
+    _wire_protected_range(monkeypatch, commits={}, merge_only=["d" * 40])
+
+    rc = protected_files_gate.run(["--base", "base", "--head", "head", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["reason"] == "unmeasurable_merge_only_range"
+    assert payload["merge_commits_skipped"] == 1
+
+
+def test_protected_files_gate_fails_closed_when_range_cannot_be_enumerated(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(protected_files_gate, "_runtime_protection_disabled", lambda: False)
+
+    def _boom(base, head, *, include_merges=False):
+        raise RuntimeError("fatal: bad revision 'nope..nope2'")
+
+    monkeypatch.setattr(protected_files_gate, "_range_commits", _boom)
+
+    rc = protected_files_gate.run(["--base", "nope", "--head", "nope2", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert "bad revision" in payload["error"]
+
+
+def test_protected_files_gate_waiver_registry_matches_documented_schema() -> None:
+    registry = Path(protected_files_gate.LANDED_HISTORY_WAIVERS)
+    assert registry.exists(), "docs/ops/landed_history_waivers.json must exist"
+    doc = json.loads(registry.read_text(encoding="utf-8"))
+    assert doc["version"] == 1
+    assert isinstance(doc["waivers"], list)
+    for row in doc["waivers"]:
+        for field in protected_files_gate.WAIVER_REQUIRED_FIELDS:
+            assert str(row.get(field) or "").strip(), f"waiver {row.get('id')!r} is missing {field}"
+        assert len(str(row["commit"])) == 40, "no prefix/wildcard waivers"
 
 
 def test_protected_files_gate_staged_mode_rejects_commit_message_env_trailer(monkeypatch, capsys) -> None:
@@ -185,12 +465,37 @@ def test_protected_files_gate_staged_mode_rejects_commit_message_env_trailer(mon
     assert payload["approved_protected_files"] is False
 
 
-def test_bulk_commit_guard_supports_diff_range(monkeypatch, capsys) -> None:
+# ---------------------------------------------------------------------------
+# bulk_commit_guard diff-range mode (2026-08-12 scoping fix).
+#
+# The guard's limit is a PER COMMIT limit. Diff-range mode used to diff only
+# the two endpoints of base..head and compare that one number against it, so a
+# 597-commit range reported the two-month total (1923 files) as if one commit
+# had done it. And its approval helper scanned every message in the range and
+# returned True on the first trailer found anywhere, so one trailer approved
+# every oversized commit in the range.
+#
+# Full per-commit / waiver coverage: tests/test_bulk_commit_guard_per_commit.py
+# ---------------------------------------------------------------------------
+
+_BULK_SHA_A = "a" * 40
+_BULK_SHA_B = "b" * 40
+
+
+def _bulk_fake_range(monkeypatch, commits, *, endpoint=None) -> None:
+    """Fake an ordered range of commits: {sha: (changed_files, message)}."""
+    monkeypatch.setattr(bulk_commit_guard, "_range_commits", lambda repo_root, base, head: list(commits))
+    monkeypatch.setattr(bulk_commit_guard, "_commit_changed_files", lambda repo_root, sha: list(commits[sha][0]))
+    monkeypatch.setattr(bulk_commit_guard, "_commit_message", lambda repo_root, sha: commits[sha][1])
     monkeypatch.setattr(
         bulk_commit_guard,
-        "_changed_files",
-        lambda repo_root, *, base=None, head=None: ["a.py", "b.py"],
+        "_git_lines",
+        lambda repo_root, args, *, what="": list(endpoint or []),
     )
+
+
+def test_bulk_commit_guard_supports_diff_range(monkeypatch, capsys) -> None:
+    _bulk_fake_range(monkeypatch, {_BULK_SHA_A: (["a.py", "b.py"], "chore: two files\n")})
 
     rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
     payload = json.loads(capsys.readouterr().out)
@@ -202,17 +507,14 @@ def test_bulk_commit_guard_supports_diff_range(monkeypatch, capsys) -> None:
 
 
 def test_bulk_commit_guard_diff_range_allows_approval_trailer(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(
-        bulk_commit_guard,
-        "_changed_files",
-        lambda repo_root, *, base=None, head=None: ["a.py", "b.py"],
-    )
-    monkeypatch.setattr(
-        bulk_commit_guard,
-        "_commit_messages",
-        lambda repo_root, base, head: [
-            "fix: takeover\n\nThomas-Bulk-Change-Approved: Calvin-approved dirty-tree publish\n"
-        ],
+    _bulk_fake_range(
+        monkeypatch,
+        {
+            _BULK_SHA_A: (
+                ["a.py", "b.py"],
+                "fix: takeover\n\nThomas-Bulk-Change-Approved: Calvin-approved dirty-tree publish\n",
+            )
+        },
     )
 
     rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
@@ -224,9 +526,35 @@ def test_bulk_commit_guard_diff_range_allows_approval_trailer(monkeypatch, capsy
     assert "Calvin-approved" in payload["approval_reason"]
 
 
+def test_bulk_commit_guard_trailer_does_not_approve_another_commit(monkeypatch, capsys) -> None:
+    # One trailer used to approve every oversized commit in the range.
+    _bulk_fake_range(
+        monkeypatch,
+        {
+            _BULK_SHA_A: (["a.py", "b.py"], "fix: approved\n\nThomas-Bulk-Change-Approved: reviewed\n"),
+            _BULK_SHA_B: (["c.py", "d.py"], "fix: not approved\n"),
+        },
+    )
+
+    rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert [row["sha"] for row in payload["violations"]] == [_BULK_SHA_B]
+    assert payload["approved_bulk_change"] is False
+
+
 def test_commit_growth_guard_supports_diff_range(monkeypatch, capsys) -> None:
+    # Diff-range mode measures EACH commit against its own parent, so the seams
+    # are per-commit now. Full scoping/approval/waiver proofs live in
+    # tests/test_commit_growth_guard_per_commit.py.
+    sha, parent = "a" * 40, "1" * 40
     monkeypatch.setattr(commit_growth_guard, "_runtime_protection_disabled", lambda: False)
     monkeypatch.delenv("THOMAS_COMMIT_GROWTH_GUARD_DISABLE", raising=False)
+    monkeypatch.setattr(commit_growth_guard, "_range_commits", lambda repo_root, base, head: [sha])
+    monkeypatch.setattr(commit_growth_guard, "_range_all_commits", lambda repo_root, base, head: [sha])
+    monkeypatch.setattr(commit_growth_guard, "_commit_parent", lambda repo_root, s: parent)
     monkeypatch.setattr(
         commit_growth_guard,
         "_changed_files",
@@ -235,8 +563,10 @@ def test_commit_growth_guard_supports_diff_range(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         commit_growth_guard,
         "_rev_lines",
-        lambda repo_root, rev, rel: 0 if rev == "base" else 400,
+        lambda repo_root, rev, rel: 0 if rev == parent else 400,
     )
+    monkeypatch.setattr(commit_growth_guard, "_commit_message", lambda repo_root, s: "feat: dump")
+    monkeypatch.setattr(commit_growth_guard, "_load_waivers", lambda repo_root: [])
 
     rc = commit_growth_guard.run(Path("."), max_growth=300, json_output=True, base="base", head="head")
     payload = json.loads(capsys.readouterr().out)
@@ -248,8 +578,15 @@ def test_commit_growth_guard_supports_diff_range(monkeypatch, capsys) -> None:
 
 
 def test_commit_growth_guard_diff_range_allows_approval_trailer(monkeypatch, capsys) -> None:
+    # A trailer approves ONLY the commit whose own message carries it. The
+    # cross-commit leak this used to allow is covered in
+    # tests/test_commit_growth_guard_per_commit.py.
+    sha, parent = "a" * 40, "1" * 40
     monkeypatch.setattr(commit_growth_guard, "_runtime_protection_disabled", lambda: False)
     monkeypatch.delenv("THOMAS_COMMIT_GROWTH_GUARD_DISABLE", raising=False)
+    monkeypatch.setattr(commit_growth_guard, "_range_commits", lambda repo_root, base, head: [sha])
+    monkeypatch.setattr(commit_growth_guard, "_range_all_commits", lambda repo_root, base, head: [sha])
+    monkeypatch.setattr(commit_growth_guard, "_commit_parent", lambda repo_root, s: parent)
     monkeypatch.setattr(
         commit_growth_guard,
         "_changed_files",
@@ -258,15 +595,16 @@ def test_commit_growth_guard_diff_range_allows_approval_trailer(monkeypatch, cap
     monkeypatch.setattr(
         commit_growth_guard,
         "_rev_lines",
-        lambda repo_root, rev, rel: 10 if rev == "base" else 400,
+        lambda repo_root, rev, rel: 10 if rev == parent else 400,
     )
     monkeypatch.setattr(
         commit_growth_guard,
-        "_commit_messages",
-        lambda repo_root, base, head: [
+        "_commit_message",
+        lambda repo_root, s: (
             "fix: takeover\n\nThomas-Commit-Growth-Approved: Calvin-approved public safety-arc replay\n"
-        ],
+        ),
     )
+    monkeypatch.setattr(commit_growth_guard, "_load_waivers", lambda repo_root: [])
 
     rc = commit_growth_guard.run(Path("."), max_growth=300, json_output=True, base="base", head="head")
     payload = json.loads(capsys.readouterr().out)
@@ -435,20 +773,23 @@ def test_post_commit_audit_human_bypass_warns_but_does_not_reset(
 
 def test_bulk_commit_guard_ignores_disable_env_R4(monkeypatch, capsys) -> None:
     monkeypatch.setenv("THOMAS_BULK_COMMIT_GUARD_DISABLE", "1")
-    monkeypatch.setattr(
-        bulk_commit_guard,
-        "_changed_files",
-        lambda repo_root, *, base=None, head=None: ["a.py", "b.py", "c.py"],
-    )
+    _bulk_fake_range(monkeypatch, {_BULK_SHA_A: (["a.py", "b.py", "c.py"], "chore: three files\n")})
     rc = bulk_commit_guard.run(Path("."), max_files=1, json_output=True, base="base", head="head")
     payload = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert payload["ok"] is False
+    # Fails on the measurement itself, not because the range was unresolvable.
+    assert payload["violations"][0]["files"] == 3
+    assert payload["error"] == ""
 
 
 def test_commit_growth_guard_ignores_disable_env_R4(monkeypatch, capsys) -> None:
+    sha, parent = "a" * 40, "1" * 40
     monkeypatch.setattr(commit_growth_guard, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setenv("THOMAS_COMMIT_GROWTH_GUARD_DISABLE", "1")
+    monkeypatch.setattr(commit_growth_guard, "_range_commits", lambda repo_root, base, head: [sha])
+    monkeypatch.setattr(commit_growth_guard, "_range_all_commits", lambda repo_root, base, head: [sha])
+    monkeypatch.setattr(commit_growth_guard, "_commit_parent", lambda repo_root, s: parent)
     monkeypatch.setattr(
         commit_growth_guard,
         "_changed_files",
@@ -457,8 +798,10 @@ def test_commit_growth_guard_ignores_disable_env_R4(monkeypatch, capsys) -> None
     monkeypatch.setattr(
         commit_growth_guard,
         "_rev_lines",
-        lambda repo_root, rev, rel: 0 if rev == "base" else 400,
+        lambda repo_root, rev, rel: 0 if rev == parent else 400,
     )
+    monkeypatch.setattr(commit_growth_guard, "_commit_message", lambda repo_root, s: "feat: dump")
+    monkeypatch.setattr(commit_growth_guard, "_load_waivers", lambda repo_root: [])
     rc = commit_growth_guard.run(Path("."), max_growth=300, json_output=True, base="base", head="head")
     payload = json.loads(capsys.readouterr().out)
     assert rc == 1

@@ -63,6 +63,62 @@
     return book.workspaces[key][point];
   }
   function currentPoint() { return breakpoint(window.innerWidth); }
+  // The user overlay's element layer (thomas/server/overlay): entries the
+  // overlay records for this workspace and breakpoint sit UNDER the local
+  // book, so a local edit still wins per key. A minted entry whose anchor no
+  // longer resolves, or resolves to a different kind of element than the one
+  // it was recorded on, is an ORPHAN: left out of the active map and listed
+  // by orphans(), never applied to a replacement node silently. An exact id
+  // with no element in this document is listed too, so the UI can say so.
+  let overlayView = null;
+  const orphanKeys = new Set();
+  function readOverlayView() { return overlayView || window.ThomasOverlayView || null; }
+  function overlayEntries() {
+    const view = readOverlayView();
+    const spaces = view && view.elements ? view.elements[workspace()] : null;
+    const map = spaces ? spaces[currentPoint()] : null;
+    return map && typeof map === "object" ? map : {};
+  }
+  function overlayAnchor(key) {
+    const view = readOverlayView();
+    return (view && view.anchors && view.anchors[`${workspace()}:${currentPoint()}:${key}`]) || null;
+  }
+  function hasExact(key) {
+    return Array.from(document.querySelectorAll("[data-ui-id]")).some((node) => identity(node) === key);
+  }
+  function overlayMap() {
+    const out = {}; orphanKeys.clear();
+    Object.entries(overlayEntries()).forEach(([key, entry]) => {
+      if (!entry || typeof entry !== "object") return;
+      const anchor = overlayAnchor(key);
+      if (anchor && anchor.fragile) {
+        const node = resolveSynthetic(key);
+        const component = String(anchor.component || "").toLowerCase();
+        // The same expression the Redesign descriptor records, so a component name is never compared to a tag name.
+        const actual = node ? String(node.dataset.uiComponent || node.tagName).toLowerCase() : "";
+        if (!node || (component && actual !== component)) { orphanKeys.add(key); return; }
+      } else if (!hasExact(key)) orphanKeys.add(key);
+      out[key] = clone(entry);
+    });
+    return out;
+  }
+  function overlaidKeys() { return Object.keys(overlayMap()); }
+  function orphans() { overlayMap(); return Array.from(orphanKeys); }
+  function refreshOverlay(view) { overlayView = view || null; }
+  // Removing or reverting a key the overlay carries must retract it THERE, or
+  // the local deletion is quietly re-covered on the next apply while the UI
+  // reports a rollback. Returns the write's promise (null when nothing was
+  // overlaid); the reply's adopt() takes the entry out of every document.
+  function clearOverlaid(ids, why) {
+    const entries = overlayEntries();
+    const keys = ids.filter((id) => Object.prototype.hasOwnProperty.call(entries, id));
+    if (!keys.length) return null;
+    const overlay = window.ThomasOverlay;
+    if (!overlay || typeof overlay.record !== "function") return Promise.resolve({ ok: false, unavailable: true, keys });
+    const records = keys.map((id) => ({ op: "clear", kind: "element", address: `element:${workspace()}:${currentPoint()}:${id}` }));
+    return overlay.record({ actor: "layout", instruction: why || "clear", targets: keys }, records)
+      .then((reply) => Object.assign({ keys }, reply || { ok: false }));
+  }
   function identity(node) {
     if (!(node instanceof Element)) return "";
     const id = String(node.dataset.uiId || "").trim();
@@ -71,10 +127,13 @@
   }
   function currentMap() {
     const slot = ensureSlot(read(), currentPoint());
-    return clone(editing ? slot.draft : slot.saved);
+    return Object.assign(overlayMap(), clone(editing ? slot.draft : slot.saved));
   }
   function replaceMap(next) {
     const book = read(); const slot = ensureSlot(book, currentPoint()); const map = clone(next || {});
+    // An entry identical to the overlay's is the overlay's: it is not copied into the local book.
+    const overlay = overlayMap();
+    Object.keys(overlay).forEach((id) => { if (equal(map[id], overlay[id])) delete map[id]; });
     if (editing) { slot.draft = map; slot.dirty = !equal(slot.draft, slot.saved); }
     else { slot.saved = map; slot.draft = clone(map); slot.dirty = false; }
     write(book); applyAll();
@@ -85,8 +144,15 @@
     map[id] = Object.assign({ x: 0, y: 0 }, map[id] || {}, patch || {});
     replaceMap(map); return map[id];
   }
-  function remove(id) { const map = currentMap(); delete map[id]; replaceMap(map); }
-  function resetBreakpoint() { replaceMap({}); }
+  function remove(id) { const map = currentMap(); delete map[id]; replaceMap(map); return clearOverlaid([id], "remove"); }
+  // Drop only this browser's copy of an entry the overlay now carries (after a
+  // save); the overlay entry stays and keeps applying through the layer.
+  function forgetLocal(id) {
+    const book = read(); const slot = ensureSlot(book, currentPoint());
+    delete slot.saved[id]; delete slot.draft[id]; slot.dirty = !equal(slot.draft, slot.saved);
+    write(book); applyAll();
+  }
+  function resetBreakpoint() { const keys = overlaidKeys(); replaceMap({}); return clearOverlaid(keys, "reset"); }
   function beginDraft() {
     const book = read(); const slot = ensureSlot(book, currentPoint());
     editing = true; slot.draft = clone(slot.saved); slot.dirty = false; write(book); applyAll(); return clone(slot.saved);
@@ -239,11 +305,36 @@
     if (base !== "(none)") node.classList.add(base);
     delete node.dataset.uiIconBase;
   }
+  // What the element says. The text nodes are the target, never the children:
+  // a button keeps its icon and gets new words. The stock words are kept on the
+  // node so a removed record restores them exactly.
+  const TEXT_SEP = " |~| ";  // joins the stock text runs; no label carries it
+  function textRuns(node) { return Array.from(node.childNodes).filter((child) => child.nodeType === 3); }
+  function applyText(node, item) {
+    const wanted = String(item.text || "").trim();
+    if (!wanted) { clearText(node); return; }
+    const runs = textRuns(node);
+    if (!("uiTextBase" in node.dataset)) node.dataset.uiTextBase = runs.map((run) => run.nodeValue).join(TEXT_SEP);
+    const spoken = runs.filter((run) => String(run.nodeValue || "").trim());
+    if (spoken.length === 0) { node.appendChild(document.createTextNode(wanted)); return; }
+    runs.forEach((run) => { run.nodeValue = ""; });
+    spoken[spoken.length - 1].nodeValue = wanted;
+  }
+  function clearText(node) {
+    if (!("uiTextBase" in node.dataset)) return;
+    const stored = String(node.dataset.uiTextBase);
+    const base = stored === "" ? [] : stored.split(TEXT_SEP);
+    // Every stock run gets its words back, whitespace included; a run this
+    // overlay added (the element had no words) is removed again.
+    textRuns(node).forEach((run, i) => { if (i < base.length) run.nodeValue = base[i]; else node.removeChild(run); });
+    delete node.dataset.uiTextBase;
+  }
   function clearStyle(node) {
     String(node.dataset.uiStyled || "").split(",").filter(Boolean).forEach((prop) => restoreStyle(node, prop));
     delete node.dataset.uiStyled;
     if (node.dataset.uiHidden) { restoreStyle(node, "display"); delete node.dataset.uiHidden; }
     clearIcon(node);
+    clearText(node);
   }
   function applyStyle(node, item) {
     const style = cleanStyle(item.style);
@@ -255,6 +346,7 @@
     if (item.hidden === true) { writeStyle(node, "display", "none"); node.dataset.uiHidden = "true"; }
     else if (node.dataset.uiHidden) { restoreStyle(node, "display"); delete node.dataset.uiHidden; }
     if (item.icon) applyIcon(node, item); else clearIcon(node);
+    if (item.text) applyText(node, item); else clearText(node);
   }
   function applyNode(node, map) {
     rememberBase(node);
@@ -340,6 +432,9 @@
     if (!id) return false;
     const book = read(); const slot = ensureSlot(book, currentPoint());
     const stack = versionsFor(slot, id);
+    // An entry the overlay carries is reverted THERE (a clear record); the
+    // local stack alone cannot move it, and saying it did would be a lie.
+    if (Object.prototype.hasOwnProperty.call(overlayEntries(), id)) { stack.length = 0; write(book); clearOverlaid([id], "revert"); return true; }
     if (!stack.length) return false;
     const previous = stack.pop();
     const target = editing ? slot.draft : slot.saved;
@@ -360,7 +455,7 @@
     return { valid: duplicates.length === 0, duplicates };
   }
 
-  window.ThomasUiLayout = { BREAKPOINTS, applyAll, applyNode, beginDraft, breakpoint, cancelDraft, cleanStyle, commitDraft, currentMap, currentPoint, exportBook, get, identity, isDirty, policy, pushVersion, redoPrevious, remove, replaceMap, resetBreakpoint, restorePrevious, revert, savedAt, set, validate, versionCount, workspace };
+  window.ThomasUiLayout = { BREAKPOINTS, applyAll, applyNode, clearOverlaid, forgetLocal, orphans, overlaidKeys, refreshOverlay, beginDraft, breakpoint, cancelDraft, cleanStyle, commitDraft, currentMap, currentPoint, exportBook, get, identity, isDirty, policy, pushVersion, redoPrevious, remove, replaceMap, resetBreakpoint, restorePrevious, revert, savedAt, set, validate, versionCount, workspace };
   const start = () => {
     applyAll(); let applyFrame = 0;
     const queueApply = () => { if (applyFrame) return; applyFrame = requestAnimationFrame(() => { applyFrame = 0; applyAll(); }); };

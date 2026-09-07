@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,13 @@ from thomas.agent.loop_tool_protocol import is_inspection_tool, tool_call_access
 
 from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
-from .build_verify import _verify_and_iterate
+from .build_verify import PASS_WALL_CLOCK_RC, _verify_and_iterate
+from .dispatch_agent_loop_translator import (  # noqa: F401 - the names tests and callers import from here
+    _acceptance_event,
+    _AgentLoopForgeTranslator,
+    _summarize_agent_event_tool,
+)
+from .dispatch_agent_summary import _acceptance_summary, _judge_checks_summary  # noqa: F401 - re-exported for tests
 from .dispatch_claude_cli import CliDispatchResult, _is_action_refusal, _is_conversational_reply
 from .forge_event_stream import (
     FORGE_EVENT_KEY,
@@ -18,6 +25,8 @@ from .forge_event_stream import (
     _summarize_tool_input,
     _thinking_to_events,
 )
+
+log = logging.getLogger(__name__)
 
 # The honest message shown when the GPT brain is selected but the user's ChatGPT
 # subscription is not connected. NEVER a silent fallback to another brain, never
@@ -42,200 +51,53 @@ def chatgpt_oauth_connected() -> bool:
     return False
 
 
-def _summarize_agent_event_tool(name: str, args: Any) -> str:
-    """Compact summary for an AgentLoop tool call (reuses the tool-input summarizer)."""
-    summary = _summarize_tool_input(args if isinstance(args, dict) else {})
-    return summary or str(name or "tool")
+def _contract_level_for_build(build_effort: str) -> str:
+    """The verification depth a Build pass runs its acceptance contract at.
 
-
-class _AgentLoopForgeTranslator:
-    """Map Thomas's own ``AgentEvent`` stream (the GPT in-process loop) onto the
-    SAME forge events the claude stream-json path emits — including the mid-task
-    insight + collapsed reasoning beat, via the SAME shared gate.
-
-    This is the GPT twin of ``ClaudeStreamTranslator``. Both engines carry a
-    per-run ``_StreamState`` and funnel reasoning through ``_thinking_to_events``,
-    so a user who picks GPT sees the IDENTICAL genuine post-observation insight
-    cards (deduped, enumeration-stripped, honest) a claude run shows — never zero.
-
-    Two stream-shape differences from the claude path are absorbed here:
-
-      * ``THINKING`` arrives as token DELTAS, not whole blocks, so reasoning is
-        ACCUMULATED in ``_think_buf`` and flushed as ONE block at the next
-        boundary (a tool, an error, or done).
-      * the flush happens BEFORE a tool flips ``seen_observation``: reasoning that
-        precedes the run's first observation is the plan (gated to NO card, only
-        its collapsed ``reason``); reasoning that follows an observation is
-        insight-eligible — exactly the claude positional rule.
-
-    ``rc`` is set to 1 on an agent error and ``final_text`` holds the loop's final
-    message, so the async driver keeps returning the genuine ``(rc, final_text)``.
+    It follows the Build's own reasoning effort, and never drops below the first
+    level with a separate judge. Below that, a judged requirement ("at least 4
+    distinct race tracks") is nobody's to check: the verdict counts only checked
+    items, so it read "met" with nine features unchecked, and a one-track demo
+    was filed as done. Only the contract reads this value -- the worker model's
+    own effort comes from its profile and is not raised here.
     """
+    from thomas.agent.verification_contract import LEVELS, normalize_level
 
-    def __init__(self, emit: Callable[[dict[str, Any]], None]) -> None:
-        from thomas.core.events import EventType
+    level = normalize_level(build_effort)
+    floor = "xhigh"
+    return level if LEVELS.index(level) >= LEVELS.index(floor) else floor
 
-        self._emit = emit
-        self._ET = EventType
-        self._state = _StreamState()
-        self._say_buf: list[str] = []
-        self._think_buf: list[str] = []
-        # Raw argument JSON per tool call, accumulated from the streaming
-        # TOOL_CALL_ARGS_DELTA events. This is the ONLY place the arguments are
-        # visible to this translator: the executed TOOL_RESULT event carries
-        # tool_id/name/result but no args, so without this buffer a shell.exec
-        # that ran "dir" is indistinguishable from one that ran "del x", and
-        # every shell call was assumed to write — which filed correct
-        # explain-only runs as failed edits with a fabricated exit 1.
-        self._tool_args_buf: dict[str, list[str]] = {}
-        # tool_id -> the shell command it ran (excerpt), so results are auditable.
-        self._last_call_command: dict[str, str] = {}
-        # True once we've forwarded token-progressive ``say`` deltas for the current
-        # prose run, so the boundary flush does NOT re-emit the same text as a block.
-        self._streamed_say = False
-        self.rc = 0
-        self.final_text = ""
 
-    def _flush_say(self) -> None:
-        # If the prose was already streamed token-by-token (the live path), the
-        # deltas ARE the message — just drop the accumulator and re-arm for the next
-        # block. Only the non-streaming fallback emits the buffered text as one block.
-        if self._streamed_say:
-            self._say_buf.clear()
-            self._streamed_say = False
-            return
-        text = "".join(self._say_buf).strip()
-        self._say_buf.clear()
-        if text:
-            self._emit({FORGE_EVENT_KEY: "say", "text": text})
+def _clock_contract(cwd: str | Path | None = None) -> dict[str, Any]:
+    """The settlement of a pass that ended at its wall clock: not finished, by
+    construction. It stands in only until a pass that ran to its own end settles.
+    The saved playtest sessions ride in the detail: pass 2 of a proof run replayed
+    what pass 1 had proven and hit the clock again, because "continue where you
+    left off" said nothing about what was already on record."""
+    detail = "continue exactly where it left off; do not start over"
+    if cwd is not None:
+        from thomas.agent.acceptance_evaluator import _session_index_line
+        from thomas.tools.web_playtest import recent_reports
 
-    def _flush_think(self) -> None:
-        # The reasoning accumulated since the last boundary is ONE block: distil its
-        # insight (gated) and emit the collapsed reason via the SHARED helper. Flush
-        # BEFORE a tool flips the observation gate so pre-observation reasoning stays
-        # plan (no card) and post-observation reasoning is insight-eligible.
-        text = "".join(self._think_buf).strip()
-        self._think_buf.clear()
-        for ev in _thinking_to_events(text, self._state):
-            self._emit(ev)
-
-    def _classify_call(self, tool_name: str, tool_id: str) -> tuple[str, str]:
-        """Classify one completed call as ``("read"|"write", basis)``.
-
-        Uses the streamed argument JSON buffered for this ``tool_id`` so a
-        shell command is judged by its content — the same repair-tolerant
-        parse the executor itself uses (``parse_tool_args``), so the
-        classification sees the same command the tool actually ran. When the
-        stream never showed the arguments, ``tool_call_access`` fails toward
-        "write": no positive evidence, no relaxation.
-        """
-        from thomas.agent.loop_tool_exec import parse_tool_args
-
-        raw = "".join(self._tool_args_buf.pop(tool_id, []))
-        args, _parse_error = parse_tool_args(raw) if raw else (None, None)
-        # Remember the shell command so the RESULT event can carry it. Without
-        # this the durable record holds only stdout -- a passing check was
-        # unauditable after the fact, because nothing could say WHAT ran.
-        if isinstance(args, dict):
-            self._last_call_command[tool_id] = str(args.get("command") or "")[:300]
-        return tool_call_access(tool_name, args if isinstance(args, dict) else None)
-
-    def feed(self, et: str, data: dict[str, Any] | None) -> None:
-        """Translate one AgentLoop event, emitting forge events as a side effect."""
-        ET = self._ET
-        data = data or {}
-        if et == ET.TEXT_DELTA.value:
-            # Forward each token PROMPTLY as a progressive ``say`` delta (RAW — no
-            # strip, so inter-token spaces survive). The accumulator is still kept
-            # so the boundary flush knows prose was streamed (must not re-emit as block).
-            piece = str(data.get("text") or "")
-            if piece:
-                self._say_buf.append(piece)
-                self._streamed_say = True
-                self._emit({FORGE_EVENT_KEY: "say", "text": piece, "delta": True})
-        elif et == ET.THINKING.value:
-            # Accumulate reasoning deltas; they flush as one block at the next
-            # boundary so the shared insight/reason rule sees a whole thought.
-            self._think_buf.append(str(data.get("text") or ""))
-        elif et == ET.TOOL_CALL_ARGS_DELTA.value:
-            # Buffer the streamed argument JSON per call. The command a
-            # shell.exec ran only ever crosses this stream here, and the
-            # read-only-run verdict needs it (see _classify_call).
-            tool_id = str(data.get("tool_id") or "")
-            delta = str(data.get("delta") or "")
-            if tool_id and delta:
-                self._tool_args_buf.setdefault(tool_id, []).append(delta)
-        elif et == ET.TOOL_START.value:
-            # Reasoning BEFORE the tool is flushed (and gated) FIRST, then the tool
-            # marks the run as having OBSERVED so later reasoning can surface.
-            self._flush_think()
-            self._flush_say()
-            start_args = data.get("args")
-            start_access, start_basis = tool_call_access(
-                str(data.get("tool_name") or ""),
-                start_args if isinstance(start_args, dict) else None,
+        saved = recent_reports(Path(cwd), limit=20)
+        if saved:
+            detail += "; playtest sessions already on record (do not replay them): " + " | ".join(
+                _session_index_line(r) for r in saved
             )
-            self._emit(
-                {
-                    FORGE_EVENT_KEY: "tool",
-                    "name": str(data.get("tool_name") or "tool"),
-                    "text": _summarize_agent_event_tool(data.get("tool_name"), data.get("args")),
-                    "access": start_access,
-                    "access_basis": start_basis,
-                }
-            )
-            self._state.seen_observation = True
-        elif et == ET.TOOL_RESULT.value:
-            access, access_basis = self._classify_call(
-                str(data.get("tool_name") or ""), str(data.get("tool_id") or "")
-            )
-            command_excerpt = self._last_call_command.pop(str(data.get("tool_id") or ""), "")
-            self._emit(
-                {
-                    FORGE_EVENT_KEY: "tool_result",
-                    # The command the tool ran (excerpt), when the stream showed
-                    # one -- so a passing check is auditable after the fact
-                    # instead of being stdout with no provenance.
-                    **({"command": command_excerpt} if command_excerpt else {}),
-                    # Carry the tool's name. TOOL_START is never emitted by the
-                    # agent loop -- Events.tool_start has no callers anywhere --
-                    # so this is the ONLY place a name reaches the forge stream.
-                    # Without it, everything downstream that asks "did this run
-                    # only read?" gets an unnamed event, cannot tell reading from
-                    # writing, and falls back to treating every tool call as a
-                    # failed edit. That is what reported correct read-only
-                    # answers as no-ops.
-                    "name": str(data.get("tool_name") or ""),
-                    "text": str(data.get("result") or "")[:500],
-                    "is_error": not bool(data.get("ok", True)),
-                    # How this call was judged for the read-only-run verdict,
-                    # and on what evidence — recorded so the decision is
-                    # visible in the persisted event stream instead of being
-                    # re-derived (differently) by whoever reads it later.
-                    "access": access,
-                    "access_basis": access_basis,
-                }
-            )
-            # A tool RESULT is the clearest observation — following reasoning is
-            # insight-eligible, mirroring the claude ``tool_result`` branch.
-            self._state.seen_observation = True
-        elif et == ET.AGENT_ERROR.value:
-            self._flush_think()
-            self._flush_say()
-            self.rc = 1
-            self._emit({FORGE_EVENT_KEY: "error", "text": str(data.get("error") or "agent loop reported an error")})
-        elif et == ET.AGENT_DONE.value:
-            self._flush_think()
-            self.final_text = str(data.get("text") or "")
-            if self._say_buf:
-                self._flush_say()
-            if self.final_text:
-                self._emit({FORGE_EVENT_KEY: "final", "text": self.final_text})
-
-    def close(self) -> None:
-        """Drain any trailing reasoning/say buffered when the stream ends."""
-        self._flush_think()
-        self._flush_say()
+    return {
+        "active": True,
+        "verdict": {"met": False, "unmet": ["pass:wall-clock"], "unchecked": []},
+        "items": [
+            {
+                "item_id": "pass:wall-clock",
+                "kind": "requirement",
+                "description": "The previous pass stopped at its wall clock before it declared the work finished.",
+                "checked": True,
+                "satisfied": False,
+                "detail": detail,
+            }
+        ],
+    }
 
 
 async def _translate_agent_stream(
@@ -265,9 +127,16 @@ async def _translate_agent_stream(
             ):
                 translator.feed(getattr(event.type, "value", ""), event.data)
     except TimeoutError:
-        translator.feed(
-            EventType.AGENT_ERROR.value,
-            {"error": f"Agent run exceeded the {int(timeout)}-second execution limit."},
+        # The clock bounds a PASS, not the task. The engine decides what the
+        # files it left behind are worth: verified and continued when something
+        # changed, a failure only when nothing did.
+        translator.close()
+        translator.rc = PASS_WALL_CLOCK_RC
+        translator._emit(
+            {
+                FORGE_EVENT_KEY: "meta",
+                "text": f"pass wall clock ({int(timeout)} s) reached; the engine verifies what changed and continues",
+            }
         )
 
 
@@ -285,8 +154,13 @@ def _run_agent_loop_pass(
     autonomy_level: int = 3,
     token_economy: str = "optimal",
     oauth_access_token: str = "",
+    acceptance_sink: dict[str, Any] | None = None,
+    protected_paths: list[str] | None = None,
 ) -> tuple[int, str]:
     """Run ONE in-process AgentLoop edit pass on the ``openai_codex`` provider.
+
+    ``acceptance_sink``, when given, receives the pass's acceptance settlement
+    under ``"acceptance"`` so the engine can decide whether the work is done.
 
     Builds an edit-only toolset (filesystem + diff + code-search; NO shell/git/
     network), constructs the loop over the ChatGPT-OAuth model profile, runs it,
@@ -313,6 +187,8 @@ def _run_agent_loop_pass(
             autonomy_level=autonomy_level,
             token_economy=token_economy,
             oauth_access_token=oauth_access_token,
+            acceptance_sink=acceptance_sink,
+            protected_paths=protected_paths,
         )
     )
 
@@ -331,6 +207,8 @@ async def _agent_loop_pass_async(
     autonomy_level: int = 3,
     token_economy: str = "optimal",
     oauth_access_token: str = "",
+    acceptance_sink: dict[str, Any] | None = None,
+    protected_paths: list[str] | None = None,
 ) -> tuple[int, str]:
     from thomas.agent.loop import AgentLoop
     from thomas.core.config import load_config
@@ -339,9 +217,11 @@ async def _agent_loop_pass_async(
     from thomas.tools.code_search import register_code_search_tools
     from thomas.tools.diff import register_diff_tools
     from thomas.tools.filesystem import register_filesystem_tools
+    from thomas.tools.goals import register_goal_tools
     from thomas.tools.image_generation import register_image_generation_tools
     from thomas.tools.registry import ToolRegistry
     from thomas.tools.shell import register_shell_tools
+    from thomas.tools.web_playtest import register_web_playtest_tool
 
     config = load_config(Path(cwd) / "thomas.toml")
     # Edits must land in the dispatched repo, and ONLY there — confine the
@@ -366,6 +246,12 @@ async def _agent_loop_pass_async(
     )
     register_diff_tools(tools, sandbox)
     register_code_search_tools(tools, sandbox)
+    # The builder can play what it writes: a scripted, offline browser session
+    # against the project (thomas.tools.web_playtest). Without it the worker
+    # wrote "this workspace gave me no browser-control tool" and was right.
+    register_web_playtest_tool(tools, Path(cwd))
+    # Standing goals for the project: the contract holds every turn to them.
+    register_goal_tools(tools, Path(cwd))
     # Image generation: keys come from config profiles / env here (the forge
     # layer must not import the server SecretStore); Settings-saved keys reach
     # the chat/worker path via app_helpers._build_tools.
@@ -384,6 +270,14 @@ async def _agent_loop_pass_async(
         autonomy_level=autonomy_level,
         max_parallel_tools=max_parallel_tools,
     )
+    # The acceptance contract's depth: the Build's effort, floored at the level
+    # with a separate judge. The contract reads the worker model's own effort
+    # (`loop.llm.config.reasoning_effort`) unless this attribute is set, so a
+    # Build can verify deeper without paying for a deeper worker.
+    # The run's file fence: paths the brief or another agent's claim holds. Enforced
+    # by the write tools (loop_tool_paths), not left to the prose.
+    agent.protected_paths = [str(p) for p in (protected_paths or []) if str(p).strip()]
+    agent.verification_effort = _contract_level_for_build(str(getattr(model_cfg, "reasoning_effort", "") or ""))
 
     # ONE translator carries the per-run insight gate + buffers and maps each
     # AgentEvent to the SAME forge events the claude path emits — INCLUDING the
@@ -404,6 +298,8 @@ async def _agent_loop_pass_async(
     finally:
         translator.close()
         await llm.close()
+    if acceptance_sink is not None:
+        acceptance_sink["acceptance"] = translator.acceptance
     return translator.rc, translator.final_text
 
 
@@ -428,8 +324,10 @@ def dispatch_via_agent_loop(
     file_access: str = "project",
     guardrails: str = "guarded",
     autonomy_level: int = 3,
+    protected_paths: list[str] | None = None,
     token_economy: str = "optimal",
     oauth_access_token: str = "",
+    allow_without_history: bool = False,
 ) -> CliDispatchResult:
     """Dispatch a build to the GPT brain IN-PROCESS via Thomas's own AgentLoop.
 
@@ -517,7 +415,33 @@ def dispatch_via_agent_loop(
                     saw_mutating_tool = True
         emit_sink(event)
 
+    # A shell can write anywhere, so a fence and a shell cannot coexist honestly:
+    # a fenced run stays edit-only, and the stream says why.
+    fenced = [str(x) for x in (protected_paths or []) if str(x).strip()]
+    if fenced and allow_shell:
+        allow_shell = False
+        emit_event(
+            {
+                "type": "output",
+                "kind": "status",
+                "text": "shell disabled for this run: it is fenced off from "
+                + ", ".join(fenced[:6])
+                + (" and more" if len(fenced) > 6 else "")
+                + "; a shell could write anywhere, so the fence keeps this run edit-only.",
+            }
+        )
+
+    # The last pass's acceptance settlement, read by the engine after each pass.
+    # An injected ``runner`` (tests) never fills it, so the engine sees no contract.
+    acceptance_sink: dict[str, Any] = {}
+    pass_state: dict[str, bool] = {"clock": False}
+
     def _run_pass(p: str) -> tuple[int, str]:
+        rc_out = _run_pass_inner(p)
+        pass_state["clock"] = rc_out[0] == PASS_WALL_CLOCK_RC
+        return rc_out
+
+    def _run_pass_inner(p: str) -> tuple[int, str]:
         if runner is not None:
             return runner(p, str(cwd), timeout, emit_event)
         return _run_agent_loop_pass(
@@ -533,24 +457,50 @@ def dispatch_via_agent_loop(
             autonomy_level=autonomy_level,
             token_economy=token_economy,
             oauth_access_token=oauth_access_token,
+            acceptance_sink=acceptance_sink,
+            protected_paths=list(protected_paths or []),
         )
 
     from thomas.forge.anvil import forge_code_git
 
     verify_failed = False
     try:
-        snap_before = forge_code_git.snapshot(cwd)
+        # The open-time choice to work without history arrives as an argument, never inferred.
+        snap_before = forge_code_git.snapshot(cwd, allow_without_history=allow_without_history)
         rc, out = _run_pass(prompt)
+        if (
+            rc == PASS_WALL_CLOCK_RC
+            and verify
+            and (forge_code_git.project_delta_since(cwd, snap_before) or saw_tool_activity)
+        ):
+            # The clock ended a pass that was working: a pass boundary, not a
+            # verdict. Files on disk are one kind of work; a pass that only
+            # played and proved (the Minecraft proof run: eight sessions, no
+            # file to change) is another. Only a pass that did nothing fails.
+            what = "files changed" if forge_code_git.project_delta_since(cwd, snap_before) else "the pass was working"
+            emit_event({FORGE_EVENT_KEY: "meta", "text": f"{what} before the wall clock; verifying and continuing"})
+            rc = 0
         # The RUN/TEST step: only verify a clean edit pass. The engine — ordinary
         # in-process Python — owns the real check regardless of the brain.
         if verify and rc == 0:
             vrc = _verify_and_iterate(
-                cwd, snap_before, emit_event, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
+                cwd,
+                snap_before,
+                emit_event,
+                _run_pass,
+                goal,
+                verifier=verifier,
+                max_fix_iters=max_fix_iters,
+                contract=lambda: _clock_contract(cwd) if pass_state["clock"] else acceptance_sink.get("acceptance"),
             )
             if vrc != 0:
                 rc, verify_failed = vrc, True
     except (RuntimeError, OSError, ValueError, TypeError) as exc:
-        return CliDispatchResult(False, f"refused: agent loop run failed: {exc}", prompt)
+        # The frame that raised is the only thing that turns "run failed" into
+        # a fix; a self-edit run died on a copied venv link (WinError 1920)
+        # with nothing in the record saying which walker touched it.
+        log.warning("agent loop run failed: %s: %s", type(exc).__name__, exc, exc_info=True)
+        return CliDispatchResult(False, f"refused: agent loop run failed: {type(exc).__name__}: {exc}", prompt)
 
     changed = forge_code_git.project_delta_since(cwd, snap_before)
     action_refused = saw_refusal
@@ -573,7 +523,13 @@ def dispatch_via_agent_loop(
     read_only_run = saw_named_tool and not saw_mutating_tool
     tools_disqualify = saw_tool_activity and not read_only_run and saw_failed_tool
     conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
-    if rc != 0:
+    if rc == PASS_WALL_CLOCK_RC and not verify_failed:
+        reason = f"the pass reached its wall clock ({int(timeout)} s)" + (
+            f"; {len(changed)} file(s) changed but verification is off"
+            if changed
+            else " with no file changed and no tool activity"
+        )
+    elif rc != 0:
         reason = f"verification failed (exit {rc}) after fix attempts" if verify_failed else f"agent loop exited {rc}"
     elif action_refused:
         detail = " after leaving partial file changes" if changed else ""
@@ -586,14 +542,18 @@ def dispatch_via_agent_loop(
             # changed: the answer IS the outcome. The fact worth knowing stays
             # visible as a neutral note in the event stream, not an error.
             reason = "GPT answered; a write-capable tool ran and no files changed"
-            emit_sink({FORGE_EVENT_KEY: "meta", "text": "a write-capable tool ran; no files changed", "is_error": False})
+            emit_sink(
+                {FORGE_EVENT_KEY: "meta", "text": "a write-capable tool ran; no files changed", "is_error": False}
+            )
         elif conversation_reply:
             reason = "GPT replied without changing files"
         elif saw_reply:
             # The run is rightly not a success — a tool call reported failure
             # and no changes landed — but an answer EXISTS, and calling it
             # "nothing to review" was false. Describe both facts.
-            reason = "GPT gave an answer but a tool call failed and no files changed — review the answer; no edit landed"
+            reason = (
+                "GPT gave an answer but a tool call failed and no files changed — review the answer; no edit landed"
+            )
         else:
             # "Nothing to review" is reserved for when it is true: no repo
             # changes AND no answer text.

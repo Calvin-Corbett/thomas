@@ -101,6 +101,119 @@ jobs:
       - name: Protected deletion / rename guard
         run: python scripts/forge/gates/deletions.py --base "$BASE_SHA" --head "$HEAD_SHA"
 
+  merge-resurrection-gate:
+    name: merge-resurrection-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: A dead file path cannot ride back in on a merge
+        run: python scripts/forge/gates/merge_resurrection_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  dead-ref-gate:
+    name: dead-ref-gate
+    runs-on: ubuntu-latest
+    # This is the CI-side documentation of the contract, not the enforcement
+    # point: the real check runs as a LOCAL pre-push hook against every ref a
+    # push is about to CREATE (see dead_ref_gate.py's module docstring). CI
+    # never sees a pre-push stdin stream -- there is no "ref about to be
+    # created" event in a GitHub Actions run, only a ref that already exists
+    # (the PR branch or the pushed branch). So this job checks the one thing
+    # CI *can* honestly check: whether THIS PR/push's own branch name is
+    # itself a dead name, via the --ref argv fallback. Wiring the actual
+    # pre-push hook entry into .pre-commit-config.yaml is deferred -- that
+    # file is protected (agent_safety.toml) and requires the owner's tap; see
+    # plans/thomas/tasks/PRAXIS-PHASE1-BREAKGLASS/batch.md (Task 5).
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve this push/PR's own branch name
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BRANCH_NAME=${{ github.head_ref }}" >> "$GITHUB_ENV"
+          else
+            echo "BRANCH_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+      - name: A dead branch name cannot come back as this branch's own name
+        run: python scripts/forge/gates/dead_ref_gate.py --ref "$BRANCH_NAME"
+
+  branch-claim-gate:
+    name: branch-claim-gate
+    runs-on: ubuntu-latest
+    # Same CI-side caveat as dead-ref-gate above: the real enforcement point
+    # is a LOCAL pre-push hook that sees a ref about to be CREATED, which CI
+    # cannot observe. This job checks the one thing CI can honestly check --
+    # whether THIS PR/push's own branch name itself carries a live claim --
+    # via the --ref argv fallback. Wiring the real pre-push hook entry into
+    # .pre-commit-config.yaml is deferred: that file is protected
+    # (agent_safety.toml) and requires the owner's tap.
+    #
+    # NOT YET in gates-required's `needs:` list -- deliberately, unlike
+    # dead-ref-gate. dead-ref-gate's CI form is safe to require immediately:
+    # an empty/no-match graveyard passes every branch by default. This gate
+    # has the OPPOSITE polarity. Making it required is a real policy change
+    # (every contributor's branch must be claimed before it can land), and
+    # is queued as its own follow-up with its own reviewer sign-off (see
+    # plans/thomas/tasks/PRAXIS-BRANCH-EQUILIBRIUM/status.md) -- not
+    # something to flip silently by adding one line to a `needs:` array.
+    #
+    # STATE AS OF Task 4 (2026-08-27, updated in the fix wave that landed
+    # after Task 4's own closure commit -- verify docs/ops/branch_claims.json
+    # directly before trusting this comment's count, the same way this
+    # comment was corrected once already): the registry is seeded, not
+    # empty -- it holds 8 records (the local integration/unify-2026-08-14
+    # plus 7 codex/* remote-branch clusters), all owned by
+    # `calvin (standing delegation 2026-08-24, claude-recorded)`, expiring
+    # 2026-09-30. `dev`/`main` need no claim (`_EXEMPT_BRANCHES` in
+    # branch_claim_gate.py). Any OTHER branch pushed today without a claim
+    # still shows a red X here -- non-blocking (not in gates-required),
+    # but genuinely enforcing: a present, non-empty-but-incomplete registry
+    # is not infrastructure absence -- see branch_claims.py's docstring.
+    # Local pre-push wiring (a .pre-commit-config.yaml hook calling this
+    # same script) does not exist yet either -- that is a separate, named
+    # tap item (PRAXIS-PHASE14-BREAKGLASS/batch.md section (k)), not
+    # something this CI job substitutes for.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve this push/PR's own branch name
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BRANCH_NAME=${{ github.head_ref }}" >> "$GITHUB_ENV"
+          else
+            echo "BRANCH_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+      - name: An anonymous branch cannot reach a remote without a live claim
+        run: python scripts/forge/gates/branch_claim_gate.py --ref "$BRANCH_NAME"
+
   # ────────────────────────────────────────────────────────────────────────
   # COMMIT-SHAPE GATES (bypass-targeted: these are the ones agents game)
   # ────────────────────────────────────────────────────────────────────────
@@ -359,6 +472,79 @@ jobs:
           fi
       - run: python scripts/forge/gates/workboard_changed_files.py --base "$BASE_SHA" --head "$HEAD_SHA" --require-identity-metadata
 
+  workboard-evidence-gate:
+    name: workboard-evidence-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      # No --run-store-db here (recon #7b, phase 2 batch 1): the run_store
+      # sqlite db is not a repo artifact -- it lives outside the checkout in
+      # a per-machine data dir (thomas/core/config.py's THOMAS_RUNS_DB_PATH,
+      # under the user's home), and is only ever populated by a LIVE Thomas
+      # server processing real chat/workspace turns. A GitHub-hosted runner
+      # never runs that server, so it can structurally never hold the run
+      # this diff's evidence actually refers to. Wiring a fresh/empty db in
+      # here would be worse than the status quo: every real run-kind claim
+      # would flip from an honest UNAVAILABLE (reason_code=db_path_required)
+      # PASS to a hard FAIL ("run not found"), since a throwaway CI db can
+      # never contain a production run_id. The gate already prints that
+      # reason_code by name in its UNAVAILABLE note -- see
+      # workboard_evidence_gate.py's main(). If a CI-reachable run-store
+      # ever exists (e.g. a synced read-only mirror), pass --run-store-db
+      # here; until then this omission is the honest choice, not a gap.
+      - name: A done transition cannot land without evidence that checks out
+        run: python scripts/forge/gates/workboard_evidence_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  problem-closure-gate:
+    name: problem-closure-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+      - name: Resolve diff range
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+              base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            echo "BASE_SHA=$base" >> "$GITHUB_ENV"
+            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+          fi
+      - name: An incident may end in a practice or an owned risk -- never a shrug
+        run: python scripts/forge/gates/problem_closure_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
   # ────────────────────────────────────────────────────────────────────────
   # ARTIFACT / DOC INTEGRITY
   # ────────────────────────────────────────────────────────────────────────
@@ -571,6 +757,8 @@ jobs:
     needs:
       - protected-files-gate
       - protected-deletions-gate
+      - merge-resurrection-gate
+      - dead-ref-gate
       - bulk-commit-guard
       - commit-growth-guard
       - public-repo-leak-guard
@@ -582,6 +770,8 @@ jobs:
       - workboard-claims-gate
       - workboard-task-problems-gate
       - workboard-changed-files-gate
+      - workboard-evidence-gate
+      - problem-closure-gate
       - changelog-gate
       - plan-structure-gate
       - repo-hygiene-gate

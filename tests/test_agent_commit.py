@@ -305,17 +305,17 @@ def test_agent_commit_rejects_include_outside_scope(tmp_path: Path) -> None:
     assert result.blocker_class == "claim_scope_mismatch"
 
 
-def test_agent_commit_auto_includes_release_metadata_when_changed(tmp_path: Path) -> None:
+def test_agent_commit_never_sweeps_a_dirty_changelog_into_the_scope(tmp_path: Path) -> None:
+    """Another session's changelog prose must not land under this committer's name."""
     repo, workboard = _init_repo(
         tmp_path,
         claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
     )
-    _write(repo / "src" / "app.py", 'print("changed")\n')
-    _write(repo / "CHANGELOG.md", "# Changelog\n\nnew\n")
-    _write(repo / "thomas" / "__init__.py", '__version__ = "0.1.1"\n')
+    _write(repo / "src" / "app.py", 'print("changed")')
+    _write(repo / "CHANGELOG.md", "# Changelog: someone else's entry")
 
     result = mod.commit_scoped_changes(
-        message="feat: release trio",
+        message="feat: only my scope",
         agent="codex",
         dry_run=True,
         repo_root=repo,
@@ -325,9 +325,31 @@ def test_agent_commit_auto_includes_release_metadata_when_changed(tmp_path: Path
 
     assert result.ok is True
     assert "src/app.py" in result.selected_paths
-    assert "CHANGELOG.md" in result.selected_paths
-    assert "thomas/__init__.py" in result.selected_paths
-    assert "pyproject.toml" not in result.selected_paths
+    assert "CHANGELOG.md" not in result.selected_paths
+
+
+def test_agent_commit_refuses_a_version_bump_in_progress_outside_the_scope(tmp_path: Path) -> None:
+    """A dirty version file is never swept in and never left to land half."""
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")')
+    _write(repo / "thomas" / "__init__.py", '__version__ = "0.1.1"')
+
+    result = mod.commit_scoped_changes(
+        message="feat: my scope while a bump is parked elsewhere",
+        agent="codex",
+        dry_run=True,
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "release_metadata_dirty"
+    assert "thomas/__init__.py" in result.message
+    assert "thomas/__init__.py" not in result.selected_paths
 
 
 def test_agent_commit_does_not_include_release_metadata_when_clean(tmp_path: Path) -> None:

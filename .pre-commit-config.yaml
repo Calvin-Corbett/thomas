@@ -34,6 +34,12 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-untracked-import-gate
+        name: Thomas Untracked Import Gate (a staged file may not import an untracked module)
+        entry: python scripts/_gate_python.py scripts/forge/gates/untracked_import_gate.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-precommit-skip-policy-gate
         name: Thomas Pre-commit Skip Policy Gate
         entry: python scripts/_gate_python.py scripts/forge/gates/precommit_skip_policy.py
@@ -85,6 +91,12 @@ repos:
       - id: thomas-workboard-task-problems-gate
         name: Thomas Workboard Task Problems Gate
         entry: python scripts/_gate_python.py scripts/forge/gates/workboard_task_problems.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-problem-closure-gate
+        name: Thomas Problem Closure Gate
+        entry: python scripts/_gate_python.py scripts/forge/gates/problem_closure_gate.py
         language: system
         pass_filenames: false
 
@@ -183,6 +195,19 @@ repos:
       - id: thomas-publish-preflight
         name: Thomas Publish Preflight (secret scan + blocked-file check)
         entry: python scripts/_gate_python.py scripts/forge/publish/preflight.py --skip-worktree-clean-check --required-branch dev --strict
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: thomas-dead-ref-gate
+        name: Thomas Dead Ref Gate (graveyard-protected branch names)
+        entry: python scripts/_gate_python.py scripts/forge/gates/dead_ref_gate.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: thomas-branch-claim-gate
+        name: Thomas Branch Claim Gate (anonymous pushes need an owner)
+        entry: python scripts/_gate_python.py scripts/forge/gates/branch_claim_gate.py
         language: system
         pass_filenames: false
         stages: [pre-push]

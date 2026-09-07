@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .forge_code_projects import is_task_born_project, workspace_is_unused
+from .forge_code_settings import direct_shell_allowed
 
 
 def _fresh_workspace_note(project_root: Any) -> str:
@@ -136,28 +137,38 @@ def compose_headless_prompt(
         "pc": "PC: write inside the selected project or the user's home folders",
         "full": "full: write to non-system paths while preserving Thomas runtime protections",
     }
-    guardrail_rules = {
-        "open": "permissive: shell may be available after the route's explicit risky-action approval",
-        "guarded": (
-            "standard: shell runs inside the project folder; external or destructive "
-            "actions require approval"
-        ),
-        "fortress": "strict: shell is unavailable, risky actions require approval, and tool calls are serialized",
-    }
     access = str(file_access or "project").strip().lower()
     guard = str(guardrails or "guarded").strip().lower()
+    autonomy = max(1, min(4, int(autonomy_level)))
+    allow_direct_shell = direct_shell_allowed(
+        autonomy_level=autonomy,
+        file_access=access,
+        guardrails=guard,
+    )
+    guardrail_rules = {
+        "open": (
+            "permissive: an unsandboxed host shell starts in the selected project "
+            "because the request explicitly selected Open"
+            if allow_direct_shell
+            else "permissive setting selected, but direct shell is unavailable under the current access policy"
+        ),
+        "guarded": "standard: direct shell is unavailable; bounded engine verification runs after edits",
+        "fortress": (
+            "strict: direct shell is unavailable, bounded engine verification runs after edits, "
+            "and tool calls are serialized"
+        ),
+    }
     parts.append(
         "## Enforced Code execution policy\n"
         f"File access = {access_rules.get(access, access_rules['project'])}.\n"
         f"Guardrails = {guardrail_rules.get(guard, guardrail_rules['guarded'])}.\n"
-        f"Autonomy level = {max(1, min(4, int(autonomy_level)))}. "
+        f"Autonomy level = {autonomy}. "
         "Do not claim access or permissions broader than these enforced settings."
     )
-    # This used to tell the model "you do not run shell or git yourself" and to leave
-    # verification entirely to the engine. That instruction was the reason a one-line
-    # undeclared-variable bug shipped: the model reviewed its work by READING it,
-    # because reading was the only thing it could do. Now that the shell is available
-    # inside the project folder, ask for the thing that actually catches bugs.
+    # Keep the prompt aligned with the actual capability boundary. Guarded and
+    # fortress edit without a direct shell and consume engine-verifier receipts;
+    # Open exposes the host shell only when autonomy and file access permit it,
+    # and must say that boundary plainly.
     parts.append(
         "When — and only when — the user asks you to build or change something, you are "
         "the EDIT and VERIFY steps of a reason→edit→verify loop. Make the file changes "
@@ -172,6 +183,21 @@ def compose_headless_prompt(
         "inside the project folder. Do NOT create branches or commit. Do not modify "
         "protected files or gate scripts."
     )
+    if allow_direct_shell:
+        parts[-1] = parts[-1].replace(
+            "Shell commands run inside the project folder.",
+            "The direct shell is an unsandboxed host process that starts in the selected project; "
+            "it is enabled only because this request explicitly selected Open, and commands can "
+            "leave that project.",
+        )
+    else:
+        parts[-1] = (
+            "When the user asks you to build or change something, make the file changes directly "
+            "with Read/Write/Edit. Direct shell is unavailable under this execution policy. Thomas's "
+            "bounded verifier runs after the edit pass and feeds failures into the next edit pass; "
+            "use those receipts instead of claiming you ran commands yourself. Do NOT create "
+            "branches or commit. Do not modify protected files or gate scripts."
+        )
     # Measured on a homepage build: verification scratch (a server log, a
     # verify-*.cjs probe) landed in the project root, appeared in CHANGED FILES
     # beside the user's real work with a Keep/Revert choice, and was swept into
@@ -191,7 +217,7 @@ def compose_headless_prompt(
     parts.append(
         "Write your final summary AFTER re-reading the files you changed, and name "
         "only details that are actually in them — a name, a heading, a count you can "
-        "point to. Prefer \"I re-checked <file>\" phrasing over recalling what you "
+        'point to. Prefer "I re-checked <file>" phrasing over recalling what you '
         "meant to build. A summary written from memory can describe content that "
         "never shipped."
     )

@@ -19,8 +19,10 @@ class PolicyEngine:
         tool_categories: dict[str, str] | None = None,
     ) -> PolicyEngine:
         rules = default_rules(
+            validation_errors=cfg.validation_errors,
             allow_tools=cfg.allow_tools,
             deny_tools=cfg.deny_tools,
+            require_approval_tools=cfg.guardrails.tools_require_approval,
             deny_roots=cfg.deny_roots,
             deny_paths=cfg.deny_paths,
             deny_groups=cfg.deny_groups,
@@ -29,7 +31,7 @@ class PolicyEngine:
         return PolicyEngine(cfg, rules)
 
     def evaluate(self, ctx: PolicyContext) -> PolicyDecision:
-        # Explicit allow/deny lists in config can short-circuit via rule order.
+        # Rules are ordered from strongest restriction to explicit allow.
         decision: PolicyDecision | None = None
         for rule in self.rules:
             dec = rule.apply(ctx)
@@ -38,17 +40,17 @@ class PolicyEngine:
                 break
 
         if decision is None:
-            # Optional: force approvals for listed tools
-            if ctx.tool_name in self.config.guardrails.tools_require_approval:
-                decision = PolicyDecision.require_approval(
-                    f"Tool '{ctx.tool_name}' requires approval by config.",
-                    rule_id="config_tools_require_approval",
-                )
-            else:
-                decision = PolicyDecision.allow("No matching rule; allowed.", rule_id="default_allow")
+            decision = PolicyDecision.allow("No matching rule; allowed.", rule_id="default_allow")
 
         if decision.type == PolicyDecisionType.REQUIRE_APPROVAL:
             mode = str(self.config.guardrails.no_human_mode or "human").strip().lower()
+            # Publishing, messages, and money ask in every mode. Builder mode
+            # exists to stop the prompt on ordinary work, not to hand over the
+            # actions that leave this machine — and prompt injection makes that
+            # distinction matter even when the model is behaving perfectly.
+            # "deny" is stricter than asking, so it still applies below.
+            if mode == "allow" and decision.meta.get("always_ask") is True:
+                return decision
             if mode == "allow":
                 return PolicyDecision.allow(
                     f"Auto-approved in no-human mode (policy still blocked by risk). Original: {decision.reason}",

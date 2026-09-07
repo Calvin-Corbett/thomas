@@ -3,11 +3,12 @@
 Proves the mechanism deterministically (mocked LLM, no live model): when the
 model calls send_task, the reasoning specialist actually invokes the dispatch
 callback (so any "handed off" claim is TRUE), emits a task_request, and replies
-with the model's own confirmation. When the model doesn't call it, nothing
+with a runtime-owned receipt. When the model doesn't call it, nothing
 dispatches and nothing is faked. This is the fix for the dishonesty Calvin found
 ("I'll get that started" with nothing behind it).
 """
 
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -26,7 +27,9 @@ class _FakeLLM:
     def stream_chat(self, *, messages, tools=None):
         idx = len(self.calls)
         self.calls.append({"messages": list(messages), "tools": tools})
-        events = self._scripts[idx] if idx < len(self._scripts) else [StreamEvent(type="done")]
+        if idx >= len(self._scripts):
+            raise AssertionError("unexpected extra model pass")
+        events = self._scripts[idx]
 
         async def _gen():
             for ev in events:
@@ -35,14 +38,14 @@ class _FakeLLM:
         return _gen()
 
 
-async def _run(scripts, send_task, operate=None):
+async def _run(scripts, send_task, operate=None, update_task=None):
     spec = ReasoningSpecialist(config=None, llm=_FakeLLM(scripts))
     contract = DelegationContract(
         specialist_id="reasoning",
         task_description="x",
         allowed_tools={"reasoning"},
         timeout_seconds=0,
-        input_context={"send_task": send_task, "operate": operate},
+        input_context={"send_task": send_task, "operate": operate, "update_task": update_task},
     )
     token = CapabilityToken(
         specialist_id="reasoning",
@@ -83,12 +86,6 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
                 ),
                 StreamEvent(type="done"),
             ],
-            # pass 2: natural confirmation after the task result
-            [
-                StreamEvent(type="token", data={"text": "On its way — "}),
-                StreamEvent(type="token", data={"text": "the team is building your Pac-Man game."}),
-                StreamEvent(type="done"),
-            ],
         ]
         events, llm = await _run(scripts, send_task)
 
@@ -100,41 +97,55 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured.get("instructions"), "Build a pac-man browser game")
         # A task_request event was surfaced for the UI/brain.
         self.assertTrue(any(e.get("type") == "task_request" for e in events))
-        # Final reply is the model's own confirmation — not a canned line.
+        # The receipt is runtime-owned and can only appear after the callback.
         done = next(e for e in events if e.get("type") == "done")
-        self.assertIn("running now", done.get("content", ""))
-        # Tool offered on pass 1, withdrawn on pass 2 (no double-dispatch).
+        self.assertEqual(done.get("content"), "Started the task card “Build a Pac-Man game”. Follow progress there.")
+        # There is no discarded second model pass and no opportunity to dispatch
+        # the same work twice.
+        self.assertEqual(len(llm.calls), 1)
         self.assertIsNotNone(llm.calls[0]["tools"])
-        self.assertIsNone(llm.calls[1]["tools"])
 
-    async def test_post_dispatch_completion_claim_is_rewritten_before_emission(self):
-        async def send_task(*, title, instructions, surface=""):
-            return None
+    async def test_model_authored_completion_claims_cannot_replace_the_runtime_receipt(self):
+        claims = (
+            "Done — I built all three files and they are ready.",
+            "The requested deliverable already exists now.",
+            "I wrote the requested report.",
+            "Your generated artifact is available.",
+        )
 
-        scripts = [
-            [
-                StreamEvent(
-                    type="tool_call_end",
-                    data={
-                        "id": "c1",
-                        "name": "send_task",
-                        "arguments": '{"title":"Build three files","instructions":"Build them"}',
-                    },
-                ),
-                StreamEvent(type="done"),
-            ],
-            [
-                StreamEvent(type="token", data={"text": "Done — I built all three files and they are ready."}),
-                StreamEvent(type="done"),
-            ],
-        ]
+        for claim in claims:
+            with self.subTest(claim=claim):
+                calls = []
 
-        events, _ = await _run(scripts, send_task)
-        visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
-        done = next(event for event in events if event.get("type") == "done")
-        self.assertIn("running now", visible)
-        self.assertNotIn("built all three", visible.lower())
-        self.assertIn("running now", str(done.get("content") or ""))
+                async def send_task(*, title, instructions, surface=""):
+                    calls.append(title)
+
+                scripts = [
+                    [
+                        StreamEvent(
+                            type="tool_call_end",
+                            data={
+                                "id": "c1",
+                                "name": "send_task",
+                                "arguments": (
+                                    '{"title":"Build three files","instructions":"Build them",'
+                                    f'"confirmation":{json.dumps(claim)}}}'
+                                ),
+                            },
+                        ),
+                        StreamEvent(type="done"),
+                    ]
+                ]
+
+                events, llm = await _run(scripts, send_task)
+                visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
+                done = next(event for event in events if event.get("type") == "done")
+                self.assertEqual(calls, ["Build three files"])
+                self.assertEqual(sum(event.get("type") == "task_request" for event in events), 1)
+                self.assertEqual(len(llm.calls), 1)
+                self.assertEqual(visible, "Started the task card “Build three files”. Follow progress there.")
+                self.assertEqual(visible, str(done.get("content") or ""))
+                self.assertNotEqual(visible, claim)
 
     async def test_pre_tool_completion_claim_is_never_streamed(self):
         async def send_task(*, title, instructions, surface=""):
@@ -153,16 +164,92 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
                 ),
                 StreamEvent(type="done"),
             ],
-            [
-                StreamEvent(type="token", data={"text": "The three builds are running now."}),
-                StreamEvent(type="done"),
-            ],
         ]
 
         events, _ = await _run(scripts, send_task)
         visible = "".join(str(event.get("text") or "") for event in events if event.get("type") == "text")
         self.assertNotIn("built all three", visible.lower())
-        self.assertIn("running now", visible.lower())
+        self.assertIn("Started the task card", visible)
+
+    async def test_successful_send_uses_title_receipt_without_an_extra_pass(self):
+        async def send_task(*, title, instructions, surface=""):
+            return None
+
+        scripts = [
+            [
+                StreamEvent(
+                    type="tool_call_end",
+                    data={
+                        "id": "c1",
+                        "name": "send_task",
+                        "arguments": '{"title":"Draft the report","instructions":"Draft it"}',
+                    },
+                ),
+                StreamEvent(type="done"),
+            ]
+        ]
+
+        events, llm = await _run(scripts, send_task)
+        done = next(event for event in events if event.get("type") == "done")
+        self.assertIn("Draft the report", str(done.get("content") or ""))
+        self.assertIn("task card", str(done.get("content") or ""))
+        self.assertEqual(len(llm.calls), 1)
+
+    async def test_failed_dispatch_may_use_a_second_pass_to_explain_the_failure(self):
+        async def send_task(*, title, instructions, surface=""):
+            raise RuntimeError("queue offline")
+
+        scripts = [
+            [
+                StreamEvent(
+                    type="tool_call_end",
+                    data={
+                        "id": "c1",
+                        "name": "send_task",
+                        "arguments": '{"title":"Draft the report","instructions":"Draft it"}',
+                    },
+                ),
+                StreamEvent(type="done"),
+            ],
+            [
+                StreamEvent(type="token", data={"text": "I couldn’t start that because the queue is offline."}),
+                StreamEvent(type="done"),
+            ],
+        ]
+
+        events, llm = await _run(scripts, send_task)
+        self.assertFalse(any(event.get("type") == "task_request" for event in events))
+        done = next(event for event in events if event.get("type") == "done")
+        self.assertIn("couldn’t start", str(done.get("content") or ""))
+        self.assertEqual(len(llm.calls), 2)
+
+    async def test_successful_update_uses_runtime_receipt_once(self):
+        captured = {}
+
+        async def update_task(*, task_ref, update, cancel=False):
+            captured.update({"task_ref": task_ref, "update": update, "cancel": cancel})
+            return {"ok": True, "action": "steer"}
+
+        scripts = [
+            [
+                StreamEvent(
+                    type="tool_call_end",
+                    data={
+                        "id": "u1",
+                        "name": "update_task",
+                        "arguments": '{"task_ref":"exec-123","update":"make it blue"}',
+                    },
+                ),
+                StreamEvent(type="done"),
+            ]
+        ]
+
+        events, llm = await _run(scripts, None, update_task=update_task)
+        self.assertEqual(captured, {"task_ref": "exec-123", "update": "make it blue", "cancel": False})
+        self.assertTrue(any(event.get("type") == "task_update" for event in events))
+        done = next(event for event in events if event.get("type") == "done")
+        self.assertEqual(done.get("content"), "The requested change was sent to the running task.")
+        self.assertEqual(len(llm.calls), 1)
 
     async def test_text_form_tool_call_never_dispatches(self):
         async def send_task(*, title, instructions, surface=""):

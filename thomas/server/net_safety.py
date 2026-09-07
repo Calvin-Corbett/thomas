@@ -16,10 +16,12 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
+from typing import Any
 from urllib.parse import urlparse
 
 _ALLOWED_SCHEMES = ("https", "http")
 _ALLOW_PRIVATE_ENV = "THOMAS_ALLOW_PRIVATE_OUTBOUND"
+_MAX_REDIRECTS = 5
 
 
 def _allow_private() -> bool:
@@ -66,3 +68,51 @@ def validate_public_url(url: str) -> str:
     if not _resolves_public(parsed.hostname):
         raise ValueError(f"refusing to fetch URL resolving to a non-public address: {parsed.hostname!r}")
     return url
+
+
+def _validated_next_hop(response: Any) -> str | None:
+    """Return the validated absolute target of a redirect, or None if not one.
+
+    Raises ``ValueError`` (from ``validate_public_url``) when a redirect points
+    somewhere the guard would have refused on the first request.
+    """
+    if not getattr(response, "is_redirect", False):
+        return None
+    location = response.headers.get("location")
+    if not location:
+        return None
+    return validate_public_url(str(response.url.join(location)))
+
+
+def request_validated(client: Any, method: str, url: str, *, max_redirects: int = _MAX_REDIRECTS, **kwargs: Any) -> Any:
+    """Issue an httpx request, re-validating the target at EVERY redirect hop.
+
+    ``validate_public_url`` only judges the URL it is handed. A client left on
+    ``follow_redirects=True`` therefore checks the first address and then follows
+    a ``Location`` header anywhere it likes -- including straight back to
+    localhost or the cloud metadata endpoint the guard exists to refuse. The
+    per-request ``follow_redirects=False`` below overrides any client-level
+    default, so every hop is validated before it is fetched.
+    """
+    target = validate_public_url(url)
+    for _ in range(max_redirects + 1):
+        response = client.request(method, target, follow_redirects=False, **kwargs)
+        next_hop = _validated_next_hop(response)
+        if next_hop is None:
+            return response
+        target = next_hop
+    raise ValueError(f"refusing to follow more than {max_redirects} redirects from {url!r}")
+
+
+async def request_validated_async(
+    client: Any, method: str, url: str, *, max_redirects: int = _MAX_REDIRECTS, **kwargs: Any
+) -> Any:
+    """Async twin of :func:`request_validated`, for ``httpx.AsyncClient``."""
+    target = validate_public_url(url)
+    for _ in range(max_redirects + 1):
+        response = await client.request(method, target, follow_redirects=False, **kwargs)
+        next_hop = _validated_next_hop(response)
+        if next_hop is None:
+            return response
+        target = next_hop
+    raise ValueError(f"refusing to follow more than {max_redirects} redirects from {url!r}")

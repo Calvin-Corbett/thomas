@@ -37,6 +37,7 @@ import shlex
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 log = logging.getLogger(__name__)
@@ -352,6 +353,15 @@ class ConsolidationResult:
     flagged: list[str] = field(default_factory=list)
     kept: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # I7 (graveyard-with-teeth fix-wave, 2026-08-25): _record_branch_death
+    # swallowed a failed graveyard write into a log.warning line -- nothing
+    # in the report itself said whether an archived branch's death record
+    # actually landed. These two counters make that visible without
+    # changing _record_branch_death's fail-soft behaviour: an archived
+    # branch always finishes archiving even if its graveyard record could
+    # not be written, but the report now says so.
+    graveyard_records_written: int = 0
+    graveyard_failures: int = 0
 
     @property
     def ok(self) -> bool:
@@ -365,7 +375,48 @@ class ConsolidationResult:
             "kept": list(self.kept),
             "errors": list(self.errors),
             "ok": self.ok,
+            "graveyard_records_written": self.graveyard_records_written,
+            "graveyard_failures": self.graveyard_failures,
         }
+
+
+def _record_branch_death(repo_root: Path, name: str, sha: str) -> bool:
+    """Best-effort: write a graveyard death record for an archived branch.
+
+    Import-guarded so the custodian keeps working even when the graveyard
+    module is unavailable (older checkout, partial deploy) -- log the miss,
+    never crash a branch retirement that already succeeded (the
+    ``update-ref`` under ``refs/archive`` has already landed by the time
+    this is called; failing to *also* record it in the graveyard must not
+    undo that or block the rest of the run).
+
+    Returns ``True`` if the record was written, ``False`` if the attempt
+    failed (import unavailable, or ``graveyard.record_death`` itself
+    raised). The caller (``consolidate``) counts this into
+    ``ConsolidationResult.graveyard_records_written`` /
+    ``.graveyard_failures`` (I7, graveyard-with-teeth fix-wave, 2026-08-25)
+    so a failure that used to be visible only as a log line is now visible
+    in the report itself. Callers that never pass a ``repo_root`` to
+    ``consolidate`` do not call this at all -- see ``consolidate`` below.
+    """
+    try:
+        from scripts.forge import graveyard
+    except ImportError as exc:  # pragma: no cover - only when graveyard.py is absent
+        log.info("graveyard module unavailable; branch death for %s not recorded: %s", name, exc)
+        return False
+    try:
+        graveyard.record_death(
+            repo_root,
+            "branch",
+            name,
+            sha,
+            reason="custodian: archived and deleted (superseded, no unique content beyond trunk)",
+            by="branch-custodian",
+        )
+        return True
+    except (OSError, ValueError, SystemExit) as exc:
+        log.warning("could not record graveyard death for branch %s: %s", name, exc)
+        return False
 
 
 def consolidate(
@@ -374,12 +425,19 @@ def consolidate(
     *,
     apply: bool = False,
     archive_namespace: str = "refs/archive",
+    repo_root: Path | None = None,
 ) -> ConsolidationResult:
     """Execute (or, by default, rehearse) the report's proposed actions.
 
     ``apply=False`` is a dry run: nothing is touched and the result describes
     what *would* happen. Branches carrying unique work are never deleted in
     either mode -- they are only flagged.
+
+    ``repo_root``, when given, makes an applied ``ARCHIVE_AND_DELETE`` also
+    write a graveyard death record (``scripts/forge/graveyard.py``) after the
+    ``refs/archive`` update-ref succeeds, so the pre-push dead-ref gate can
+    later refuse the name coming back. Omitting it (the default) preserves
+    the old behaviour exactly -- no graveyard write, no import attempted.
     """
     result = ConsolidationResult()
 
@@ -408,6 +466,11 @@ def consolidate(
             if action is Action.ARCHIVE_AND_DELETE:
                 git(["update-ref", f"{archive_namespace}/{row.name}", row.sha])
                 result.archived.append(row.name)
+                if repo_root is not None:
+                    if _record_branch_death(repo_root, row.name, row.sha):
+                        result.graveyard_records_written += 1
+                    else:
+                        result.graveyard_failures += 1
             git(["branch", "-D", row.name])
             result.deleted.append(row.name)
         except (*_GIT_FAULTS, BranchCustodianError) as exc:

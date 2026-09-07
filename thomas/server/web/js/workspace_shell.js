@@ -5,15 +5,45 @@
   const STORAGE_KEY = "thomas_chat_theme";
   let applyingRemoteEdit = false;
 
+  // The user overlay's view, put in every served page by the server
+  // (thomas/server/overlay/render.py). Overlay themes are known names too, so
+  // a stored or relayed choice of one is never reset to nebula.
+  function overlayView() {
+    let view = window.ThomasOverlayView;
+    if (!view) {
+      const el = document.getElementById("thomas-overlay-view");
+      view = { present: false };
+      try { if (el) view = JSON.parse(el.textContent || "{}"); } catch (_) { view = { present: false, notes: ["overlay view unreadable"] }; }
+      window.ThomasOverlayView = view;
+    }
+    // Overlay themes join the known names in manifest order, so every document
+    // agrees on the index the tab shell relays; light ones join the light list.
+    // Both lists are rebuilt from their stock prefix on every read, so a theme
+    // cleared from the overlay leaves them as it would in a fresh tab.
+    THEMES.length = STOCK_THEME_COUNT;
+    LIGHT_THEMES.length = STOCK_LIGHT_COUNT;
+    Object.entries((view && view.themes) || {}).forEach(([name, spec]) => {
+      if (!THEMES.includes(name)) THEMES.push(name);
+      if (spec && spec.color_scheme === "light" && !LIGHT_THEMES.includes(name)) LIGHT_THEMES.push(name);
+    });
+    return view;
+  }
+  function knownThemes() { overlayView(); return THEMES.slice(); }
   function safeTheme(value) {
+    overlayView();
     const theme = String(value || "").toLowerCase();
     return THEMES.includes(theme) ? theme : "nebula";
   }
   function storedTheme() {
-    try { return safeTheme(localStorage.getItem(STORAGE_KEY)); }
-    catch (_) { return "nebula"; }
+    try {
+      const stored = String(localStorage.getItem(STORAGE_KEY) || "").toLowerCase();
+      if (stored && knownThemes().includes(stored)) return stored;
+    } catch (_) { /* storage is optional */ }
+    return safeTheme(overlayView().default_theme);
   }
   const LIGHT_THEMES = ["light", "sandstone"];
+  const STOCK_THEME_COUNT = THEMES.length;
+  const STOCK_LIGHT_COUNT = LIGHT_THEMES.length;
   function applyTheme(theme, options) {
     const name = safeTheme(theme); const root = document.documentElement;
     root.dataset.thomasTheme = name; root.dataset.theme = name;
@@ -177,6 +207,71 @@
     window.ThomasUiEditMode.setActive(Boolean(active), { save: save !== false });
     queueMicrotask(() => { applyingRemoteEdit = false; });
   }
+  /* The browser chrome is the web UI's default frame (owner charter,
+   * 2026-09-01: tabs need no Electron).
+   *
+   * The tab strip, omnibox, bookmarks bar and side panel live under /static
+   * but are not linked from chat.html: that file is over the monolith
+   * guard's HTML hard limit and unbaselined, so no commit can touch it. This
+   * attaches them for anyone running Thomas in an ordinary browser; the
+   * desktop app attaches the same chain through its preload.
+   *
+   * Off only when asked: ?browser=0 on the address, or thomas_browser_shell
+   * set to off in storage (the profile menu's Classic layout writes it).
+   * ?browser=1 always wins, so a link can force the chrome back on. Never
+   * inside an embedded document, never where window.thomasDesktop exists,
+   * never twice, and only where the chat shell actually exists: this file
+   * also loads on mission, settings and the classic index. The decision is
+   * a pure function so the node harness can table it.
+   */
+  function browserChromeDecision(input) {
+    const params = new URLSearchParams(String(input.search || ""));
+    if (input.embedded) return { attach: false, reason: "embedded" };
+    if (input.desktop) return { attach: false, reason: "desktop-app" };
+    if (input.attached) return { attach: false, reason: "already-attached" };
+    if (!input.shell) return { attach: false, reason: "no-chat-shell" };
+    if (params.get("browser") === "0") return { attach: false, reason: "query-off" };
+    if (params.get("browser") === "1") return { attach: true, reason: "query-on" };
+    if (String(input.stored || "") === "off") return { attach: false, reason: "stored-off" };
+    return { attach: true, reason: "default-on" };
+  }
+  function maybeAttachBrowserChrome() {
+    let stored = "";
+    try { stored = localStorage.getItem("thomas_browser_shell") || ""; } catch (_) { stored = ""; }
+    const decision = browserChromeDecision({
+      search: location.search, stored, desktop: Boolean(window.thomasDesktop),
+      embedded: window.parent !== window, attached: Boolean(document.getElementById("bt-titlebar")),
+      shell: Boolean(document.getElementById("tc-shell")),
+    });
+    if (!decision.attach) return;
+    const stamped = document.querySelector('link[href*="/static/css/tokens.css"]');
+    const query = stamped ? (stamped.getAttribute("href").split("?")[1] || "") : "";
+    const suffix = query ? "?" + query : "";
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "/static/css/browser_shell.css" + suffix;
+    document.head.appendChild(css);
+    // Sequential: the shell's IIFE runs on load and needs the other two.
+    const chain = [
+      "/static/js/browser_shell_panel.js",
+      "/static/js/browser_shell_desktop.js",
+      "/static/js/browser_shell_keys.js",
+      "/static/js/browser_shell_search.js",
+      "/static/js/browser_shell_web.js",
+      "/static/js/browser_shell_docs_policy.js",
+      "/static/js/browser_shell_docs.js",
+      "/static/js/browser_shell.js",
+    ];
+    (function loadNext(i) {
+      if (i >= chain.length) return;
+      const el = document.createElement("script");
+      el.src = chain[i] + suffix;
+      el.addEventListener("load", () => loadNext(i + 1));
+      el.addEventListener("error", () => console.error("[thomas] browser chrome failed to load:", chain[i]));
+      document.body.appendChild(el);
+    }(0));
+  }
+
   function init() {
     let queryTheme = "";
     try {
@@ -192,6 +287,9 @@
     });
     document.querySelectorAll("[data-thomas-theme-select]").forEach((control) => control.addEventListener("change", () => applyTheme(control.value)));
     if (window.parent !== window) window.parent.postMessage({ type: "thomas:workspace-ready", workspace: workspaceKey() }, location.origin);
+    // Last: the chat shell's own inline script has finished booting by now,
+    // and the browser chrome reads what it built.
+    maybeAttachBrowserChrome();
   }
 
   window.addEventListener("message", (event) => {
@@ -221,6 +319,6 @@
     }
   });
 
-  window.ThomasWorkspaceShell = { THEMES, applyTheme, navigateWorkspace, relayFrames, safeTheme, sendTheme, storedTheme, workspaceKey };
+  window.ThomasWorkspaceShell = { THEMES, applyTheme, browserChromeDecision, knownThemes, navigateWorkspace, overlayView, relayFrames, safeTheme, sendTheme, storedTheme, workspaceKey };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true }); else init();
 }());

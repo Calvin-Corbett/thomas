@@ -132,30 +132,71 @@ def _topology_violations(branch: str) -> list[str]:
     return violations
 
 
-def _local_branch_names() -> list[str]:
-    """All local branch names (one per line, no leading marker)."""
+def _ref_sha(ref: str) -> str:
+    """Sha for an exact, fully-qualified ref path via `git show-ref --verify`
+    -- NO DWIM fallback, so a same-named tag can never stand in for the
+    branch this guard means to check (the landed claim_evidence.py
+    `_ref_resolves` pattern, 9ac14311/f7a523f0). Empty string when the ref
+    does not exist or cannot be read.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "show-ref", "--verify", ref],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+    if proc.returncode != 0 or not (proc.stdout or "").strip():
+        return ""
+    return (proc.stdout or "").strip().splitlines()[0].split(maxsplit=1)[0].strip()
+
+
+def _head_ref() -> str:
+    """Full refname HEAD points at (e.g. refs/heads/dev); '' when detached.
+    `symbolic-ref` reads .git/HEAD directly -- no DWIM resolution."""
     proc = subprocess.run(
-        ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/"],
+        ["git", "symbolic-ref", "--quiet", "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def _local_branch_refs() -> list[tuple[str, str]]:
+    """(bare_name, full_refname) for every local branch. The bare name is
+    cut from for-each-ref's own %(refname) -- never from %(refname:short),
+    whose disambiguation lengthens under a same-named tag (e.g. to
+    heads/topic) and would then denote a different ref."""
+    proc = subprocess.run(
+        ["git", "for-each-ref", "--format=%(refname)", "refs/heads/"],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
     if proc.returncode != 0:
         return []
-    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    out: list[tuple[str, str]] = []
+    for line in proc.stdout.splitlines():
+        full = line.strip()
+        if full.startswith("refs/heads/"):
+            out.append((full[len("refs/heads/") :], full))
+    return out
 
 
 def _branch_tip(name: str) -> str:
-    """Commit hash at the tip of `name`. Empty string if the branch is unknown."""
-    proc = subprocess.run(
-        ["git", "rev-parse", "--verify", f"{name}^{{commit}}"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        return ""
-    return proc.stdout.strip()
+    """Commit hash at the tip of BRANCH `name`. Empty string if unknown.
+    Resolved as the exact path refs/heads/<name> (or as given when already
+    fully qualified) -- the old bare-name `rev-parse --verify
+    {name}^{{commit}}` let a same-named tag shadow the branch
+    (gitrevisions(7) tries refs/tags/ before refs/heads/), so a stray tag
+    `dev` at HEAD silently bypassed the freshness check.
+    """
+    ref = name if name.startswith("refs/") else f"refs/heads/{name}"
+    return _ref_sha(ref)
 
 
 def _is_ancestor(commit: str, ref: str) -> bool:
@@ -201,8 +242,10 @@ def _commits_behind(base: str) -> int | None:
     tip = _branch_tip(base)
     if not tip:
         return None
+    # `tip` is a sha -- passing the bare `base` name here would re-run the
+    # DWIM resolution _branch_tip just avoided.
     proc = subprocess.run(
-        ["git", "rev-list", "--count", f"HEAD..{base}"],
+        ["git", "rev-list", "--count", f"HEAD..{tip}"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -360,15 +403,19 @@ def run(_argv: Sequence[str] | None = None) -> int:
     # Topic branches must start directly from canonical base branches
     # (master, main, release/oss-launch, publish-clean).
     if _is_topic_branch(branch):
-        current_tip = _branch_tip(branch)
+        # The current branch's tip comes from HEAD's own full refname --
+        # `branch` (from --abbrev-ref) can be a lengthened short form under
+        # a same-named tag, which refs/heads/-qualifying would then miss.
+        head_ref = _head_ref()
+        current_tip = _ref_sha(head_ref) if head_ref else ""
         if current_tip:
             base_tips = {name: _branch_tip(name) for name in CANONICAL_BASE_BRANCHES}
-            local_branches = _local_branch_names()
+            local_branches = _local_branch_refs()
             unmerged_ancestors: list[str] = []
-            for other in local_branches:
-                if other == branch or not _is_topic_branch(other):
+            for other, other_full in local_branches:
+                if other_full == head_ref or not _is_topic_branch(other):
                     continue
-                other_tip = _branch_tip(other)
+                other_tip = _ref_sha(other_full)
                 if not other_tip or not _is_ancestor(other_tip, current_tip):
                     continue
                 already_merged = any(base_tip and _is_ancestor(other_tip, base_tip) for base_tip in base_tips.values())

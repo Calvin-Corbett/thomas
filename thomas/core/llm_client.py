@@ -22,6 +22,7 @@ try:
 except ImportError:
     from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
+from thomas.core import capture_context
 from thomas.core.config import ModelConfig
 from thomas.core.llm_budget import LLMBudgetMixin
 from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage, callable_accepts_keyword
@@ -121,6 +122,8 @@ class LLMClient(LLMBudgetMixin):
         self._request_overrides = dict(request_overrides or {})
         self._attempt_trace: list[dict[str, Any]] = []
         self._runtime_attempt_trace: list[dict[str, Any]] = []
+        # Honesty-spine capture: counted, never fatal. See capture_context.py.
+        self.capture_failures: int = 0
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -306,6 +309,12 @@ class LLMClient(LLMBudgetMixin):
             else self.config.max_tokens,
             "stream": stream,
         }
+        if stream and str(getattr(self.config, "provider", "") or "").lower() != "azure":
+            # OpenAI-compatible streams carry usage only when asked. Without
+            # this, a local model server (Ollama, vLLM, LM Studio) never sends
+            # a count and every receipt read "0 in · 0 out". Azure's older API
+            # versions reject the field, so Azure is left as it was.
+            body["stream_options"] = {"include_usage": True}
         if self.config.top_p < 1.0:
             body["top_p"] = self.config.top_p
         freq_pen = self._request_overrides.get("frequency_penalty")
@@ -540,7 +549,69 @@ class LLMClient(LLMBudgetMixin):
         *,
         turn_user_content: Any = None,
     ) -> AsyncIterator[StreamEvent]:
-        """Stream a chat completion, yielding events as they arrive."""
+        """Stream a chat completion, yielding events as they arrive.
+
+        This is the honesty-spine narrow waist: every message list handed to
+        a model is captured here, before the underlying provider call, and
+        the assembled reply is captured when the stream ends -- whether it
+        ends naturally or is closed early by a caller that stops consuming
+        partway through (`interrupted=True` in that case). `chat()` is built
+        on this method, so it gets capture for free without logging twice.
+        See capture_context.py for the capture mechanics and correlation.
+        """
+        state = capture_context.begin_model_capture(
+            messages,
+            model=str(getattr(self.config, "model", "") or ""),
+            provider=str(getattr(self.config, "provider", "") or ""),
+            tools=tools,
+        )
+        if state.failed:
+            self.capture_failures += 1
+        interrupted = True
+        # Failover can switch providers mid-call (`_switch_config` mutates
+        # `self.config`). Track which (provider, model) pairs actually
+        # produced token output so the response can honestly flag
+        # merged_partial_output instead of presenting multi-provider output
+        # as one clean primary response.
+        served_configs: set[tuple[str, str]] = set()
+        try:
+            async for event in self._stream_chat_uncaptured(
+                messages,
+                tools,
+                turn_user_content=turn_user_content,
+            ):
+                if event.type == "token":
+                    served_configs.add(
+                        (
+                            str(getattr(self.config, "provider", "") or ""),
+                            str(getattr(self.config, "model", "") or ""),
+                        )
+                    )
+                capture_context.record_stream_event(state, event)
+                yield event
+            interrupted = False
+        finally:
+            # Read at completion time -- whichever attempt was last active,
+            # which is not necessarily the config the request was opened
+            # with if failover switched providers along the way.
+            if capture_context.end_model_capture(
+                state,
+                interrupted=interrupted,
+                served_by_model=str(getattr(self.config, "model", "") or ""),
+                served_by_provider=str(getattr(self.config, "provider", "") or ""),
+                provider_attempts=max(1, len(self._attempt_trace)),
+                merged_partial_output=len(served_configs) > 1,
+            ):
+                self.capture_failures += 1
+
+    async def _stream_chat_uncaptured(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        turn_user_content: Any = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """The pre-capture implementation: provider selection, retries, failover."""
         provider_kwargs = (
             {"turn_user_content": turn_user_content}
             if callable_accepts_keyword(self._stream_current_provider, "turn_user_content")

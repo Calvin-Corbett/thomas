@@ -1,0 +1,395 @@
+/* companion_shell.css — the Infinite shell chrome: persistent left rail and
+ * the home screen of app icons.
+ *
+ * Two decisions worth stating, because they look unusual on a phone:
+ *
+ * 1. The rail never hides. It collapses to icons, not to nothing. Apps here are
+ *    generated, so some will be broken; a shell with no persistent chrome traps
+ *    the user inside one. The rail is the way out, and it is also the only place
+ *    the host-connection state can always be visible — which matters because the
+ *    computer running Thomas can sleep.
+ *
+ * 2. It is on the left, not the bottom. Embedded apps want the bottom edge for
+ *    their own navigation. Shell chrome on the left leaves it to them. The nav
+ *    cluster still sits low in the rail so it stays inside thumb reach.
+ *
+ * Expanding overlays the content instead of resizing it: relayouting an
+ * embedded app mid-animation looks broken.
+ */
+
+:root {
+    --rail-w: 64px;
+    --rail-w-open: 232px;
+}
+
+.infinite-chat-app {
+    /* The rail is absolutely positioned, so the grid rows here describe the
+       content column only. */
+    grid-template-rows: none !important;
+    display: block !important;
+}
+
+.companion-content {
+    position: absolute;
+    inset: 0 0 0 var(--rail-w);
+    display: grid;
+    grid-template-rows: calc(44px + env(safe-area-inset-top)) minmax(0, 1fr);
+    min-height: 0;
+}
+
+/* ── Rail ───────────────────────────────────────────────────────────────── */
+
+.infinite-rail {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 30;
+    width: var(--rail-w);
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+    gap: 6px;
+    padding: calc(8px + env(safe-area-inset-top)) 8px max(10px, env(safe-area-inset-bottom));
+    background: var(--c-sidebar);
+    border-right: 1px solid var(--c-border);
+    backdrop-filter: blur(18px);
+    overflow: hidden;
+    transition: width 160ms ease;
+}
+
+.infinite-rail.expanded {
+    width: var(--rail-w-open);
+    box-shadow: var(--c-shadow);
+}
+
+/* Starts where the expanded rail ends: the scrim exists to dim and catch taps
+   on the content, and stretching it under the rail only makes a dead zone. */
+.rail-scrim {
+    position: absolute;
+    inset: 0 0 0 var(--rail-w-open);
+    z-index: 29;
+    background: rgba(4, 6, 14, 0.5);
+}
+
+.rail-scrim[hidden] {
+    display: none;
+}
+
+.rail-mark,
+.rail-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--c-dim);
+    font-family: var(--font-label);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.rail-mark:hover,
+.rail-item:hover {
+    background: var(--c-hover);
+    color: var(--c-text);
+}
+
+.rail-item.active {
+    color: var(--c-text);
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent-line);
+}
+
+.rail-mark-glyph,
+.rail-glyph {
+    flex: 0 0 26px;
+    font-size: 1.15rem;
+    line-height: 1;
+    text-align: center;
+}
+
+.rail-mark-glyph {
+    color: var(--c-accent);
+}
+
+/* Collapsed: icons only. The labels stay in the DOM for screen readers. */
+.rail-label {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.infinite-rail:not(.expanded) .rail-label {
+    width: 0;
+    overflow: hidden;
+    position: absolute;
+    clip-path: inset(50%);
+}
+
+.infinite-rail.expanded .rail-label {
+    opacity: 1;
+}
+
+/* Nav sits low so the buttons land in thumb reach on a phone. */
+.rail-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-self: end;
+}
+
+.rail-pins {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-self: end;
+    max-height: 34vh;
+    padding-top: 8px;
+    margin-top: 4px;
+    border-top: 1px solid var(--c-border);
+    overflow-y: auto;
+}
+
+.rail-pins:empty {
+    border-top: 0;
+}
+
+.rail-pin {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--c-dim);
+    font-family: var(--font-label);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.rail-pin:hover {
+    background: var(--c-hover);
+    color: var(--c-text);
+}
+
+.rail-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rail-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    color: var(--c-muted);
+    font-family: var(--font-label);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.rail-status-dot {
+    flex: 0 0 8px;
+    display: block;
+    width: 8px;
+    height: 8px;
+    /* 8px dot + 9px either side lines up with the 26px glyph column. */
+    margin: 0 9px;
+    border-radius: 50%;
+    background: var(--c-muted);
+}
+
+.rail-status[data-state="online"] .rail-status-dot {
+    background: var(--c-success);
+    box-shadow: 0 0 0 3px rgba(71, 215, 172, 0.18);
+}
+
+.rail-status[data-state="offline"] .rail-status-dot {
+    background: var(--c-danger);
+    box-shadow: 0 0 0 3px rgba(255, 154, 154, 0.18);
+}
+
+/* ── Home ───────────────────────────────────────────────────────────────── */
+
+.home-scroll {
+    height: 100%;
+    overflow-y: auto;
+    padding: 4px 14px 18px;
+}
+
+.home-head {
+    padding: 6px 2px 12px;
+}
+
+.home-greeting {
+    margin: 0;
+    font-family: var(--font-head);
+    font-size: 1.35rem;
+    color: var(--c-text);
+}
+
+.home-sub {
+    margin: 4px 0 0;
+    color: var(--c-muted);
+    font-size: 0.85rem;
+}
+
+/* Creation is the point of the product, so it gets the top of the home screen
+   rather than a menu. */
+.home-composer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px 6px 14px;
+    margin-bottom: 18px;
+    border: 1px solid var(--c-border-2);
+    border-radius: var(--r-composer);
+    background: var(--c-composer-bg);
+}
+
+/* Asking and building are different actions with the same input, so the mode
+   is a visible control rather than something inferred from the wording. */
+.home-composer-mode {
+    flex: 0 0 auto;
+    padding: 5px 11px;
+    border: 1px solid var(--c-border-2);
+    border-radius: 999px;
+    background: var(--c-surface);
+    color: var(--c-dim);
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+}
+
+.home-composer[data-mode="build"] .home-composer-mode {
+    color: var(--c-accent-ink);
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+}
+
+.home-composer {
+    padding-left: 6px;
+}
+
+.home-status {
+    margin: -8px 2px 16px;
+    color: var(--c-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.home-status[hidden] {
+    display: none;
+}
+
+.home-status[data-tone="error"] {
+    color: var(--c-danger);
+}
+
+.home-composer-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--c-text);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    padding: 8px 0;
+}
+
+.home-composer-input:focus {
+    outline: none;
+}
+
+.home-composer-send {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--c-accent);
+    color: var(--c-accent-ink);
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.home-composer-send:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.home-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px 10px;
+}
+
+.home-app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.home-app-tile {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 15px;
+    font-family: var(--font-head);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #0b0d18;
+    box-shadow: 0 6px 16px rgba(2, 4, 12, 0.45);
+}
+
+.home-app:hover .home-app-tile {
+    filter: brightness(1.08);
+}
+
+.home-app-name {
+    max-width: 100%;
+    color: var(--c-dim);
+    font-family: var(--font-label);
+    font-size: 0.7rem;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A declarative module has no surface to open yet; say so rather than
+   presenting it as tappable. */
+.home-app[data-openable="false"] .home-app-tile {
+    opacity: 0.45;
+}
+
+.home-empty-note {
+    margin: 16px 2px 0;
+    color: var(--c-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+@media (max-width: 380px) {
+    .home-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}

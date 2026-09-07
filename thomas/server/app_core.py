@@ -120,7 +120,7 @@ def create_app(config: AppConfig | None = None):
     if config is None:
         config = load_config()
     try:
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
         from thomas.preferences.store import get_db_path
 
         resolved_profile, resolved_model_id = resolve_effective_model(
@@ -351,6 +351,24 @@ def create_app(config: AppConfig | None = None):
         log.warning("Realtime routes unavailable: %s", e)
     _diagnostics["realtime"] = _realtime_ok
 
+    # Base behavior never writes the user overlay directory; every page reads
+    # it at request time, and these routes are its only writer.
+    _overlay_ok = False
+    try:
+        from thomas.server.routes.ui_overlay_routes import setup_overlay_routes
+
+        setup_overlay_routes(app, require_api_access=_require_api_access)
+        _overlay_ok = True
+    except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+        log.warning("Overlay routes unavailable: %s", e)
+    _diagnostics["overlay"] = _overlay_ok
+
+    # Frontier-parity surfaces (questions, export, schedules, feedback) register
+    # from their own module so this file stays under the size guard.
+    from thomas.server.parity_routes import register_parity_routes
+
+    _diagnostics.update(register_parity_routes(app, config=config, require_api_access=_require_api_access, log=log))
+
     # Optional: autonomy engine
     _autonomy_ok = False
     try:
@@ -358,7 +376,19 @@ def create_app(config: AppConfig | None = None):
 
         autonomy_enabled = _env_flag("THOMAS_AUTONOMY_ENABLED", False)
         autonomy_token = os.environ.get("THOMAS_AUTONOMY_TOKEN")
-        install_autonomy(app, config, enabled=autonomy_enabled, api_token=autonomy_token)
+        # Work execution stages run through the governed delegation path with
+        # durable receipts (codex's WorkExecutionAdapter); planning keeps the
+        # base adapter. Optional on purpose: without that module the engine
+        # installs exactly as before, so this file can land ahead of it.
+        work_adapter = None
+        try:
+            from thomas.marketplace.autonomy.adapters import ChatAdapterConfig
+            from thomas.server.work_execution_adapter import WorkExecutionAdapter
+
+            work_adapter = WorkExecutionAdapter(app=app, cfg=ChatAdapterConfig(api_token=autonomy_token))
+        except (ImportError, ModuleNotFoundError, TypeError, ValueError) as adapter_error:
+            log.info("Work execution adapter not installed: %s", adapter_error)
+        install_autonomy(app, config, enabled=autonomy_enabled, api_token=autonomy_token, chat_adapter=work_adapter)
         _autonomy_ok = True
     except (ImportError, ModuleNotFoundError, RuntimeError, ValueError) as e:
         log.warning("Autonomy engine unavailable: %s", e)
@@ -704,8 +734,16 @@ def create_app(config: AppConfig | None = None):
 
     app.router.add_get("/api/issues", api_issues)
     app.router.add_post("/api/issues", api_issues_report)
-    from thomas.server.routes.self_review import handle_self_review
+    from thomas.server.routes.self_review import APP_SELF_REVIEW_CACHE, handle_self_review
 
+    # Registered here (still inside create_app, before the runner freezes the
+    # app) rather than lazily on first request: aiohttp's AppRunner.setup()
+    # freezes the Application, and writing a new key into it afterward emits
+    # a DeprecationWarning on aiohttp 3.13.5 -- harmless today but a future
+    # hard error, and a warning unit tests can never see since they never
+    # freeze the app they build. self_review._self_review_cache() keeps a
+    # lazy fallback for exactly that test case.
+    app[APP_SELF_REVIEW_CACHE] = {"lock": asyncio.Lock(), "entries": {}}
     app.router.add_get("/api/self-review", handle_self_review)
     app.router.add_get("/api/health", api_health)
     app.router.add_get("/healthz", api_health)

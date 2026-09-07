@@ -21,145 +21,33 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from thomas.agent.context_compaction_heuristics import (
+    _CHARS_PER_TOKEN,
+    _COMPACTION_MARKER,
+    _apply_heuristic_compaction,
+    _extract_key_info_from_messages,
+    _format_token_count,
+    _is_compaction_summary,
+    _summarize_assistant_content,
+    _summarize_tool_result,
+    estimate_conversation_tokens,
+    estimate_message_tokens,
+    estimate_tokens,
+)
+from thomas.core import capture_context
+from thomas.core.capture_context import CAPTURE_EXCEPTIONS
+from thomas.marketplace.observability.session_log_events import compaction_payload
+
 log = logging.getLogger(__name__)
 
-# Rough token estimate: 1 token ~ 4 characters
-_CHARS_PER_TOKEN = 4
-
-# Marker used to identify already-compacted summary messages
-_COMPACTION_MARKER = "[context-summary]"
-
-
-def estimate_tokens(text: str) -> int:
-    """Rough token estimate from character count."""
-    return max(1, len(text) // _CHARS_PER_TOKEN)
-
-
-def estimate_message_tokens(msg: dict[str, Any]) -> int:
-    """Estimate token count for a single message."""
-    content = msg.get("content", "")
-    if isinstance(content, str):
-        tokens = estimate_tokens(content) + 4  # role overhead
-    elif isinstance(content, list):
-        tokens = 4
-        for part in content:
-            if isinstance(part, dict):
-                text = part.get("text", "")
-                if isinstance(text, str):
-                    tokens += estimate_tokens(text)
-            elif isinstance(part, str):
-                tokens += estimate_tokens(part)
-    else:
-        tokens = 10
-
-    # Tool calls add overhead
-    tool_calls = msg.get("tool_calls", [])
-    if isinstance(tool_calls, list):
-        for tc in tool_calls:
-            if not isinstance(tc, dict):
-                continue
-            func = tc.get("function", {})
-            if isinstance(func, dict):
-                tokens += estimate_tokens(func.get("name", ""))
-                tokens += estimate_tokens(func.get("arguments", ""))
-                tokens += 3
-    return tokens
-
-
-def estimate_conversation_tokens(messages: list[dict[str, Any]]) -> int:
-    """Estimate total tokens across all messages."""
-    return sum(estimate_message_tokens(m) for m in messages)
-
-
-def _is_compaction_summary(msg: dict[str, Any]) -> bool:
-    """Check if a message is already a compaction summary (idempotency guard)."""
-    content = msg.get("content", "")
-    if isinstance(content, str) and _COMPACTION_MARKER in content:
-        return True
-    return False
-
-
-def _summarize_tool_result(content: str, max_chars: int = 200) -> str:
-    """Shrink a tool result to a compact summary."""
-    if len(content) <= max_chars:
-        return content
-    try:
-        data = json.loads(content)
-        if isinstance(data, dict):
-            if "ok" in data:
-                status = "ok" if data["ok"] else "failed"
-                error = data.get("error", "")
-                return f"[{status}] {error[:100]}" if error else f"[{status}]"
-            keys = list(data.keys())[:5]
-            return f"{{keys: {keys}, ...({len(data)} entries)}}"
-        if isinstance(data, list):
-            return f"[list of {len(data)} items]"
-    except (json.JSONDecodeError, TypeError):
-        pass
-    half = max_chars // 2
-    return content[:half] + f" ...(truncated {len(content)} chars)... " + content[-half:]
-
-
-def _summarize_assistant_content(content: str, max_chars: int = 300) -> str:
-    """Summarize an assistant message to key points."""
-    if len(content) <= max_chars:
-        return content
-    lines = content.splitlines()
-    if len(lines) > 8:
-        kept = lines[:3] + [f"  ...(skipped {len(lines) - 5} lines)..."] + lines[-2:]
-        result = "\n".join(kept)
-        if len(result) <= max_chars * 2:
-            return result
-    return content[:max_chars] + f" ...(truncated, was {len(content)} chars)"
-
-
-def _extract_key_info_from_messages(messages: list[dict[str, Any]]) -> str:
-    """Extract key information from a segment of messages for summarization prompt."""
-    parts: list[str] = []
-    for msg in messages:
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")
-        if not isinstance(content, str):
-            content = str(content)
-
-        if role == "user":
-            # Keep user messages concise
-            text = content.strip()
-            if len(text) > 500:
-                text = text[:500] + "..."
-            parts.append(f"USER: {text}")
-
-        elif role == "assistant":
-            text = content.strip()
-            if len(text) > 800:
-                text = text[:800] + "..."
-            tool_calls = msg.get("tool_calls", [])
-            if isinstance(tool_calls, list) and tool_calls:
-                tool_names = []
-                for tc in tool_calls:
-                    if isinstance(tc, dict):
-                        func = tc.get("function", {})
-                        if isinstance(func, dict):
-                            tool_names.append(func.get("name", "?"))
-                parts.append(f"ASSISTANT (tools: {', '.join(tool_names)}): {text}")
-            else:
-                parts.append(f"ASSISTANT: {text}")
-
-        elif role == "tool":
-            name = msg.get("name", msg.get("tool_name", "?"))
-            text = content.strip()
-            if len(text) > 300:
-                text = text[:300] + "..."
-            parts.append(f"TOOL[{name}]: {text}")
-
-        elif role == "system" and not _is_compaction_summary(msg):
-            text = content.strip()
-            if len(text) > 200:
-                text = text[:200] + "..."
-            parts.append(f"SYSTEM: {text}")
-
-    return "\n".join(parts)
-
+# estimate_tokens / estimate_message_tokens / estimate_conversation_tokens,
+# _is_compaction_summary, _summarize_tool_result, _summarize_assistant_content,
+# _extract_key_info_from_messages, _format_token_count, _apply_heuristic_compaction,
+# _CHARS_PER_TOKEN and _COMPACTION_MARKER all live in context_compaction_heuristics.py
+# now (M5, 2026-08-25 honesty-spine fix wave -- kept this file under the monolith
+# guard's line budget). Imported above and re-exported under their original names
+# so every existing caller (loop_core.py, repl_compact.py, repl_runtime.py, and the
+# test suite, several of which import them directly from this module) needs no change.
 
 _SUMMARIZATION_PROMPT = """\
 Summarize the following conversation segment concisely. Preserve:
@@ -236,6 +124,23 @@ class ContextCompactor:
         self._llm = llm
         self._max_summary_tokens = max_summary_tokens
         self._segment_size = max(4, segment_size)
+        self.compaction_event_failures = 0  # honesty spine: counted, never fatal
+
+    def _record_compaction_event(
+        self, *, run_id: str | None, summary_text: str, replaced_from: int, replaced_to: int, by: str, spliced=None
+    ) -> None:
+        """Append one history/compaction event; never lets a capture failure break compact()."""
+        if run_id is None:
+            return
+        try:
+            s = spliced or {}
+            role, content = s.get("role", "system"), str(s.get("content") or "compacted")
+            recon = s.get("reconstruction", "exact")
+            payload = compaction_payload(summary_text, replaced_from, replaced_to, by, role, content, recon)
+            capture_context._append_capture_event(run_id, payload)  # Task 2's writer-aware seq source
+        except CAPTURE_EXCEPTIONS as e:
+            log.debug("Compaction: history/compaction append failed (%s): %s", type(e).__name__, e)
+            self.compaction_event_failures += 1
 
     async def compact(
         self,
@@ -328,18 +233,44 @@ class ContextCompactor:
         # pairs together to avoid orphaning
         segments = self._segment_messages(compactable)
 
-        # Try LLM-based summarization first
+        # Honesty spine: resolve the correlated run ONCE (current(), else ambient).
+        try:
+            event_run_id = capture_context.current() or capture_context.ambient_run_id()
+        except CAPTURE_EXCEPTIONS:
+            event_run_id = None
+
+        # Try LLM-based summarization first, correlated to the SAME run its
+        # own history/compaction event lands on. Each heuristic call below
+        # gets its OWN inner try/finally (nested, not one outer wrap, to
+        # keep the pre-existing except line un-re-indented -- a re-indent
+        # reads as a brand-new handler to exception_handler_gate).
+        compaction_source = "heuristic"
+        _summary_capture_token = capture_context.set_capture_run(event_run_id) if event_run_id else None
         if use_llm and self._llm is not None:
+            # KNOWN GAP: BaseException (asyncio cancellation) from the LLM await skips this except AND the token reset below - sticky-token risk remains on this path until the LLM dispatch is extracted to a helper wrapped in try/finally (deferred, task-3 re-review 2026-08-25).
             try:
                 summaries = await self._summarize_segments_with_llm(segments)
                 result.segments_summarized = len(summaries)
+                compaction_source = "llm"
             except Exception as e:
                 log.warning("LLM summarization failed, falling back to heuristic: %s", e)
+                try:
+                    summaries = self._summarize_segments_heuristic(segments)
+                    result.segments_summarized = len(summaries)
+                finally:
+                    if _summary_capture_token is not None:
+                        capture_context.reset(_summary_capture_token)
+                        _summary_capture_token = None
+        else:
+            try:
                 summaries = self._summarize_segments_heuristic(segments)
                 result.segments_summarized = len(summaries)
-        else:
-            summaries = self._summarize_segments_heuristic(segments)
-            result.segments_summarized = len(summaries)
+            finally:
+                if _summary_capture_token is not None:
+                    capture_context.reset(_summary_capture_token)
+                    _summary_capture_token = None
+        if _summary_capture_token is not None:
+            capture_context.reset(_summary_capture_token)
 
         # Build the compacted summary message
         if summaries:
@@ -372,13 +303,23 @@ class ContextCompactor:
                     original_count,
                     len(messages),
                 )
+                self._record_compaction_event(
+                    run_id=event_run_id,
+                    # A segment can summarize to nothing -- compaction_payload rejects a blank summary_text.
+                    summary_text=combined_summary.strip()
+                    or f"{compactable_end - compactable_start} messages compacted (no summary text)",
+                    replaced_from=compactable_start,
+                    replaced_to=compactable_end,
+                    by=compaction_source,
+                    spliced=summary_msg,
+                )
                 return result
 
             # If still over budget, apply additional heuristic trimming
             messages[:] = new_messages
 
         # Fallback: progressive heuristic compaction if still over budget
-        _apply_heuristic_compaction(messages, target_budget, preserve_recent)
+        dropped = _apply_heuristic_compaction(messages, target_budget, preserve_recent)
 
         result.compacted_message_count = len(messages)
         result.compacted_tokens = estimate_conversation_tokens(messages)
@@ -391,6 +332,17 @@ class ContextCompactor:
             original_count,
             result.compacted_message_count,
             result.elapsed_ms,
+        )
+        base = messages[compactable_start] if compactable_start < len(messages) else {}
+        self._record_compaction_event(
+            run_id=event_run_id,
+            summary_text=result.summary_text.strip()
+            or f"heuristic trim of {compactable_end - compactable_start} messages (no summary text)",
+            replaced_from=compactable_start,
+            replaced_to=compactable_end,
+            by=compaction_source if result.summary_text.strip() else "heuristic-trim",
+            # exact iff a real splice happened AND Pass 3 dropped nothing extra.
+            spliced={**base, "reconstruction": "exact" if (summaries and not dropped) else "lossy-fallback"},
         )
         return result
 
@@ -577,97 +529,9 @@ class ContextCompactor:
         }
 
 
-def _format_token_count(tokens: int) -> str:
-    """Format token count for display (e.g., 12.3k)."""
-    if tokens >= 1000:
-        return f"{tokens / 1000:.1f}k"
-    return str(tokens)
-
-
-def _apply_heuristic_compaction(
-    messages: list[dict[str, Any]],
-    target_tokens: int,
-    preserve_recent: int,
-) -> None:
-    """Apply heuristic compaction directly on the message list (in-place).
-
-    Progressive strategy:
-    1. Truncate tool results in older messages
-    2. Summarize older assistant messages
-    3. Drop oldest non-system messages
-    """
-    compactable_end = max(0, len(messages) - preserve_recent)
-
-    # Pass 1: Truncate tool results
-    for i in range(compactable_end):
-        msg = messages[i]
-        if msg.get("role") == "tool" or (msg.get("role") == "assistant" and isinstance(msg.get("tool_calls"), list)):
-            content = msg.get("content", "")
-            if isinstance(content, str) and len(content) > 200:
-                messages[i] = {**msg, "content": _summarize_tool_result(content)}
-
-    current_tokens = estimate_conversation_tokens(messages)
-    if current_tokens <= target_tokens:
-        return
-
-    # Pass 2: Summarize assistant messages
-    for i in range(compactable_end):
-        msg = messages[i]
-        if msg.get("role") == "assistant" and not _is_compaction_summary(msg):
-            content = msg.get("content", "")
-            if isinstance(content, str) and len(content) > 300:
-                messages[i] = {**msg, "content": _summarize_assistant_content(content)}
-
-    current_tokens = estimate_conversation_tokens(messages)
-    if current_tokens <= target_tokens:
-        return
-
-    # Pass 3: Drop oldest non-system, non-summary messages
-    #
-    # This used to inspect messages[0] and then pop messages[1] without looking at
-    # what index 1 was. A real conversation is [system prompt, [context-summary],
-    # ...turns], so index 1 is the compaction summary -- the one artifact carrying
-    # the turns already compacted away. It was the first thing deleted, every time,
-    # and the marker below then reported it as one of "N earlier messages".
-    #
-    # Losing it is worse than losing the turns it replaced: a constraint agreed
-    # thirty messages ago lived only there. So the oldest DROPPABLE message is found
-    # by looking, which is what the heading above always said this did.
-    dropped = 0
-    while current_tokens > target_tokens and compactable_end > 0:
-        drop_at = next(
-            (
-                i
-                for i in range(compactable_end)
-                if messages[i].get("role") != "system" and not _is_compaction_summary(messages[i])
-            ),
-            None,
-        )
-        if drop_at is None:
-            # Everything still compactable is protected; shedding more would cost
-            # the system prompt or the summary, which is never the cheaper trade.
-            break
-        messages.pop(drop_at)
-        compactable_end -= 1
-        dropped += 1
-        current_tokens = estimate_conversation_tokens(messages)
-
-    if dropped > 0:
-        log.info("Heuristic compaction: dropped %d messages, now %d tokens", dropped, current_tokens)
-        marker = {
-            "role": "system",
-            "content": (f"[{dropped} earlier messages trimmed to fit context window. Recent conversation preserved.]"),
-        }
-        insert_idx = 0
-        for idx, m in enumerate(messages):
-            if m.get("role") == "system" or _is_compaction_summary(m):
-                insert_idx = idx + 1
-            else:
-                break
-        messages.insert(insert_idx, marker)
-
-
 # --- Legacy API (backward compatibility) ---
+# _format_token_count and _apply_heuristic_compaction now live in
+# context_compaction_heuristics.py (imported above, M5 split).
 
 
 def compact_conversation(

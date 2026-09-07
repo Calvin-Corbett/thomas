@@ -84,7 +84,7 @@ class TestServerUsageInvariants(AioHTTPTestCase):
         self.assertTrue(events)
 
         done = [e for e in events if e.get("type") == "done"][0]
-        expected_run = {"prompt_tokens": 9, "completion_tokens": 0, "total_tokens": 9}
+        expected_run = {"prompt_tokens": 9, "completion_tokens": 0, "total_tokens": 9, "cached_prompt_tokens": 0}
         self.assertEqual(done.get("usage"), expected_run)
         self.assertEqual(done.get("run_usage"), expected_run)
 
@@ -112,7 +112,7 @@ class TestServerUsageInvariants(AioHTTPTestCase):
         self.assertTrue(events)
 
         done = [e for e in events if e.get("type") == "done"][0]
-        expected = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        expected = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cached_prompt_tokens": 0}
         self.assertEqual(done.get("usage"), expected)
         self.assertEqual(done.get("run_usage"), expected)
         self.assertEqual(done.get("session_usage"), expected)

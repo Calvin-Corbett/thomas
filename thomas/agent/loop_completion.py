@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.acceptance_runtime import effort_level, finish_contract, settle_contract
 from thomas.agent.completion_gate import GATE_BLOCK, evaluate_completion_gate
+from thomas.agent.harness_guard import guard_path, run_monolith_guard
 from thomas.agent.hook_events import HookEvent, emit_hook
+from thomas.agent.verification_contract import apply_verification_plan, plan_for, verification_contract_enabled
 from thomas.core.config import load_config
 from thomas.core.events import AgentEvent
-from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
+from thomas.core.rules_of_road import _is_write_tool, build_remediation_prompt, evaluate_rules
 
 if TYPE_CHECKING:
     from thomas.agent.loop import AgentLoop
@@ -202,10 +206,29 @@ async def handle_post_loop_completion(
     quality_enabled = bool(getattr(quality_cfg, "enabled", True))
     quality_enforce = bool(getattr(quality_cfg, "enforce", True))
     quality_max_retries = max(0, min(3, int(getattr(quality_cfg, "max_auto_retries", 1) or 0)))
+    # How much to verify is the effort slider's decision (see verification_contract).
+    verification_plan = plan_for(effort_level(self))
+    plan_gate = False
+    if verification_contract_enabled():
+        quality_max_retries, plan_gate = apply_verification_plan(
+            verification_plan, quality_max_retries=quality_max_retries, gate_active=False
+        )
     require_verify = bool(getattr(quality_cfg, "require_verification_for_coding", True))
     require_tests = bool(getattr(quality_cfg, "require_tests_for_code_edits", False))
 
     combined_quality_events = list(_quality_carry_forward_events or []) + quality_tool_events
+    require_guard = bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True))
+    # A run whose toolset has no shell cannot run the guard the rules require;
+    # asking it to is a demand it can never meet. The harness runs the guard
+    # for it and the check judges the receipt.
+    guard_receipt: dict[str, Any] | None = None
+    if (
+        require_guard
+        and self.tools.get("shell.exec") is None
+        and any(_is_write_tool(str(evt.get("name") or "")) for evt in combined_quality_events)
+        and guard_path(Path.cwd()).is_file()
+    ):
+        guard_receipt = await asyncio.to_thread(run_monolith_guard, Path.cwd())
     rules_report = evaluate_rules(
         route_path=str(route.path or ""),
         prompt_text=prompt_text,
@@ -216,23 +239,38 @@ async def handle_post_loop_completion(
         unknown_core_keys=cfg_unknown,
         require_verification_for_coding=require_verify,
         require_tests_for_code_edits=require_tests,
-        require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
+        require_monolith_guard_for_coding=require_guard,
+        monolith_guard_receipt=guard_receipt,
         strict_issue_ownership=bool(strict_issue_ownership),
         skill_required_checks=list(runtime_skills_payload.get("required_checks") or []),
         attempt=int(_quality_retry_count),
         repo_root=Path.cwd(),
     )
     token_report["rules_of_road"] = rules_report
+    token_report["verification_plan"] = verification_plan.to_payload()
+
+    # The acceptance contract: checked in the workspace, judged by the evaluator at xhigh+.
+    settlement = await settle_contract(
+        self,
+        plan=verification_plan,
+        prompt_text=prompt_text,
+        response_text=state.text_response,
+        tool_events=combined_quality_events,
+        attempt=int(_quality_retry_count),
+    )
+    token_report["acceptance_contract"] = settlement.payload
 
     # Quality-gate retries are for action routes only
     quality_required = not bool(rules_report.get("passed", False))
     if strict_issue_ownership:
         quality_max_retries = max(quality_max_retries, 2)
     quality_retry_enabled = strict_issue_ownership or str(route.path or "") not in _low_intent_skip_quality
+    # The acceptance contract's revision rounds happen inside the loop (hold_at_finish);
+    # only the rules-of-the-road report still re-runs from here.
+    quality_retry_due = quality_required and ((quality_enabled and quality_enforce) or strict_issue_ownership)
     if (
-        quality_required
+        quality_retry_due
         and _quality_retry_count < quality_max_retries
-        and ((quality_enabled and quality_enforce) or strict_issue_ownership)
         and not bool(state.error)
         and quality_retry_enabled
     ):
@@ -257,23 +295,35 @@ async def handle_post_loop_completion(
     # changes as finished work.
     if state.error:
         # Hook surface (failure category): the run terminated with an error.
+        finish_contract(self, plan=verification_plan)
         await emit_hook(self, HookEvent.FAILURE, {"error": str(state.error), "run_id": self._run_id})
         return
 
     # Completion is derived from the structured validation report only.
     # Assistant prose is never interpreted as success, failure, or give-up.
     gate_decision = evaluate_completion_gate(
-        validation_passed=bool(rules_report.get("passed", False)),
-        gate_active=bool(((quality_enabled and quality_enforce) or strict_issue_ownership) and quality_retry_enabled),
+        validation_passed=bool(rules_report.get("passed", False)) and not settlement.blocking,
+        gate_active=bool(
+            ((quality_enabled and quality_enforce) or strict_issue_ownership or plan_gate) and quality_retry_enabled
+        ),
     )
     token_report["completion_gate"] = gate_decision.to_payload()
 
     if gate_decision.outcome == GATE_BLOCK:
         block_error = f"Completion gate blocked AGENT_DONE: {gate_decision.reason}"
+        if settlement.blocking and settlement.trailer:
+            block_error += "\n" + settlement.trailer
+        finish_contract(self, plan=verification_plan)
         yield AgentEvent.agent_error(block_error, iteration=state.iteration)
         state.error = block_error
         await emit_hook(self, HookEvent.FAILURE, {"error": block_error, "run_id": self._run_id})
         return
+
+    # What was checked, what failed, what nobody checked - in the reply, except when the
+    # reply IS the artifact (benchmark code output); the report always carries it.
+    if settlement.trailer and settlement.payload.get("active") and str(job_type or "").strip().lower() != "benchmark":
+        state.text_response = (state.text_response or "").rstrip() + "\n\n" + settlement.trailer
+    finish_contract(self, plan=verification_plan)
 
     # Yield final completion event.
     done_event = AgentEvent.agent_done(

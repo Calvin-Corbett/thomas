@@ -147,7 +147,7 @@ def normalize_analysis(payload: dict[str, Any]) -> dict[str, Any]:
 def _resolve_model(config: Any) -> tuple[Any, list[Any], bool]:
     """Resolve the model exactly like the chat pipeline: user prefs first,
     then project default, with the configured failover chain."""
-    from thomas.core.model_resolution import resolve_effective_model
+    from thomas.preferences.model_resolution import resolve_effective_model
 
     try:
         profile, model_id = resolve_effective_model(config, user_id="default")

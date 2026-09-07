@@ -11,6 +11,8 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from thomas.marketplace.autonomy.store_notes import NotesStoreMixin
+
 from .models import Approval, AuditEvent, Job, RetryPolicy
 
 ISO = "%Y-%m-%dT%H:%M:%S.%f%z"
@@ -38,7 +40,7 @@ def _str_to_dt(s: str | None) -> datetime | None:
         return datetime.fromisoformat(s)
 
 
-class AutonomyStore:
+class AutonomyStore(NotesStoreMixin):
     """SQLite persistence for the autonomy engine.
 
     Goals:
@@ -370,16 +372,24 @@ class AutonomyStore:
             )
             cur.close()
 
-    def cancel_job(self, job_id: str, *, actor: str = "user") -> None:
+    def cancel_job(self, job_id: str, *, actor: str = "user", pending: bool = False) -> None:
+        """Cancel a job. ``pending`` records ``cancelling`` (already ``cancelled=1``
+        for every finalizer) while the engine waits for the in-flight handler to
+        stop; the engine writes the plain cancel once the stop is confirmed, so
+        Work's poll never reconciles a cancel that has not actually happened."""
         now = _utcnow()
+        status = "cancelling" if pending else "cancelled"
         with self._lock:
             cur = self._conn.cursor()
             cur.execute(
-                "UPDATE jobs SET status='cancelled', cancelled=1, updated_at=? WHERE id=?;",
-                (_dt_to_str(now), job_id),
+                "UPDATE jobs SET status=?, cancelled=1, updated_at=? WHERE id=?;",
+                (status, _dt_to_str(now), job_id),
             )
+            touched = cur.rowcount
             cur.close()
-        self.add_audit(job_id, "job.cancelled", actor, {})
+        if touched == 0:  # no such job: the route turns this into 404, never "ok"
+            raise KeyError(job_id)
+        self.add_audit(job_id, "job.cancelling" if pending else "job.cancelled", actor, {})
 
     def set_job_next_run(self, job_id: str, next_run_at: datetime | None) -> None:
         now = _utcnow()
@@ -403,7 +413,18 @@ class AutonomyStore:
         requires_approval: bool | None = None,
         lock_clear: bool = True,
         next_run_at: datetime | None = None,
-    ) -> None:
+        preserve_cancelled: bool = False,
+    ) -> bool:
+        """Write the job's status. Returns True when a row was updated.
+
+        ``preserve_cancelled`` is the boundary an engine finalizer needs: a
+        handler that finishes after Mission Control cancelled its job must not
+        write ``succeeded`` over ``cancelled`` (measured live in Work). With it,
+        the update touches only a row that is not cancelled and the caller gets
+        False for a cancelled one, so it can skip its success audit. Explicit
+        control writes leave it off and behave as before. An unknown id is a
+        KeyError either way; the routes answer 404, never "ok".
+        """
         now = _utcnow()
         sets = ["status=?", "updated_at=?"]
         args: list[Any] = [status, _dt_to_str(now)]
@@ -428,12 +449,22 @@ class AutonomyStore:
         if lock_clear:
             sets.extend(["locked_by=NULL", "lock_token=NULL", "locked_at=NULL", "lock_expires_at=NULL"])
 
-        q = "UPDATE jobs SET " + ", ".join(sets) + " WHERE id=?;"
+        q = "UPDATE jobs SET " + ", ".join(sets) + " WHERE id=?" + (" AND cancelled=0" if preserve_cancelled else "") + ";"
         args.append(job_id)
         with self._lock:
             cur = self._conn.cursor()
             cur.execute(q, tuple(args))
+            touched = cur.rowcount
+            exists = True
+            if touched == 0 and preserve_cancelled:
+                cur.execute("SELECT 1 FROM jobs WHERE id=?;", (job_id,))
+                exists = cur.fetchone() is not None
             cur.close()
+        if touched == 0:
+            if preserve_cancelled and exists:
+                return False  # cancelled meanwhile: the finalizer's write is refused, not applied
+            raise KeyError(job_id)  # unknown job: the routes answer 404, never "ok"
+        return True
 
     # ---------------------------
     # Claim / lock / recovery
@@ -693,58 +724,6 @@ class AutonomyStore:
                 )
             )
         return out
-
-    # ---------------------------
-    # Messages + briefings (optional UX layer)
-    # ---------------------------
-    def add_message(self, *, session_id: str | None, level: str, text: str) -> str:
-        now = _utcnow()
-        mid = uuid.uuid4().hex
-        with self._lock:
-            cur = self._conn.cursor()
-            cur.execute(
-                "INSERT INTO autonomy_messages(id,session_id,ts,level,text) VALUES (?,?,?,?,?);",
-                (mid, session_id, _dt_to_str(now), level, text),
-            )
-            cur.close()
-        return mid
-
-    def list_messages(self, *, limit: int = 200, session_id: str | None = None) -> list[dict[str, Any]]:
-        q = "SELECT * FROM autonomy_messages"
-        args: list[Any] = []
-        if session_id:
-            q += " WHERE session_id=?"
-            args.append(session_id)
-        q += " ORDER BY ts DESC LIMIT ?;"
-        args.append(int(limit))
-
-        with self._lock:
-            cur = self._conn.cursor()
-            rows = cur.execute(q, tuple(args)).fetchall()
-            cur.close()
-        return [
-            {"id": r["id"], "session_id": r["session_id"], "ts": r["ts"], "level": r["level"], "text": r["text"]}
-            for r in rows
-        ]
-
-    def add_briefing(self, *, content: dict[str, Any]) -> str:
-        now = _utcnow()
-        bid = uuid.uuid4().hex
-        with self._lock:
-            cur = self._conn.cursor()
-            cur.execute(
-                "INSERT INTO briefings(id,ts,content_json) VALUES (?,?,?);",
-                (bid, _dt_to_str(now), json.dumps(content or {}, separators=(",", ":"), ensure_ascii=False)),
-            )
-            cur.close()
-        return bid
-
-    def list_briefings(self, *, limit: int = 30) -> list[dict[str, Any]]:
-        with self._lock:
-            cur = self._conn.cursor()
-            rows = cur.execute("SELECT * FROM briefings ORDER BY ts DESC LIMIT ?;", (int(limit),)).fetchall()
-            cur.close()
-        return [{"id": r["id"], "ts": r["ts"], "content": json.loads(r["content_json"] or "{}")} for r in rows]
 
     # ---------------------------
     # Row mappers

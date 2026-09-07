@@ -71,7 +71,7 @@ def repl(ctx: click.Context, model_name: str | None, trace_files: bool | None) -
 
     config: AppConfig = ctx.obj["config"]
     try:
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
 
         selected_model = _resolve_model_profile_name(config, model_name)
         if model_name and not selected_model:

@@ -83,6 +83,10 @@ def run(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ok, results = evaluate_merge_readiness()
+    from scripts.crew.brief.trunk_health import write_push_gate_cache
+    write_push_gate_cache(
+        ROOT, ok=ok, blocked_gates=[r["name"] for r in results if not r["ok"]]
+    )
     if args.json:
         print(json.dumps({"ok": ok, "results": results}, sort_keys=True))
         return 0 if ok else 1

@@ -61,6 +61,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Stale tool outputs shrink once the transcript passes this share of the
+# window; full (model-summarised) compaction still waits for `threshold`.
+_PRUNE_THRESHOLD = 0.33
+
 _TPM_HEADROOM_DEFAULT = 0.90
 
 
@@ -136,6 +140,9 @@ class AgentLoop:
         self.config = config
         self.llm = llm
         self.tools = tools
+        # Paths (relative to the sandbox root) no write tool may touch in this run; the
+        # engine sets it from a brief's boundary or another agent's claim.
+        self.protected_paths: list[str] = []
         self._system_prompt = system_prompt
         # Preserve the caller-provided list object even if it's empty.
         self._conversation = conversation if conversation is not None else []
@@ -464,11 +471,23 @@ class AgentLoop:
 
         Returns compaction result dict if compaction occurred, else None.
         """
-        if not _HAS_CONTEXT_COMPACTOR or self._context_compactor is None:
-            return None
-
         compact_cap = int(self._context_window) if (hard_cap is None or int(hard_cap) <= 0) else int(hard_cap)
         conv_tokens = _compact_estimate_tokens(self._conversation)
+        # Cheap step first (frontier parity, 2026-09-05): once the transcript
+        # passes a third of the window, stale tool outputs shrink to a stub with
+        # no model call. TB-4.0 run 3 re-sent ~116k tokens per call for 128
+        # iterations without ever reaching the 75% line below.
+        if conv_tokens >= int(compact_cap * _PRUNE_THRESHOLD):
+            from thomas.agent.tool_output_pruning import prune_stale_tool_outputs
+
+            removed = prune_stale_tool_outputs(self._conversation, keep_recent_messages=preserve_recent * 2)
+            if removed:
+                before = conv_tokens
+                conv_tokens = _compact_estimate_tokens(self._conversation)
+                log.info("Pruned stale tool outputs: %d -> %d tokens", before, conv_tokens)
+                self._last_prune_result = {"original_tokens": before, "pruned_tokens": conv_tokens}
+        if not _HAS_CONTEXT_COMPACTOR or self._context_compactor is None:
+            return None
         if conv_tokens < int(compact_cap * threshold):
             return None
 

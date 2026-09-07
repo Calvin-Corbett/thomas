@@ -10,15 +10,45 @@ import logging
 from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from aiohttp import web
 
 from thomas.core.search_history import get_search
+from thomas.server.app_keys import APP_TOOLS
 
 # Type alias matching the pattern used by spend/goals routes.
 RequireAccessFn = Callable[[web.Request], None]
 
 _log = logging.getLogger(__name__)
+
+
+def _result_url(raw_url: str) -> str:
+    """Return the destination a result actually points at.
+
+    The DuckDuckGo fallback hands back /l/?uddg=<encoded> redirect wrappers.
+    Those are not links a person can use or a tab can navigate to, so they
+    are unwrapped here. Mirrors the same unwrapping in
+    thomas/marketplace/specialists/web_research.py, which needs it for the
+    same reason.
+    """
+
+    url = str(raw_url or "").strip()
+    if url.startswith("//"):
+        url = "https:" + url
+    parsed = urlparse(url)
+    if parsed.netloc.lower().endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
+        target = parse_qs(parsed.query).get("uddg", [""])[0]
+        if target:
+            url = unquote(target)
+    # A result is a web address or it is nothing. The wrapper's target is
+    # attacker-chosen, so "javascript:" survives unwrapping intact and would
+    # otherwise reach the page as a clickable link in the chrome document --
+    # which is the document holding the desktop bridge. The client refuses
+    # these too; this is the half that does not depend on the client.
+    if urlparse(url).scheme.lower() not in ("http", "https"):
+        return ""
+    return url
 
 
 def register_search_routes(
@@ -204,9 +234,74 @@ def register_search_routes(
         get_search().delete_saved_search(sid)
         return web.json_response({"ok": True})
 
+    async def api_web_search(request: web.Request) -> web.Response:
+        """Real web results for the browser's omnibox.
+
+        The chrome renders its own results page, so this returns rows rather
+        than HTML: a search that only listed the sources Thomas happened to
+        cite would not be a search engine, and the omnibox has to feel like
+        one. The AI answer is layered on top by the client from the ordinary
+        chat pipeline, the way an overview sits above the ten blue links.
+        """
+
+        require_api_access(request)
+        query = (_qp(request, "q") or _qp(request, "query") or "").strip()
+        if not query:
+            raise web.HTTPBadRequest(text="missing query")
+        # The tool caps at 10; ask for what the page can show and no more.
+        count = max(1, min(10, _qp_int(request, "count", 8)))
+
+        registry = request.app.get(APP_TOOLS)
+        if registry is None or not hasattr(registry, "execute"):
+            # Name the missing piece rather than returning an empty list that
+            # reads as "the web had nothing".
+            return web.json_response(
+                {"ok": False, "query": query, "results": [], "error": "web search tool is not available"},
+                status=503,
+            )
+
+        result = await registry.execute("web.search", {"query": query, "count": count})
+        if not bool(getattr(result, "ok", False)):
+            return web.json_response(
+                {
+                    "ok": False,
+                    "query": query,
+                    "results": [],
+                    "error": str(getattr(result, "error", "") or "web search failed"),
+                },
+                status=502,
+            )
+
+        data = getattr(result, "data", None)
+        raw = data.get("results", []) if isinstance(data, dict) else []
+        rows: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            url = _result_url(item.get("url") or "")
+            title = str(item.get("title") or "").strip()
+            if not url or not title:
+                continue
+            rows.append(
+                {
+                    "title": title,
+                    "url": url,
+                    # The tool calls it description; the page shows a snippet.
+                    "snippet": str(item.get("description") or "").strip(),
+                    "published": item.get("published_date"),
+                }
+            )
+        # Say which provider answered, so a page can tell a Brave result from
+        # a DuckDuckGo one without guessing from the shape of the rows.
+        provider = ""
+        if isinstance(data, dict):
+            provider = str(data.get("provider") or (data.get("meta") or {}).get("provider") or "")
+        return web.json_response({"ok": True, "query": query, "results": rows, "provider": provider, "error": None})
+
     # ── route registration ───────────────────────────────────
 
     app.router.add_get("/api/search", api_search)
+    app.router.add_get("/api/search/web", api_web_search)
     app.router.add_get("/api/search/suggest", api_suggest)
     app.router.add_get("/api/search/context", api_context)
     app.router.add_get("/api/search/channels", api_channels)

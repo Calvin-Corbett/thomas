@@ -191,6 +191,10 @@
       label: labelFor(node),
       text: visibleText(node),
       component: String(node.dataset.uiComponent || node.tagName.toLowerCase()),
+      // The region's data-ui-policy (its own, else its container's): a
+      // protected or no-edit region is refused at pick time, before any model
+      // call, with Edit Mode's own wording.
+      policy: String(node.dataset.uiPolicy || (owner ? owner.dataset.uiPolicy : '') || ''),
       isIcon: isIcon(node),
       icon: iconName(node),
       box: { width: Math.round(rect.width), height: Math.round(rect.height) },

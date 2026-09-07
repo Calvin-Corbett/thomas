@@ -209,15 +209,18 @@ def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(tmp_path: Pat
         agent: str,
         allow_dirty: bool = False,
         dirty_reason: str = "",
+        require_done_state: bool = False,
     ) -> tuple[bool, str]:
         release_call["agent"] = agent
         release_call["allow_dirty"] = bool(allow_dirty)
         release_call["dirty_reason"] = dirty_reason
+        release_call["require_done_state"] = bool(require_done_state)
         return original_release(
             workboard_path,
             agent=agent,
             allow_dirty=allow_dirty,
             dirty_reason=dirty_reason,
+            require_done_state=require_done_state,
         )
 
     monkeypatch.setattr(mod.workboard_claim, "release", _release_proxy)
@@ -249,6 +252,9 @@ def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(tmp_path: Pat
         "agent": "Codex Offline",
         "allow_dirty": True,
         "dirty_reason": "inactivity reclaim by TaskManager for Codex Offline: claim_line_age_timeout",
+        # require_done_state=False: the reclaimed task is expected to be unfinished
+        # (that's why the agent went silent and the claim is being reclaimed).
+        "require_done_state": False,
     }
     assert "agent=Codex Offline; scope=thomas/cli/main.py; task=[WIP] models lane" not in text
     assert "task_id=models-lane; agent=Codex Offline;" not in text

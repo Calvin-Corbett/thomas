@@ -37,7 +37,7 @@ this project:
 
 ## What Thomas is
 
-Thomas is an AI-first workspace platform with a marketplace of domain modules. The repo is intentionally broad in scope — that is a feature, not a problem. Do not suggest removing, consolidating, or refactoring domain modules (e.g. `thomas/agriculture/`, `thomas/blockchain/`, etc.) unless the user explicitly asks you to.
+Thomas is an AI-first workspace platform. `thomas/marketplace/` holds domain modules — most were generated in a single burst on 2026-03-23, never had a focused commit afterward, and were never invoked in real usage despite being wired into the tool registry on every boot. Being reachable from that registry was mistaken for being used, and this rule protected that mistake for six months. The marketplace *product feature* is a different thing and is unaffected: the installable-plugin system (`extensions/`, `/api/marketplace/*`). A new domain module needs a caller and a test before it lands. Code with no caller is not a feature, it is debt — flag it, don't protect it.
 
 ## Architecture in 30 seconds
 
@@ -47,7 +47,7 @@ Thomas is an AI-first workspace platform with a marketplace of domain modules. T
 - `thomas/cli/` — CLI and REPL.
 - `thomas/tools/` — Tool definitions and registry.
 - `thomas/memory/` — Conversation and context stores.
-- Everything else under `thomas/` — Marketplace domain modules. Leave them alone unless told otherwise.
+- Everything else under `thomas/` — Marketplace domain modules. Most are burst-generated and unused (see "What Thomas is" above); treat them as debt, not as furniture. Before extending one, check it has a real caller.
 
 ## Branch awareness (required — prevents duplicate work)
 

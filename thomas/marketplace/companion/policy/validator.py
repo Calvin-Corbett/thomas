@@ -36,6 +36,8 @@ _EXECUTABLE_EXTENSIONS = {
     ".wasm",
 }
 
+_SURFACE_EXTENSIONS = {".html", ".htm"}
+
 _COMMAND_INVOCATION_KEYS = {
     "command",
     "commands",
@@ -154,6 +156,12 @@ class ComplianceReportStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
+
+
+def _module_surface_type(manifest: Any) -> str:
+    """How the entrypoint should be read. Defaults to declarative for old manifests."""
+    module = getattr(manifest, "module", None)
+    return str(getattr(module, "surface_type", "") or "declarative").strip().lower()
 
 
 def _payload_entrypoint_path(bundle_dir: Path, manifest: Any) -> Path | None:
@@ -455,6 +463,31 @@ class PolicyComplianceService:
                 path="manifest.module.entrypoint",
                 remediation="Ensure entrypoint points to a payload json file inside the bundle.",
             )
+        elif _module_surface_type(manifest) == "surface":
+            # A surface module ships an HTML document, not a component tree, so
+            # the JSON checks below do not apply to it. entry_payload stays None
+            # and the payload-derived policy reads further down are skipped.
+            if entry_path.suffix.lower() not in _SURFACE_EXTENSIONS:
+                add_violation(
+                    code="bundle.entrypoint.invalid_surface_extension",
+                    severity="block",
+                    message="surface module entrypoint must be an .html document",
+                    path="manifest.module.entrypoint",
+                    remediation="Point a surface_type=surface module at a single self-contained .html file.",
+                )
+            else:
+                try:
+                    surface_text = entry_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    surface_text = ""
+                if not surface_text.strip():
+                    add_violation(
+                        code="bundle.entrypoint.invalid_surface_document",
+                        severity="block",
+                        message="surface module entrypoint is empty or not valid UTF-8",
+                        path=str(entry_path),
+                        remediation="Ship a readable UTF-8 HTML document as the surface entrypoint.",
+                    )
         else:
             entry_payload = _read_json(entry_path)
             if entry_payload is None:

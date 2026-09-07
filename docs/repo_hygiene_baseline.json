@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 41,
+  "max_tracked_root_files": 44,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -26,11 +26,14 @@
     "SECURITY.md",
     "SOUL.md",
     "Thomas-Pitch-Deck.pptx",
+    "Thomas.vbs",
     "agent_safety.toml",
     "bootdoctor.cmd",
     "build-installer.cmd",
+    "desktop.cmd",
     "docker-compose.dev.yml",
     "docker-compose.yml",
+    "evolve_governor.toml",
     "install.cmd",
     "install.sh",
     "launch-thomas.vbs",

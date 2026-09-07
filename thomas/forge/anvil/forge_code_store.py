@@ -49,6 +49,7 @@ def transcript_text(value: object) -> str:
         return ""
     return str(value)
 
+
 # Max characters for a derived title before we truncate with an ellipsis.
 _TITLE_MAX = 60
 _DEFAULT_TITLE = "Untitled build"
@@ -210,10 +211,17 @@ def draft_conversation(
     *,
     title: str | None = None,
     source_evolve_item: dict | None = None,
+    self_edit: bool = False,
+    protected_paths: list[str] | None = None,
 ) -> dict:
-    """Allocate a fresh in-memory conversation without making it durable."""
+    """Allocate a fresh in-memory conversation without making it durable.
+
+    ``self_edit`` marks a thread the person opened on purpose through Redesign
+    to change Thomas's own UI: the one kind of conversation the source-repo
+    guard lets run inside the checkout.
+    """
     now = _now_iso()
-    return {
+    conversation = {
         "id": _new_id(),
         "title": title or _DEFAULT_TITLE,
         "created_at": now,
@@ -221,6 +229,13 @@ def draft_conversation(
         "source_evolve_item": source_evolve_item,
         "turns": [],
     }
+    if self_edit:
+        conversation["self_edit"] = True
+    fenced = [str(p).strip() for p in (protected_paths or []) if str(p).strip()]
+    if fenced:
+        # Paths other agents hold; the run's write tools refuse them (loop protected_paths).
+        conversation["protected_paths"] = fenced
+    return conversation
 
 
 def new_conversation(
@@ -228,9 +243,16 @@ def new_conversation(
     *,
     title: str | None = None,
     source_evolve_item: dict | None = None,
+    self_edit: bool = False,
+    protected_paths: list[str] | None = None,
 ) -> dict:
     """Allocate a fresh conversation, persist it, and return the full dict."""
-    return _write_conversation(root, draft_conversation(title=title, source_evolve_item=source_evolve_item))
+    return _write_conversation(
+        root,
+        draft_conversation(
+            title=title, source_evolve_item=source_evolve_item, self_edit=self_edit, protected_paths=protected_paths
+        ),
+    )
 
 
 def _user_turn(text: str, *, request_id: str = "", request_fingerprint: str = "") -> dict:
@@ -412,6 +434,8 @@ def append_agent_turn(
     run_id: str = "",
     report: dict | None = None,
     outcome: str = "",
+    redesign_undo: dict | None = None,
+    run_source: str = "",
 ) -> dict | None:
     """Append an agent turn carrying the model used and the run outcome."""
     conversation = load_conversation(root, cid)
@@ -436,6 +460,8 @@ def append_agent_turn(
         "reason": reason,
         "run_id": str(run_id or ""),
     }
+    if run_source:
+        turn["run_source"] = str(run_source)
     if outcome:
         # The recorder's outcome word ("completed" / "conversation" / "noop" /
         # "stopped" / "failed"), persisted so a reloaded transcript can render
@@ -447,7 +473,54 @@ def append_agent_turn(
         # CAP-141: the structured post-run report (attempts/validations/risks/
         # pointers/rubric), persisted so a reloaded conversation re-renders it.
         turn["report"] = report
+    if redesign_undo is not None:
+        # Redesign source undo metadata points to pre-images held under Thomas's
+        # catalog record, never inside the selected project.
+        turn["redesign_undo"] = dict(redesign_undo)
     conversation.setdefault("turns", []).append(turn)
+    conversation["updated_at"] = _now_iso()
+    return _write_conversation(root, conversation)
+
+
+def mark_redesign_undone(root: str | Path, cid: str, run_id: str, restored: list[str]) -> dict | None:
+    """Mark one persisted Redesign run as undone after its pre-images land."""
+    conversation = load_conversation(root, cid)
+    if conversation is None:
+        return None
+    turn = next(
+        (
+            row
+            for row in reversed(conversation.get("turns") or [])
+            if row.get("role") == "agent" and str(row.get("run_id") or "") == str(run_id or "")
+        ),
+        None,
+    )
+    if not isinstance(turn, dict) or str(turn.get("run_source") or "") != "redesign":
+        return None
+    undo = turn.get("redesign_undo") if isinstance(turn.get("redesign_undo"), dict) else {}
+    turn["redesign_undo"] = {**undo, "available": False, "undone": True, "restored": list(restored)}
+    conversation["updated_at"] = _now_iso()
+    return _write_conversation(root, conversation)
+
+
+def update_self_edit_turn(root: str | Path, cid: str, run_id: str, values: dict) -> dict | None:
+    """Persist supervisor-owned candidate state on one completed self-edit run."""
+    conversation = load_conversation(root, cid)
+    if conversation is None:
+        return None
+    turn = next(
+        (
+            row
+            for row in reversed(conversation.get("turns") or [])
+            if row.get("role") == "agent" and str(row.get("run_id") or "") == str(run_id or "")
+        ),
+        None,
+    )
+    report = turn.get("report") if isinstance(turn, dict) and isinstance(turn.get("report"), dict) else None
+    self_edit = report.get("self_edit") if report and isinstance(report.get("self_edit"), dict) else None
+    if self_edit is None:
+        return None
+    self_edit.update(dict(values))
     conversation["updated_at"] = _now_iso()
     return _write_conversation(root, conversation)
 

@@ -674,3 +674,29 @@ def chroma_search_impl(
 
     out.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
     return out
+
+
+def cap_per_file(hits: list[dict[str, Any]], max_per_file: int) -> list[dict[str, Any]]:
+    """Keep at most `max_per_file` hits per file, best-ranked first.
+
+    A file is chunked into many rows, and a query that matches a file strongly
+    matches several of its chunks. Measured on this repo on 2026-09-03, a
+    top-5 for `branch claim expires` was the same file five times: one answer
+    presented as five, with four other files crowded out. Capping at one hit
+    per file moved two of five sample queries from a miss to the top three.
+
+    `max_per_file <= 0` disables the cap, for a caller that genuinely wants
+    several passages from one document.
+    """
+    if max_per_file <= 0:
+        return hits
+    seen: dict[str, int] = {}
+    out: list[dict[str, Any]] = []
+    for hit in hits:
+        key = str(hit.get("relpath") or hit.get("file") or "")
+        count = seen.get(key, 0)
+        if count >= max_per_file:
+            continue
+        seen[key] = count + 1
+        out.append(hit)
+    return out

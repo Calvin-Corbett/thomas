@@ -132,6 +132,10 @@ jobs:
         run: |
           python scripts/forge/gates/worktree_branch_guard.py
 
+      - name: Watcher-of-watchers gate tests
+        run: |
+          python -m pytest -q tests/test_a_worktree_report_counts_what_it_would_lose.py tests/test_every_enforcing_gate_can_fail.py tests/test_no_gate_enforces_unwatched.py
+
       - name: Workboard claims gate
         run: |
           python scripts/forge/gates/workboard_claims.py --require-identity-metadata

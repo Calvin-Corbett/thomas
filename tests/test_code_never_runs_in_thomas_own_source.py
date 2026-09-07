@@ -212,3 +212,57 @@ def test_a_normal_project_still_runs(tmp_path: Path, monkeypatch: Any) -> None:
         assert launched["cwd"] == str(project.resolve())
 
     _drive(catalog, _body)
+
+
+def test_a_self_edit_thread_from_redesign_is_let_through_the_guard(tmp_path: Path, monkeypatch: Any) -> None:
+    """Redesign is "edit this thing however I say" (the owner, 2026-09-06): "thomas
+    must be able to change every single thing about him and it work". The guard
+    above stays for every accidental way into the checkout; a thread the person
+    opened on purpose through Redesign is marked ``self_edit`` and runs there."""
+    catalog = tmp_path / "thomas-source"
+    catalog.mkdir()
+    _init_repo(catalog)
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", lambda: catalog.resolve())
+
+    spawns: list[dict[str, Any]] = []
+
+    async def _spawn(_executable: str, *_args: str, **kwargs: Any) -> Any:
+        spawns.append({"cwd": kwargs.get("cwd")})
+        raise RuntimeError("stop here: the launch itself is the proof")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
+
+    async def _access_token(_profile: str, *, secret_store: object) -> str:
+        return "live-oauth-token"
+
+    monkeypatch.setattr(evolve_agent_http_support, "ensure_openai_codex_access_token", _access_token)
+
+    conv = forge_code_store.new_conversation(catalog, title="Redesign: turn the plus into a menu", self_edit=True)
+    assert conv.get("self_edit") is True
+    cid = conv["id"]
+    forge_code_projects.bind_conversation(catalog, cid, catalog)
+
+    async def _body(client: TestClient) -> None:
+        response = await client.post(
+            "/api/evolve/agent/send",
+            json={
+                "conversation_id": cid,
+                "message": "turn the plus into a menu",
+                "model": "codex:gpt",
+                "model_id": "gpt-5.6-codex",
+                "request_id": "self-edit-allowed",
+            },
+        )
+        # The stub raises once Code is launched, so the run itself ends in an
+        # error; the launch, in the checkout, is the proof.
+        assert response.status != 409, await response.text()
+        # Since the self-edit isolation landed (2026-09-07) a self-edit run does not
+        # start IN the checkout: it starts in its own candidate copy under the data
+        # dir and the checkout stays untouched until Apply. The launch itself, no
+        # 409, is the proof the guard let it through.
+        assert spawns, spawns
+        cwd = Path(str(spawns[0]["cwd"])).resolve()
+        assert cwd != catalog.resolve(), spawns
+        assert "self-edit" in cwd.as_posix(), spawns
+
+    _drive(catalog, _body)

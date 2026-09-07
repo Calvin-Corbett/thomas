@@ -51,6 +51,69 @@
       "max_lines": 1300,
       "max_growth_lines": 0,
       "reason": "Contains long UI editor render functions; needs internal refactor to split further."
+    },
+    "thomas/agent/loop_execution.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-09-30",
+      "max_lines": 1100,
+      "reason": "phase 1.3 session-log refactor target; time-boxed waiver per praxis-first spec phase 0.4",
+      "max_growth_lines": 130
+    },
+    "thomas/core/llm_client.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-09-30",
+      "max_lines": 950,
+      "reason": "phase 1.3 capture-hook boundary; time-boxed waiver per praxis-first spec phase 0.4",
+      "max_growth_lines": 130
+    },
+    "thomas/marketplace/observability/run_store.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-09-30",
+      "max_lines": 1050,
+      "reason": "phase 1.3 run_store spine extension; time-boxed waiver per praxis-first spec phase 0.4",
+      "max_growth_lines": 130
+    },
+    "scripts/crew/brief/commit.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-10-31",
+      "max_lines": 950,
+      "reason": "phase 3.1 gate-registry refactor target; time-boxed waiver per praxis-first spec phase 0.4; 2026-09-05: +55 from the 2026-09-02 coordination batch (session identity, commit integrity) and +17 for the release-metadata refusal, ceiling 950 unchanged",
+      "max_growth_lines": 80
+    },
+    "thomas/core/rag_index.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-12-01",
+      "max_lines": 857,
+      "max_growth_lines": 23,
+      "reason": "Was already 834 lines - over the 800 soft limit - before any change on 2026-09-03, so the guard refused every edit and the full-repo index could not be repaired at all. The +23 is functional: a try/except so a missing chromadb no longer makes the index unconstructable, and a build that checks for the semantic half before embedding. Prose was trimmed and cap_per_file moved to rag_search.py first. max_lines 857 is a hard ceiling, so this cannot creep. Expires 2026-12-01; the real fix is splitting the search half into rag_search.py, which already exists."
+    },
+    "thomas/core/agent_presence.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-10-01",
+      "max_lines": 1258,
+      "max_growth_lines": 0,
+      "reason": "Already 1258 lines at HEAD on 2026-09-03 - over the 1200 hard limit - so the guard refused every edit, including the net-zero one-line fix that stopped six-week-dead agents from reading as present and blocking every other agent's scope. Short expiry on purpose: the split that fixes this properly already exists uncommitted in the working tree (session helpers moving to agent_presence_sessions.py, which takes the file to 1149), so this waiver should be deleted as soon as that lands rather than renewed."
+    },
+    "scripts/crew/workboard/claim_utils.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-12-01",
+      "max_lines": 1022,
+      "max_growth_lines": 1,
+      "reason": "Already 1021 lines on 2026-09-03 - over the 800 soft limit - so the guard refused every edit, including making a claim record when it was made. Growth is a single line: the stamp is inlined and its reasoning lives in the test, the CHANGELOG and the commit rather than in this file. Putting the stamp at the two call sites instead would have avoided this waiver and left two copies of one rule to drift apart. max_lines 1022 is a hard ceiling. Expires 2026-12-01; the real fix is splitting the formatting and parsing halves apart."
+    },
+    "thomas/cli/_commands_base.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-12-01",
+      "max_lines": 1031,
+      "max_growth_lines": 4,
+      "reason": "Already 1027 lines at HEAD on 2026-09-04 - over the 800 soft limit - so the guard refused every edit, including the 4-line fix that stops the first-run nudge from calling an env-configured Thomas unconfigured. Growth is exactly those lines: one import widened and one condition extended at the call site; the new predicate lives in setup_wizard.py. max_lines 1031 is a hard ceiling so this cannot creep. Expires 2026-12-01; the real fix is moving the startup nudges (first-run, auto-update) out of the click group callback into their own module, which also takes this hub file under the soft limit."
+    },
+    "scripts/crew/workboard/message.py": {
+      "owner": "codex-integrator",
+      "expires_on": "2026-10-31",
+      "max_lines": 1200,
+      "max_growth_lines": 0,
+      "reason": "landed with the 2026-09-02 coordination batch at the hard limit after the message_audit/message_queries split (was 1506); the next split - the send/ack/resolve handlers - is codex-integrator's, zero growth until then"
     }
   }
 }

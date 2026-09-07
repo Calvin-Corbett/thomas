@@ -16,7 +16,9 @@ import json
 import logging
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from typing import Any
 
 from aiohttp import web
@@ -40,6 +42,23 @@ _BOOT_TIME: float = time.time()
 _REQUEST_COUNTS: deque = deque(maxlen=30)
 _ERROR_COUNTS: deque = deque(maxlen=30)
 _WEBSOCKET_CLIENTS: set = set()
+
+RequireApiAccess = Callable[[web.Request], None]
+ObservabilityHandler = Callable[[web.Request], Awaitable[web.StreamResponse]]
+
+
+def _with_access_guard(
+    handler: ObservabilityHandler,
+    require_api_access: RequireApiAccess,
+) -> ObservabilityHandler:
+    """Run the injected access check before any observability work or upgrade."""
+
+    @wraps(handler)
+    async def guarded(request: web.Request) -> web.StreamResponse:
+        require_api_access(request)
+        return await handler(request)
+
+    return guarded
 
 
 def _get_uptime_seconds() -> int:
@@ -208,13 +227,23 @@ async def ws_events(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
-def register_observability_routes(app: web.Application) -> None:
-    app.router.add_get("/api/events", api_events)
-    app.router.add_get("/api/metrics", api_metrics)
-    app.router.add_get("/api/agents/activity", api_agents_activity)
-    app.router.add_get("/api/task-bots/executions", api_task_bot_executions)
-    app.router.add_get("/api/tools/usage", api_tools_usage)
-    app.router.add_get("/ws/events", ws_events)
+def register_observability_routes(
+    app: web.Application,
+    *,
+    require_api_access: RequireApiAccess,
+) -> None:
+    if not callable(require_api_access):
+        raise TypeError("require_api_access must be callable")
+
+    app.router.add_get("/api/events", _with_access_guard(api_events, require_api_access))
+    app.router.add_get("/api/metrics", _with_access_guard(api_metrics, require_api_access))
+    app.router.add_get("/api/agents/activity", _with_access_guard(api_agents_activity, require_api_access))
+    app.router.add_get(
+        "/api/task-bots/executions",
+        _with_access_guard(api_task_bot_executions, require_api_access),
+    )
+    app.router.add_get("/api/tools/usage", _with_access_guard(api_tools_usage, require_api_access))
+    app.router.add_get("/ws/events", _with_access_guard(ws_events, require_api_access))
     log.info("Observability routes registered")
 
 

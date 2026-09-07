@@ -18,16 +18,26 @@ from pathlib import Path
 
 import pytest
 from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient, TestServer, make_mocked_request
 
 from thomas.core.config import load_config
-from thomas.server.app_keys import APP_REQUIRE_API_ACCESS
+from thomas.server.app_keys import APP_CONFIG, APP_REQUIRE_API_ACCESS
 from thomas.server.app_middleware_handlers import setup_middleware_and_handlers
 
 
-async def _build_app(tmp_path: Path) -> web.Application:
+class _LoopbackTransport:
+    def get_extra_info(self, name: str, default=None):
+        if name == "peername":
+            return ("127.0.0.1", 12345)
+        return default
+
+
+async def _build_app(tmp_path: Path, *, access_mode: str = "local") -> web.Application:
     app = web.Application()
     config = load_config()
+    config.server.access_mode = access_mode
+    config.server.api_token = "remote-secret" if access_mode == "remote" else ""
+    app[APP_CONFIG] = config
     web_dir = tmp_path / "web"
     chat_dir = tmp_path / "chat"
     web_dir.mkdir(parents=True, exist_ok=True)
@@ -104,7 +114,7 @@ async def test_foreign_origin_is_still_rejected(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_non_loopback_lookalike_origin_is_rejected(tmp_path: Path) -> None:
-    """"notlocalhost" and "localhost.evil.com" must not slip through the name check."""
+    """ "notlocalhost" and "localhost.evil.com" must not slip through the name check."""
     app = await _build_app(tmp_path)
     server = TestServer(app)
     await server.start_server()
@@ -117,3 +127,127 @@ async def test_non_loopback_lookalike_origin_is_rejected(tmp_path: Path) -> None
         await client.close()
     finally:
         await server.close()
+
+
+@pytest.mark.asyncio
+async def test_local_mode_accepts_only_intended_local_host_authorities(tmp_path: Path) -> None:
+    app = await _build_app(tmp_path)
+    guard = app[APP_REQUIRE_API_ACCESS]
+    allowed = (
+        "localhost",
+        "localhost:8899",
+        "thomas.localhost:8899",
+        "127.0.0.1",
+        "127.0.0.42:8899",
+        "[::1]:8899",
+        "10.0.2.2:8899",
+        "10.0.3.2",
+    )
+    for authority in allowed:
+        request = make_mocked_request(
+            "GET",
+            "/api/_host_probe",
+            headers={"Host": authority, "Sec-Fetch-Site": "same-origin"},
+            app=app,
+            transport=_LoopbackTransport(),
+        )
+        guard(request)
+
+
+@pytest.mark.asyncio
+async def test_local_mode_rejects_foreign_and_malformed_host_authorities(tmp_path: Path) -> None:
+    app = await _build_app(tmp_path)
+    guard = app[APP_REQUIRE_API_ACCESS]
+    rejected = (
+        "evil.example:8899",
+        "localhost.evil.example",
+        "127.0.0.1.evil.example",
+        "bad host",
+        "user@localhost",
+        "localhost/path",
+        "localhost:",
+        "localhost:0",
+        "localhost:65536",
+        "[::1",
+        "::1",
+        "[127.0.0.1]",
+        "10.0.2.3",
+    )
+    for authority in rejected:
+        request = make_mocked_request(
+            "GET",
+            "/api/_host_probe",
+            headers={"Host": authority, "Sec-Fetch-Site": "same-origin"},
+            app=app,
+            transport=_LoopbackTransport(),
+        )
+        with pytest.raises(web.HTTPForbidden):
+            guard(request)
+
+
+@pytest.mark.asyncio
+async def test_local_mode_rejects_missing_and_ambiguous_host_headers(tmp_path: Path) -> None:
+    app = await _build_app(tmp_path)
+    guard = app[APP_REQUIRE_API_ACCESS]
+    requests = (
+        make_mocked_request(
+            "GET",
+            "/api/_host_probe",
+            headers={"Sec-Fetch-Site": "same-origin"},
+            app=app,
+            transport=_LoopbackTransport(),
+        ),
+        make_mocked_request(
+            "GET",
+            "/api/_host_probe",
+            headers=[
+                ("Host", "localhost"),
+                ("Host", "evil.example"),
+                ("Sec-Fetch-Site", "same-origin"),
+            ],
+            app=app,
+            transport=_LoopbackTransport(),
+        ),
+    )
+    for request in requests:
+        with pytest.raises(web.HTTPForbidden):
+            guard(request)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("authority", ["evil.example:8899", "bad host"])
+async def test_configured_csrf_token_does_not_restore_host_header_bypass(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    authority: str,
+) -> None:
+    monkeypatch.setenv("THOMAS_MUTATING_CSRF_TOKEN", "audit-secret")
+    app = await _build_app(tmp_path)
+    csrf_guard = next(middleware for middleware in app.middlewares if middleware.__name__ == "csrf_guard_mutating_api")
+    request = make_mocked_request(
+        "POST",
+        "/api/_origin_probe",
+        headers={"Host": authority, "Sec-Fetch-Site": "same-origin"},
+        app=app,
+        transport=_LoopbackTransport(),
+    )
+
+    async def handler(_request: web.Request) -> web.Response:
+        return web.json_response({"ok": True})
+
+    with pytest.raises(web.HTTPForbidden):
+        await csrf_guard(request, handler)
+
+
+@pytest.mark.asyncio
+async def test_remote_mode_keeps_token_auth_for_nonlocal_host_authorities(tmp_path: Path) -> None:
+    app = await _build_app(tmp_path, access_mode="remote")
+    guard = app[APP_REQUIRE_API_ACCESS]
+    request = make_mocked_request(
+        "GET",
+        "/api/_host_probe",
+        headers={"Host": "remote.example", "Authorization": "Bearer remote-secret"},
+        app=app,
+        transport=_LoopbackTransport(),
+    )
+    guard(request)

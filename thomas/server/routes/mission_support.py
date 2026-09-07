@@ -22,6 +22,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas import __version__ as THOMAS_VERSION
+from thomas.server.app_middleware_helpers import inject_overlay
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
 _MAX_BENCH_LOG_LINES = 220
@@ -623,6 +624,7 @@ def _send_alert_email(to_addr: str, subject: str, body_text: str) -> dict[str, A
 def _serve_versioned_page(path: Path) -> web.StreamResponse:
     try:
         html = path.read_text(encoding="utf-8", errors="replace")
+        html = inject_overlay(html, "__THOMAS_VERSION__")
         html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
         return web.Response(
             text=html,

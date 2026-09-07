@@ -428,3 +428,44 @@ def test_bootstrap_claim_registers_presence_session(tmp_path: Path, capsys) -> N
     assert rc == 0
     assert session_path.exists()
     assert "AGENT_SESSION_ID" in payload["powershell_export"]
+
+
+def test_bootstrap_reuses_the_task_folder_a_job_already_has(tmp_path: Path, monkeypatch) -> None:
+    """Every bootstrap used to mint a fresh HSK id: five identical LAND-THREE folders on one board."""
+    from scripts.crew.brief import bootstrap_claim_state as state
+
+    board = tmp_path / "plans" / "thomas" / "WORKBOARD.md"
+    tasks = board.parent / "tasks"
+    for name in (
+        "[WIP][HSK-20260903-212700] LAND-THREE",
+        "[WIP][HSK-20260903-213301] LAND-THREE",
+        "[WIP][HSK-1] OTHER",
+    ):
+        (tasks / name).mkdir(parents=True)
+    board.write_text("# board", encoding="utf-8")
+    monkeypatch.setattr(state.claim_tool, "list_claims", lambda path: (True, []))
+
+    assert state.existing_task_for_subject(board, "LAND-THREE") == "[WIP][HSK-20260903-213301] LAND-THREE"
+    assert state.existing_task_for_subject(board, "land-three") == "[WIP][HSK-20260903-213301] LAND-THREE"
+    assert state.existing_task_for_subject(board, "BRAND-NEW") == ""
+
+    minted = []
+    chosen = state.select_bootstrap_task(
+        board,
+        agent="claude",
+        requested="LAND-THREE",
+        ticket="",
+        build_task=lambda t, k: minted.append(t) or "[WIP][HSK-NEW] " + t,
+    )
+    assert chosen == "[WIP][HSK-20260903-213301] LAND-THREE" and minted == []
+    # An explicit ticket is a deliberate new id and is honoured.
+    assert (
+        state.select_bootstrap_task(
+            board,
+            agent="claude",
+            requested="LAND-THREE",
+            ticket="HSK-X",
+            build_task=lambda t, k: "[WIP][" + k + "] " + t,
+        )
+        == "[WIP][HSK-X] LAND-THREE"
+    )

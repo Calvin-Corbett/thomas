@@ -1,586 +1,407 @@
-"""Comprehensive tests for thomas.flows module.
-
-Tests cover:
-- FlowState for state management
-- Step execution and lifecycle
-- Flow run and execution control
-- Condition evaluation
-- FlowBuilder for fluent API
-"""
-
-import unittest
-from collections.abc import Callable
-from datetime import datetime
-from typing import Any
-
-# Note: These imports assume the modules exist or will be created
-try:
-    from thomas.flows.builder import FlowBuilder
-    from thomas.flows.condition import Condition
-    from thomas.flows.flow import Flow
-    from thomas.flows.state import FlowState
-    from thomas.flows.step import Step
-    from thomas.flows.types import FlowStatus, StepStatus
-except ImportError:
-    # Fallback: define minimal mock classes
-    from enum import Enum
-
-    class StepStatus(str, Enum):
-        """Step execution status."""
-
-        PENDING = "pending"
-        RUNNING = "running"
-        COMPLETED = "completed"
-        FAILED = "failed"
-        SKIPPED = "skipped"
-
-    class FlowStatus(str, Enum):
-        """Flow execution status."""
-
-        INITIALIZED = "initialized"
-        RUNNING = "running"
-        COMPLETED = "completed"
-        FAILED = "failed"
-        PAUSED = "paused"
-
-    class FlowState:
-        """State container for flow execution."""
-
-        def __init__(self, name: str = "default"):
-            self.name = name
-            self.state = {}
-            self.history = []
-            self.timestamp = datetime.now()
-
-        def set(self, key: str, value: Any) -> None:
-            """Set state value."""
-            self.state[key] = value
-            self.history.append({"key": key, "value": value, "timestamp": datetime.now()})
-
-        def get(self, key: str, default: Any = None) -> Any:
-            """Get state value."""
-            return self.state.get(key, default)
-
-        def has(self, key: str) -> bool:
-            """Check if key exists in state."""
-            return key in self.state
-
-        def update(self, updates: dict[str, Any]) -> None:
-            """Update multiple state values."""
-            for key, value in updates.items():
-                self.set(key, value)
-
-        def clear(self) -> None:
-            """Clear all state."""
-            self.state.clear()
-            self.history = []
-
-        def get_history(self) -> list[dict]:
-            """Get state change history."""
-            return self.history
-
-    class Step:
-        """Individual step in a flow."""
-
-        def __init__(self, name: str, action: Callable = None, on_error: Callable = None):
-            self.name = name
-            self.action = action
-            self.on_error = on_error
-            self.status = StepStatus.PENDING
-            self.result = None
-            self.error = None
-            self.created_at = datetime.now()
-
-        def execute(self, state: FlowState) -> Any:
-            """Execute the step."""
-            self.status = StepStatus.RUNNING
-            try:
-                if self.action:
-                    result = self.action(state)
-                    self.result = result
-                else:
-                    self.result = None
-                self.status = StepStatus.COMPLETED
-                return self.result
-            except Exception as e:
-                self.error = e
-                self.status = StepStatus.FAILED
-                if self.on_error:
-                    return self.on_error(state, e)
-                raise
-
-        def skip(self) -> None:
-            """Skip this step."""
-            self.status = StepStatus.SKIPPED
-
-    class Condition:
-        """Conditional logic for flow control."""
-
-        def __init__(self, predicate: Callable, description: str = ""):
-            self.predicate = predicate
-            self.description = description
-
-        def evaluate(self, state: FlowState) -> bool:
-            """Evaluate condition."""
-            return self.predicate(state)
-
-    class Flow:
-        """Orchestrated flow of steps."""
-
-        def __init__(self, name: str = "default", initial_state: dict = None):
-            self.name = name
-            self.state = FlowState(name)
-            if initial_state:
-                self.state.update(initial_state)
-            self.steps = []
-            self.status = FlowStatus.INITIALIZED
-            self.results = []
-
-        def add_step(self, step: Step) -> None:
-            """Add step to flow."""
-            self.steps.append(step)
-
-        def run(self) -> list[Any]:
-            """Execute all steps in flow."""
-            self.status = FlowStatus.RUNNING
-            try:
-                for step in self.steps:
-                    result = step.execute(self.state)
-                    self.results.append(result)
-                self.status = FlowStatus.COMPLETED
-            except Exception:
-                # Catch every exception so the test's
-                # `test_flow_error_handling` (which raises ZeroDivisionError
-                # inside a step) sees status=FAILED. The narrower
-                # `(OSError, RuntimeError, ValueError, ...)` tuple let
-                # ZeroDivisionError propagate WITHOUT setting FAILED.
-                self.status = FlowStatus.FAILED
-                raise
-            return self.results
-
-        def pause(self) -> None:
-            """Pause flow execution."""
-            self.status = FlowStatus.PAUSED
-
-        def resume(self) -> None:
-            """Resume paused flow."""
-            if self.status == FlowStatus.PAUSED:
-                self.status = FlowStatus.RUNNING
-
-    class FlowBuilder:
-        """Fluent API for building flows."""
-
-        def __init__(self, name: str = "default"):
-            self.flow = Flow(name)
-
-        def with_initial_state(self, state: dict) -> "FlowBuilder":
-            """Set initial state."""
-            self.flow.state.update(state)
-            return self
-
-        def add_step(self, name: str, action: Callable = None) -> "FlowBuilder":
-            """Add step to flow."""
-            step = Step(name, action)
-            self.flow.add_step(step)
-            return self
-
-        def add_conditional_step(
-            self, name: str, condition: Condition, action_true: Callable, action_false: Callable
-        ) -> "FlowBuilder":
-            """Add conditional step."""
-
-            def conditional_action(state):
-                if condition.evaluate(state):
-                    return action_true(state)
-                else:
-                    return action_false(state)
-
-            step = Step(name, conditional_action)
-            self.flow.add_step(step)
-            return self
-
-        def build(self) -> Flow:
-            """Build the flow."""
-            return self.flow
-
-
-class TestFlowState(unittest.TestCase):
-    """Test FlowState functionality."""
-
-    def test_create_state(self):
-        """Test creating flow state."""
-        state = FlowState("test_flow")
-
-        self.assertEqual(state.name, "test_flow")
-        self.assertEqual(state.state, {})
-
-    def test_set_and_get_value(self):
-        """Test setting and getting state value."""
-        state = FlowState()
-
-        state.set("counter", 0)
-        result = state.get("counter")
-
-        self.assertEqual(result, 0)
+"""Behavioral tests for the production flow graph and its registered tools."""
+
+from __future__ import annotations
+
+import pytest
+
+from thomas.flows.core import Edge, ExecutionContext, Flow, FlowExecutor, Node, NodeType
+from thomas.flows.tools import FlowDesignTool, FlowExecutionTool, register_flows_tools
+from thomas.server import tool_extensions
+from thomas.tools.registry import ToolRegistry
+
+
+def _linear_flow(*, action_count: int = 1) -> Flow:
+    flow = Flow("linear", "Linear flow")
+    previous = flow.add_node(NodeType.START, "Start")
+    for index in range(action_count):
+        current = flow.add_node(NodeType.ACTION, f"Action {index + 1}")
+        flow.add_edge(previous, current)
+        previous = current
+    end = flow.add_node(NodeType.END, "End")
+    flow.add_edge(previous, end)
+    return flow
+
 
-    def test_get_with_default(self):
-        """Test getting non-existent value with default."""
-        state = FlowState()
+def test_tests_import_the_production_flow_types() -> None:
+    assert Flow.__module__ == "thomas.flows.core"
+    assert FlowExecutor.__module__ == "thomas.flows.core"
+    assert FlowDesignTool.__module__ == "thomas.flows.tools"
 
-        result = state.get("nonexistent", "default")
-
-        self.assertEqual(result, "default")
-
-    def test_has_key(self):
-        """Test checking key existence."""
-        state = FlowState()
-        state.set("exists", True)
-
-        self.assertTrue(state.has("exists"))
-        self.assertFalse(state.has("nonexistent"))
 
-    def test_update_multiple_values(self):
-        """Test updating multiple values."""
-        state = FlowState()
-        updates = {"key1": "value1", "key2": "value2", "key3": "value3"}
-
-        state.update(updates)
+@pytest.mark.parametrize(
+    ("node_type", "value"),
+    [
+        (NodeType.START, "start"),
+        (NodeType.END, "end"),
+        (NodeType.ACTION, "action"),
+        (NodeType.DECISION, "decision"),
+        (NodeType.MERGE, "merge"),
+    ],
+)
+def test_node_types_are_the_values_exposed_by_the_design_tool(node_type: NodeType, value: str) -> None:
+    assert node_type.value == value
 
-        for key, value in updates.items():
-            self.assertEqual(state.get(key), value)
 
-    def test_clear_state(self):
-        """Test clearing all state."""
-        state = FlowState()
-        state.set("key", "value")
-        state.clear()
+def test_node_and_edge_serialization_uses_the_public_graph_shape() -> None:
+    node = Node("review", NodeType.ACTION, "Review", config={"owner": "ops"})
+    edge = Edge("edge_1", "start", "review", label="next", condition="approved")
 
-        self.assertEqual(state.get("key"), None)
-        self.assertEqual(len(state.state), 0)
+    assert node.to_dict() == {
+        "node_id": "review",
+        "node_type": "action",
+        "name": "Review",
+        "config": {"owner": "ops"},
+    }
+    assert edge.to_dict() == {
+        "edge_id": "edge_1",
+        "source": "start",
+        "target": "review",
+        "label": "next",
+        "condition": "approved",
+    }
+
 
-    def test_state_history(self):
-        """Test tracking state change history."""
-        state = FlowState()
+def test_add_node_tracks_generated_ids_start_and_end_nodes() -> None:
+    flow = Flow("approval", "Approval")
 
-        state.set("key1", "value1")
-        state.set("key2", "value2")
+    start = flow.add_node(NodeType.START, "Start")
+    end = flow.add_node(NodeType.END, "Done", node_id="finished")
 
-        history = state.get_history()
+    assert start == "node_1"
+    assert end == "finished"
+    assert flow.start_node == start
+    assert flow.end_nodes == [end]
 
-        self.assertEqual(len(history), 2)
-        self.assertEqual(history[0]["key"], "key1")
-        self.assertEqual(history[1]["key"], "key2")
 
-    def test_state_with_complex_values(self):
-        """Test storing complex values."""
-        state = FlowState()
-        complex_value = {"nested": {"data": [1, 2, 3]}}
+def test_add_node_rejects_duplicate_ids() -> None:
+    flow = Flow("duplicate", "Duplicate")
+    flow.add_node(NodeType.ACTION, "First", node_id="same")
 
-        state.set("complex", complex_value)
-        result = state.get("complex")
+    with pytest.raises(ValueError, match="already exists"):
+        flow.add_node(NodeType.ACTION, "Second", node_id="same")
 
-        self.assertEqual(result["nested"]["data"], [1, 2, 3])
 
+@pytest.mark.parametrize(("source", "target"), [("missing", "end"), ("start", "missing")])
+def test_add_edge_rejects_unknown_endpoints(source: str, target: str) -> None:
+    flow = Flow("bad-edge", "Bad edge")
+    flow.add_node(NodeType.START, "Start", node_id="start")
+    flow.add_node(NodeType.END, "End", node_id="end")
 
-class TestStep(unittest.TestCase):
-    """Test Step functionality."""
+    with pytest.raises(ValueError, match="Source or target node not found"):
+        flow.add_edge(source, target)
 
-    def test_create_step(self):
-        """Test creating a step."""
-        step = Step("test_step")
 
-        self.assertEqual(step.name, "test_step")
-        self.assertEqual(step.status, StepStatus.PENDING)
+def test_graph_queries_return_only_edges_for_the_requested_node() -> None:
+    flow = Flow("branch", "Branch")
+    start = flow.add_node(NodeType.START, "Start")
+    decision = flow.add_node(NodeType.DECISION, "Choose")
+    left = flow.add_node(NodeType.ACTION, "Left")
+    right = flow.add_node(NodeType.ACTION, "Right")
+    merge = flow.add_node(NodeType.MERGE, "Merge")
+    end = flow.add_node(NodeType.END, "End")
+    first = flow.add_edge(start, decision)
+    flow.add_edge(decision, left, label="left")
+    flow.add_edge(decision, right, label="right")
+    flow.add_edge(left, merge)
+    flow.add_edge(right, merge)
+    flow.add_edge(merge, end)
 
-    def test_step_with_action(self):
-        """Test step with action function."""
-        action = lambda state: state.set("result", "done")  # noqa: E731
-        step = Step("action_step", action)
+    assert [edge.edge_id for edge in flow.get_outgoing_edges(start)] == [first]
+    assert {edge.source_node for edge in flow.get_incoming_edges(merge)} == {left, right}
 
-        self.assertIsNotNone(step.action)
 
-    def test_execute_step(self):
-        """Test executing step."""
-        action = lambda state: "result"  # noqa: E731
-        step = Step("exec_step", action)
-        state = FlowState()
+def test_validate_requires_a_start_node() -> None:
+    flow = Flow("no-start", "No start")
+    flow.add_node(NodeType.END, "End")
 
-        result = step.execute(state)
+    assert flow.validate() == (False, "No start node defined")
 
-        self.assertEqual(result, "result")
-        self.assertEqual(step.status, StepStatus.COMPLETED)
 
-    def test_step_execution_with_state_modification(self):
-        """Test step that modifies state."""
+def test_validate_requires_an_end_node() -> None:
+    flow = Flow("no-end", "No end")
+    flow.add_node(NodeType.START, "Start")
 
-        def action(state):
-            state.set("counter", state.get("counter", 0) + 1)
-            return state.get("counter")
+    assert flow.validate() == (False, "No end nodes defined")
 
-        step = Step("counter", action)
-        state = FlowState()
 
-        result = step.execute(state)
+def test_validate_reports_unreachable_nodes() -> None:
+    flow = _linear_flow()
+    orphan = flow.add_node(NodeType.ACTION, "Orphan")
 
-        self.assertEqual(result, 1)
-        self.assertEqual(state.get("counter"), 1)
+    valid, error = flow.validate()
 
-    def test_step_error_handling(self):
-        """Test step with error."""
-        action = lambda state: 1 / 0  # noqa: E731
-        step = Step("error_step", action)
-        state = FlowState()
+    assert valid is False
+    assert error == f"Unreachable nodes: {{{orphan!r}}}"
 
-        with self.assertRaises(ZeroDivisionError):
-            step.execute(state)
 
-        self.assertEqual(step.status, StepStatus.FAILED)
+def test_valid_flow_stats_and_serialization_describe_the_live_graph() -> None:
+    flow = _linear_flow(action_count=2)
 
-    def test_step_with_error_handler(self):
-        """Test step with error handler."""
-        action = lambda state: 1 / 0  # noqa: E731
-        on_error = lambda state, e: "handled"  # noqa: E731
-        step = Step("handled_error", action, on_error)
-        state = FlowState()
+    assert flow.validate() == (True, None)
+    assert flow.get_stats() == {
+        "flow_id": "linear",
+        "nodes": 4,
+        "edges": 3,
+        "start_node": "node_1",
+        "end_nodes": 1,
+        "is_valid": True,
+    }
+    serialized = flow.to_dict()
+    assert serialized["flow_id"] == "linear"
+    assert [node["node_type"] for node in serialized["nodes"]] == ["start", "action", "action", "end"]
+    assert [(edge["source"], edge["target"]) for edge in serialized["edges"]] == [
+        ("node_1", "node_2"),
+        ("node_2", "node_3"),
+        ("node_3", "node_4"),
+    ]
 
-        result = step.execute(state)
 
-        self.assertEqual(result, "handled")
+def test_execution_context_starts_with_independent_state() -> None:
+    first = ExecutionContext("one", "flow")
+    second = ExecutionContext("two", "flow")
 
-    def test_skip_step(self):
-        """Test skipping a step."""
-        step = Step("skip_me")
-        step.skip()
+    first.variables["changed"] = True
+    first.visited_nodes.append("start")
 
-        self.assertEqual(step.status, StepStatus.SKIPPED)
+    assert second.variables == {}
+    assert second.visited_nodes == []
 
 
-class TestCondition(unittest.TestCase):
-    """Test Condition functionality."""
+def test_executor_rejects_a_duplicate_injected_execution_id() -> None:
+    executor = FlowExecutor(_linear_flow())
+    executor.create_execution(execution_id="external")
 
-    def test_create_condition(self):
-        """Test creating condition."""
-        predicate = lambda state: state.get("flag", False)  # noqa: E731
-        condition = Condition(predicate, "Check flag")
+    with pytest.raises(ValueError, match="Execution external already exists"):
+        executor.create_execution(execution_id="external")
 
-        self.assertIsNotNone(condition)
 
-    def test_evaluate_true_condition(self):
-        """Test evaluating true condition."""
-        condition = Condition(lambda state: state.get("value", 0) > 5)
-        state = FlowState()
-        state.set("value", 10)
+@pytest.mark.asyncio
+async def test_executor_steps_through_nodes_and_rejects_work_after_completion() -> None:
+    executor = FlowExecutor(_linear_flow())
+    execution_id = executor.create_execution({"request_id": 42})
 
-        result = condition.evaluate(state)
+    assert await executor.execute_step(execution_id) == (True, None)
+    assert await executor.execute_step(execution_id) == (True, None)
+    assert await executor.execute_step(execution_id) == (True, None)
+    assert await executor.execute_step(execution_id) == (False, "Execution already completed")
 
-        self.assertTrue(result)
+    state = executor.get_execution_state(execution_id)
+    assert state == {
+        "execution_id": "exec_1",
+        "flow_id": "linear",
+        "current_node": "node_3",
+        "visited_nodes": ["node_1", "node_2", "node_3"],
+        "completed": True,
+        "variables": {"request_id": 42},
+        "error": None,
+    }
 
-    def test_evaluate_false_condition(self):
-        """Test evaluating false condition."""
-        condition = Condition(lambda state: state.get("value", 0) > 5)
-        state = FlowState()
-        state.set("value", 3)
 
-        result = condition.evaluate(state)
+@pytest.mark.asyncio
+async def test_executor_reports_unknown_execution_ids() -> None:
+    executor = FlowExecutor(_linear_flow())
 
-        self.assertFalse(result)
+    assert await executor.execute_step("missing") == (False, "Execution missing not found")
+    assert await executor.execute_full("missing") == (False, "Execution missing not found")
+    assert executor.get_execution_state("missing") is None
 
-    def test_condition_with_description(self):
-        """Test condition with description."""
-        condition = Condition(lambda state: True, "Always true condition")
 
-        self.assertEqual(condition.description, "Always true condition")
+@pytest.mark.asyncio
+async def test_full_execution_can_finish_on_the_exact_step_limit() -> None:
+    flow = _linear_flow(action_count=FlowExecutor.MAX_STEPS - 2)
+    executor = FlowExecutor(flow)
+    execution_id = executor.create_execution()
 
-    def test_complex_condition(self):
-        """Test complex condition logic."""
-        condition = Condition(
-            lambda state: state.get("count", 0) > 0 and state.has("name") and state.get("status") == "active"
+    assert await executor.execute_full(execution_id) == (True, None)
+    state = executor.get_execution_state(execution_id)
+    assert state is not None
+    assert state["completed"] is True
+    assert len(state["visited_nodes"]) == FlowExecutor.MAX_STEPS
+
+
+@pytest.mark.asyncio
+async def test_cycle_stops_at_the_step_limit_and_records_the_error() -> None:
+    flow = Flow("cycle", "Cycle")
+    start = flow.add_node(NodeType.START, "Start")
+    loop = flow.add_node(NodeType.ACTION, "Loop")
+    end = flow.add_node(NodeType.END, "End")
+    flow.add_edge(start, loop)
+    flow.add_edge(loop, start)
+    flow.add_edge(loop, end)
+    assert flow.validate() == (True, None)
+
+    executor = FlowExecutor(flow)
+    execution_id = executor.create_execution()
+
+    assert await executor.execute_full(execution_id) == (False, "Max steps exceeded")
+    state = executor.get_execution_state(execution_id)
+    assert state is not None
+    assert state["completed"] is False
+    assert state["error"] == "Max steps exceeded"
+    assert len(state["visited_nodes"]) == FlowExecutor.MAX_STEPS
+
+
+def test_injected_design_and_execution_tools_share_the_exact_store() -> None:
+    store: dict[str, Flow] = {}
+
+    design = FlowDesignTool(store)
+    execution = FlowExecutionTool(store)
+
+    assert design.flows is store
+    assert execution.flows is store
+
+
+async def _design_registered_linear_flow(registry: ToolRegistry, flow_id: str) -> list[str]:
+    created = await registry.execute(
+        "flow_design",
+        {"action": "create_flow", "flow_id": flow_id, "name": f"{flow_id} flow"},
+    )
+    assert created.ok is True
+
+    node_ids: list[str] = []
+    for node_type in ("start", "end"):
+        result = await registry.execute(
+            "flow_design",
+            {"action": "add_node", "flow_id": flow_id, "node_type": node_type, "name": node_type.title()},
         )
-        state = FlowState()
-        state.set("count", 5)
-        state.set("name", "test")
-        state.set("status", "active")
+        assert result.ok is True
+        node_ids.append(result.data["node_id"])
 
-        self.assertTrue(condition.evaluate(state))
-
-
-class TestFlow(unittest.TestCase):
-    """Test Flow functionality."""
-
-    def test_create_flow(self):
-        """Test creating a flow."""
-        flow = Flow("test_flow")
-
-        self.assertEqual(flow.name, "test_flow")
-        self.assertEqual(flow.status, FlowStatus.INITIALIZED)
-
-    def test_flow_with_initial_state(self):
-        """Test flow with initial state."""
-        initial = {"count": 0, "name": "flow"}
-        flow = Flow("init_flow", initial)
-
-        self.assertEqual(flow.state.get("count"), 0)
-        self.assertEqual(flow.state.get("name"), "flow")
-
-    def test_add_step_to_flow(self):
-        """Test adding steps to flow."""
-        flow = Flow()
-        step1 = Step("step1")
-        step2 = Step("step2")
-
-        flow.add_step(step1)
-        flow.add_step(step2)
-
-        self.assertEqual(len(flow.steps), 2)
-
-    def test_run_flow(self):
-        """Test running a flow."""
-        flow = Flow()
-        step1 = Step("step1", lambda s: "result1")
-        step2 = Step("step2", lambda s: "result2")
-
-        flow.add_step(step1)
-        flow.add_step(step2)
-
-        results = flow.run()
-
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0], "result1")
-        self.assertEqual(results[1], "result2")
-
-    def test_flow_status_changes(self):
-        """Test flow status transitions."""
-        flow = Flow()
-        step = Step("test", lambda s: None)
-        flow.add_step(step)
-
-        self.assertEqual(flow.status, FlowStatus.INITIALIZED)
-
-        flow.run()
-
-        self.assertEqual(flow.status, FlowStatus.COMPLETED)
-
-    def test_flow_with_state_passing(self):
-        """Test state passing between steps."""
-        flow = Flow(initial_state={"counter": 0})
-
-        step1 = Step("increment", lambda s: s.set("counter", s.get("counter") + 1))
-        step2 = Step("double", lambda s: s.set("counter", s.get("counter") * 2))
-
-        flow.add_step(step1)
-        flow.add_step(step2)
-
-        flow.run()
-
-        self.assertEqual(flow.state.get("counter"), 2)
-
-    def test_flow_pause_resume(self):
-        """Test pausing and resuming flow."""
-        flow = Flow()
-        flow.pause()
-
-        self.assertEqual(flow.status, FlowStatus.PAUSED)
-
-        flow.resume()
-
-        self.assertEqual(flow.status, FlowStatus.RUNNING)
-
-    def test_flow_error_handling(self):
-        """Test flow handles step errors."""
-        flow = Flow()
-        error_step = Step("error", lambda s: 1 / 0)
-        flow.add_step(error_step)
-
-        with self.assertRaises(ZeroDivisionError):
-            flow.run()
-
-        self.assertEqual(flow.status, FlowStatus.FAILED)
+    edge = await registry.execute(
+        "flow_design",
+        {"action": "add_edge", "flow_id": flow_id, "source": node_ids[0], "target": node_ids[1]},
+    )
+    assert edge.ok is True
+    return node_ids
 
 
-class TestFlowBuilder(unittest.TestCase):
-    """Test FlowBuilder for fluent API."""
+@pytest.mark.asyncio
+async def test_optional_registry_runs_create_design_validate_start_and_execute_end_to_end(monkeypatch) -> None:
+    registry = ToolRegistry()
+    monkeypatch.setattr(
+        tool_extensions,
+        "_OPTIONAL_TOOL_MODULES",
+        [("thomas.flows.tools", "register_flows_tools")],
+    )
+    monkeypatch.setattr(tool_extensions, "_register_self_extend", lambda _registry: None)
+    monkeypatch.setattr(tool_extensions, "_register_email_calendar", lambda _registry: None)
+    monkeypatch.setattr(tool_extensions, "_register_work_google_drive", lambda _registry: None)
 
-    def test_create_builder(self):
-        """Test creating flow builder."""
-        builder = FlowBuilder("test")
+    assert tool_extensions.register_all_optional_tools(registry) == 1
 
-        self.assertIsNotNone(builder.flow)
+    assert [tool.name for tool in registry.list_tools("flows")] == ["flow_design", "flow_execute"]
+    created = await registry.execute("flow_design", {"action": "create_flow", "flow_id": "audit", "name": "Audit flow"})
+    assert created.ok is True
 
-    def test_builder_with_initial_state(self):
-        """Test builder with initial state."""
-        builder = FlowBuilder()
-        builder.with_initial_state({"count": 0})
-
-        flow = builder.build()
-
-        self.assertEqual(flow.state.get("count"), 0)
-
-    def test_builder_add_step(self):
-        """Test adding step via builder."""
-        builder = FlowBuilder()
-        builder.add_step("step1", lambda s: "done")
-
-        flow = builder.build()
-
-        self.assertEqual(len(flow.steps), 1)
-
-    def test_builder_fluent_interface(self):
-        """Test fluent interface chaining."""
-        flow = (
-            FlowBuilder("test")
-            .with_initial_state({"count": 0})
-            .add_step("step1", lambda s: s.set("count", 1))
-            .add_step("step2", lambda s: s.set("count", 2))
-            .build()
+    node_ids: list[str] = []
+    for node_type, name in [("start", "Start"), ("action", "Review"), ("end", "Done")]:
+        result = await registry.execute(
+            "flow_design",
+            {"action": "add_node", "flow_id": "audit", "node_type": node_type, "name": name},
         )
+        assert result.ok is True
+        node_ids.append(result.data["node_id"])
 
-        self.assertEqual(len(flow.steps), 2)
-
-    def test_builder_conditional_step(self):
-        """Test adding conditional step."""
-        condition = Condition(lambda s: s.get("flag", False))
-        builder = FlowBuilder()
-        builder.add_conditional_step("conditional", condition, lambda s: "true", lambda s: "false")
-
-        flow = builder.build()
-
-        self.assertEqual(len(flow.steps), 1)
-
-    def test_builder_returns_self(self):
-        """Test that builder methods return self."""
-        builder = FlowBuilder()
-        result = builder.add_step("step")
-
-        self.assertIs(result, builder)
-
-    def test_builder_complex_flow(self):
-        """Test building complex flow."""
-        flow = (
-            FlowBuilder("complex")
-            .with_initial_state({"total": 0})
-            .add_step("load", lambda s: s.set("loaded", True))
-            .add_step("process", lambda s: s.set("total", s.get("total") + 10))
-            .add_step("finalize", lambda s: s.set("done", True))
-            .build()
+    for source, target in zip(node_ids[:-1], node_ids[1:], strict=True):
+        result = await registry.execute(
+            "flow_design", {"action": "add_edge", "flow_id": "audit", "source": source, "target": target}
         )
+        assert result.ok is True
 
-        flow.run()
+    validation = await registry.execute("flow_design", {"action": "validate", "flow_id": "audit"})
+    assert validation.ok is True
+    assert validation.data == {"valid": True, "error": None}
 
-        self.assertEqual(flow.state.get("total"), 10)
-        self.assertTrue(flow.state.get("done"))
+    started = await registry.execute(
+        "flow_execute", {"action": "start_execution", "flow_id": "audit", "variables": {"ticket": 134}}
+    )
+    assert started.ok is True
+    execution_id = started.data["execution_id"]
 
-    def test_builder_with_error_handling(self):
-        """Test builder with error handling step."""
-
-        def safe_action(s):
-            return s.get("value") / s.get("divisor", 1)
-
-        flow = FlowBuilder().with_initial_state({"value": 10, "divisor": 2}).add_step("divide", safe_action).build()
-
-        results = flow.run()
-
-        self.assertEqual(results[0], 5)
+    completed = await registry.execute("flow_execute", {"action": "execute_full", "execution_id": execution_id})
+    assert completed.ok is True
+    assert completed.error is None
+    assert completed.data["visited_nodes"] == node_ids
+    assert completed.data["variables"] == {"ticket": 134}
+    assert completed.data["completed"] is True
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.asyncio
+async def test_two_flows_in_one_registry_keep_distinct_executions() -> None:
+    registry = ToolRegistry()
+    register_flows_tools(registry)
+    alpha_nodes = await _design_registered_linear_flow(registry, "alpha")
+    beta_nodes = await _design_registered_linear_flow(registry, "beta")
+
+    alpha = await registry.execute("flow_execute", {"action": "start_execution", "flow_id": "alpha"})
+    beta = await registry.execute("flow_execute", {"action": "start_execution", "flow_id": "beta"})
+    alpha_id = alpha.data["execution_id"]
+    beta_id = beta.data["execution_id"]
+
+    assert alpha.ok is True
+    assert beta.ok is True
+    assert alpha_id.startswith("flow_exec_")
+    assert beta_id.startswith("flow_exec_")
+    assert alpha_id != beta_id
+
+    alpha_done = await registry.execute("flow_execute", {"action": "execute_full", "execution_id": alpha_id})
+    beta_waiting = await registry.execute("flow_execute", {"action": "get_state", "execution_id": beta_id})
+
+    assert alpha_done.data["flow_id"] == "alpha"
+    assert alpha_done.data["visited_nodes"] == alpha_nodes
+    assert beta_waiting.data["flow_id"] == "beta"
+    assert beta_waiting.data["visited_nodes"] == []
+    assert beta_waiting.data["current_node"] is None
+
+    beta_done = await registry.execute("flow_execute", {"action": "execute_full", "execution_id": beta_id})
+    assert beta_done.data["flow_id"] == "beta"
+    assert beta_done.data["visited_nodes"] == beta_nodes
+
+
+@pytest.mark.asyncio
+async def test_execution_ids_are_isolated_across_registries() -> None:
+    first_registry = ToolRegistry()
+    second_registry = ToolRegistry()
+    register_flows_tools(first_registry)
+    register_flows_tools(second_registry)
+    await _design_registered_linear_flow(first_registry, "first")
+    await _design_registered_linear_flow(second_registry, "second")
+
+    first = await first_registry.execute("flow_execute", {"action": "start_execution", "flow_id": "first"})
+    second = await second_registry.execute("flow_execute", {"action": "start_execution", "flow_id": "second"})
+    first_id = first.data["execution_id"]
+    second_id = second.data["execution_id"]
+
+    assert first_id != second_id
+    foreign = await second_registry.execute("flow_execute", {"action": "get_state", "execution_id": first_id})
+    missing = await first_registry.execute("flow_execute", {"action": "get_state", "execution_id": "missing"})
+    assert foreign.ok is False
+    assert foreign.error == f"Execution {first_id} not found"
+    assert missing.ok is False
+    assert missing.error == "Execution missing not found"
+
+
+@pytest.mark.asyncio
+async def test_execution_tool_rejects_an_invalid_shared_flow() -> None:
+    registry = ToolRegistry()
+    register_flows_tools(registry)
+    await registry.execute("flow_design", {"action": "create_flow", "flow_id": "invalid", "name": "Invalid"})
+
+    result = await registry.execute("flow_execute", {"action": "start_execution", "flow_id": "invalid"})
+
+    assert result.ok is False
+    assert result.error == "Flow invalid is invalid: No start node defined"
+
+
+@pytest.mark.asyncio
+async def test_registered_tools_report_bad_actions_and_missing_records() -> None:
+    registry = ToolRegistry()
+    register_flows_tools(registry)
+
+    unknown_action = await registry.execute("flow_design", {"action": "erase_everything"})
+    missing_flow = await registry.execute("flow_design", {"action": "validate", "flow_id": "missing"})
+    missing_execution = await registry.execute("flow_execute", {"action": "execute_step", "execution_id": "missing"})
+
+    assert unknown_action.error == "Unknown action: erase_everything"
+    assert missing_flow.error == "Flow missing not found"
+    assert missing_execution.error == "Execution missing not found"

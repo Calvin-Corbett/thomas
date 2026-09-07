@@ -22,12 +22,18 @@ ASSETS = REPO_ROOT / "assets"
 # Straight from tokens.css / the brand span in chat.html.
 ACCENT = (139, 140, 255, 255)      # --c-accent  #8b8cff
 ACCENT_INK = (10, 11, 22, 255)     # --c-accent-ink #0a0b16
-# Proportions of the 30px brand mark: radius 9, eyes 5x6, gap 4.
-RADIUS_RATIO = 9 / 30
-EYE_W_RATIO = 5 / 30
-EYE_H_RATIO = 6 / 30
-EYE_GAP_RATIO = 4 / 30
-EYE_RADIUS_RATIO = 1 / 30
+
+# Geometry of thomas/server/web/thomas-icon.svg, on its 100-unit viewBox.
+# Both files used to carry a comment promising they matched while the numbers
+# said otherwise - the .ico drew eyes a third wider with twice the gap, so the
+# shortcut wore a different face than the app. These are the SVG's numbers, and
+# tests/test_the_shortcut_icon_is_the_thomas_mark.py re-reads the SVG so the two
+# can never drift apart in silence again.
+RADIUS_RATIO = 30 / 100      # <rect rx="30">
+EYE_W_RATIO = 13 / 100       # eye width="13"
+EYE_H_RATIO = 20 / 100       # eye height="20"
+EYE_GAP_RATIO = 6 / 100      # x=53 minus (x=34 + width 13)
+EYE_RADIUS_RATIO = 3.5 / 100  # eye rx="3.5"
 
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
@@ -75,7 +81,18 @@ def main() -> int:
     ASSETS.mkdir(parents=True, exist_ok=True)
     frames = [render(size) for size in ICON_SIZES]
     ico_path = ASSETS / "thomas.ico"
-    frames[-1].save(ico_path, format="ICO", sizes=[(s, s) for s in ICON_SIZES])
+    # Hand Pillow every supersampled render, not just one image plus a size
+    # list. Saving frames[-1] with `sizes=` alone made Pillow downsample the
+    # 256px art to 16/24/32 itself and discard the six careful renders above,
+    # which is what made the shortcut blurry at the size Windows actually draws.
+    # The base image must be the LARGEST frame: Pillow skips any requested size
+    # bigger than the base, so passing the 16px frame here yields a 1-layer ico.
+    frames[-1].save(
+        ico_path,
+        format="ICO",
+        sizes=[(s, s) for s in ICON_SIZES],
+        append_images=frames[:-1],
+    )
     png_path = ASSETS / "thomas.png"
     frames[-1].save(png_path, format="PNG")
     print(f"wrote {ico_path} ({', '.join(str(s) for s in ICON_SIZES)})")

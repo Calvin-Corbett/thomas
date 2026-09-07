@@ -487,9 +487,11 @@
 /* The chat is as wide as the composer now: inner elements stop capping
    themselves below the 768 column, and the user's message stacks on top at
    full width instead of floating offset to the right. */
+/* 2026-09-05, owner: my messages i put are huge and wide. Stacked on the left as
+   the August redline asked, but capped like Chat's own bubble. */
 .tc-code-turn.is-user {
-  width: 100% !important;
-  max-width: none !important;
+  width: fit-content !important;
+  max-width: min(78%, 640px) !important;
   margin-left: 0 !important;
   border-radius: 14px;
 }

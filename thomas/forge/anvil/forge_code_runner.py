@@ -18,7 +18,11 @@ from typing import BinaryIO
 
 from .dispatch_agent_loop import dispatch_via_agent_loop
 from .dispatch_claude_cli import SAFE_CLI_TOOLS, dispatch_via_claude_cli
-from .forge_code_settings import EXECUTION_MAX_FIX_ITERS, EXECUTION_TIMEOUTS_S
+from .forge_code_settings import (
+    EXECUTION_MAX_FIX_ITERS,
+    EXECUTION_TIMEOUTS_S,
+    direct_shell_allowed,
+)
 from .forge_code_store import history_turns
 from .forge_event_stream import FORGE_EVENT_KEY, _default_emit
 
@@ -91,19 +95,8 @@ def run_configured_turn(args: argparse.Namespace, *, oauth_access_token: str = "
     root = Path(args.project_root).resolve()
     history = history_turns(root, str(args.conversation_id or "")) if args.memory == "on" else []
     live_edit = args.autonomy >= 3 and args.file_access != "read_only"
-    # A builder that cannot run anything cannot check anything.
-    #
-    # This used to be `guardrails == "open"`, and the default is "guarded" — so the
-    # only way to let Thomas run the tests for the code it just wrote was to also
-    # pick the setting branded least safe. Measured cost, 2026-08-05: Thomas shipped
-    # a three-file app whose last line referenced an undeclared variable. It said it
-    # was "doing a quick source review", which is a READ. Nothing ever executed the
-    # page. Raising the pass budget from 10 to 25 produced more edits and the same
-    # bug, because after a file is written no new information can reach a model that
-    # cannot run things — there is nothing left for it to react to.
-    #
-    # Everywhere else in software "guarded" means *asks before dangerous things*,
-    # not *cannot do things*. Fortress remains the setting that means no shell.
+    # Direct shell is an explicit Open-only capability. Guarded and fortress
+    # rely on the bounded verifier to run checks and return failures for repair.
     #
     # What actually bounds this: ToolRegistry gets `sandbox_root = cwd` (the user's
     # project folder) and ShellTool resolves any requested cwd through `_safe_path`
@@ -111,7 +104,14 @@ def run_configured_turn(args: argparse.Namespace, *, oauth_access_token: str = "
     # the same shape Codex CLI uses. It is not a capability boundary — a command can
     # still do damage inside the project folder, which is the trade every comparable
     # tool makes to let an agent verify its own work.
-    allow_shell = live_edit and args.guardrails in ("open", "guarded")
+    # That ToolRegistry confinement applies to the GPT tool path only. Claude Bash
+    # is an unsandboxed host process and is therefore available only when the request
+    # explicitly selects Open.
+    allow_shell = direct_shell_allowed(
+        autonomy_level=args.autonomy,
+        file_access=args.file_access,
+        guardrails=args.guardrails,
+    )
     timeout = EXECUTION_TIMEOUTS_S[args.token_economy]
     max_fix_iters = EXECUTION_MAX_FIX_ITERS[args.token_economy]
     definition = ""
@@ -171,6 +171,9 @@ def run_configured_turn(args: argparse.Namespace, *, oauth_access_token: str = "
             FORGE_EVENT_KEY: "meta" if result.ok else "error",
             "text": result.reason,
             "is_error": not result.ok,
+            # Distinguish the runner-owned verdict from ordinary progress/meta
+            # events when the parent classifies a nonzero process exit.
+            "terminal": True,
         }
     )
     if result.ok:

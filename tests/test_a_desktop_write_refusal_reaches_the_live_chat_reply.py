@@ -153,7 +153,11 @@ def test_without_file_access_context_absolute_paths_stay_rejected(tmp_path: Path
         benchmark_root=None,
     )
     assert validated is None
-    assert error == "invalid path: absolute paths are not allowed"
+    assert error is not None
+    # Still refused; since 2026-09-05 the refusal names the sandbox root the
+    # path fell outside of instead of a bare sentence (TB-4.0 run 3 evidence).
+    assert error.startswith("invalid path: absolute paths are not allowed")
+    assert str(ws.resolve()) in error
 
 
 # ── 2. execute_tools emits that refusal as the tool result_text ───────────────

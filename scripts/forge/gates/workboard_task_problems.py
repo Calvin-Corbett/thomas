@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -97,23 +98,53 @@ def _parse_kv_entry(
     return token, fields, None
 
 
+def _committing_agent() -> str:
+    for key in ("THOMAS_AGENT_ID", "AGENT_ID"):
+        value = str(os.environ.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> list[str]:
+    """Every mapping problem on the board, whoever owns the task (CI and the board tools)."""
+
+    violations, _warnings = evaluate_scoped(workboard_path, agent="")
+    return violations
+
+
+def evaluate_scoped(workboard_path: Path = DEFAULT_WORKBOARD, *, agent: str = "") -> tuple[list[str], list[str]]:
+    """Mapping problems split by ownership. With an ``agent``, only that agent's tasks
+    can fail the gate; other agents' stale or missing mappings are warnings. A commit
+    used to be blocked by mappings of tasks that were not the committer's - three
+    board re-syncs in one evening just to land unrelated work."""
+
     violations: list[str] = []
+    warnings: list[str] = []
+    agent_key = _norm(agent)
 
     board_violations, _claims, active_tasks, up_for_grabs, _issues = claims_gate.evaluate_board(workboard_path)
     if board_violations:
         violations.extend([f"workboard invalid: {item}" for item in board_violations])
-        return violations
+        return violations, warnings
 
     tracked: dict[str, str] = {}
+    owners: dict[str, str] = {}
     for row in active_tasks:
         task_id = str(row.task_id).strip()
         if task_id:
             tracked[_norm(task_id)] = task_id
+            owners[_norm(task_id)] = _norm(str(getattr(row, "agent", "") or ""))
     for row in up_for_grabs:
         task_id = str(row.task_id).strip()
         if task_id:
             tracked.setdefault(_norm(task_id), task_id)
+
+    def _someone_elses(task_key: str, owner: str = "") -> bool:
+        if not agent_key:
+            return False
+        holder = owner or owners.get(task_key, "")
+        return bool(holder) and holder != agent_key
 
     text = workboard_path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -153,23 +184,26 @@ def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> list[str]:
             violations.append(f"task `{task_id}` problem path must end with `/PROBLEM.md` (found `{problem_path}`)")
 
         problem_abs = (ROOT / problem_path).resolve()
-        if not problem_abs.exists():
-            # A problem record the repository deliberately refuses to track is
-            # not a missing record -- it is a record that must not be committed.
-            # .gitignore excludes plans/thomas/problems/* over a real incident
-            # (2026-05-19) where private content leaked through those files.
-            # This gate reads the filesystem, so it passed on a developer machine
-            # (file present) and failed in CI (checkout has no ignored files),
-            # and the only way to "fix" it was to force-add the very content the
-            # ignore exists to keep out. Ignored paths are skipped instead.
-            if _path_is_git_ignored(problem_path):
-                continue
-            violations.append(f"task `{task_id}` problem file missing: {problem_path}")
-        else:
+        if problem_abs.exists():
             body = problem_abs.read_text(encoding="utf-8")
             marker = f"task_id: `{task_id}`"
             if marker not in body:
                 violations.append(f"task `{task_id}` problem file missing marker `{marker}`: {problem_path}")
+        elif not _path_is_git_ignored(problem_path):
+            violations.append(f"task `{task_id}` problem file missing: {problem_path}")
+        # An absent record at a git-ignored path is neither missing nor readable.
+        # .gitignore excludes plans/thomas/problems/* over a real incident
+        # (2026-05-19) where private content leaked through those files, so this
+        # gate passed on a developer machine (file present) and failed in CI
+        # (checkout has no ignored files), and the only way to "fix" it was to
+        # force-add the very content the ignore exists to keep out.
+        #
+        # Skipping the VIOLATION is right; skipping the whole entry was not. An
+        # earlier version of this branch used `continue`, which jumped past
+        # `entries[task_key] = fields` below -- so the task registered as having
+        # no mapping at all and the gate reported `missing task problem mapping`
+        # for a mapping that was present in the workboard the whole time. Fall
+        # through instead.
 
         path_key = _norm(problem_path)
         prior_task = path_owners.get(path_key)
@@ -186,17 +220,19 @@ def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> list[str]:
 
     for task_key, task_id in tracked.items():
         if task_key not in entries:
-            violations.append(
+            line = (
                 f"missing task problem mapping for `{task_id}`; run "
                 "`python scripts/crew/tasks/manager.py --sync-plans --apply`"
             )
+            (warnings if _someone_elses(task_key) else violations).append(line)
 
     for task_key, fields in entries.items():
         if task_key not in tracked:
             task_id = str(fields.get("task_id", "")).strip() or task_key
-            violations.append(f"stale task problem mapping without tracked task: `{task_id}`")
+            line = f"stale task problem mapping without tracked task: `{task_id}`"
+            (warnings if _someone_elses(task_key, _norm(str(fields.get("owner", "")))) else violations).append(line)
 
-    return violations
+    return violations, warnings
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -231,13 +267,14 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- {payload['error']}")
         return 1
 
-    violations = evaluate(workboard_path)
+    violations, warnings = evaluate_scoped(workboard_path, agent=_committing_agent())
     payload = {
         "ok": not violations,
         "gate": "workboard_task_problems",
         "workboard": str(workboard_path),
         "violation_count": len(violations),
         "violations": violations,
+        "warnings": warnings,
     }
 
     if args.json:
@@ -252,6 +289,8 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     print("Workboard task problems gate: PASS")
     print("- every tracked task has a canonical problem record")
+    for item in warnings:
+        print(f"- warning (another agent's task, not blocking): {item}")
     return 0
 
 

@@ -213,6 +213,8 @@ class AdvancedToolsPatch(BaseModel):
     max_parallel_tools: int | None = Field(default=None, ge=1, le=32)
     allowed_paths: str | None = None
     blocked_commands: str | None = None
+    browser_sensitive_hosts: str | None = None
+    browser_sensitive_mode: str | None = None
 
 
 class AdvancedMemoryPatch(BaseModel):

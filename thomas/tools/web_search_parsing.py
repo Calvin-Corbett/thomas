@@ -266,6 +266,24 @@ def _diversify_by_domain(results: list[dict[str, Any]], count: int) -> list[dict
     return picked[:count]
 
 
+def _is_result_container(class_attr: str) -> bool:
+    """True for the element that opens one DuckDuckGo result.
+
+    Each result nests several elements whose class *contains* "result" --
+    ``result__body``, ``result__extras``, ``result__extras__url``. A substring
+    test treats every one of them as the start of a new result and throws away
+    the title and snippet collected so far, leaving whatever the last nested
+    element held. Match on class tokens instead, while still accepting the
+    ``web-result`` spelling DuckDuckGo also ships.
+    """
+    for token in class_attr.split():
+        if token.startswith("result__") or token.startswith("results_"):
+            continue
+        if token == "result" or token.endswith("-result"):
+            return True
+    return False
+
+
 class _DDGHtmlResultsParser(HTMLParser):
     """Best-effort parser for DuckDuckGo HTML results page."""
 
@@ -273,47 +291,83 @@ class _DDGHtmlResultsParser(HTMLParser):
         super().__init__()
         self.results: list[dict[str, Any]] = []
         self._in_result = False
+        self._depth = 0
         self._cur: dict[str, Any] = {}
         self._capture_title = False
         self._capture_snippet = False
         self._title_parts: list[str] = []
         self._snip_parts: list[str] = []
 
+    def _reset_current(self) -> None:
+        self._cur = {}
+        self._title_parts = []
+        self._snip_parts = []
+        self._capture_title = False
+        self._capture_snippet = False
+
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         t = tag.lower()
         a = {k.lower(): (v or "") for k, v in attrs}
-        if t == "div" and "result" in (a.get("class", "")):
-            self._in_result = True
-            self._cur = {}
-            self._title_parts = []
-            self._snip_parts = []
-        if self._in_result and t == "a":
-            cls = a.get("class", "")
-            href = a.get("href", "").strip()
-            if href and ("result__a" in cls or "result-link" in cls or "result__url" in cls):
-                self._cur["url"] = href
-                self._capture_title = True
-        if self._in_result and t in ("a", "div", "span"):
-            cls = a.get("class", "")
+        cls = a.get("class", "")
+        if t == "div":
+            if not self._in_result:
+                if _is_result_container(cls):
+                    self._in_result = True
+                    self._depth = 1
+                    self._reset_current()
+                return
+            # Nested divs must not close the result early, so they are counted
+            # rather than matched.
+            self._depth += 1
             if "result__snippet" in cls:
                 self._capture_snippet = True
+            return
+        if not self._in_result:
+            return
+        if t == "a":
+            href = a.get("href", "").strip()
+            # result__url holds the *displayed* address, not the headline, and
+            # it sits after the title in the markup -- accepting it here is
+            # what turned every title into a bare URL.
+            if href and ("result__a" in cls or "result-link" in cls):
+                self._cur["url"] = href
+                self._capture_title = True
+            elif "result__snippet" in cls:
+                self._capture_snippet = True
+        elif t == "span" and "result__snippet" in cls:
+            self._capture_snippet = True
 
     def handle_endtag(self, tag: str) -> None:
         t = tag.lower()
+        if not self._in_result:
+            return
         if t == "a":
             self._capture_title = False
-        if t in ("div", "span"):
             self._capture_snippet = False
-        if t == "div" and self._in_result:
-            title = _compact_ws(unescape(" ".join(self._title_parts)))
-            snip = _compact_ws(unescape(" ".join(self._snip_parts)))
-            url = _canonicalize_url(_safe_str(self._cur.get("url")).strip())
-            if title and url:
-                self.results.append({"title": title, "url": url, "description": snip or title, "published_date": None})
-            self._in_result = False
-            self._cur = {}
-            self._title_parts = []
-            self._snip_parts = []
+        elif t == "span":
+            self._capture_snippet = False
+        elif t == "div":
+            self._capture_snippet = False
+            self._depth -= 1
+            if self._depth <= 0:
+                self._emit()
+
+    def close(self) -> None:
+        super().close()
+        # A truncated page still has whole results above the cut; emitting the
+        # last one beats dropping it silently.
+        if self._in_result:
+            self._emit()
+
+    def _emit(self) -> None:
+        title = _compact_ws(unescape(" ".join(self._title_parts)))
+        snip = _compact_ws(unescape(" ".join(self._snip_parts)))
+        url = _canonicalize_url(_safe_str(self._cur.get("url")).strip())
+        if title and url:
+            self.results.append({"title": title, "url": url, "description": snip or title, "published_date": None})
+        self._in_result = False
+        self._depth = 0
+        self._reset_current()
 
     def handle_data(self, data: str) -> None:
         if not data or not data.strip():

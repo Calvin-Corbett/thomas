@@ -11,6 +11,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.crew.brief.coordination_barrier import CoordinationBlocked, require_clear_p0
     from scripts.crew.workboard.claim_utils import (
         LOCK_FILE,
         NONE_ENTRY,
@@ -37,7 +38,13 @@ try:
         _validate_dirty_release_reason,
         workboard_issue_mod,
     )
+    from scripts.crew.workboard.takeover_transaction import (
+        execute_takeover_transaction,
+        prepare_exact_takeover,
+        record_takeover_decision,
+    )
 except ImportError:  # pragma: no cover
+    from crew.brief.coordination_barrier import CoordinationBlocked, require_clear_p0  # type: ignore
     from crew.workboard.claim_utils import (  # type: ignore
         LOCK_FILE,
         NONE_ENTRY,
@@ -63,6 +70,28 @@ except ImportError:  # pragma: no cover
         _validate_dirty_claim_reason,
         _validate_dirty_release_reason,
         workboard_issue_mod,
+    )
+    from crew.workboard.takeover_transaction import (  # type: ignore
+        execute_takeover_transaction,
+        prepare_exact_takeover,
+        record_takeover_decision,
+    )
+
+try:
+    from scripts.crew.workboard.claim_ownership import (
+        append_takeover_audit,
+        evaluate_takeover_eligibility,
+        foreign_scope_conflicts,
+        refusal_message,
+        validate_takeover_reason,
+    )
+except ImportError:  # pragma: no cover
+    from crew.workboard.claim_ownership import (  # type: ignore
+        append_takeover_audit,
+        evaluate_takeover_eligibility,
+        foreign_scope_conflicts,
+        refusal_message,
+        validate_takeover_reason,
     )
 
 
@@ -125,7 +154,15 @@ def claim(
     dirty_reason: str = "",
     allow_presence_override: bool = False,
     presence_override_reason: str = "",
+    allow_scope_takeover: bool = False,
+    takeover_reason: str = "",
+    takeover_authorization_id: str = "",
 ) -> tuple[bool, str]:
+    barrier = _via_claim("require_clear_p0", require_clear_p0)
+    try:
+        barrier(workboard_path, bound_agent=agent)
+    except CoordinationBlocked as exc:
+        return False, str(exc)
     ok_presence, presence_message = _presence_gate(
         workboard_path=workboard_path,
         purpose="workboard_claim",
@@ -138,7 +175,12 @@ def claim(
         return False, presence_message
 
     with _via_claim("_file_lock", _file_lock)(_via_claim("LOCK_FILE", LOCK_FILE)):
+        try:
+            barrier(workboard_path, bound_agent=agent)
+        except CoordinationBlocked as exc:
+            return False, str(exc)
         dirty_paths = {"staged": [], "unstaged": [], "untracked": []}
+        dirty_audit_reason = ""
         scope_norm = _normalize_scope_value(scope)
         scope_guard = _via_claim("_scope_guard_supported", _scope_guard_supported)
         dirty_paths_fn = _via_claim("_claimed_scope_dirty_paths", _claimed_scope_dirty_paths)
@@ -163,15 +205,9 @@ def claim(
                 )
             if offenders and allow_dirty:
                 try:
-                    reason = _validate_dirty_claim_reason(dirty_reason)
+                    dirty_audit_reason = _validate_dirty_claim_reason(dirty_reason)
                 except ValueError as exc:
                     return False, str(exc)
-                _append_claim_override_audit(
-                    agent=agent,
-                    reason=reason,
-                    scope=scope,
-                    dirty_paths=dirty_paths,
-                )
         claim_name = _resolve_display_name(name, agent)
         claim_parent = _normalize_parent_token(parent)
         claim_role = _resolve_claim_role(role, claim_parent)
@@ -185,6 +221,58 @@ def claim(
         )
         text = workboard_path.read_text(encoding="utf-8")
         lines = text.splitlines(keepends=True)
+        # Someone else's claim is someone else's work. Refuse to reach into it
+        # by default; a handover stays possible, but it has to be said out loud,
+        # it takes their claim off the board rather than sitting beside it, and
+        # it leaves a line in the audit log naming who was holding the scope.
+        conflicts = foreign_scope_conflicts(lines, agent=agent, scope=scope_norm)
+        takeover_agents: tuple[str, ...] = ()
+        takeover = ""
+        takeover_evidence: dict[str, object] = {}
+        takeover_intermediate_text = ""
+        strict_takeover = False
+        if conflicts:
+            if not allow_scope_takeover:
+                return False, refusal_message(scope_norm, conflicts)
+            try:
+                takeover = validate_takeover_reason(takeover_reason)
+            except ValueError as exc:
+                return False, str(exc)
+            strict_takeover = bool(scope_guard(workboard_path))
+            if strict_takeover:
+                eligible, eligibility_message, takeover_evidence = evaluate_takeover_eligibility(
+                    workboard_path=workboard_path,
+                    lines=lines,
+                    taker=agent,
+                    requested_task=task,
+                    requested_scope=scope_norm,
+                    conflicting_agents=tuple(conflicts),
+                    takeover_reason=takeover,
+                    authorization_id=str(takeover_authorization_id or "").strip(),
+                )
+                if not eligible:
+                    return False, eligibility_message
+            prepared, prepared_message, takeover_agents = prepare_exact_takeover(
+                lines,
+                requested_scope=scope_norm,
+                conflicting_agents=tuple(conflicts),
+                release_active_task=_via_claim("_release_active_task", _release_active_task),
+            )
+            if not prepared:
+                return False, prepared_message
+            if strict_takeover:
+                recorded, record_message = record_takeover_decision(
+                    lines,
+                    taker=agent,
+                    holders=takeover_agents,
+                    task=task,
+                    scope=scope_norm,
+                    authorization_id=str(takeover_authorization_id or "").strip(),
+                    evidence=takeover_evidence,
+                )
+                if not recorded:
+                    return False, record_message
+                takeover_intermediate_text = "".join(lines)
         section = _find_claim_section(lines)
         # If the agent already has a claim, UPDATE the existing line in place
         # (idempotent claim semantics — agent can refine scope/task without
@@ -229,18 +317,65 @@ def claim(
             return False, active_message
 
         new_text = "".join(lines)
-        try:
-            ok, violations = _validate_and_write(
-                workboard_path,
-                text,
-                new_text,
+        if strict_takeover and takeover_agents:
+            transaction_ok, transaction_message = execute_takeover_transaction(
+                workboard_path=workboard_path,
+                original_text=text,
+                intermediate_text=takeover_intermediate_text,
+                successor_text=new_text,
+                agent=agent,
+                holders=takeover_agents,
+                task=task,
+                scope=scope_norm,
+                reason=takeover,
+                authorization_id=str(takeover_authorization_id or "").strip(),
+                evidence=takeover_evidence,
+                validate_write=_validate_and_write,
+                append_audit=append_takeover_audit,
+                check_barrier=lambda transaction_id: barrier(
+                    workboard_path,
+                    bound_agent=agent,
+                    allowed_takeover_transaction_id=transaction_id,
+                ),
                 require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
                 allow_blocked_without_issue=bool(allow_blocked_without_issue),
             )
-            if not ok:
-                return False, "; ".join(str(v) for v in violations)
-        except Exception as exc:
-            return False, str(exc)
+            if not transaction_ok:
+                return False, transaction_message
+        else:
+            try:
+                ok, violations = _validate_and_write(
+                    workboard_path,
+                    text,
+                    new_text,
+                    require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+                    allow_blocked_without_issue=bool(allow_blocked_without_issue),
+                )
+                if not ok:
+                    return False, "; ".join(str(v) for v in violations)
+            except Exception as exc:
+                return False, str(exc)
+
+            try:
+                if workboard_path.read_text(encoding="utf-8") != new_text:
+                    return False, "workboard durability readback differs from the validated successor"
+            except OSError as exc:
+                return False, f"workboard durability readback failed: {exc}"
+        if dirty_audit_reason:
+            _append_claim_override_audit(
+                agent=agent,
+                reason=dirty_audit_reason,
+                scope=scope,
+                dirty_paths=dirty_paths,
+            )
+        if takeover_agents and not strict_takeover:
+            append_takeover_audit(
+                agent=agent,
+                reason=takeover,
+                scope=scope,
+                takeover_from=takeover_agents,
+                workboard_path=workboard_path,
+            )
 
         if existing_idx is not None:
             return True, f"updated claim for `{agent}` to scope `{scope_norm}` with task `{task}`"
@@ -259,17 +394,18 @@ def release(
 ) -> tuple[bool, str]:
     """Release the given agent's claim from the workboard.
 
-    ``require_done_state`` is a worker-side hint (set when the worker
-    finished a task successfully and wants the release to fail if the
-    matching task isn't marked done). The flag is currently informational
-    here — it's stored on the claim line by upstream tooling but the
-    release flow does not enforce it directly. We accept the kwarg so
-    callers like ``scripts/crew/workboard/worker.py::_release_claim_safe``
-    can stay compatible across versions. Tests that pass this kwarg
-    (``test_worker_executes_assigned_task_and_releases_on_success``)
-    confirm the worker-side contract is wired through.
+    ``require_done_state`` is enforced, not informational: when True, every
+    Active Task line belonging to ``agent`` must already read ``status=done``
+    on the board, or the release is refused before anything is written --
+    ``(False, "<reason naming the task and its actual status>")``, the same
+    convention every other refusal in this function uses. An agent with no
+    active tasks at all passes trivially (nothing to check). Callers that
+    legitimately need to release a claim whose task is NOT done (e.g. a
+    worker cleaning up after a failed pipeline) must pass
+    ``require_done_state=False`` explicitly -- see
+    ``scripts/crew/workboard/worker.py``'s failure branch, which already
+    does.
     """
-    _ = require_done_state
     ok_presence, presence_message = _presence_gate(
         workboard_path=workboard_path,
         purpose="workboard_release",
@@ -341,8 +477,11 @@ def release(
         # mutates the lines list, so we can clean up any `auto-inactive`
         # issues that reference them (otherwise validation will fail with
         # "issue X references unknown task_id Y" after the active-task line
-        # is gone).
+        # is gone). Also where require_done_state is enforced: the Active
+        # Task lines are still intact here, and nothing has been written to
+        # disk yet, so refusing here is a clean no-op on failure.
         from scripts.crew.workboard.claim_utils import _find_active_tasks_section, _parse_active_task_line
+        from scripts.forge.gates.workboard_claims import normalize_active_task_status
 
         released_task_ids: list[str] = []
         at_section = _find_active_tasks_section(lines)
@@ -358,6 +497,14 @@ def release(
                 continue
             if fields and _agent_key(str(fields.get("agent") or "")) == _agent_key(agent):
                 task_id = str(entry or fields.get("task_id") or "").strip()
+                if require_done_state:
+                    status_norm, _status_err = normalize_active_task_status(str(fields.get("status") or ""))
+                    if status_norm != "done":
+                        shown_status = status_norm or str(fields.get("status") or "unknown")
+                        return False, (
+                            f"cannot release claim for `{agent}`: task `{task_id or 'unknown'}` is "
+                            f"`{shown_status}`, not `done` (require_done_state=True)"
+                        )
                 if task_id:
                     released_task_ids.append(task_id)
 

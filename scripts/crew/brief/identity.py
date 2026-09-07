@@ -7,6 +7,9 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
+
+from thomas.core import agent_session_identity
 
 AGENT_ID_ENV_KEYS: tuple[str, ...] = (
     "THOMAS_AGENT_ID",
@@ -39,7 +42,6 @@ def resolve_agent_source(
     explicit = _clean(explicit_agent)
     if explicit:
         return explicit, "explicit"
-
     for key in AGENT_ID_ENV_KEYS:
         value = _clean(os.getenv(key))
         if value:
@@ -52,6 +54,36 @@ def resolve_agent_source(
                 return value, key
 
     return None, None
+
+
+def require_bound_agent(
+    explicit_agent: str | None,
+    *,
+    repo_root: str | Path,
+    stale_seconds: int = 120,
+) -> str:
+    """Resolve all identity sources and require their live immutable binding."""
+    binding = agent_session_identity.validate_live_binding(
+        Path(repo_root).resolve(),
+        explicit_agent=explicit_agent,
+        env=os.environ,
+        stale_seconds=stale_seconds,
+    )
+    return binding.agent_id
+
+
+def require_bound_identity(
+    explicit_agent: str | None,
+    *,
+    repo_root: str | Path,
+    stale_seconds: int = 120,
+) -> agent_session_identity.SessionBinding:
+    return agent_session_identity.validate_live_binding(
+        Path(repo_root).resolve(),
+        explicit_agent=explicit_agent,
+        env=os.environ,
+        stale_seconds=stale_seconds,
+    )
 
 
 def resolve_agent(

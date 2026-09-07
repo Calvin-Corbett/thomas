@@ -1,4 +1,6 @@
 import { attachCompanionRuntime } from "./companion_runtime.js";
+import { createSurfaceHost } from "./companion_surface.js";
+import { createCompanionShell } from "./companion_shell.js";
 
 const TOKEN_KEY = "thomas.companion.token";
 const CHAT_SESSION_KEY = "thomas.infinite.chat.session.v1";
@@ -32,9 +34,13 @@ const state = {
   apps: {
     loading: false,
     rows: [],
+    installed: [],
     error: "",
   },
-  panel: "chat",
+  panel: "home",
+  railExpanded: false,
+  host: { state: "unknown", checkedAt: 0 },
+  home: { mode: "ask", building: false },
 };
 
 const refs = {
@@ -52,14 +58,27 @@ const refs = {
   chatForm: document.getElementById("chatForm"),
   chatInput: document.getElementById("chatInput"),
   chatSendBtn: document.getElementById("chatSendBtn"),
+  panelHome: document.getElementById("panelHome"),
   panelChat: document.getElementById("panelChat"),
   panelApps: document.getElementById("panelApps"),
   panelAdd: document.getElementById("panelAdd"),
-  tabChat: document.getElementById("tabChat"),
-  tabApps: document.getElementById("tabApps"),
-  tabAdd: document.getElementById("tabAdd"),
+  rail: document.getElementById("rail"),
+  railToggle: document.getElementById("railToggle"),
+  railScrim: document.getElementById("railScrim"),
+  railPins: document.getElementById("railPins"),
+  railStatus: document.getElementById("railStatus"),
+  railStatusLabel: document.getElementById("railStatusLabel"),
+  homeGrid: document.getElementById("homeGrid"),
+  homeMeta: document.getElementById("homeMeta"),
+  homeGreeting: document.getElementById("homeGreeting"),
+  homeComposerForm: document.getElementById("homeComposerForm"),
+  homeComposerInput: document.getElementById("homeComposerInput"),
+  homeComposerSend: document.getElementById("homeComposerSend"),
+  homeComposerMode: document.getElementById("homeComposerMode"),
+  homeStatus: document.getElementById("homeStatus"),
   appsRefreshBtn: document.getElementById("appsRefreshBtn"),
   appsList: document.getElementById("appsList"),
+  surfaceMount: document.getElementById("surfaceMount"),
   appsMeta: document.getElementById("appsMeta"),
   deviceSetupForm: document.getElementById("deviceSetupForm"),
   deviceIdInput: document.getElementById("deviceIdInput"),
@@ -164,7 +183,7 @@ function persistModelState() {
 
 function persistActivePanel() {
   try {
-    localStorage.setItem(ACTIVE_PANEL_KEY, asText(state.panel, "chat"));
+    localStorage.setItem(ACTIVE_PANEL_KEY, asText(state.panel, "home"));
   } catch (_error) {
     // Ignore storage failures.
   }
@@ -273,9 +292,9 @@ function hydrateDeviceState() {
   }
 
   try {
-    state.panel = asText(localStorage.getItem(ACTIVE_PANEL_KEY), "chat").toLowerCase();
+    state.panel = asText(localStorage.getItem(ACTIVE_PANEL_KEY), "home").toLowerCase();
   } catch (_error) {
-    state.panel = "chat";
+    state.panel = "home";
   }
 }
 
@@ -402,6 +421,8 @@ function renderAppsPanel() {
     const release = (item && item.latest_release) || {};
     const compat = (item && item.compatibility) || {};
     const eligible = Boolean(compat && compat.eligible);
+    const installed = installedModule(moduleId);
+    const openable = Boolean(installed && asText(installed.surface_type, "declarative") === "surface");
 
     const card = document.createElement("article");
     card.className = "companion-app-card";
@@ -413,6 +434,7 @@ function renderAppsPanel() {
       <div class="app-actions">
         <span class="app-chip ${eligible ? "good" : "bad"}">${eligible ? "Eligible" : "Blocked"}</span>
         <button type="button" class="settings-mini-btn" data-app-push="${moduleId}" ${eligible ? "" : "disabled"}>Push</button>
+        ${openable ? `<button type="button" class="settings-mini-btn" data-app-open="${moduleId}">Open</button>` : ""}
       </div>
     `;
     refs.appsList.appendChild(card);
@@ -426,52 +448,76 @@ function render() {
   renderModelButton();
   renderDeviceSetupForm();
   renderAppsPanel();
+  renderHome();
+  renderHostStatus();
 }
 
+const PANEL_KEYS = ["home", "chat", "apps", "add"];
+
 function setActivePanel(panelKey) {
-  const nextRaw = asText(panelKey, "chat").toLowerCase();
-  const next = ["chat", "apps", "add"].includes(nextRaw) ? nextRaw : "chat";
+  const nextRaw = asText(panelKey, "home").toLowerCase();
+  const next = PANEL_KEYS.includes(nextRaw) ? nextRaw : "home";
   state.panel = next;
   persistActivePanel();
+
   const panelMap = {
+    home: refs.panelHome,
     chat: refs.panelChat,
     apps: refs.panelApps,
     add: refs.panelAdd,
-  };
-  const tabMap = {
-    chat: refs.tabChat,
-    apps: refs.tabApps,
-    add: refs.tabAdd,
   };
 
   Object.entries(panelMap).forEach(([key, node]) => {
     if (!node) {
       return;
     }
-    if (key === next) {
-      node.classList.add("active");
-    } else {
-      node.classList.remove("active");
-    }
+    node.classList.toggle("active", key === next);
   });
 
-  Object.entries(tabMap).forEach(([key, node]) => {
-    if (!node) {
-      return;
-    }
-    if (key === next) {
-      node.classList.add("active");
+  document.querySelectorAll("[data-rail]").forEach((node) => {
+    const key = asText(node.getAttribute("data-rail"), "");
+    const isActive = key === next;
+    node.classList.toggle("active", isActive);
+    if (isActive) {
       node.setAttribute("aria-current", "page");
     } else {
-      node.classList.remove("active");
       node.removeAttribute("aria-current");
     }
   });
 
+  // Choosing a destination closes the expanded rail; on a phone it is covering
+  // what you just asked to see.
+  setRailExpanded(false);
+
   if (next === "apps") {
     void loadAppStore();
   }
+  if (next === "home") {
+    void refreshHome();
+  }
 }
+
+const shell = createCompanionShell({
+  state,
+  refs,
+  asText,
+  requestJson,
+  openSurface,
+  loadInstalledModules,
+});
+
+const {
+  setRailExpanded,
+  toggleRail,
+  renderHome,
+  refreshHome,
+  setHomeStatus,
+  setHomeMode,
+  setHomeBuilding,
+  buildAppFromDescription,
+  refreshHostStatus,
+  renderHostStatus,
+} = shell;
 
 async function requestJson(path, options = {}) {
   const headers = buildAuthHeaders(options.headers || {});
@@ -486,6 +532,17 @@ async function requestJson(path, options = {}) {
     throw new Error(asText(payload && (payload.error || payload.message), `${response.status} ${response.statusText}`));
   }
   return payload;
+}
+
+async function requestText(path, options = {}) {
+  const headers = buildAuthHeaders(options.headers || {});
+  headers.set("Accept", "text/html");
+  const response = await fetch(path, { ...options, headers });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(asText(body, `${response.status} ${response.statusText}`));
+  }
+  return body;
 }
 
 function syncDeviceFromInputs() {
@@ -543,6 +600,48 @@ function appStoreQuery() {
   return `/api/companion/v1/app-store?${params.toString()}`;
 }
 
+const surfaceHost = createSurfaceHost({
+  requestJson,
+  requestText,
+  mount: refs.surfaceMount,
+});
+
+function installedModule(moduleId) {
+  const wanted = asText(moduleId, "");
+  return state.apps.installed.find((row) => asText(row && row.module_id, "") === wanted) || null;
+}
+
+function openSurface(moduleId) {
+  const module = installedModule(moduleId);
+  if (!module) {
+    appendSystemNotice("That app is not installed on this device yet.", { error: true });
+    return;
+  }
+  if (asText(module.surface_type, "declarative") !== "surface") {
+    appendSystemNotice(
+      `${asText(module.display_name, moduleId)} is a ${asText(module.surface_type, "declarative")} module and has no surface to open.`,
+      { error: true },
+    );
+    return;
+  }
+  void surfaceHost.open(module).catch((error) => {
+    appendSystemNotice(
+      `Could not open ${asText(module.display_name, moduleId)}: ${asText(error && error.message, "load failed")}`,
+      { error: true },
+    );
+  });
+}
+
+async function loadInstalledModules() {
+  try {
+    const payload = await requestJson("/api/companion/v1/modules");
+    state.apps.installed = Array.isArray(payload && payload.modules) ? payload.modules : [];
+  } catch (_error) {
+    // A missing module list only costs Open buttons; the catalog still renders.
+    state.apps.installed = [];
+  }
+}
+
 async function loadAppStore() {
   if (!refs.appsList) {
     return;
@@ -553,6 +652,7 @@ async function loadAppStore() {
   try {
     const payload = await requestJson(appStoreQuery());
     state.apps.rows = Array.isArray(payload && payload.apps) ? payload.apps : [];
+    await loadInstalledModules();
     state.apps.error = "";
   } catch (error) {
     state.apps.rows = [];
@@ -712,6 +812,16 @@ const { bootstrap } = attachCompanionRuntime({
   buildAuthHeaders,
   loadAppStore,
   pushModuleToDevice,
+  openSurface,
+  surfaceHost,
+  setRailExpanded,
+  toggleRail,
+  refreshHome,
+  refreshHostStatus,
+  renderHome,
+  setHomeMode,
+  setHomeStatus,
+  buildAppFromDescription,
   persistModelState,
   persistDeviceState,
   refreshModelSelector,

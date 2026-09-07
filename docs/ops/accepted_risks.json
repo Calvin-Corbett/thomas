@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "id": "2026-08-25-nine-task-records-scope-landed-in-ea788bac-2026-08-14-without-closure-no-practice-yet-auto-closes-landed-scope-records-1",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "reason": "nine task records' scope landed in ea788bac 2026-08-14 without closure; no practice yet auto-closes landed-scope records",
+      "reviewed_on": "2026-08-25",
+      "expires_on": "2026-11-30",
+      "refs": ".superpowers/sdd/2026-08-25-phase2-recon/recon.md#section-4-1"
+    },
+    {
+      "id": "2026-08-26-runtime-protection-fix-2026-05-27-is-fixed-and-permanently-tested-thomas-tools-filesystem-py-252-266-always-protects-runtime-flag-rel-runtime-key-rel-44-44-protection-tests-green-but-no-red-path-cases-gate-covers-filesystem-tool-level-write-protection-of-the-runtime-protection-control-files-the-closure-grammar-has-no-form-for-a-fixed-and-permanently-tested-incident-that-a-gate-does-not-watch-1",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "reason": "runtime-protection-fix-2026-05-27 is fixed and permanently tested (thomas/tools/filesystem.py:252-266 always-protects _RUNTIME_FLAG_REL/_RUNTIME_KEY_REL, 44/44 protection tests green) but no RED_PATH_CASES gate covers filesystem-tool-level write protection of the runtime-protection control files -- the closure grammar has no form for a fixed-and-permanently-tested incident that a gate does not watch",
+      "reviewed_on": "2026-08-26",
+      "expires_on": "2026-11-30",
+      "refs": "plans/thomas/problems/runtime-protection-fix-2026-05-27/PROBLEM.md;thomas/tools/filesystem.py:252-266;.superpowers/sdd/2026-08-26-phase2-repairs-batch2/task-2-brief.md"
+    },
+    {
+      "id": "2026-08-26-problem-record-py-s-unlocked-append-can-double-fire-records-when-two-auto-checks-py-processes-run-within-the-same-second-the-40-audit-24h-backstop-failure-records-were-produced-this-way-during-a-since-fixed-surface-parity-failure-window-the-real-fix-is-a-file-lock-in-pinned-problem-record-py-gated-behind-a-future-tap-1",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "reason": "problem_record.py's unlocked append can double-fire records when two auto_checks.py processes run within the same second -- the 40 audit-24h-backstop failure records were produced this way during a since-fixed Surface-parity failure window; the real fix is a file-lock in pinned problem_record.py, gated behind a future tap",
+      "reviewed_on": "2026-08-26",
+      "expires_on": "2026-11-30",
+      "refs": "plans/thomas/problems/audit-24h-backstop/PROBLEM.md;scripts/crew/workboard/problem_record.py;scripts/auto_checks.py:105-156"
+    }
+  ]
+}

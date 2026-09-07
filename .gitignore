@@ -177,11 +177,10 @@ plans/thomas/swarm/
 thomas/demo/snake_h2h_benchmark.py
 tests/test_snake_h2h_benchmark.py
 
-# Visual-regression OUTPUT (regenerated every run; baselines stay tracked).
-apps/site/verification/diffs/
-apps/site/verification/screenshots/
-apps/site/verification/runtime-report.json
-apps/site/verification/ui-proof.json
+# Visual-regression proof bundle: tracked, gate-required evidence
+# (site_visual_proof.py requires these exact paths in the committed
+# changed-set whenever a UI file changes - they are not disposable output;
+# four ignore rules removed by the owner-signed 2026-09-01 tap).
 .runtime/
 .state/
 secrets.env
@@ -211,3 +210,13 @@ thomas_vs_*.docx
 # Thomas and regenerated on demand -- not source. Left untracked they show up as
 # working-tree dirt every session, which makes "is this repo clean?" ambiguous.
 data/
+
+# Graveyard lock/temp files (scripts/forge/graveyard.py write path) --
+# a crash between _atomic_write os.replace and cleanup can leave one behind (M12).
+docs/ops/graveyard.json.lock
+docs/ops/.graveyard.json.*.tmp
+
+# Generated search index (rebuilt from the repo; ~69 MB of SQLite + manifest).
+# Not ignored until 2026-09-03, when building one for the first time left it
+# staged-able: any `git add -A` would have committed it.
+thomas_rag_index/

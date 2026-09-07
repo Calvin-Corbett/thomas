@@ -24,7 +24,8 @@ import tomllib
 
 from evolve_supervisor import evaluate_spend_governor, record_evolve_child_spend, run_evolve_corpus, run_verifier_panel
 from thomas.core.config import load_config
-from thomas.core.model_resolution import resolve_effective_model, resolve_model_profile_name
+from thomas.core.model_resolution import resolve_model_profile_name
+from thomas.preferences.model_resolution import resolve_effective_model
 
 from .doppelganger import (
     _GREEN_SUPPORT_DIRS,

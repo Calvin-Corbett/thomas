@@ -1,11 +1,15 @@
-# Task Plan: audit-24h-backstop
+# PLAN for audit-24h-backstop
+
+_Task Plan: audit-24h-backstop_
 
 - task_id: `audit-24h-backstop`
-- owner: `unassigned`
-- status: `up_for_grabs`
-- scope: `thomas`
 - summary: ensure every major module is audited in last 24h and fix findings
 - created_at_utc: `2026-03-06T00:01:49+00:00`
+
+- Owner: unassigned
+- Status: up_for_grabs
+- Updated At: 2026-09-03T12:53:23+00:00
+- Scope: thomas
 
 ## Objective
 

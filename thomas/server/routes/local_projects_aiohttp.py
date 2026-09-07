@@ -33,6 +33,7 @@ from thomas.server.routes.local_project_workspace import (
     _workspace_state,
     build_project_chat_context,
 )
+from thomas.server.routes.local_projects_boards import boards_index
 from thomas.server.routes.local_projects_generated import (
     _find_generated_deliverable_project,
     _generated_deliverable_projects,
@@ -198,6 +199,13 @@ def register_local_project_routes(
         require_loopback(request)
         projects = await _projects_catalogue(request.app)
         return web.json_response({"ok": True, "count": len(projects), "projects": projects})
+
+    async def api_local_projects_boards(request: web.Request) -> web.Response:
+        """The user-level index over every Praxis board: yours first, then one per project."""
+        require_api_access(request)
+        require_loopback(request)
+        projects = await _projects_catalogue(request.app)
+        return web.json_response({"ok": True, **boards_index(projects)})
 
     async def api_local_projects_import(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -607,6 +615,7 @@ def register_local_project_routes(
         return web.json_response({"ok": True, "project_id": project_id, "revoked_share_id": share_id})
 
     app.router.add_get("/api/local/projects", api_local_projects_list)
+    app.router.add_get("/api/local/projects/boards", api_local_projects_boards)  # before {project_id}
     app.router.add_post("/api/local/projects/import", api_local_projects_import)
     app.router.add_post("/api/local/projects/link", api_local_projects_import)
     app.router.add_post("/api/local/projects/pick-folder", api_local_projects_pick_folder)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = REPO_ROOT / "thomas/server/web/chat.html"
 DRAWER_JS = REPO_ROOT / "thomas/server/web/js/workspace_chat_drawer.js"

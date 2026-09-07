@@ -20,8 +20,10 @@ from typing import Any
 from aiohttp import web
 
 from thomas.chat.session_store import SessionStore
-from thomas.core import task_bot_runtime
+from thomas.core import capture_context, task_bot_runtime
 from thomas.core.action_receipt import delegated_action_receipt
+from thomas.core.capture_context import CAPTURE_EXCEPTIONS
+from thomas.marketplace.observability.session_log_events import truncate_payload
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 from thomas.server.chat_delegation import apply_task_update, session_active_delegations
 from thomas.server.routes.chat_v2_keys import APP_SESSION_STORE, APP_SPECIALIST_REGISTRY
@@ -33,6 +35,41 @@ except ImportError:
     APP_MEMORY = None
 
 log = logging.getLogger(__name__)
+
+# Honesty spine: history/truncate append failures are counted here, never
+# fatal to the truncate route -- see _record_truncate_event.
+TRUNCATE_EVENT_FAILURES = 0
+
+
+def _record_truncate_event(session_id: str, kept: int, dropped: int) -> None:
+    """Best-effort history/truncate append; never breaks the truncate route.
+
+    handle_session_truncate runs outside AgentLoop -- no capture_context
+    contextvar is set here, so this lands in the per-process ambient run
+    unless a future caller happens to already have one current. That is
+    stated honestly rather than invented: exact run co-location with the
+    session's own turns is a bonus this route does not have, not a
+    requirement (per the honesty-spine plan). The session identity IS known
+    here, so it rides along as an extra key on the payload for Task 4's
+    derivation to match on, even though truncate_payload()'s own signature
+    (a Task 1 interface) has no such field. Callers only invoke this when
+    the route actually trimmed the session (`keep < len(msgs)`); the
+    no-op branch (`keep >= len(msgs)`) returns before ever calling this,
+    since no mutation happened there and an event would misrepresent one.
+    """
+    global TRUNCATE_EVENT_FAILURES
+    try:
+        run_id = capture_context.current() or capture_context.ambient_run_id()
+        if run_id is None:
+            return
+        payload = truncate_payload(kept=kept, dropped=dropped)
+        payload["session_id"] = session_id
+        # Reuses the writer-aware seq source from Task 2's capture hook
+        # instead of inventing a second seq source for this run_id.
+        capture_context._append_capture_event(run_id, payload)
+    except CAPTURE_EXCEPTIONS as e:
+        log.debug("Truncate: history/truncate append failed (%s): %s", type(e).__name__, e)
+        TRUNCATE_EVENT_FAILURES += 1
 
 
 def guard_chat_v2_read(
@@ -104,6 +141,7 @@ async def handle_session_truncate(request: web.Request) -> web.Response:
     trimmed = ConversationManager(messages=msgs[:keep])
     await session_store.save(sid, trimmed, force=True)
     await _evict_session_llm(request.app, sid)
+    _record_truncate_event(sid, kept=keep, dropped=len(msgs) - keep)
     return web.json_response({"session_id": sid, "kept": keep, "removed": len(msgs) - keep})
 
 

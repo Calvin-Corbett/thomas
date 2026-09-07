@@ -22,6 +22,7 @@ from .policy import (
 from .registry import ModuleRegistry
 from .releases import ReleaseRecord, ReleaseRegistry
 from .runtime import ModuleRuntime
+from .store import ModuleStore, ModuleStoreError, ModuleStoreQuotaError, StoreQuota
 from .studio import BundleStudio
 from .update import BundleVerifier, UpdateApplier
 
@@ -40,10 +41,14 @@ __all__ = [
     "ModuleContract",
     "ModuleRuntime",
     "ModuleRegistry",
+    "ModuleStore",
+    "ModuleStoreError",
+    "ModuleStoreQuotaError",
     "PolicyComplianceService",
     "PolicyProfile",
     "ReleaseRecord",
     "ReleaseRegistry",
+    "StoreQuota",
     "BundleStudio",
     "allowed_permissions",
     "get_policy_profile",

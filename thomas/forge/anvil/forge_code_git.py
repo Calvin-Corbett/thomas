@@ -20,6 +20,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from thomas.forge.anvil import forge_code_manifest
+
 log = logging.getLogger(__name__)
 
 # Default timeout (seconds) for a single git invocation.
@@ -101,6 +103,12 @@ _STATUS_ARGS = ["status", "--porcelain=v1", "-z", "--untracked-files=all"]
 # prefixes stay fully visible, so a builder that ignores the prompt is seen,
 # not silently cleaned up after.
 _RUNTIME_BOOKKEEPING_PREFIXES = (".thomas/evolve/agent/", ".thomas/scratch/")
+# Thomas's own search index, written INTO the project folder by rag_indexer
+# (``thomas_rag_index/``). It is never the person's work, and its SQLite side
+# files are held open while indexing: on 2026-09-05 a Code run edited the
+# game, then died fingerprinting ``thomas_rag_index/rag_fts.sqlite3-shm``
+# (Permission denied) and was filed as a crash.
+_THOMAS_OWN_PREFIXES = ("thomas_rag_index/",)
 
 
 def _status_entries(root: str | Path) -> list[tuple[str, str]]:
@@ -108,7 +116,11 @@ def _status_entries(root: str | Path) -> list[tuple[str, str]]:
     if rc != 0:
         detail = (err or out).strip() or f"git status exited {rc}"
         raise ForgeCodeGitError(f"git status could not confirm workspace state: {detail}")
-    return _parse_porcelain(out)
+    return [
+        (status, path)
+        for status, path in _parse_porcelain(out)
+        if not path.replace("\\", "/").lower().startswith(_THOMAS_OWN_PREFIXES)
+    ]
 
 
 def _content_fingerprint(root: str | Path, path: str, status: str) -> str:
@@ -126,16 +138,34 @@ def _content_fingerprint(root: str | Path, path: str, status: str) -> str:
         else:
             digest = "missing"
     except OSError as exc:
-        raise ForgeCodeGitError(f"could not fingerprint changed file {path}: {exc}") from exc
+        # A file another process holds open (a lock, a database side file) is
+        # still a changed file; its fingerprint says it could not be read
+        # rather than ending the run that had already done its work.
+        digest = f"unreadable:{type(exc).__name__}"
     return f"{status}\0{digest}"
 
 
-def snapshot(root: str | Path) -> dict[str, str]:
+def has_history(root: str | Path) -> bool:
+    """True when ``root`` is inside a git repository."""
+    return (Path(root) / ".git").exists()
+
+
+def snapshot(
+    root: str | Path, *, allow_without_history: bool = False, max_files: int | None = None
+) -> dict[str, str]:
     """Return ``{path: status_and_content_fingerprint}`` for changed files.
 
     This is a point-in-time fingerprint of the working tree, used to later
-    diff a run's effect via :func:`delta_since`.
+    diff a run's effect via :func:`delta_since`. A folder that is not a
+    repository is refused unless the person chose to work without history, in
+    which case the snapshot is a content manifest of every file
+    (:mod:`forge_code_manifest`) and the delta is computed from it.
     """
+    if allow_without_history and not has_history(root):
+        try:
+            return forge_code_manifest.snapshot(root, max_files=max_files)
+        except forge_code_manifest.ManifestError as exc:  # refused whole: too large, or a file it could not read
+            raise ForgeCodeGitError(str(exc)) from exc
     return {path: _content_fingerprint(root, path, status) for status, path in _status_entries(root)}
 
 
@@ -221,6 +251,12 @@ def commit_run_snapshot(root: str | Path, *, run_id: str = "", reason: str = "")
 
     Returns ``{"committed": bool, "commit": str, "reason": str}``.
     """
+    if not has_history(root):
+        return {
+            "committed": False,
+            "commit": "",
+            "reason": "no history: this folder is not a repository, so there is nothing to commit into",
+        }
     try:
         from thomas.forge.anvil.forge_code_projects import is_task_born_project, shield_thomas_dir
 
@@ -270,6 +306,11 @@ def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
     A path is included when it is changed *now* and is either absent from
     ``snap`` or present with a different status/content fingerprint.
     """
+    if forge_code_manifest.is_manifest(snap):
+        try:
+            return forge_code_manifest.delta_since(root, snap)
+        except forge_code_manifest.ManifestError as exc:  # the folder outgrew the bound, or a file became unreadable
+            raise ForgeCodeGitError(str(exc)) from exc
     current = snapshot(root)
     snap = snap or {}
     changed = [path for path, status in current.items() if snap.get(path) != status]
@@ -379,6 +420,13 @@ def revert_file(root: str | Path, file: str) -> dict:
             "clean": False,
             "file": file,
             "reason": "refused: path is absolute or escapes the repo root",
+        }
+    if not has_history(root):
+        return {
+            "ok": False,
+            "clean": False,
+            "file": file,
+            "reason": "undo is unavailable: this folder has no version history, so there is no earlier version to restore",
         }
 
     if is_untracked(root, file):

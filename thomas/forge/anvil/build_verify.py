@@ -24,12 +24,18 @@ from thomas.tools.web_preflight import (
     mask_js_strings_and_comments,
     orphaned_web_assets,
     owners_by_mention,
+    scan_project_files,
 )
 
 from .bridge_config import emergency_stop_active
 from .bridge_prompts import compose_fix_prompt
 from .forge_event_stream import FORGE_EVENT_KEY
 from .web_artifact_smoke import smoke_html_artifacts
+
+# The exit a pass returns when it reached its wall clock. It is a pass boundary,
+# not a verdict: the engine verifies whatever changed and continues, and only a
+# clock with nothing changed is a failure. (124 is what `timeout(1)` returns.)
+PASS_WALL_CLOCK_RC = 124
 
 # A small, self-contained verifier program: byte-compile each changed file and
 # import each changed package module. A syntax error (py_compile) or an import
@@ -232,10 +238,12 @@ def _snapshot_repair_files(cwd: str | Path, changed_files: list[str]) -> dict[Pa
     root = Path(cwd).resolve()
     snapshot: dict[Path, bytes] = {}
     candidates = {(root / name).resolve() for name in changed_files}
+    # The pruning walk the orphan scan uses: machinery folders are never
+    # entered and a path that cannot be stat-ed is treated as absent. The
+    # bare rglob here raised WinError 1920 on a copied venv link at the
+    # start of every fix pass on the Thomas checkout (2026-09-06).
     candidates.update(
-        path.resolve()
-        for path in root.rglob("*")
-        if path.is_file() and path.suffix.lower() in _REPAIR_TRUNCATION_SUFFIXES
+        path.resolve() for path in scan_project_files(root) if path.suffix.lower() in _REPAIR_TRUNCATION_SUFFIXES
     )
     for path in sorted(candidates):
         if path.suffix.lower() not in _REPAIR_TRUNCATION_SUFFIXES or not path.is_relative_to(root):
@@ -279,6 +287,7 @@ def _verify_and_iterate(
     *,
     verifier: Any = None,
     max_fix_iters: int = 2,
+    contract: Callable[[], dict[str, Any] | None] | None = None,
 ) -> int:
     """Verify THIS run's changes; on failure, feed the failure back for bounded fixes.
 
@@ -286,6 +295,15 @@ def _verify_and_iterate(
     Returns the final returncode: ``0`` when verification ultimately passes (or
     there was nothing to verify), else the non-zero exit of the failing check or
     the failing fix pass. Never raises — a fix pass that errors surfaces honestly.
+
+    ``contract()`` returns the acceptance settlement of the LAST pass (the loop's
+    own verdict on the task's requirements), or None. When the engine's checks
+    pass but that contract is unmet, the unmet items go back for another pass,
+    under the same runaway guard as the fix loop. A spent budget with items still
+    unmet is "unfinished" with the gaps named -- never a passing exit. This is
+    what makes a Build run until the task is done rather than until a pass ends:
+    the Mario Kart build wrote one track, declared "Built. Open index.html", and
+    the only thing the engine could still fail it on was the smoke test.
     """
     from thomas.forge.anvil import forge_code_git
 
@@ -306,26 +324,21 @@ def _verify_and_iterate(
     # A run that touches ONLY bookkeeping now correctly verifies nothing and
     # returns 0, instead of parsing a JSON file and calling that a passing check.
     changed = forge_code_git.project_delta_since(cwd, snap_before)
-    if not changed:
-        return 0  # nothing this run touched -> caller surfaces the no-op honestly
-
-    ok, rc, summary = verify(cwd, changed, emit)
+    # Nothing touched means nothing for the engine to verify -- not that the
+    # task is done. A proof-only pass (the Minecraft feature run: eight play
+    # sessions, no file to change) still answers to the contract below.
+    ok, rc, summary = verify(cwd, changed, emit) if changed else (True, 0, "nothing changed; nothing to verify")
     iters = 0
     limit = max(0, int(max_fix_iters))
-    while not ok and iters < limit:
-        # A fix pass re-invokes the agent, so the kill switch gates it too: if an
-        # operator drops the STOP file mid-build, stop iterating and surface the
-        # last real failure rather than spawning another build.
-        if emergency_stop_active():
-            emit({FORGE_EVENT_KEY: "error", "text": "emergency stop active — halting fix loop"})
-            return rc or 1
-        iters += 1
-        emit({FORGE_EVENT_KEY: "meta", "text": f"verification failed (exit {rc}); fix pass {iters}/{limit}"})
+
+    def guarded_pass(prompt: str, failing_rc: int) -> int | None:
+        """One more agent pass. Returns an exit code to stop on, or None to go on."""
+        nonlocal changed
         repair_snapshot = _snapshot_repair_files(cwd, changed)
         fix_error: Exception | None = None
         frc = 0
         try:
-            frc, _out = run_pass(compose_fix_prompt(goal, summary))
+            frc, _out = run_pass(prompt)
         except (RuntimeError, ValueError, TypeError, OSError) as exc:
             fix_error = exc
         restored, restore_failed = _restore_catastrophic_repair_truncations(repair_snapshot)
@@ -339,24 +352,124 @@ def _verify_and_iterate(
                     "text": "verification repair was stopped after destructive truncation: " + detail,
                 }
             )
-            return rc or 1
+            return failing_rc or 1
         if fix_error is not None:
             emit({FORGE_EVENT_KEY: "error", "text": f"fix pass could not run: {fix_error}"})
-            return rc or 1
+            return failing_rc or 1
+        if frc == PASS_WALL_CLOCK_RC:
+            emit(
+                {
+                    FORGE_EVENT_KEY: "meta",
+                    "text": "the pass reached its wall clock; the engine re-verifies what changed and goes on",
+                }
+            )
+            return None
         if frc != 0:
             return frc
-        # project_delta_since here TOO. This is the re-check after a repair pass,
-        # and it is the second of two call sites in this function. Fixing only the
-        # first left every repair iteration re-reading the unfiltered list, so
-        # Thomas went back to verifying its own `.thomas/evolve/agent/` transcripts
-        # the moment a run needed fixing -- which is precisely when it is writing
-        # the most of them.
-        #
-        # A guard that exercises only the first verification passes with this line
-        # broken, which is how the same class of half-fix survived once before.
-        # `test_a_repair_pass_also_ignores_the_bookkeeping` covers this call.
-        changed = forge_code_git.project_delta_since(cwd, snap_before)
-        if not changed:
+        return None
+
+    while True:
+        while not ok and iters < limit:
+            # A fix pass re-invokes the agent, so the kill switch gates it too: if an
+            # operator drops the STOP file mid-build, stop iterating and surface the
+            # last real failure rather than spawning another build.
+            if emergency_stop_active():
+                emit({FORGE_EVENT_KEY: "error", "text": "emergency stop active — halting fix loop"})
+                return rc or 1
+            iters += 1
+            emit({FORGE_EVENT_KEY: "meta", "text": f"verification failed (exit {rc}); fix pass {iters}/{limit}"})
+            stop = guarded_pass(compose_fix_prompt(goal, summary), rc)
+            if stop is not None:
+                return stop
+            # project_delta_since here TOO. This is the re-check after a repair pass,
+            # and it is the second of two call sites in this function. Fixing only the
+            # first left every repair iteration re-reading the unfiltered list, so
+            # Thomas went back to verifying its own `.thomas/evolve/agent/` transcripts
+            # the moment a run needed fixing -- which is precisely when it is writing
+            # the most of them.
+            #
+            # A guard that exercises only the first verification passes with this line
+            # broken, which is how the same class of half-fix survived once before.
+            # `test_a_repair_pass_also_ignores_the_bookkeeping` covers this call.
+            changed = forge_code_git.project_delta_since(cwd, snap_before)
+            if changed:  # a fix pass that touched nothing leaves the failing verdict standing
+                ok, rc, summary = verify(cwd, changed, emit)
+        if not ok:
+            return rc or 1
+        # The engine's checks pass. Is the TASK done? The loop's acceptance
+        # settlement says; the model's prose does not.
+        gaps = _contract_gaps(contract() if contract is not None else None)
+        if not gaps:
             return 0
-        ok, rc, summary = verify(cwd, changed, emit)
-    return 0 if ok else (rc or 1)
+        names = ", ".join(item_id for item_id, _ in gaps)
+        if iters >= limit:
+            emit(
+                {
+                    FORGE_EVENT_KEY: "error",
+                    "text": f"unfinished after {iters} pass(es): the acceptance contract still has unmet items: "
+                    + "; ".join(text for _, text in gaps),
+                }
+            )
+            return 1
+        if emergency_stop_active():
+            emit({FORGE_EVENT_KEY: "error", "text": "emergency stop active — halting before the next pass"})
+            return 1
+        iters += 1
+        emit({FORGE_EVENT_KEY: "meta", "text": f"acceptance contract not met ({names}); pass {iters}/{limit}"})
+        stop = guarded_pass(_contract_pass_prompt(goal, gaps), rc)
+        if stop is not None:
+            return stop
+        changed = forge_code_git.project_delta_since(cwd, snap_before)
+        # A continue pass that touched nothing (it played, or it answered) has
+        # nothing for the engine to check; the contract above still decides.
+        ok, rc, summary = verify(cwd, changed, emit) if changed else (True, 0, "nothing changed; nothing to verify")
+
+
+def _contract_gaps(acceptance: dict[str, Any] | None) -> list[tuple[str, str]]:
+    """(item id, 'description (observed: detail)') for every checked, unmet item."""
+    if not isinstance(acceptance, dict) or not acceptance.get("active"):
+        return []
+    verdict = acceptance.get("verdict")
+    if not isinstance(verdict, dict):
+        return []
+    judge = acceptance.get("evaluator")
+    judge_ran = isinstance(judge, dict) and bool(judge.get("available"))
+    findings = " | ".join(str(f) for f in (judge.get("findings") or []) if str(f).strip()) if judge_ran else ""
+    gaps: list[tuple[str, str]] = []
+    for row in acceptance.get("items") or []:
+        if not isinstance(row, dict):
+            continue
+        item_id = str(row.get("item_id") or "").strip() or "item"
+        description = str(row.get("description") or "").strip() or item_id
+        if row.get("checked") and not row.get("satisfied"):
+            detail = str(row.get("detail") or "").strip() or "unmet"
+            gaps.append((item_id, f"{description} (observed: {detail})"))
+        elif not row.get("checked") and judge_ran and str(row.get("kind") or "") == "requirement":
+            # In a Build, a requirement the judge ran but could not verify is
+            # not done: live, the judge's Unix checks failed on Windows, the
+            # driving requirement stayed unchecked, and "unchecked" read as met.
+            why = f"; judge: {findings[:300]}" if findings else ""
+            gaps.append(
+                (item_id, f"{description} (not verified{why}; prove it with web.playtest and quote the output)")
+            )
+    if not gaps and not verdict.get("met"):  # the verdict names ids the items list does not carry
+        gaps = [(str(x), str(x)) for x in verdict.get("unmet") or []]
+    return gaps
+
+
+def _contract_pass_prompt(goal: str, gaps: list[tuple[str, str]]) -> str:
+    """The next pass: the original goal plus exactly what the judge found missing."""
+    lines = [
+        f"Build task dispatched by Thomas-evolve (CONTINUE pass):\n\n{goal.strip()}\n",
+        "Your previous pass passed the engine's checks, but the task is not done. The acceptance",
+        "contract was checked against the workspace and these items are still unmet:",
+    ]
+    lines.extend(f"- {text}" for _, text in gaps)
+    lines.append(
+        "\nKeep working on the existing files until every item above holds. Do not start over, "
+        "do not replace or truncate a substantial file, and do not declare the task done in "
+        "words: the same checks run again after this pass. If the work is a page or a game and "
+        "the web.playtest tool is available to you, play it yourself before you finish and quote "
+        "what the browser showed."
+    )
+    return "\n".join(lines)

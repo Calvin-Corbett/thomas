@@ -10,8 +10,12 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core import capture_context
 from thomas.core.autonomy import clamp_autonomy_level
+from thomas.core.capture_context import CAPTURE_EXCEPTIONS
 from thomas.core.config import AppConfig
+from thomas.marketplace.observability import run_store
+from thomas.marketplace.observability.session_log_events import fork_payload
 from thomas.marketplace.observability.task_ledger import derive_active_goal
 from thomas.server.app_keys import (
     APP_CONFIG,
@@ -25,6 +29,43 @@ ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
 TaskLedgerUpdateFn = Callable[..., None]
 
 log = logging.getLogger(__name__)
+
+# Honesty spine: history/fork append failures are counted here, never fatal
+# to the fork route -- see _record_fork_event.
+FORK_EVENT_FAILURES = 0
+
+
+def _record_fork_event(child_session_id: str, parent_session_id: str, boundary_len: int) -> None:
+    """Best-effort history/fork append; never breaks the fork route.
+
+    A fork creates a new conversation identity, so its history/fork event
+    lands on a NEW pinned run tagged with the child's session_id -- distinct
+    from the parent's run and from the shared per-process ambient run --
+    rather than being folded into whatever happened to be current(). The
+    run starts pinned only long enough to survive retention while its
+    single event is written, then is finalized immediately: a fork run
+    never has further activity, so leaving it pinned forever would mint one
+    permanently-unreclaimable row per fork, eventually leaving retention's
+    scan window entirely made of protected rows it can never evict.
+    """
+    global FORK_EVENT_FAILURES
+    try:
+        run_id = run_store.create_run(
+            {
+                "pinned": True,
+                "mode": "fork-history",
+                "session_id": child_session_id,
+            }
+        )
+        payload = fork_payload(parent_session=parent_session_id, boundary_len=boundary_len)
+        payload["session_id"] = child_session_id
+        # Reuses the writer-aware seq source from Task 2's capture hook
+        # instead of inventing a second seq source for this run_id.
+        capture_context._append_capture_event(run_id, payload)
+        run_store.finalize_run(run_id, ok=True, error=None, iterations=0, tool_calls=0, usage={})
+    except CAPTURE_EXCEPTIONS as e:
+        log.debug("Fork: history/fork append failed (%s): %s", type(e).__name__, e)
+        FORK_EVENT_FAILURES += 1
 
 
 async def _publish_to_chat_store(
@@ -95,7 +136,7 @@ def register_sessions_routes(
         try:
             from os import environ
 
-            from thomas.core.model_resolution import resolve_effective_model
+            from thomas.preferences.model_resolution import resolve_effective_model
             from thomas.preferences.store import get_db_path
 
             resolved_profile, resolved_model_id = resolve_effective_model(
@@ -172,6 +213,7 @@ def register_sessions_routes(
             except (TypeError, ValueError, copy.Error, RecursionError):
                 forked_session.active_plan = dict(base_plan) if isinstance(base_plan, dict) else base_plan
         request.app[APP_SESSIONS][sid] = forked_session
+        _record_fork_event(sid, src, len(cloned) if isinstance(cloned, list) else 0)
         # A fork that the chat cannot see is not a fork. Publish the cloned
         # history to the store /api/v2/chat reads, or the child starts empty
         # while claiming to continue the parent.

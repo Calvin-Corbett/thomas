@@ -15,6 +15,7 @@ from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
 from thomas.tools.filesystem import register_filesystem_tools
 from thomas.tools.git import register_git_tools
+from thomas.tools.goals import register_goal_tools
 from thomas.tools.image_generation import register_image_generation_tools
 from thomas.tools.registry import ToolRegistry
 from thomas.tools.resilient_web_search import get_resilient_web_search_tool
@@ -127,6 +128,7 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_git_tools(registry, sandbox)
     register_code_search_tools(registry, sandbox)
     register_diff_tools(registry, sandbox)
+    register_goal_tools(registry, Path(sandbox))  # standing goals the contract holds every turn to
     register_ssh_tools(registry)
 
     # Investigation tools -- registered only if investigation DB has cases
@@ -144,6 +146,11 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
         from thomas.tools.browser import register_browser_tools
 
         register_browser_tools(registry)
+        # Sensitive-site pause on click/type, console + network tools (2026-09-05),
+        # layered on the registry so browser.py itself stays as it is.
+        from thomas.tools.browser_parity import install_browser_parity
+
+        install_browser_parity(registry)
     except (ImportError, ModuleNotFoundError):
         pass
 

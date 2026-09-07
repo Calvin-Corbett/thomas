@@ -209,7 +209,7 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.core.model_resolution",
+        "thomas.preferences.model_resolution",
         SimpleNamespace(
             resolve_effective_model=lambda config, env_profile="", user_id="", db_path="": ("local", "resolved-model")
         ),
@@ -398,7 +398,7 @@ def test_create_app_uses_fallback_secret_store_and_rejects_invalid_config(
     bad_cfg.default_model = "missing"
     monkeypatch.setitem(
         sys.modules,
-        "thomas.core.model_resolution",
+        "thomas.preferences.model_resolution",
         SimpleNamespace(
             resolve_effective_model=lambda config, env_profile="", user_id="", db_path="": ("missing", None)
         ),

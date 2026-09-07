@@ -169,7 +169,9 @@
   color: var(--c-accent);
 }
 .tc-work-transcript {
-  min-height: 360px;
+  /* A fixed 360px minimum beat the viewport-fitting maximum below, so in a
+     short window the newest reply sat under the panel's visible bottom. */
+  min-height: min(360px, calc(100vh - 340px));
   max-height: calc(100vh - 340px);
   overflow: auto;
   padding: 10px 4px 60px;

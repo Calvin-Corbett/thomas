@@ -1,198 +1,211 @@
-# Agent File Editing Rules — READ BEFORE CHANGING ANYTHING
+# Agent File Editing Rules — Read Before Changing Anything
 
-> **CRITICAL FOR ALL AI AGENTS WORKING ON THIS PROJECT.**
-> If you skip this doc, your changes WILL NOT WORK.
+> Verify the live entrypoint, imports, and manifests before editing. A plausible
+> filename is not evidence that the runtime executes it.
 
-Last updated: 2026-04-02
+Last updated: 2026-08-13
 
-## The #1 Rule
+These rules supplement [`AGENTS.md`](../AGENTS.md),
+[`ARCHITECTURE.md`](../ARCHITECTURE.md), and
+[`CHAT_EXECUTION_MODEL.md`](CHAT_EXECUTION_MODEL.md).
 
-**Before editing any file, verify you're editing the file that ACTUALLY runs in production.**
+## The Source-of-Truth Rule
 
-This project has had multiple runtime architectures over time. Old files still exist in the repo. If you edit a dead file, your changes do nothing and you create version confusion.
+Use this evidence order:
 
-## JavaScript — WHERE TO EDIT
+1. The current entrypoint and its normal imports.
+2. An explicit loader manifest or route-registration function.
+3. Executable tests that exercise the same surface.
+4. Documentation.
+5. Historical plans and archived material.
 
-### The ACTIVE runtime (what the browser actually loads):
+Before editing, answer all three questions:
 
-```
-thomas/server/web/js/app_runtime_loader.js   ← Loader (loads all split files in order)
-thomas/server/web/js/runtime/001_preamble.js  ← Global DOM refs and constants
-thomas/server/web/js/runtime/002_*.js         ← Virtual office data
-thomas/server/web/js/runtime/003-008_*.js     ← Setup/onboarding
-thomas/server/web/js/runtime/009_*.js         ← Initialization composer
-thomas/server/web/js/runtime/010-011_*.js     ← Chat games
-thomas/server/web/js/runtime/012-014_*.js     ← Actions/interactions
-thomas/server/web/js/runtime/015_*.js         ← Debug dock
-thomas/server/web/js/runtime/016_*.js         ← Session/chat persistence
-thomas/server/web/js/runtime/017-022_*.js     ← Virtual office
-thomas/server/web/js/runtime/023-024_*.js     ← Mission control
-thomas/server/web/js/runtime/025-028_*.js     ← Module system/command center
-thomas/server/web/js/runtime/029-037_*.js     ← Workbench editors
-thomas/server/web/js/runtime/038-039_*.js     ← Module rendering dispatch
-thomas/server/web/js/runtime/040-045_*.js     ← Model/setup/settings
-```
+- What imports or declares this file?
+- Does that caller run on the surface being changed?
+- Which focused test or runtime proof will demonstrate the change?
 
-`app_runtime_loader.js` loads these 45 files **sequentially** into global scope. They all share `window` — a `const` in `001_preamble.js` is visible in `045_model_setup_settings_06.js`.
+## JavaScript: Classic Runtime
 
-**Edit the numbered files in `js/runtime/`.** That is where the live UI code is.
+The classic browser runtime is declared by:
 
-### Standalone scripts loaded directly by index.html:
+`thomas/server/web/js/app_runtime_loader.js`
 
-```
-thomas/server/web/js/theme_rules.js            ← Theme engine (classic)
-thomas/server/web/js/token_economy_space.js    ← Space background engine
-thomas/server/web/js/token_economy.js          ← Token Economy module
-thomas/server/web/js/templates/tpl_settings.js ← Settings HTML template
-thomas/server/web/js/chat_themes.js            ← Chat shell theme data — DERIVES its
-                                                  values from css/tokens.css at load
-thomas/server/web/js/chat_connect_prompt.js    ← ChatGPT-connect overlay (factory)
-thomas/server/web/js/workspace_shell.js        ← Unified theme engine (all pages)
-```
+Its `RUNTIME_SCRIPTS` array is the complete ordered manifest. Every declared file
+is active. Filenames can be numbered or descriptive, and the set changes as
+features are added or split. Never infer the active set from a remembered numeric
+range or copy its current count into prose or tests.
 
-### CSS — WHERE TO EDIT (since the 2026-08-06 design unification):
+### Before editing a runtime module
 
-- `css/tokens.css` is THE design-token source: canonical `--c-*` palette, all
-  five theme blocks, the legacy-name bridge, reduced-motion and focus-visible
-  guards. The chat shell derives its theme payloads from this file at runtime.
-- `css/component_styles/` and `css/layout_styles/` hold the split component and
-  layout files (the old `components_parts/` / `layout_parts/` names are banned
-  by the monolith filename guard). `components.css` / `layout.css` /
-  `evolution.css` are @import hubs — edit the imported files, not the hubs.
+1. Search `thomas/server/web/js/runtime/` for the implementation.
+2. Confirm the exact filename appears in `RUNTIME_SCRIPTS`.
+3. Read adjacent manifest entries to understand dependency order.
+4. Search for other implementations before adding a new rendering path.
+5. If adding a file, add exactly one manifest entry and verify there are no
+   missing, duplicate, or unlisted runtime files.
+6. Run the affected source-level and browser-level tests.
 
-These are loaded by `<script>` tags in `index.html` and ARE active. Check `index.html` to confirm what's loaded.
+Useful checks:
 
-### DEAD FILES — deleted, watch for resurrection:
-
-`app_runtime_primary.mjs` (the pre-split monolith) and the `app_parts/`
-string-array files were DELETED on 2026-08-06/07 with approved records
-(`docs/deletions/`). Only `app_parts/GUARDRAILS.md` remains, guarded by
-`agent_safety.toml`. If any of these files reappear in a diff, that is a
-regression — do not merge it.
-
-### How to verify which JS files are live:
 ```bash
-# Check what index.html loads:
-grep '<script' thomas/server/web/index.html
-
-# Check the runtime loader manifest:
-grep "'" thomas/server/web/js/app_runtime_loader.js | head -50
-
-# Find which runtime file contains a function:
-grep -rn "function myFunction" thomas/server/web/js/runtime/
+rg -n "RUNTIME_SCRIPTS" thomas/server/web/js/app_runtime_loader.js
+rg -n "function_name_or_feature" thomas/server/web/js/runtime
+rg -n "<script" thomas/server/web/index.html
 ```
 
-## Rule: UI Cleanup — Delete Old Before Adding New
+`thomas/server/web/index.html` is the source of truth for scripts loaded directly
+outside `RUNTIME_SCRIPTS`. Do not maintain a second copied list in this document.
 
-**When you create new UI code, you MUST remove or disable the old version it replaces.**
+### Retired browser paths
 
-This is the single most common agent mistake in this codebase. The pattern:
-1. Agent A builds a feature in file X
-2. Agent B comes along, builds the same feature in file Y
-3. Both versions are live. The browser renders whichever loads last, or both fight
-4. User sees wrong/broken UI. Next agent is confused about which version is real.
+Only edit browser code reached from the live HTML shell, `RUNTIME_SCRIPTS`, or a
+normal import. Do not recreate a deleted bundle or parallel split tree because an
+old plan mentions it. `thomas/server/web/js/app_parts/GUARDRAILS.md` is a policy
+sentinel, not an executable runtime module.
 
-**Before writing any new UI rendering code:**
-1. Search for existing implementations: `grep -rn "<function_or_feature>" thomas/server/web/js/`
-2. If you find one, FIX IT or REPLACE IT in-place. Do not create a parallel version.
-3. If you must create a new file, DELETE or DISABLE the old rendering path in the same commit.
-4. Verify with `grep` that no other file still calls the old version.
+### CSS
 
-**You may NOT:**
-- Create `feature_v2.js` alongside `feature.js`
-- Add a new `mount()` function without removing the old one
-- Leave old `window.__moduleName` exports live when you've moved the logic elsewhere
-- Create new HTML template sections without removing the old HTML they replace
+- `thomas/server/web/css/tokens.css` is the design-token source.
+- `thomas/server/web/css/component_styles/` contains split component rules.
+- `thomas/server/web/css/layout_styles/` contains split layout rules.
+- `thomas/server/web/css/components.css`,
+  `thomas/server/web/css/layout.css`, and
+  `thomas/server/web/css/evolution.css` are import hubs. Edit the imported file
+  that owns the rule.
 
-## Python — WHERE TO EDIT
+Trace each stylesheet from `thomas/server/web/index.html` or the page being
+changed before assuming it is active.
 
-### Direct source files (edit these):
-```
-thomas/orchestrator/brain.py       <- Direct file, changes take effect
-thomas/specialists/*.py            <- Direct files
-thomas/agent/dispatch.py           <- Direct file (new)
-thomas/agent/chat_dispatcher.py    <- Direct file (new)
-thomas/core/events.py              <- Direct file
-```
+## Python: Normal Imports First
 
-### Monolith-loaded files (edit the PARTS, not the stub):
-```
-thomas/agent/loop.py               <- STUB — loads from loop_part01/02/03.py
-thomas/server/routes/chat_aiohttp.py <- STUB — loads from chat_aiohttp_part01/02/03.py
-scripts/crew/tasks/manager.py  <- STUB — loads from workboard_task_manager_part01/02/03/04.py
-```
+Thomas uses focused modules and normal imports by default. Do not create new
+`*_part*.py` files and do not add exec-based source loaders.
 
-For monolith-loaded files, the stub file (e.g. `loop.py`) does NOT contain code. It loads from part files (e.g. `loop_part01.py`, `loop_part02.py`). Edit the PARTS.
+These frequently misidentified files are normal source today:
 
-### ALWAYS clear bytecache after editing:
+- `thomas/agent/loop.py` is the live `AgentLoop` facade. It imports
+  `thomas/agent/loop_core.py`, `thomas/agent/loop_execution.py`,
+  `thomas/agent/loop_streaming.py`, `thomas/agent/loop_tools.py`, and other named
+  helpers.
+- `thomas/server/routes/chat_aiohttp.py` is a compatibility shim with normal
+  imports from `thomas/server/routes/chat_aiohttp_handlers.py` and
+  `thomas/server/routes/chat_aiohttp_helpers.py`.
+- `scripts/crew/tasks/manager.py` is a normal module that imports
+  `scripts/crew/tasks/base.py`, `scripts/crew/tasks/messages.py`,
+  `scripts/crew/tasks/plans.py`, `scripts/crew/tasks/reactivate.py`,
+  `scripts/crew/tasks/sessions.py`, and `scripts/crew/tasks/sweep.py`.
+
+Edit the named module that owns the behavior. Do not invent a part file because a
+historical document described one.
+
+### Residual loader compatibility
+
+Some branches can still contain migration-era `load_monolith_source` callers. The
+live callers are exactly the output of this command in the checkout being edited:
+
 ```bash
-find thomas -name "*.pyc" -delete
+rg -l "load_monolith_source" thomas --glob "*.py"
 ```
 
-Python caches compiled `.pyc` files in `__pycache__/` directories. If you don't clear them, Python may load OLD code even after you edit the source.
+Do not cache that output in documentation; parallel repairs can remove a caller.
+For every result:
 
-### Placeholder files (CANNOT be edited):
-```
-thomas/memory/episodic.py          <- PLACEHOLDER (stub with hash padding)
-thomas/memory/episodic_store.py    <- PLACEHOLDER
-thomas/memory/summarization.py     <- PLACEHOLDER
+1. Open the caller.
+2. Inspect its condition, fallback, and listed source files.
+3. Verify every referenced source file exists.
+4. Do not recreate an absent source fragment.
+5. Prefer the named-import path and prove the import surface with a focused test.
+
+A loader reference is migration debt, not a standing exception to the repository
+ban on new part files or exec-based loaders.
+
+## Chat and Specialist Paths
+
+The live web chat route is registered by
+`thomas/server/routes/chat_v2_registration.py` and handled by
+`thomas/server/routes/chat_v2.py`. The route gives the frontier model structured
+capabilities through `thomas/marketplace/orchestrator/brain.py`.
+
+`thomas/server/routes/chat_v2_registration.py` is the exclusive live registrar
+for `/api/chat` and `/api/v2/chat`.
+`thomas/server/routes/chat_aiohttp.py` is compatibility-only; it does not own
+either live route registration.
+
+The model can answer directly or issue a structured `send_task` call.
+`thomas/server/chat_delegation.py` validates and starts governed background work,
+and `thomas/server/worker_runtime.py` runs the standard `AgentLoop`. Task Manager
+is an explicit fallback path. No deterministic prose classifier owns this choice.
+
+Live specialist registration is in
+`thomas/server/routes/chat_v2_registration.py`. Registry behavior lives in
+`thomas/marketplace/orchestrator/registry.py`, and implementations live under
+`thomas/marketplace/specialists/`.
+
+## Memory Paths
+
+Start with `thomas/memory/store.py` and `thomas/memory/v2/`. Trace the configured
+store and caller before editing persistence. Do not infer a live implementation
+from a filename remembered from an older architecture.
+
+## Cache and Restart
+
+After changing Python, stop the foreground server with `Ctrl+C`. Clear only
+bytecode under the checked-out `thomas/` package, then restart the Click
+`thomas serve` surface.
+
+Windows PowerShell:
+
+```powershell
+Get-ChildItem -LiteralPath thomas -Recurse -File -Filter *.pyc | Remove-Item -Force
+.\.venv\Scripts\python.exe -m thomas serve
 ```
 
-These files are NOT real implementations. They're stubs. The runtime uses `.pyc` bytecache OR falls back to in-memory implementations defined in `thomas/memory/__init__.py`.
+POSIX shell:
+
+```bash
+find thomas -type f -name '*.pyc' -delete
+.venv/bin/python -m thomas serve
+```
+
+Do not kill every Python process on the machine; other Thomas tasks and unrelated
+applications may be using Python. After JavaScript or CSS changes, hard-refresh
+the affected page (`Ctrl+Shift+R` on Windows/Linux; `Cmd+Shift+R` on macOS).
 
 ## Verification Checklist
 
-Before committing any change:
+Before handing off a change:
 
-1. **Is the file I edited the one that actually runs?**
-   - JS runtime: Is it in `thomas/server/web/js/runtime/`? (the numbered files)
-   - JS standalone: Is it loaded by a `<script>` tag in `index.html`?
-   - JS dead code: the old monolith and `app_parts/` split files are deleted; if a diff resurrects them, reject it
-   - Python: Is it a direct file or a monolith part?
+1. **Entrypoint:** Did you identify the caller that executes the edited file?
+2. **Manifest/import:** Is the file declared or imported by that caller?
+3. **No duplicate path:** Did you search for an existing implementation first?
+4. **No invented parts:** Did you avoid new `*_part*.py` files and exec loaders?
+5. **Frontend correspondence:** Does `RUNTIME_SCRIPTS` correspond one-to-one with
+   the tracked JavaScript files under `thomas/server/web/js/runtime/`?
+6. **Chat ownership:** Does natural-language meaning remain with the frontier
+   model and structured capability call?
+7. **Focused proof:** Did the targeted tests and relevant runtime proof pass?
+8. **Cache discipline:** Did you use the platform-specific project bytecode
+   cleanup above before testing?
+9. **Counts:** Does the verification report say how many documents, links,
+   source paths, manifest entries, files, and tests it examined?
 
-2. **Did I remove the old version?**
-   - If I added new UI code, is there an old version still live? REMOVE IT.
-   - `grep` for the function/feature name across all JS files to confirm no duplicates.
+## Quick Reference
 
-3. **Did I clear the Python bytecache?**
-   ```bash
-   find thomas -name "*.pyc" -delete
-   ```
+| Change | Source of truth |
+|---|---|
+| Chat route and model capabilities | `thomas/server/routes/chat_v2.py` |
+| Chat route/specialist registration | `thomas/server/routes/chat_v2_registration.py` |
+| Model orchestration | `thomas/marketplace/orchestrator/brain.py` |
+| Background delegation | `thomas/server/chat_delegation.py` |
+| Worker execution | `thomas/server/worker_runtime.py` and `thomas/agent/loop.py` |
+| Runtime JavaScript | `RUNTIME_SCRIPTS` in `thomas/server/web/js/app_runtime_loader.js` |
+| Direct browser assets | `thomas/server/web/index.html` |
+| Design tokens | `thomas/server/web/css/tokens.css` |
+| Component CSS | `thomas/server/web/css/component_styles/` |
+| Layout CSS | `thomas/server/web/css/layout_styles/` |
+| Memory | `thomas/memory/store.py` and `thomas/memory/v2/` |
+| Crew task manager | `scripts/crew/tasks/manager.py` and its named imports |
 
-4. **Does the user need to hard-refresh the browser?**
-   - Yes, for any JS change: `Ctrl+Shift+R`
-
-5. **Does the user need to restart the server?**
-   - Yes, for any Python change: kill Python processes, run `run-ui.cmd`
-
-## How the Monolith Source Loader Works (Python only)
-
-```python
-# In loop.py (the stub):
-load_monolith_source(
-    base_path=Path(__file__),
-    part_files=("loop_part01.py", "loop_part02.py", "loop_part03.py"),
-    namespace=globals(),
-)
-```
-
-This reads the part files, concatenates them, and exec()s the result. The stub file's namespace gets populated with all the classes/functions from the parts. So `from thomas.agent.loop import AgentLoop` works even though AgentLoop is defined in `loop_part02.py`.
-
-## Architecture Quick Reference
-
-| Component | Where To Edit | How It Loads |
-|-----------|--------------|-------------|
-| Chat UI behavior | `js/runtime/010-014_*.js` | Split runtime loader |
-| Settings UI | `js/runtime/040-045_*.js` | Split runtime loader |
-| DOM refs & constants | `js/runtime/001_preamble.js` | Split runtime loader |
-| Module rendering | `js/runtime/038-039_*.js` | Split runtime loader |
-| Token Economy widget | `js/token_economy.js` | Direct `<script>` in index.html |
-| Space background | `js/token_economy_space.js` | Direct `<script>` in index.html |
-| Settings template | `js/templates/tpl_settings.js` | Direct `<script>` in index.html |
-| Orchestrator brain | `thomas/orchestrator/brain.py` | Direct import |
-| Specialists | `thomas/specialists/*.py` | Direct import |
-| Agent loop | `thomas/agent/loop_part01/02/03.py` | Monolith loader |
-| Chat route | `thomas/server/routes/chat_aiohttp_part01/02/03.py` | Monolith loader |
-| Dispatch router | `thomas/agent/dispatch.py` | Direct import |
-| Memory engine | `thomas/memory/__init__.py` | Direct (episodic is placeholder) |
-| Workboard scripts | `scripts/workboard_*_part*.py` | Monolith loader |
+The focused regression contract for this document is
+`tests/test_documentation_truth.py`.

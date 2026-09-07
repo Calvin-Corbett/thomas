@@ -173,6 +173,34 @@ def test_autonomous_promotes_every_verified_goal(tmp_path):
     assert len(state["history"]) == 3
 
 
+def test_loop_done_reports_attempted_goals_without_claiming_nothing_is_left(tmp_path):
+    goal = _goal("g1", "refactor", "low")
+    signals = {"editable_broad_handlers": 40, "stale_files": 38}
+    events: list[dict] = []
+    rec = _Recorder()
+
+    def planner(root, *, focus="", categories=None):
+        _ = root, focus, categories
+        return EvolveBacklog(goals=[goal], signals=signals)
+
+    state = run_evolve_loop(
+        tmp_path,
+        posture="autonomous",
+        max_iterations=10,
+        max_promotions=10,
+        planner=planner,
+        session_runner=rec.run,
+        promoter=rec.promote,
+        event_sink=events.append,
+    )
+
+    done_events = [event for event in events if event["type"] == "loop_done"]
+    assert len(done_events) == 1
+    assert done_events[0]["reason"] == "no unattempted eligible goals remain"
+    assert done_events[0]["signals"] == signals
+    assert state["signals"] == signals
+
+
 def test_autonomous_holds_loop_file_candidate_for_human_approval(tmp_path):
     goals = [_goal("loop-risk", "refactor", "low")]
     rec = _Recorder()

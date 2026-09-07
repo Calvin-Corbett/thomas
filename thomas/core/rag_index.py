@@ -64,6 +64,7 @@ from thomas.core.rag_indexer import (
 from thomas.core.rag_search import (
     _parse_query,
     _QuerySpec,
+    cap_per_file,
     chroma_search_impl,
     ensure_fts_impl,
     fts_delete_file_impl,
@@ -104,6 +105,7 @@ class RagIndex:
         self._embed_lock = threading.Lock()
         self._client = None
         self._collection = None
+        self._semantic_unavailable = ""
         self._embedder = None
 
         self._manifest_path = self.persist_dir / MANIFEST_NAME
@@ -186,7 +188,9 @@ class RagIndex:
         pe.set_fact("rag.last_update", str(p))
         pe.set_fact("rag.last_update_enqueued_ts", _now_iso())
 
-    def search(self, query: str, k: int = 5, filter_ext: str | None = None) -> list[dict[str, Any]]:
+    def search(
+        self, query: str, k: int = 5, filter_ext: str | None = None, max_per_file: int = 1
+    ) -> list[dict[str, Any]]:
         """Hybrid semantic+lexical search with advanced query operators.
 
         Returns a list of dicts:
@@ -249,7 +253,7 @@ class RagIndex:
 
         if sem and lex:
             fused = _rrf_fuse(sem, lex, k0=60)
-            fused = fused[:k]
+            fused = cap_per_file(fused, max_per_file)[:k]
             return [
                 format_result(
                     r, maybe_render_fn=lambda **kw: maybe_render_from_disk(**kw, root_dir=self._get_root_dir())
@@ -258,7 +262,7 @@ class RagIndex:
             ]
 
         base = sem if sem else lex
-        base = base[:k]
+        base = cap_per_file(base, max_per_file)[:k]
         return [
             format_result(r, maybe_render_fn=lambda **kw: maybe_render_from_disk(**kw, root_dir=self._get_root_dir()))
             for r in base
@@ -561,15 +565,29 @@ class RagIndex:
     # -------------------------
 
     def _ensure_chroma(self, load_embedder: bool) -> None:
-        """Ensure Chroma collection exists and embedder is loaded if requested."""
+        """Open the Chroma collection, or record that the semantic half is absent.
+
+        ``chromadb`` is a declared dependency nowhere in this project, so on a
+        clean install this raises - and until 2026-09-03 that escaped
+        ``__init__``, making the index unconstructable and unused for months.
+        The lexical half needs only SQLite, so a missing semantic half degrades
+        to lexical-only; ``search`` treats an empty semantic result as normal.
+        """
         with self._lock:
-            if self._collection is None:
+            if self._collection is None and not self._semantic_unavailable:
                 self.persist_dir.mkdir(parents=True, exist_ok=True)
-                self._client, self._collection = _make_chroma_collection(
-                    persist_dir=str(self.persist_dir),
-                    collection_name=self.collection_name,
-                )
-        if load_embedder and self._embedder is None:
+                try:
+                    self._client, self._collection = _make_chroma_collection(
+                        persist_dir=str(self.persist_dir),
+                        collection_name=self.collection_name,
+                    )
+                except Exception as exc:  # missing dependency, unreadable store
+                    self._semantic_unavailable = str(exc) or "chroma unavailable"
+                    logger.info(
+                        "RAG: semantic search unavailable (%s); lexical index still serves queries.",
+                        self._semantic_unavailable,
+                    )
+        if load_embedder and self._embedder is None and not self._semantic_unavailable:
             emb = _load_embedder(self.model_name)
             with self._lock:
                 self._embedder = emb
@@ -677,15 +695,20 @@ class RagIndex:
         # lexical first
         self._fts_upsert_chunks(fts_rows)
 
-        # semantic
+        # Only when that half exists: embedding first would crash the build on a
+        # machine with no chromadb, losing the lexical rows written just above.
         self._ensure_chroma(load_embedder=True)
-        embeddings = self._embed(documents)
-
         with self._lock:
-            if self._collection is None:
-                return
-            self._collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+            semantic_ready = self._collection is not None
+        if semantic_ready:
+            embeddings = self._embed(documents)
+            with self._lock:
+                if self._collection is not None:
+                    self._collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
 
+        # Written whether or not the semantic half ran: the manifest is what
+        # makes a rebuild incremental.
+        with self._lock:
             self._manifest.setdefault("files", {})
             self._manifest["files"][file_key] = {
                 "sha1": sha1,

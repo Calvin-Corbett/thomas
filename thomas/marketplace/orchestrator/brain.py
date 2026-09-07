@@ -34,7 +34,6 @@ from thomas.marketplace.orchestrator.protocol import (
     DelegationContract,
     DelegationPhase,
     DelegationResult,
-    RouteDecision,
     SpecialistStatus,
 )
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
@@ -42,9 +41,16 @@ from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 log = logging.getLogger(__name__)
 
 
-def _chat_failure_message(error: str | None) -> str:
+def _chat_failure_message(
+    error: str | None,
+    *,
+    attempts: int = 1,
+    partial_output: bool = False,
+) -> str:
     """Turn provider failures into useful guidance without leaking internals."""
     detail = str(error or "").strip().lower()
+    retry_note = " I retried once, but it still failed." if attempts > 1 else ""
+    partial_note = " The text above was preserved." if partial_output else ""
     # Remember a rejected credential so /api/health can report that chat is
     # broken, instead of every message rediscovering it independently.
     try:
@@ -76,9 +82,12 @@ def _chat_failure_message(error: str | None) -> str:
         )
     if "rate-limit" in detail or "rate limit" in detail or "status 429" in detail:
         return "The selected model is temporarily rate-limited. Please wait a moment or choose another model."
-    if any(token in detail for token in ("connection", "connecterror", "timed out", "timeout")):
-        return "I couldn't reach the selected model. I retried once; please check that it is running and try again."
-    return "I couldn't get an answer from the selected model. I retried once; please try again or choose another model."
+    if any(token in detail for token in ("timed out", "timeout")):
+        return f"The selected model timed out before it could finish.{retry_note}{partial_note} Please try again."
+    if any(token in detail for token in ("connection", "connecterror")):
+        return f"I couldn't reach the selected model.{retry_note}{partial_note} Please check that it is running and try again."
+    answer_kind = "a complete answer" if partial_output else "an answer"
+    return f"I couldn't get {answer_kind} from the selected model.{retry_note}{partial_note} Please try again or choose another model."
 
 
 _STATUS_ACTIVE_STATES = {"queued", "requested", "classified", "claimed", "executing", "running", "in_progress"}
@@ -454,65 +463,6 @@ class OrchestratorBrain:
         _mark_completions_reported(session_id, fresh_completions)
         return conversation
 
-    async def _handle_background_status(
-        self,
-        session_id: str,
-        conversation: ConversationManager,
-        prompt: str,
-        dispatcher: EventDispatcher,
-        turn_start: float,
-        active_tasks: list[dict[str, Any]] | None = None,
-        completion_note: str = "",
-    ) -> ConversationManager:
-        # The status summary below already reports completed work directly from
-        # active_tasks; completion_note is accepted so the central per-turn dedup
-        # (computed in process_message) covers this branch and a finished task is
-        # not re-announced on the next casual turn.
-        _ = completion_note
-        final_text = _summarize_background_status(active_tasks)
-        chunk_size = 80
-        for i in range(0, len(final_text), chunk_size):
-            await dispatcher.emit_text(final_text[i : i + chunk_size])
-
-        conversation = conversation.append_message(
-            "assistant",
-            final_text,
-            metadata={"specialists": ["reasoning"], "mode": "background_status"},
-        )
-
-        try:
-            memory_coord = MemoryCoordinator(
-                self.memory_engine,
-                session_id,
-                context_budget=_MODE_BUDGETS.get("fast", 1_500),
-                policy=getattr(self.runtime_policy, "memory", None),
-            )
-            await memory_coord.capture_episode(
-                turn_number=conversation.length // 2,
-                user_message=prompt,
-                assistant_response=final_text[:500],
-                thinking="background_status",
-                tool_calls=[],
-                specialist="reasoning",
-            )
-        except Exception as exc:
-            log.debug("Background status episode capture skipped: %s", exc)
-
-        elapsed = int((time.monotonic() - turn_start) * 1000)
-        await dispatcher.emit_done(
-            session_id=session_id,
-            conversation_version=conversation.version,
-            thinking_summary="background_status",
-            total_thinking_ms=0,
-            iterations=1,
-            tool_calls=0,
-            tokens_used=0,
-            specialists_used=["reasoning"],
-            total_elapsed_ms=elapsed,
-        )
-
-        return conversation
-
     async def _handle_casual(
         self,
         session_id: str,
@@ -585,22 +535,41 @@ class OrchestratorBrain:
             images=images,
         )
 
-        final_text = result.content if result.ok else _chat_failure_message(result.error)
+        result_attempts = int(getattr(result, "attempts", 0) or 0)
+        result_iterations = int(getattr(result, "iterations", 0) or 0)
+        partial_text = result.content if result.content.strip() else ""
         if result.ok:
             # The model authored the reply (and, with the completion note in its
             # context above, the finished-work report is part of it). It already
             # streamed via the specialist — no canned prefix added.
-            saved_text = final_text
+            saved_text = result.content
+            if not saved_text.strip() and delivered_prefix:
+                # A tool-only turn reaches here with nothing to save. The work
+                # still has to be reported: without this the turn is a blank
+                # assistant message, which reads as "nothing happened" for a
+                # run that finished the thing it was asked to do.
+                await dispatcher.emit_text(delivered_prefix)
+                saved_text = delivered_prefix
         else:
             # The model failed, so fall back to delivering any finished-work note
             # deterministically — a completed task must never be silently lost on an
             # error turn.
-            if delivered_prefix:
-                await dispatcher.emit_text(delivered_prefix + "\n\n")
-            chunk_size = 80
-            for i in range(0, len(final_text), chunk_size):
-                await dispatcher.emit_text(final_text[i : i + chunk_size])
-            saved_text = f"{delivered_prefix}\n\n{final_text}".strip() if delivered_prefix else final_text
+            failure_text = _chat_failure_message(
+                result.error,
+                attempts=result_attempts,
+                partial_output=bool(partial_text),
+            )
+            suffix = "\n\n".join(part for part in (delivered_prefix, failure_text) if part)
+            if partial_text:
+                # Text events have already reached the wire. Append only the honest
+                # terminal explanation, then persist the same combined transcript.
+                await dispatcher.emit_text("\n\n" + suffix)
+                saved_text = f"{partial_text.rstrip()}\n\n{suffix}"
+            else:
+                chunk_size = 80
+                for i in range(0, len(suffix), chunk_size):
+                    await dispatcher.emit_text(suffix[i : i + chunk_size])
+                saved_text = suffix
         conversation = conversation.append_message(
             "assistant",
             saved_text,
@@ -611,7 +580,7 @@ class OrchestratorBrain:
         await memory_coord.capture_episode(
             turn_number=conversation.length // 2,
             user_message=prompt,
-            assistant_response=final_text[:500],
+            assistant_response=saved_text[:500],
             thinking=reply_kind,
             tool_calls=result_tool_calls,
             specialist="reasoning",
@@ -623,197 +592,11 @@ class OrchestratorBrain:
             conversation_version=conversation.version,
             thinking_summary=reply_kind,
             total_thinking_ms=0,
-            iterations=1,
+            iterations=result_iterations,
+            attempts=result_attempts,
             tool_calls=len(result_tool_calls),
             tokens_used=result.tokens_used,
             specialists_used=["reasoning"],
-            total_elapsed_ms=elapsed,
-        )
-
-        return conversation
-
-    async def _handle_actionable(
-        self,
-        session_id: str,
-        conversation: ConversationManager,
-        prompt: str,
-        dispatcher: EventDispatcher,
-        mode: str,
-        autonomy_level: int,
-        token_economy: str,
-        turn_start: float,
-        images: list[dict[str, Any]] | None = None,
-        completion_note: str = "",
-    ) -> ConversationManager:
-        """Handle actionable messages — route to specialists, dispatch work.
-
-        No canned acknowledgment is emitted: the only user-visible text is the
-        specialist's actual model output. (Calvin: an instantaneous templated
-        reply isn't the AI replying — it defeats the point.) The work:
-
-        1. Route to best specialist(s) via LLM classification
-        2. Dispatch specialist work
-        3. Stream the real results as they complete
-        4. Thomas stays responsive for follow-up messages
-
-        This is the core of the dispatch-first architecture.
-        """
-        thinking = ThinkingTracker()
-        memory_coord = MemoryCoordinator(
-            self.memory_engine,
-            session_id,
-            context_budget=_MODE_BUDGETS.get(mode, 4_000),
-            policy=getattr(self.runtime_policy, "memory", None),
-        )
-
-        # ── Refresh memory ────────────────────────────────────────
-        thinking.start(DelegationPhase.PLANNING.value)
-        memory_ctx = await memory_coord.refresh(
-            prompt=prompt,
-            conversation=conversation,
-            iteration=0,
-        )
-        # If a background task just finished, report it before handling this new
-        # actionable ask, so a completed task surfaces even when the user's next
-        # message is itself a fresh request. The specialist also gets the note in
-        # context; the deterministic line guarantees delivery because an actionable
-        # specialist won't reliably volunteer a prior task's completion on its own.
-        # Deliver any just-finished background work as a factual notification before
-        # handling this new actionable ask, so a completed task surfaces even when the
-        # user's next message is itself a fresh request. We do NOT also inject it into
-        # the specialist's context — that would double-report (the specialist would
-        # restate what this line already delivered). This is a status notification of
-        # OTHER work (like the accepted in-thread completion bubble), not a canned ack
-        # of the current request.
-        actionable_completion_prefix = _completion_delivery_line(completion_note) if completion_note else ""
-        if actionable_completion_prefix:
-            await dispatcher.emit_text(actionable_completion_prefix + "\n\n")
-        has_recalled_memory = bool(memory_ctx.episodic or memory_ctx.semantic)
-        if has_recalled_memory:
-            await dispatcher.emit_memory_refresh(
-                layer="all",
-                total_tokens=memory_ctx.total_tokens,
-            )
-
-        # ── Route to specialists ──────────────────────────────────
-        thinking.append("Using Thomas's model-owned conversation path...")
-        route = RouteDecision(
-            specialists=["reasoning"],
-            parallel=False,
-            reasoning="Structured model tools own downstream selection",
-            confidence=1.0,
-        )
-        thinking.append(f"Route: {route.reasoning}")
-        thinking.end()
-
-        for event in thinking.events():
-            await dispatcher.emit(event)
-
-        # ── Delegate to specialists ───────────────────────────────
-        all_results: list[DelegationResult] = []
-        specialists_used: list[str] = []
-
-        if route.parallel and len(route.specialists) > 1:
-            all_results = await self._dispatch_parallel(
-                session_id=session_id,
-                specialists=route.specialists,
-                prompt=prompt,
-                conversation=conversation,
-                memory_ctx=memory_ctx,
-                dispatcher=dispatcher,
-                thinking=thinking,
-                mode=mode,
-                autonomy_level=autonomy_level,
-                token_economy=token_economy,
-                images=images,
-            )
-        else:
-            for specialist_id in route.specialists:
-                result = await self._dispatch_single(
-                    session_id=session_id,
-                    specialist_id=specialist_id,
-                    prompt=prompt,
-                    conversation=conversation,
-                    memory_ctx=memory_ctx,
-                    dispatcher=dispatcher,
-                    thinking=thinking,
-                    mode=mode,
-                    autonomy_level=autonomy_level,
-                    token_economy=token_economy,
-                    images=images,
-                )
-                all_results.append(result)
-                if result.ok:
-                    specialists_used.append(specialist_id)
-
-        # ── Synthesise response ───────────────────────────────────
-        final_text = await self._synthesise(
-            prompt=prompt,
-            results=all_results,
-            memory_ctx=memory_ctx,
-            mode=mode,
-        )
-
-        # FIX (2026-03-18): Safety net — strip any leaked routing JSON from
-        # the response. If the specialist or routing LLM accidentally returned
-        # internal JSON (e.g. {"specialists":...}), remove it before streaming.
-        if final_text:
-            import re as _re
-
-            final_text = _re.sub(
-                r'\{"specialists"\s*:\s*\[.*?\]\s*,\s*"parallel"\s*:.*?\}',
-                "",
-                final_text,
-            ).strip()
-
-        # Stream the specialist's actual response
-        chunk_size = 80
-        for i in range(0, len(final_text), chunk_size):
-            await dispatcher.emit_text(final_text[i : i + chunk_size])
-
-        # Fold the finished-work notification (already streamed above, if any) into
-        # history so it persists. Never a canned ack of the current request.
-        full_response = (
-            f"{actionable_completion_prefix}\n\n{final_text}".strip() if actionable_completion_prefix else final_text
-        )
-
-        # ── Update conversation ───────────────────────────────────
-        conversation = conversation.append_message(
-            "assistant",
-            full_response,
-            metadata={
-                "specialists": specialists_used,
-                "thinking_ms": thinking.total_ms,
-                "mode": mode,
-                "token_economy": str(token_economy or "optimal"),
-            },
-        )
-
-        # ── Capture episode ───────────────────────────────────────
-        tool_calls = []
-        for r in all_results:
-            tool_calls.extend(r.tool_calls)
-
-        await memory_coord.capture_episode(
-            turn_number=conversation.length // 2,
-            user_message=prompt,
-            assistant_response=full_response[:500],
-            thinking=thinking.total_text[:300],
-            tool_calls=tool_calls,
-            specialist=", ".join(specialists_used),
-        )
-
-        # ── Emit done ─────────────────────────────────────────────
-        elapsed = int((time.monotonic() - turn_start) * 1000)
-        await dispatcher.emit_done(
-            session_id=session_id,
-            conversation_version=conversation.version,
-            thinking_summary=thinking.summary(),
-            total_thinking_ms=thinking.total_ms,
-            iterations=sum(r.iterations for r in all_results),
-            tool_calls=len(tool_calls),
-            tokens_used=sum(r.tokens_used for r in all_results),
-            specialists_used=specialists_used,
             total_elapsed_ms=elapsed,
         )
 
@@ -1039,6 +822,7 @@ class OrchestratorBrain:
             # pre-output failure from becoming the opaque "Sorry" response while also
             # ensuring tools and partial answers are never replayed.
             for attempt in range(2):
+                result.attempts = attempt + 1
                 result.error = None
                 content_parts = []
                 tool_calls = []
@@ -1096,29 +880,60 @@ class OrchestratorBrain:
             # Drop broken sandbox/local-path links the model may have inlined
             # (e.g. [Download](sandbox:/mnt/data/x.pdf)); the real deliverable
             # ships as an attached artifact card.
-            result.content = strip_sandbox_links("".join(content_parts))
+            # Stripping is deliberately skipped on the error path: that text
+            # already streamed to the screen verbatim, and rewriting it here
+            # would leave saved history disagreeing with what was displayed.
+            # A dead sandbox: link does survive on that path — the honest fix
+            # is to stop emitting it upstream, which a post-hoc pass over a
+            # token stream cannot do (a link can split across two chunks).
+            joined_content = "".join(content_parts)
+            result.content = strip_sandbox_links(joined_content) if result.error is None else joined_content
             result.tool_calls = tool_calls
             result.thinking = "\n".join(specialist_thinking)
             result.elapsed_ms = elapsed
             result.iterations = iterations
-            result.status = SpecialistStatus.COMPLETED if result.error is None else SpecialistStatus.FAILED
+            if result.error is None:
+                result.status = SpecialistStatus.COMPLETED
+            elif any(token in str(result.error).lower() for token in ("timed out", "timeout")):
+                result.status = SpecialistStatus.TIMEOUT
+            else:
+                result.status = SpecialistStatus.FAILED
 
             # Validate output against contract
             thinking.start(DelegationPhase.VALIDATING.value)
-            if contract.validate_output({"content": result.content}):
+            if result.error is not None:
+                thinking.append(f"{specialist_id} ended with {result.status.value} ({elapsed}ms)")
+            elif contract.validate_output({"content": result.content}):
                 thinking.append(f"{specialist_id} completed successfully ({elapsed}ms)")
+            elif result.tool_calls and not result.content.strip():
+                # The contract asks for prose, and this turn has none — but the
+                # tools ran and nothing errored, so the work happened. Calling
+                # it FAILED here made _handle_casual replace the turn with "I
+                # couldn't get an answer from the selected model", which is
+                # untrue of a run that just created the task it was asked for.
+                thinking.append(f"{specialist_id} acted through tools without closing prose ({elapsed}ms)")
             else:
                 thinking.append(f"{specialist_id} output failed contract validation")
                 result.status = SpecialistStatus.FAILED
             thinking.end()
 
         except asyncio.TimeoutError:
+            result.attempts = max(1, result.attempts)
             result.status = SpecialistStatus.TIMEOUT
             result.error = f"Specialist {specialist_id} timed out after {contract.timeout_seconds}s"
+            result.content = "".join(content_parts)
+            result.tool_calls = tool_calls
+            result.thinking = "\n".join(specialist_thinking)
+            result.iterations = iterations
             result.elapsed_ms = int((time.monotonic() - start) * 1000)
         except Exception as exc:
+            result.attempts = max(1, result.attempts)
             result.status = SpecialistStatus.FAILED
             result.error = str(exc)
+            result.content = "".join(content_parts)
+            result.tool_calls = tool_calls
+            result.thinking = "\n".join(specialist_thinking)
+            result.iterations = iterations
             result.elapsed_ms = int((time.monotonic() - start) * 1000)
             log.error("Specialist %s failed: %s", specialist_id, exc)
 

@@ -147,15 +147,42 @@ def _check_pushed(report: _Report, remote: str, branch: str) -> None:
         report.passed("code_is_pushed")
 
 
+def _tag_sha(version: str) -> str | None:
+    """Resolve `refs/tags/v{version}` to its commit sha via an EXACT ref-path
+    match, or `None` if it does not exist. `git show-ref --verify` performs
+    NO DWIM fallback disambiguation, unlike `git rev-parse --verify` or a
+    bare name handed straight to `git merge-base` -- both of those retry a
+    name that fails its own exact lookup under `refs/`, `refs/tags/`,
+    `refs/heads/` in turn (gitrevisions(7)). That matters here: a local
+    branch can be created with any exact string, slashes included (`git
+    branch refs/tags/v1.2.3 <sha>` is legal), so a same-named branch could
+    otherwise stand in for the tag this gate means to check -- the exact
+    class fixed in scripts/crew/workboard/claim_evidence.py (`_ref_resolves`,
+    "the last ref trick"), mirrored here.
+    """
+    code, out, _ = _run("git", "show-ref", "--verify", f"refs/tags/v{version}")
+    if code != 0 or not out:
+        return None
+    line = out.strip().splitlines()[0] if out.strip() else ""
+    if not line:
+        return None
+    sha = line.split(maxsplit=1)[0].strip()
+    return sha or None
+
+
 def _check_tag(report: _Report, version: str, remote: str, *, remote_calls: bool) -> None:
-    code, _ = _git("rev-parse", "-q", "--verify", f"refs/tags/v{version}")
-    if code != 0:
+    tag_sha = _tag_sha(version)
+    if tag_sha is None:
         report.fail("tag_exists", f"no git tag v{version} - tag the release commit")
         return
     report.passed("tag_exists")
 
-    # A tag on a commit nobody shipped is a tag that lies about what is released.
-    code, _ = _git("merge-base", "--is-ancestor", f"v{version}^{{commit}}", "HEAD")
+    # A tag on a commit nobody shipped is a tag that lies about what is
+    # released. Pass the sha already resolved above -- never the bare
+    # `v{version}^{{commit}}` name -- so merge-base cannot re-run git's
+    # ordinary DWIM resolution and match a same-named lookalike ref instead
+    # of the tag `tag_exists` just confirmed.
+    code, _ = _git("merge-base", "--is-ancestor", tag_sha, "HEAD")
     if code != 0:
         report.fail(
             "tag_points_at_shipped_code",

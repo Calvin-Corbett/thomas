@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from thomas.work.connectors import installed_connector_ids
+
 _PHASES = {"goal_discovery", "workflow_mapping", "workflow_configuration"}
 _WORKFLOW_TYPES = {"manual", "scheduled", "event"}
 
@@ -22,6 +24,17 @@ def _workflow_id(value: Any) -> str:
     if any(not (char.isalnum() or char in "-_") for char in result):
         raise ValueError("workflow id may contain only letters, numbers, hyphens, and underscores")
     return result
+
+
+def _installed_only(values: Any) -> list[str]:
+    """The connector ids among ``values`` that Thomas actually has, lowercased, in order."""
+    installed = installed_connector_ids()
+    kept: list[str] = []
+    for value in values:
+        key = str(value or "").strip().lower()
+        if key in installed and key not in kept:
+            kept.append(key)
+    return kept
 
 
 def validate_work_onboarding_state(
@@ -62,9 +75,13 @@ def validate_work_onboarding_state(
                 "name": _text(raw.get("name"), field="workflow name", max_length=80, required=True),
                 "purpose": _text(raw.get("purpose"), field="workflow purpose", max_length=280, required=True),
                 "type": workflow_type,
-                "connector_suggestions": [
+                # Only ids the store will accept. The model filled this field
+                # freely once ("HTTP request", "Mission Control inbox") and the
+                # job could not be created at all; a suggestion is advice, and
+                # advice about a connector that is not installed is dropped here.
+                "connector_suggestions": _installed_only(
                     _text(value, field="connector id", max_length=80, required=True) for value in connectors[:20]
-                ],
+                ),
             }
         )
 

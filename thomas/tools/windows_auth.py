@@ -149,6 +149,11 @@ class WindowsAuthGate:
         except (OSError, pywintypes.error):
             username = ""
 
+        # pywin32's seventh argument is the CREDUI_INFO structure, as a dict.
+        # Passing the message text there raised ``TypeError: CREDUI_INFO must
+        # be a dict`` before any dialog appeared, and that TypeError escaped
+        # the gate, so no native authorization ever reached the user.
+        ui_info = {"MessageText": message, "CaptionText": "Thomas authorization"}
         try:
             result, _username, _password, _saved = win32cred.CredUIPromptForCredentials(
                 target,  # TargetName
@@ -157,11 +162,13 @@ class WindowsAuthGate:
                 "",  # Password
                 False,  # Save
                 flags,  # Flags
-                message,  # MessageText
+                ui_info,  # UiInfo (CREDUI_INFO)
             )
             # result == 0 means ERROR_SUCCESS (user confirmed)
             return result == 0
-        except (OSError, pywintypes.error) as e:
+        except (OSError, TypeError, ValueError, pywintypes.error) as e:
+            # A prompt that cannot be shown is a denial, never a crash in the
+            # tool that asked for it.
             log.error("WindowsAuthGate: dialog error: %s", e)
             return False
 

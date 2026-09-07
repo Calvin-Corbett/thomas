@@ -9,10 +9,11 @@ Design goals:
 
 Public API:
 - init_db(path)
-- create_run(metadata) -> run_id
+- create_run(metadata) -> run_id  (metadata["pinned"]=True protects an open run from retention)
 - append_event(run_id, event_type, payload, t_ms, seq)
-- finalize_run(run_id, ok, error, iterations, tool_calls, usage)
+- finalize_run(run_id, ok, error, iterations, tool_calls, usage)  (also clears pinned)
 - mark_run_dead(run_id, error) -> int
+- pinned_skip_count() -> int  (cumulative pinned runs retention has skipped)
 - reconcile_orphaned_runs(started_before, reason) -> int
 - reconcile_stale_runs(idle_seconds, now_iso, reason) -> int
 - list_runs(limit, offset, filters)
@@ -91,6 +92,25 @@ def _unregister_writer(writer: ThreadedRunWriter) -> None:
         _ACTIVE_WRITERS.discard(writer)
 
 
+def get_active_writer(run_id: str) -> ThreadedRunWriter | None:
+    """The registered ThreadedRunWriter currently writing `run_id`, if any.
+
+    A run can have a dedicated in-process writer (e.g. the chat route's
+    per-turn streaming writer) whose `.record()` assigns its own seq
+    counter. A second in-process writer to the SAME run_id (e.g. the
+    honesty-spine capture hook) must obtain seqs from this same writer
+    instead of an independent counter -- two counters both starting at 0 on
+    one run_id collide, since `(run_id, seq)` has no uniqueness constraint.
+    Returns None when no writer is registered, so the caller can fall back
+    to its own counter (safe for ambient/CLI paths with no writer at all).
+    """
+    with _ACTIVE_WRITERS_LOCK:
+        for writer in _ACTIVE_WRITERS:
+            if writer.run_id == run_id:
+                return writer
+    return None
+
+
 def create_run(metadata: dict[str, Any]) -> str:
     db = _require_db()
     run_id = metadata.get("run_id") or uuid.uuid4().hex
@@ -109,14 +129,20 @@ def create_run(metadata: dict[str, Any]) -> str:
         "tool_calls": metadata.get("tool_calls"),
         "usage_json": _json_dumps(metadata.get("usage_json")) if metadata.get("usage_json") is not None else None,
         "thomas_version": metadata.get("thomas_version"),
+        "pinned": 1 if metadata.get("pinned") else 0,
+        # claims-verification binding (phase 2 batch 1, recon #7a): the
+        # claiming task_id, when a caller has one, so run-kind evidence can
+        # bind by exact token instead of only `not_before`. See
+        # claim_evidence.py's BINDING SEMANTICS docstring.
+        "task_id": metadata.get("task_id"),
     }
     with _connect(db) as conn:
         conn.execute(
             """
             INSERT INTO runs
-            (run_id, session_id, started_at, ended_at, profile, model_id, mode, ok, error, iterations, tool_calls, usage_json, thomas_version)
+            (run_id, session_id, started_at, ended_at, profile, model_id, mode, ok, error, iterations, tool_calls, usage_json, thomas_version, pinned, task_id)
             VALUES
-            (:run_id, :session_id, :started_at, :ended_at, :profile, :model_id, :mode, :ok, :error, :iterations, :tool_calls, :usage_json, :thomas_version)
+            (:run_id, :session_id, :started_at, :ended_at, :profile, :model_id, :mode, :ok, :error, :iterations, :tool_calls, :usage_json, :thomas_version, :pinned, :task_id)
             """,
             row,
         )
@@ -154,7 +180,7 @@ def finalize_run(
         conn.execute(
             """
             UPDATE runs
-            SET ended_at = ?, ok = ?, error = ?, iterations = ?, tool_calls = ?, usage_json = ?
+            SET ended_at = ?, ok = ?, error = ?, iterations = ?, tool_calls = ?, usage_json = ?, pinned = 0
             WHERE run_id = ?
             """,
             (
@@ -266,7 +292,7 @@ def list_runs(limit: int = 50, offset: int = 0, filters: dict[str, Any] | None =
             rows = conn.execute(
                 """
                 SELECT run_id, session_id, started_at, ended_at, profile, model_id, mode, ok, error,
-                       iterations, tool_calls, usage_json, thomas_version
+                       iterations, tool_calls, usage_json, thomas_version, task_id
                 FROM runs r
                 WHERE (? IS NULL OR r.session_id = ?)
                   AND (? IS NULL OR r.profile = ?)
@@ -302,7 +328,7 @@ def list_runs(limit: int = 50, offset: int = 0, filters: dict[str, Any] | None =
             rows = conn.execute(
                 """
                 SELECT run_id, session_id, started_at, ended_at, profile, model_id, mode, ok, error,
-                       iterations, tool_calls, usage_json, thomas_version
+                       iterations, tool_calls, usage_json, thomas_version, task_id
                 FROM runs r
                 WHERE (? IS NULL OR r.session_id = ?)
                   AND (? IS NULL OR r.profile = ?)
@@ -342,7 +368,7 @@ def get_run(run_id: str) -> dict[str, Any]:
         run_row = conn.execute(
             """
             SELECT run_id, session_id, started_at, ended_at, profile, model_id, mode, ok, error,
-                   iterations, tool_calls, usage_json, thomas_version
+                   iterations, tool_calls, usage_json, thomas_version, task_id
             FROM runs WHERE run_id = ?
             """,
             (run_id,),
@@ -690,7 +716,9 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             iterations INTEGER,
             tool_calls INTEGER,
             usage_json TEXT,
-            thomas_version TEXT
+            thomas_version TEXT,
+            pinned INTEGER NOT NULL DEFAULT 0,
+            task_id TEXT
         );
 
         CREATE TABLE IF NOT EXISTS events (
@@ -718,6 +746,11 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(events);").fetchall()}
     if "search_text" not in cols:
         conn.execute("ALTER TABLE events ADD COLUMN search_text TEXT NOT NULL DEFAULT '';")
+    run_cols = {r["name"] for r in conn.execute("PRAGMA table_info(runs);").fetchall()}
+    if "pinned" not in run_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;")
+    if "task_id" not in run_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN task_id TEXT;")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_run_seq ON events(run_id, seq);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_run_type ON events(run_id, event_type);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at);")
@@ -725,6 +758,37 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     if ENABLE_FTS5 and _fts5_available(conn):
         with contextlib.suppress(Exception):
             conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(run_id, seq, search_text);")
+
+
+# A pinned run that has not yet been finalized (no ended_at) is protected from
+# retention eviction. finalize_run() clears pinned on completion, so this is a
+# temporary hold, not a permanent exemption. Every time retention would have
+# deleted such a run, it is skipped instead -- and the skip is counted, never
+# silent. See pinned_skip_count().
+_PINNED_SKIP_COUNT = 0
+
+
+def pinned_skip_count() -> int:
+    """Cumulative count of pinned, unfinalized runs retention has skipped over."""
+    return _PINNED_SKIP_COUNT
+
+
+def _is_protected(row: sqlite3.Row) -> bool:
+    ended_at = row["ended_at"]
+    return bool(row["pinned"]) and (ended_at is None or not str(ended_at).strip())
+
+
+def _note_pinned_skip(n: int) -> None:
+    global _PINNED_SKIP_COUNT
+    if n <= 0:
+        return
+    _PINNED_SKIP_COUNT += int(n)
+    log.info(
+        "Run store retention skipped %d pinned, unfinalized run(s) that would otherwise have been evicted "
+        "(cumulative skipped=%d).",
+        n,
+        _PINNED_SKIP_COUNT,
+    )
 
 
 def _enforce_retention(conn: sqlite3.Connection) -> None:
@@ -747,11 +811,24 @@ def _enforce_retention(conn: sqlite3.Connection) -> None:
                         break
                 except FileNotFoundError:
                     break
-                oldest = conn.execute("SELECT run_id FROM runs ORDER BY started_at ASC LIMIT 10;").fetchall()
+                oldest = conn.execute(
+                    "SELECT run_id, pinned, ended_at FROM runs ORDER BY started_at ASC LIMIT 10;"
+                ).fetchall()
                 if not oldest:
                     break
-                run_ids = [r["run_id"] for r in oldest]
-                _delete_runs_by_id(conn, run_ids)
+                deletable = [r["run_id"] for r in oldest if not _is_protected(r)]
+                skipped = len(oldest) - len(deletable)
+                _note_pinned_skip(skipped)
+                if not deletable:
+                    # Every remaining candidate in this window is pinned and
+                    # unfinalized. Retention cannot free more room right now;
+                    # stop rather than spin forever on the same protected rows.
+                    log.warning(
+                        "Run store retention stalled below the byte cap: %d pinned run(s) block eviction.",
+                        skipped,
+                    )
+                    break
+                _delete_runs_by_id(conn, deletable)
                 remaining = conn.execute("SELECT COUNT(*) AS c FROM runs;").fetchone()["c"]
                 if remaining == 0:
                     break
@@ -760,8 +837,17 @@ def _enforce_retention(conn: sqlite3.Connection) -> None:
 def _delete_oldest_runs(conn: sqlite3.Connection, n: int) -> None:
     if n <= 0:
         return
-    rows = conn.execute("SELECT run_id FROM runs ORDER BY started_at ASC LIMIT ?;", (int(n),)).fetchall()
-    run_ids = [r["run_id"] for r in rows]
+    rows = conn.execute("SELECT run_id, pinned, ended_at FROM runs ORDER BY started_at ASC;").fetchall()
+    run_ids: list[str] = []
+    skipped = 0
+    for row in rows:
+        if len(run_ids) >= n:
+            break
+        if _is_protected(row):
+            skipped += 1
+            continue
+        run_ids.append(row["run_id"])
+    _note_pinned_skip(skipped)
     _delete_runs_by_id(conn, run_ids)
 
 
@@ -809,6 +895,7 @@ def _row_to_run_dict(row: sqlite3.Row) -> dict[str, Any]:
         "tool_calls": row["tool_calls"],
         "usage": usage,
         "thomas_version": row["thomas_version"],
+        "task_id": row["task_id"],
     }
 
 

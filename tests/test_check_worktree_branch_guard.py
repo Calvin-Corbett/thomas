@@ -12,10 +12,24 @@ def test_topic_branch_passes_without_unmerged_topic_ancestor(monkeypatch, capsys
     # topic-branch stacking, not freshness, so neutralize it to avoid a stale base mock.
     monkeypatch.setattr(mod, "_branch_freshness_failure", lambda *a, **k: None)
     monkeypatch.setattr(mod, "_branch_name", lambda: "codex/feature")
+    monkeypatch.setattr(mod, "_head_ref", lambda: "refs/heads/codex/feature")
     monkeypatch.setattr(
         mod,
-        "_local_branch_names",
-        lambda: ["codex/feature", "master", "release/oss-launch", "publish-clean"],
+        "_ref_sha",
+        lambda ref: {
+            "refs/heads/codex/feature": "feature-tip",
+            "refs/heads/master": "master-tip",
+            "refs/heads/release/oss-launch": "release-tip",
+            "refs/heads/publish-clean": "publish-tip",
+        }.get(ref, ""),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_local_branch_refs",
+        lambda: [
+            (n, f"refs/heads/{n}")
+            for n in ["codex/feature", "master", "release/oss-launch", "publish-clean"]
+        ],
     )
     monkeypatch.setattr(
         mod,
@@ -43,10 +57,25 @@ def test_topic_branch_fails_when_it_is_stacked_on_unmerged_topic_branch(monkeypa
     # topic-branch stacking, not freshness, so neutralize it to avoid a stale base mock.
     monkeypatch.setattr(mod, "_branch_freshness_failure", lambda *a, **k: None)
     monkeypatch.setattr(mod, "_branch_name", lambda: "codex/child")
+    monkeypatch.setattr(mod, "_head_ref", lambda: "refs/heads/codex/child")
     monkeypatch.setattr(
         mod,
-        "_local_branch_names",
-        lambda: ["codex/child", "codex/parent", "master", "release/oss-launch", "publish-clean"],
+        "_ref_sha",
+        lambda ref: {
+            "refs/heads/codex/child": "child-tip",
+            "refs/heads/codex/parent": "parent-tip",
+            "refs/heads/master": "master-tip",
+            "refs/heads/release/oss-launch": "release-tip",
+            "refs/heads/publish-clean": "publish-tip",
+        }.get(ref, ""),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_local_branch_refs",
+        lambda: [
+            (n, f"refs/heads/{n}")
+            for n in ["codex/child", "codex/parent", "master", "release/oss-launch", "publish-clean"]
+        ],
     )
     monkeypatch.setattr(
         mod,
@@ -84,10 +113,25 @@ def test_topic_branch_passes_when_other_topic_branch_is_already_merged_to_master
     # topic-branch stacking, not freshness, so neutralize it to avoid a stale base mock.
     monkeypatch.setattr(mod, "_branch_freshness_failure", lambda *a, **k: None)
     monkeypatch.setattr(mod, "_branch_name", lambda: "codex/child")
+    monkeypatch.setattr(mod, "_head_ref", lambda: "refs/heads/codex/child")
     monkeypatch.setattr(
         mod,
-        "_local_branch_names",
-        lambda: ["codex/child", "codex/parent", "master", "release/oss-launch", "publish-clean"],
+        "_ref_sha",
+        lambda ref: {
+            "refs/heads/codex/child": "child-tip",
+            "refs/heads/codex/parent": "parent-tip",
+            "refs/heads/master": "master-tip",
+            "refs/heads/release/oss-launch": "release-tip",
+            "refs/heads/publish-clean": "publish-tip",
+        }.get(ref, ""),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_local_branch_refs",
+        lambda: [
+            (n, f"refs/heads/{n}")
+            for n in ["codex/child", "codex/parent", "master", "release/oss-launch", "publish-clean"]
+        ],
     )
     monkeypatch.setattr(
         mod,

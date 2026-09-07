@@ -119,7 +119,7 @@
       } catch (err) {
         status.textContent = String(err && err.message || 'ChatGPT connection failed. Please try again.');
       }
-      status.style.color = '#ff9a9a';
+      status.style.color = 'var(--c-danger, #ff9a9a)';
       button.disabled = false;
       button.textContent = 'Try again';
     }

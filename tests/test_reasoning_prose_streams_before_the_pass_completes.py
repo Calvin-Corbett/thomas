@@ -169,10 +169,6 @@ class TestProseStreamsBeforeThePassCompletes(unittest.IsolatedAsyncioTestCase):
                     ),
                     StreamEvent(type="done"),
                 ],
-                [
-                    _token("The three builds are running now."),
-                    StreamEvent(type="done"),
-                ],
             ]
         )
         events, _ = await _drive(llm, send_task=send_task)
@@ -185,8 +181,9 @@ class TestProseStreamsBeforeThePassCompletes(unittest.IsolatedAsyncioTestCase):
         # Earlier narration that further prose had already moved past is
         # sight, not a claim, and may stream.
         self.assertIn("Let me get that moving for you.", visible)
-        # The deterministic receipt stays the voice of the dispatch itself.
-        self.assertIn("running now", visible)
+        # The runtime emits the truthful receipt; no second model pass is spent
+        # and thrown away.
+        self.assertIn("Started the task card", visible)
 
     async def test_prose_without_sentence_ends_still_streams(self):
         # 26 chunks of 40 characters with no terminator anywhere: a code block

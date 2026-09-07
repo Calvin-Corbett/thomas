@@ -125,6 +125,9 @@
       { action: 'rename', icon: 'ph-pencil-simple', label: 'Rename' },
       { action: 'pin', icon: 'ph-push-pin', label: current.pinned ? 'Unpin' : 'Pin to top' },
       { action: 'archive', icon: 'ph-archive', label: current.archived ? 'Unarchive' : 'Archive' },
+      { action: 'export', icon: 'ph-download-simple', label: 'Export as Markdown' },
+      { action: 'snapshot', icon: 'ph-share', label: 'Save as web page to share' },
+      { action: 'branch', icon: 'ph-git-branch', label: 'Branch this chat' },
       { action: 'delete', icon: 'ph-trash', label: 'Delete', danger: true },
     ];
   }
@@ -161,6 +164,32 @@
     if (!response.ok) throw new Error(`Could not delete that (${response.status})`);
   }
 
+  // A copy of a chat to take in a different direction (frontier parity:
+  // ChatGPT and Claude.ai branch). The original is untouched; the copy keeps
+  // the first `upto` messages (all of them when omitted), is named after the
+  // original, listed, and opened. Shared by the row menu and the "Branch from
+  // here" button on each reply (message_feedback.js).
+  async function branchChat(id, title, upto) {
+    let created;
+    try {
+      const body = JSON.stringify(upto ? { upto } : {});
+      const response = await fetch(`/api/chats/${encodeURIComponent(id)}/branch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      created = await response.json();
+      if (!response.ok || !created.ok) throw new Error((created && created.error) || `Could not branch that (${response.status})`);
+    } catch (error) { window.alert(error && error.message ? error.message : 'Branch failed.'); return null; }
+    const suffix = upto ? ` (branch at ${upto})` : ' (branch)';
+    patchOverlay(created.chat_id, { title: `${String(title || 'Chat')}${suffix}`.slice(0, 200) });
+    refresh();
+    // The list re-renders on its own schedule; open the copy once its row exists.
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const fresh = document.querySelector(`[data-history-id="${created.chat_id}"]`);
+      if (fresh) { fresh.click(); return created.chat_id; }
+      await new Promise(resolve => setTimeout(resolve, 150));
+      if (attempt === 6) refresh();
+    }
+    return created.chat_id;
+  }
+
   async function runAction(action, row) {
     const id = row.dataset.historyId;
     if (action === 'rename') {
@@ -178,6 +207,26 @@
     if (action === 'archive') {
       patchOverlay(id, { archived: !(overlay()[id] || {}).archived || undefined });
       closeMenu(); refresh(); return;
+    }
+    if (action === 'export' || action === 'snapshot') {
+      // The chat leaves as a file the person owns (frontier parity: ChatGPT
+      // and Claude export). Chat sessions only; a Code run has no v2 session.
+      closeMenu();
+      const mode = String(row.dataset.historyMode || (window.ThomasUnifiedModes ? window.ThomasUnifiedModes.mode() : 'chat'));
+      if (mode === 'code') { window.alert('Export is for chats; Code runs keep their own transcript.'); return; }
+      // Markdown for editing; a self-contained web page (no scripts, no outside
+      // resources) as the local-first shareable read-only snapshot.
+      const format = action === 'snapshot' ? 'html' : 'md';
+      const url = `/api/chats/${encodeURIComponent(id)}/export?format=${format}&title=${encodeURIComponent(titleOf(row))}`;
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    if (action === 'branch') {
+      closeMenu();
+      const mode = String(row.dataset.historyMode || (window.ThomasUnifiedModes ? window.ThomasUnifiedModes.mode() : 'chat'));
+      if (mode === 'code') { window.alert('Branching is for chats; Code runs keep their own transcript.'); return; }
+      await branchChat(id, titleOf(row));
+      return;
     }
     if (action === 'delete') {
       closeMenu();
@@ -312,6 +361,7 @@
 
   function decorate(wrap) {
     if (!wrap) return;
+    markCurrent(wrap);
     applyCollapse();
     clearHeadings(wrap);
     const rows = rowsIn(wrap);
@@ -427,6 +477,16 @@
 
   // The row markup every renderer shares, so a chat, a code task and a job all
   // behave identically under the cursor.
+  // The open chat's row is marked only by an inline background in chat.html;
+  // give it an accessible state too, so a screen reader and the "/" palette
+  // can both tell which chat is open.
+  function markCurrent(wrap) {
+    wrap.querySelectorAll('[data-history-id]').forEach(row => {
+      const open = String(row.style && row.style.background || '').includes('surface-2');
+      if (open) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
+    });
+  }
+
   function rowHtml({ title, preview, time, running, pinned }) {
     return `<span class="tc-history-line">`
       + `<span class="tc-history-name" data-history-name>${esc(title)}</span>`
@@ -451,6 +511,7 @@
   }
 
   window.ThomasSidebarHistory = {
+    closeMenu,
     decorate,
     rowHtml,
     relativeTime,
@@ -460,6 +521,7 @@
     view,
     displayTitle: id => (overlay()[id] || {}).title || '',
     onRefresh: fn => { refreshHook = typeof fn === 'function' ? fn : null; },
+    branchChat,
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, { once: true });

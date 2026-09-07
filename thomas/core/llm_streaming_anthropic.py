@@ -98,6 +98,7 @@ async def stream_anthropic(
                 current_tool_args = ""
                 prompt_tokens = 0
                 completion_tokens = 0
+                cached_tokens = 0
                 usage_emitted = False
 
                 async for line in resp.aiter_lines():
@@ -120,6 +121,7 @@ async def stream_anthropic(
                         completion_candidate = usage_fields.get("output_tokens", 0)
                         prompt_tokens = max(prompt_tokens, prompt_candidate)
                         completion_tokens = max(completion_tokens, completion_candidate)
+                        cached_tokens = max(cached_tokens, usage_fields.get("cache_read_input_tokens", 0))
 
                     if event_type == "content_block_start":
                         block = event_data.get("content_block", {})
@@ -176,6 +178,7 @@ async def stream_anthropic(
                                 prompt_tokens=prompt_tokens,
                                 completion_tokens=completion_tokens,
                                 total_tokens=prompt_tokens + completion_tokens,
+                                cached_prompt_tokens=cached_tokens,
                             )
                             owner.session_usage.add(tu)
                             yield StreamEvent(type="usage", data={"usage": tu})
@@ -188,6 +191,7 @@ async def stream_anthropic(
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         total_tokens=prompt_tokens + completion_tokens,
+                        cached_prompt_tokens=cached_tokens,
                     )
                     owner.session_usage.add(tu)
                     yield StreamEvent(type="usage", data={"usage": tu})

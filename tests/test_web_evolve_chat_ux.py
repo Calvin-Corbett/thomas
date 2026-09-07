@@ -148,9 +148,14 @@ def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> Non
         "an unavailable model must still say so in the picker"
     )
     assert "${status}" in text, "the status must reach the row it describes"
-    assert "['none', 'None']" in text
-    assert "['xhigh', 'xHigh']" in text
-    assert "['max', 'Max']" in text
+    # Pinned to the vocabulary, not to the tuple's arity. Each option grew a
+    # third element carrying the sentence shown under the dial, so a closing
+    # bracket right after the label stopped existing and these went red without
+    # anything regressing -- the same trap the comment above describes.
+    for value, label in (("none", "None"), ("xhigh", "xHigh"), ("max", "Max")):
+        assert re.search(rf"\['{value}',\s*'{label}'", text), (
+            f"the reasoning-effort dial must still offer {label}"
+        )
 
 
 def test_root_chat_canvas_hint_requires_visual_object_and_action() -> None:

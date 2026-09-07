@@ -6,6 +6,7 @@ Manages picking tasks for agents, reactivating parked work, and auto-starting ex
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -20,16 +21,20 @@ except ImportError:  # pragma: no cover
 try:
     from scripts.crew.tasks import sweep as workboard_task_manager_sweep
     from scripts.crew.workboard import claim as workboard_claim
+    from scripts.crew.workboard import claim_evidence
     from scripts.crew.workboard import issue as workboard_issue
     from scripts.forge.gates import workboard_claims as claims_gate
     from thomas.core import task_bot_runtime
+    from thomas.marketplace.observability import run_store
 except ImportError:  # pragma: no cover
     from crew.tasks import sweep as workboard_task_manager_sweep  # type: ignore
     from crew.workboard import claim as workboard_claim  # type: ignore
+    from crew.workboard import claim_evidence  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
     from scripts.crew.workboard import issue as workboard_issue  # type: ignore
     from thomas.core import task_bot_runtime  # type: ignore
+    from thomas.marketplace.observability import run_store  # type: ignore
 
 try:
     from scripts.crew.tasks.base import (
@@ -76,8 +81,36 @@ def set_task_status(
     actor: str,
     enforce_transition: bool = True,
     require_claims_to_have_active_task: bool = True,
+    evidence: str | None = None,
+    evidence_not_before: datetime | None = None,
+    evidence_db_path: Path | None = None,
 ) -> tuple[bool, dict[str, object]]:
-    """Set task status with transition validation."""
+    """Set task status with transition validation.
+
+    The `done` transition additionally demands machine-verifiable evidence
+    (scripts/crew/workboard/claim_evidence.py): `evidence` must be a
+    well-formed `kind:payload` string that verifies as `verified` or
+    `attested` for this `task_id` (bound via `evidence_not_before`, e.g. the
+    task's claim/start time, or a task_id match inside the evidence's own
+    text). `failed` verification or missing evidence REFUSES the transition
+    outright -- the task is left exactly as it was, current_status included.
+    `verified` and `attested` evidence both proceed and get recorded onto the
+    task's Active Task line (`evidence=`, `evidence_recorded_at=` -- the
+    latter is Task 3's expiry anchor); `attested` additionally prints an
+    ATTESTED-NOT-VERIFIED line, since it is a real, checkable claim but not
+    proof this task is the one that made it (see claim_evidence's BINDING
+    SEMANTICS docstring).
+
+    EVIDENCE IS PER-CYCLE: any transition whose FROM-status is `done`
+    (`done -> queued`, `done -> claimed`) strips `evidence=` and
+    `evidence_recorded_at=` from the task's line (see
+    claim_evidence.strip_evidence) and prints an `EVIDENCE REVOKED` line.
+    Leaving `done` revokes the proof that authorized it -- a reopened task
+    must earn new evidence before it can re-enter `done`; the prior cycle's
+    evidence, even if genuinely verified, proves nothing about this cycle's
+    work. The return payload's `evidence_stripped` key reports whether this
+    fired.
+    """
     task_clean = str(task_id or "").strip()
     actor_clean = str(actor or "").strip() or DEFAULT_TASK_MANAGER_AGENT
     if not task_clean:
@@ -127,6 +160,59 @@ def set_task_status(
                 "allowed_next": sorted(allowed_next),
             }
 
+    parsed_evidence = None
+    evidence_extra: dict[str, object] = {}
+    if target_status == "done":
+        raw_evidence = str(evidence or "").strip()
+        if not raw_evidence:
+            return False, {
+                "error": f"task `{task_clean}` cannot transition to `done` without evidence",
+            }
+        try:
+            parsed_evidence = claim_evidence.parse_evidence(raw_evidence)
+        except ValueError as exc:
+            return False, {
+                "error": f"evidence `{raw_evidence}` for task `{task_clean}` is malformed: {exc}",
+            }
+
+        # run_store.init_db(db_path) re-points the module-global _DB_PATH as
+        # a side effect of verify_evidence's run-kind check. This process may
+        # already have its own _DB_PATH pointed at a different store (the
+        # live server's, or another test's); silently leaving it re-pointed
+        # after our call would make every later run_store call in this
+        # process read/write the wrong database. Save and restore it around
+        # the single call that can touch it, regardless of evidence kind.
+        # NOT thread-safe: this save/restore assumes a single caller has
+        # _DB_PATH's attention for the duration of the try/finally (true for
+        # the worker loop, which is single-threaded). A second thread calling
+        # set_task_status with a different db_path concurrently could still
+        # read the wrong store between this save and the restore below --
+        # that race is out of scope here, not a correctness claim.
+        saved_db_path = run_store._DB_PATH
+        try:
+            verdict = claim_evidence.verify_evidence(
+                parsed_evidence,
+                ROOT,
+                db_path=evidence_db_path,
+                task_id=task_clean,
+                not_before=evidence_not_before,
+            )
+        finally:
+            run_store._DB_PATH = saved_db_path
+
+        if verdict.status == "failed":
+            return False, {
+                "error": f"evidence `{raw_evidence}` for task `{task_clean}` failed verification: {verdict.reason}",
+                "evidence": raw_evidence,
+                "evidence_status": verdict.status,
+                "evidence_reason": verdict.reason,
+            }
+        evidence_extra = {
+            "evidence": raw_evidence,
+            "evidence_status": verdict.status,
+            "evidence_reason": verdict.reason,
+        }
+
     try:
         lines[target_idx] = _replace_status_field(lines[target_idx], status=target_status)
     except ValueError as exc:
@@ -143,6 +229,33 @@ def set_task_status(
             "error": "task status update rejected by gate",
             "violations": list(violations),
         }
+
+    if parsed_evidence is not None:
+        claim_evidence.record_evidence(task_clean, parsed_evidence, workboard_path=workboard_path)
+        if evidence_extra.get("evidence_status") == "attested":
+            print(f"ATTESTED-NOT-VERIFIED: {evidence_extra.get('evidence_reason')}")
+
+    # EVIDENCE IS PER-CYCLE (fix round, post-review): leaving `done` revokes
+    # whatever evidence authorized THAT cycle's done claim. Without this, a
+    # done -> queued -> claimed -> in_progress -> review round trip carried
+    # the old evidence= field forward untouched (only status= ever changed
+    # on that path), so a later hand-flip straight back to `done` -- the
+    # same issue.py-class bypass workboard_evidence_gate.py exists to catch
+    # -- would still find a (possibly genuinely verified) evidence field on
+    # the line and pass, even though it proves nothing about THIS cycle's
+    # work. See claim_evidence.strip_evidence's docstring. The phase-1.4
+    # task-3 sweep drives its done -> queued expiry through this same
+    # function, so it inherits the strip automatically -- no separate call
+    # needed there.
+    evidence_stripped = False
+    if current_status == "done" and target_status != "done":
+        evidence_stripped = claim_evidence.strip_evidence(task_clean, workboard_path=workboard_path)
+        if evidence_stripped:
+            print(
+                f"EVIDENCE REVOKED: task `{task_clean}` left `done` (`{current_status}` -> `{target_status}`) - "
+                "evidence stripped, must earn new proof to re-enter done."
+            )
+
     try:
         task_bot_runtime.sync_task_state(
             task_id=task_clean,
@@ -160,6 +273,8 @@ def set_task_status(
         "to_status": target_status,
         "updated": True,
         "updated_by": actor_clean,
+        "evidence_stripped": evidence_stripped,
+        **evidence_extra,
     }
 
 

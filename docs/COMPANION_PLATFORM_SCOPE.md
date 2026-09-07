@@ -96,6 +96,23 @@ HTTP API scaffold (aiohttp):
 - `POST /api/companion/v1/releases/{release_id}/rollback`
 - `GET /api/companion/v1/audit/events`
 
+Surface host and bridge (`surface_type = "surface"` modules):
+- `GET /api/companion/v1/surface/{module_id}/document`
+- `POST /api/companion/v1/surface/{module_id}/storage/get`
+- `POST /api/companion/v1/surface/{module_id}/storage/set`
+- `POST /api/companion/v1/surface/{module_id}/storage/delete`
+- `GET /api/companion/v1/surface/{module_id}/storage/keys`
+- `POST /api/companion/v1/surface/{module_id}/ask`
+
+7. Surface isolation
+   - A surface renders in a frame sandboxed `allow-scripts` WITHOUT
+     `allow-same-origin`, so it holds an opaque origin and cannot reach the
+     shell's DOM, storage, or auth token.
+   - Its CSP denies `connect-src`; the shell brokers every outbound call.
+   - Each bridge call re-reads the module's declared permissions from the
+     registry. A surface cannot widen its own grant.
+   - `ask` runs with `tools=None`. Generated app code never reaches the tool belt.
+
 Companion Builder screen in Thomas web UI:
 - `GET /companion`
 

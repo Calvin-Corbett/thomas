@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import ModuleContract
+from .contracts import DEFAULT_SURFACE_TYPE, ModuleContract
 from .kernel import CompanionKernel
 
 
@@ -21,6 +21,7 @@ class ModuleState:
     source_bundle: str
     installed_at: str
     updated_at: str
+    surface_type: str = DEFAULT_SURFACE_TYPE
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModuleState:
@@ -36,6 +37,7 @@ class ModuleState:
             source_bundle=str(data.get("source_bundle") or ""),
             installed_at=str(data.get("installed_at") or ""),
             updated_at=str(data.get("updated_at") or ""),
+            surface_type=str(data.get("surface_type") or DEFAULT_SURFACE_TYPE),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -51,6 +53,7 @@ class ModuleState:
             "source_bundle": self.source_bundle,
             "installed_at": self.installed_at,
             "updated_at": self.updated_at,
+            "surface_type": self.surface_type,
         }
 
 
@@ -119,6 +122,7 @@ class ModuleRegistry:
             "source_bundle": source_bundle,
             "installed_at": installed_at,
             "updated_at": timestamp,
+            "surface_type": module.surface_type,
         }
         self._save(payload)
         return self.get(module.module_id) or ModuleState.from_dict({"module_id": module.module_id})

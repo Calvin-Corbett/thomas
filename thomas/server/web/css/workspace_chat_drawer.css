@@ -1,3 +1,4 @@
+#tc-shell { overflow: clip !important; } /* the parked drawer extends the shell's scroll width and a focus() scrolled it 51 px; clip on both axes forbids that (tests/test_the_parked_drawer_cannot_scroll_the_shell.py) */
 .tc-workspace-chat-drawer {
   position: absolute;
   inset: 0 0 0 auto;

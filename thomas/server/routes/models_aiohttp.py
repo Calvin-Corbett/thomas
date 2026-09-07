@@ -149,7 +149,7 @@ def _runtime_mode_payload(app: web.Application) -> dict[str, str]:
 
 def _resolve_default_model(cfg: AppConfig) -> tuple[str, str]:
     try:
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
         from thomas.preferences.store import get_db_path
 
         resolved_profile, resolved_model_id = resolve_effective_model(

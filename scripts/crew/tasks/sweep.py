@@ -380,6 +380,9 @@ def _sweep_inactive(
                 agent=agent,
                 allow_dirty=True,
                 dirty_reason=dirty_release_reason,
+                # Inactive-agent reclaim: the task is reassigned to up-for-grabs
+                # precisely because the agent went silent before finishing it.
+                require_done_state=False,
             )
             if ok_release:
                 released_agents.append(agent)

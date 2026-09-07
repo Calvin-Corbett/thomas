@@ -46,6 +46,9 @@ _DEFAULT_FORBIDDEN_SUBSTRINGS: tuple[str, ...] = ()
 # never part of the tracked tree the gate scans.
 ALLOWLIST_PATHS = frozenset(
     {
+        # The graveyard registry stores dead file PATHS verbatim (gate exactness);
+        # those names are historical facts already in this repo's public history.
+        "docs/ops/graveyard.json",
         "scripts/forge/gates/public_repo_leak_guard.py",
         "scripts/forge/publish/preflight.py",
         "CHANGELOG.md",

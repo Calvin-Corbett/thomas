@@ -11,6 +11,18 @@ import click
 def cron(ctx: click.Context) -> None:
     """Manage scheduled tasks (local scheduler)."""
     _ = ctx
+    # One scheduler file under the data dir, shared with the running server
+    # (2026-09-05). Before this the CLI used ./thomas_schedules.json in
+    # whatever folder it was run from, and nothing ever executed a task.
+    try:
+        from pathlib import Path
+
+        from thomas.core.config import load_config
+        from thomas.core.schedule_executor import install_scheduler
+
+        install_scheduler(data_dir=Path(load_config().memory.root_path), auto_start=False)
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:  # CLI keeps the default file
+        click.echo(f"(scheduler file: falling back to the default location: {exc})", err=True)
 
 
 def _emit_schedule_result(result: dict[str, Any], *, as_json: bool) -> None:

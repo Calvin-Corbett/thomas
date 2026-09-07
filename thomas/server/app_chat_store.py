@@ -16,12 +16,94 @@ import hashlib
 import json
 import logging
 import secrets
+import sqlite3
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+_HISTORY_CACHE_LIMIT = 512
+_HISTORY_CACHE_BYTES = 8 * 1024 * 1024
+_history_cache: OrderedDict[Path, tuple[tuple[int, ...], dict[str, Any], int]] = OrderedDict()
+_history_cache_lock = Lock()
+
+
+def _history_fingerprint(path: Path) -> tuple[int, ...]:
+    stat = path.stat()
+    return stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino
+
+
+def _history_session_data(path: Path) -> dict[str, Any]:
+    """Reuse unchanged disk data; callers construct their own public row objects."""
+    key = path.absolute()
+    fingerprint = _history_fingerprint(path)
+    with _history_cache_lock:
+        cached = _history_cache.get(key)
+        if cached and cached[0] == fingerprint:
+            _history_cache.move_to_end(key)
+            return cached[1]
+        _history_cache.pop(key, None)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return {}
+    # Never cache a read spanning a writer's replacement, or an oversized file.
+    size = fingerprint[2]
+    if size <= _HISTORY_CACHE_BYTES:
+        with _history_cache_lock:
+            if _history_fingerprint(path) != fingerprint:
+                return data
+            _history_cache[key] = (fingerprint, data, size)
+            _history_cache.move_to_end(key)
+            total = sum(entry[2] for entry in _history_cache.values())
+            while len(_history_cache) > _HISTORY_CACHE_LIMIT or total > _HISTORY_CACHE_BYTES:
+                _, evicted = _history_cache.popitem(last=False)
+                total -= evicted[2]
+    return data
+
+
+async def delete_live_chat(app: Any, session_id: str) -> dict[str, Any]:
+    """Shared V2 deletion, preserving memory and task-record cleanup receipts."""
+    from aiohttp import web
+
+    from thomas.core import task_bot_runtime
+    from thomas.server.app_keys import APP_MEMORY
+    from thomas.server.chat_attachment_store import forget_chat_originals
+    from thomas.server.routes.chat_v2_keys import APP_SESSION_LLM_CACHE, APP_SESSION_STORE
+    from thomas.server.routes.chat_v2_support import _evict_session_llm
+
+    cached = (app.get(APP_SESSION_LLM_CACHE) or {}).get(session_id)
+    if cached is not None and cached.lock.locked():
+        raise web.HTTPConflict(text="Stop the active reply before deleting this chat.")
+    store = app.get(APP_SESSION_STORE)
+    deleted = await store.delete(session_id) if store is not None else False
+    with _history_cache_lock:
+        for key, (_, data, _) in list(_history_cache.items()):
+            if data.get("session_id") == session_id:
+                del _history_cache[key]
+    await _evict_session_llm(app, session_id)
+    await asyncio.to_thread(forget_chat_originals, session_id)
+    memory_purge: dict[str, Any] = {"completed": False, "forgotten": False}
+    forget_thread = getattr(app.get(APP_MEMORY), "forget_thread", None)
+    if callable(forget_thread):
+        try:
+            memory_purge = {"completed": True, **dict(await asyncio.to_thread(forget_thread, session_id))}
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as exc:
+            memory_purge = {"completed": False, "forgotten": False, "error": type(exc).__name__}
+    tasks_removed = 0
+    try:
+        tasks_removed = await asyncio.to_thread(task_bot_runtime.delete_session_executions, session_id)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        log.warning("could not remove task records for deleted session %s: %s", session_id, exc)
+    return {
+        "deleted": deleted,
+        "session_id": session_id,
+        "memory_purge": memory_purge,
+        "task_records_removed": tasks_removed,
+    }
 
 
 def build_chat_store(
@@ -187,15 +269,15 @@ def build_chat_store(
         return True
 
     async def _load_all_chats_from_disk() -> list[dict[str, Any]]:
-        chats: list[dict[str, Any]] = []
         async with chat_store_lock:
             paths = await asyncio.to_thread(lambda: list(chat_store_dir.glob("*.json")))
-        for path in paths:
-            chat = await asyncio.to_thread(_read_chat_from_disk, path)
-            if chat is not None:
-                chats.append(chat)
-        chats.sort(key=lambda c: _safe_int(c.get("updatedAt"), 0), reverse=True)
-        return chats
+
+        def read_batch() -> list[dict[str, Any]]:
+            chats = [chat for path in paths if (chat := _read_chat_from_disk(path)) is not None]
+            chats.sort(key=lambda c: _safe_int(c.get("updatedAt"), 0), reverse=True)
+            return chats
+
+        return await asyncio.to_thread(read_batch)
 
     return {
         "_chat_file_for": _chat_file_for,
@@ -205,3 +287,93 @@ def build_chat_store(
         "_delete_chat_from_disk": _delete_chat_from_disk,
         "_load_all_chats_from_disk": _load_all_chats_from_disk,
     }
+
+
+def _v2_sessions_as_chats(
+    sessions_dir: Path,
+    *,
+    limit: int = 300,
+    surface_mode: str = "",
+    context_id: str = "",
+) -> list[dict[str, Any]]:
+    """Convert the LIVE v2 session store (``.thomas/sessions_v2/chat_*.json`` — where
+    every chat conducted through /api/v2/chat is saved) into the sidebar's chat-list
+    schema. GET /api/chats historically read ONLY the legacy ``.thomas/chats`` directory
+    (written by the old SPA's PUT /api/chats), which the current chat UI never writes —
+    so brand-new chats never showed up in Recent (no entry, no date). This bridges the
+    two so real, current chats appear with their dates. (chat history fix, 2026-06-28)"""
+    out: list[dict[str, Any]] = []
+    try:
+        files = list(sessions_dir.glob("chat_*.json"))
+    except OSError:
+        return out
+
+    # Deleted histories are not served from memory, and release their cache data.
+    present = {path.absolute() for path in files}
+    directory = sessions_dir.absolute()
+    with _history_cache_lock:
+        for key in list(_history_cache):
+            if key.parent == directory and key not in present:
+                del _history_cache[key]
+
+    def _mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    files.sort(key=_mtime, reverse=True)
+    result_limit = max(1, int(limit))
+    for path in files:
+        try:
+            data = _history_session_data(path)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        sid = str(data.get("session_id") or "").strip()
+        if not sid:
+            continue
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+        stored_surface = str(meta.get("surface_mode") or "chat").strip().lower()
+        stored_context = str(meta.get("context_id") or "").strip()
+        if surface_mode and stored_surface != surface_mode:
+            continue
+        if context_id and stored_context != context_id:
+            continue
+        conv = data.get("conversation") if isinstance(data.get("conversation"), dict) else {}
+        msgs: list[dict[str, Any]] = []
+        for msg in conv.get("messages") or []:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "")
+            content = msg.get("content")
+            if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+                mapped = {"role": role, "content": content}
+                metadata = msg.get("metadata")
+                if isinstance(metadata, dict):
+                    mapped["metadata"] = metadata
+                msgs.append(mapped)
+        if not msgs:
+            continue  # empty / system-only session — nothing to show in the sidebar
+        first_user = next((m["content"] for m in msgs if m["role"] == "user"), "")
+        title = (first_user.strip().splitlines()[0][:60] if first_user.strip() else "New chat") or "New chat"
+        saved_at = data.get("saved_at")
+        updated_ms = int(float(saved_at) * 1000) if isinstance(saved_at, (int, float)) else int(_mtime(path) * 1000)
+        out.append(
+            {
+                "id": sid,
+                "sessionId": sid,
+                "title": title,
+                "surfaceMode": stored_surface,
+                "contextId": stored_context,
+                "model": str(meta.get("model_id") or ""),
+                "messages": msgs,
+                "createdAt": updated_ms,
+                "updatedAt": updated_ms,
+                "pinned": False,
+            }
+        )
+        if len(out) >= result_limit:
+            break
+    return out

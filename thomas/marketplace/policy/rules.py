@@ -115,6 +115,18 @@ class Rule:
         return None
 
 
+@dataclass(frozen=True)
+class DenyInvalidConfigRule(Rule):
+    validation_errors: tuple[str, ...]
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        return PolicyDecision.deny(
+            "Policy configuration is invalid; all tool calls are denied.",
+            rule_id=self.id,
+            validation_errors=list(self.validation_errors),
+        )
+
+
 # Maps preference-toggle group names to tool categories + exact tool names.
 # Values ending with "." are prefix matches; others are exact matches.
 _GROUP_TOOL_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -194,6 +206,19 @@ class DenyToolRule(Rule):
     def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         if ctx.tool_name in self.deny_tools:
             return PolicyDecision.deny(f"Tool '{ctx.tool_name}' is denied by policy.", rule_id=self.id)
+        return None
+
+
+@dataclass(frozen=True)
+class RequireApprovalToolRule(Rule):
+    approval_tools: tuple[str, ...]
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        if ctx.tool_name in self.approval_tools:
+            return PolicyDecision.require_approval(
+                f"Tool '{ctx.tool_name}' requires approval by config.",
+                rule_id=self.id,
+            )
         return None
 
 
@@ -286,7 +311,11 @@ class RequireApprovalGitPushRule(Rule):
     def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         tn = ctx.tool_name.lower()
         if tn in ("git.push", "git", "git_exec"):
-            return PolicyDecision.require_approval("git push requires approval.", rule_id=self.id)
+            # always_ask: publishing leaves the machine, so Builder mode does not
+            # get to answer for it. See AlwaysAskOutboundRule for the rest.
+            return PolicyDecision.require_approval(
+                "git push requires approval.", rule_id=self.id, always_ask=True
+            )
         # shell tool sometimes used
         cmd = ""
         if "cmd" in ctx.args and isinstance(ctx.args["cmd"], str):
@@ -294,8 +323,109 @@ class RequireApprovalGitPushRule(Rule):
         elif "command" in ctx.args and isinstance(ctx.args["command"], str):
             cmd = ctx.args["command"]
         if cmd and "git push" in cmd.lower():
-            return PolicyDecision.require_approval("git push via shell requires approval.", rule_id=self.id)
+            return PolicyDecision.require_approval(
+                "git push via shell requires approval.", rule_id=self.id, always_ask=True
+            )
         return None
+
+
+# Actions that leave this machine or cannot be undone. Everything here asks a
+# human even when no_human_mode is "allow" — see AlwaysAskOutboundRule.
+#
+# Tool names are matched on the part before any dot as well as the whole name,
+# so `discord.send_message` and `discord_send` both land. Shell fragments cover
+# the same act typed into a terminal, because a gate the model can walk around
+# by spelling it differently is decoration.
+# The git tool names are deliberately absent: RequireApprovalGitPushRule already
+# owns them and carries always_ask itself, so leaving them here would only change
+# which rule_id gets reported for a decision that is identical either way.
+_OUTBOUND_TOOL_NAMES: tuple[str, ...] = ()
+# Match the ACTION, not the namespace. An earlier version listed "email",
+# "discord", "trading" and friends as prefixes, which gated email.read,
+# discord.read_messages, channels.list and trading.get_quote — inbound reads
+# that send nothing. Under a strict gatekeeper those become hard refusals, so
+# a gate meant to protect publishing made reading your own mail impossible.
+#
+# Only verbs that are themselves outbound may lead a name.
+_OUTBOUND_TOOL_PREFIXES: tuple[str, ...] = (
+    "deploy",
+    "publish",
+    "release",
+)
+_OUTBOUND_TOOL_SUFFIXES: tuple[str, ...] = (
+    # messages sent as the owner
+    ".send",
+    ".send_message",
+    ".post",
+    ".reply",
+    ".forward",
+    ".broadcast",
+    # publishing
+    ".publish",
+    ".deploy",
+    ".release",
+    # money
+    ".buy",
+    ".sell",
+    ".order",
+    ".place_order",
+    ".transfer",
+    ".checkout",
+    ".charge",
+    ".refund",
+    ".pay",
+    ".withdraw",
+    ".deposit",
+)
+_OUTBOUND_SHELL_FRAGMENTS: tuple[str, ...] = (
+    "git push",
+    "gh pr ",
+    "gh pr create",
+    "gh release",
+    "npm publish",
+    "pip upload",
+    "twine upload",
+    "docker push",
+)
+
+
+@dataclass(frozen=True)
+class AlwaysAskOutboundRule(Rule):
+    """Ask a human before anything leaves the machine, in every mode.
+
+    ``PolicyEngine.evaluate`` collapses REQUIRE_APPROVAL to ALLOW when
+    no_human_mode is "allow", which is what Builder mode sets. That is correct
+    for ordinary work and wrong for publishing: turning Builder on used to turn
+    off the gate on ``git push`` as a side effect nobody chose.
+
+    Decisions from this rule carry ``always_ask=True`` so the engine leaves them
+    alone. Denial is stricter than asking, so a "deny" mode still denies.
+    """
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        name = str(ctx.tool_name or "").strip().lower()
+        head = name.split(".", 1)[0]
+        matched = (
+            name in _OUTBOUND_TOOL_NAMES
+            or head in _OUTBOUND_TOOL_PREFIXES
+            or any(name.endswith(suffix) for suffix in _OUTBOUND_TOOL_SUFFIXES)
+        )
+        if not matched:
+            for key in ("cmd", "command"):
+                raw = ctx.args.get(key)
+                if isinstance(raw, str) and raw:
+                    lowered = raw.lower()
+                    if any(fragment in lowered for fragment in _OUTBOUND_SHELL_FRAGMENTS):
+                        matched = True
+                        break
+        if not matched:
+            return None
+        return PolicyDecision.require_approval(
+            "This sends something out of your machine or spends money, so it asks first "
+            "even in Builder mode.",
+            rule_id=self.id,
+            always_ask=True,
+        )
 
 
 @dataclass(frozen=True)
@@ -308,8 +438,10 @@ class RequireApprovalShellExecRule(Rule):
 
 def default_rules(
     *,
+    validation_errors: Sequence[str] = (),
     allow_tools: Sequence[str] = (),
     deny_tools: Sequence[str] = (),
+    require_approval_tools: Sequence[str] = (),
     deny_roots: Sequence[str] = (),
     deny_paths: Sequence[str] = (),
     deny_groups: Sequence[str] = (),
@@ -317,8 +449,13 @@ def default_rules(
 ) -> list[Rule]:
     """Built-in rule library (order matters)."""
     rules: list[Rule] = []
-    if allow_tools:
-        rules.append(AllowToolRule(id="allow_tools", allow_tools=tuple(allow_tools)))
+    if validation_errors:
+        rules.append(
+            DenyInvalidConfigRule(
+                id="deny_invalid_config",
+                validation_errors=tuple(validation_errors),
+            )
+        )
     # Group deny evaluated BEFORE individual deny so toggles take precedence.
     if deny_groups:
         rules.append(
@@ -334,9 +471,24 @@ def default_rules(
     rules.extend(
         [
             DenySecretReadRule(id="deny_secret_reads", deny_roots=tuple(deny_roots), deny_paths=tuple(deny_paths)),
+            # Sits after the deny rules (refusing outright is stronger than asking)
+            # and ahead of everything else, so neither the generic approval rules
+            # nor an allow_tools entry can answer for an outbound action first.
+            AlwaysAskOutboundRule(id="always_ask_outbound"),
             RequireApprovalShellExecRule(id="approve_shell_exec"),
             RequireApprovalGitPushRule(id="approve_git_push"),
             RequireApprovalWriteOutsideSandboxRule(id="approve_write_outside_sandbox"),
         ]
     )
+    if require_approval_tools:
+        rules.append(
+            RequireApprovalToolRule(
+                id="config_tools_require_approval",
+                approval_tools=tuple(require_approval_tools),
+            )
+        )
+    # An allowlist may label an otherwise unrestricted tool, but it must never
+    # bypass a deny or approval decision. Keep this rule last.
+    if allow_tools:
+        rules.append(AllowToolRule(id="allow_tools", allow_tools=tuple(allow_tools)))
     return rules

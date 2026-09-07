@@ -11,13 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import shlex
-import subprocess
+import subprocess  # noqa: F401 -- re-exported: tests patch mod.subprocess.run (a process-global singleton)
 import sys
 import time
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,17 +24,28 @@ if str(_REPO_ROOT) not in sys.path:
 
 try:
     from scripts.crew.tasks import manager as workboard_task_manager
-    from scripts.crew.workboard import claim as workboard_claim
-    from scripts.crew.workboard import message as workboard_message
+    from scripts.crew.workboard import worker_dispatch, worker_pipeline
     from scripts.forge.gates import workboard_claims as claims_gate
     from thomas.core import task_bot_runtime
 except Exception:  # pragma: no cover
     from crew.tasks import manager as workboard_task_manager  # type: ignore
-    from crew.workboard import claim as workboard_claim  # type: ignore
-    from crew.workboard import message as workboard_message  # type: ignore
+    from crew.workboard import worker_dispatch, worker_pipeline  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
     from thomas.core import task_bot_runtime  # type: ignore
+
+# Split out (worker_pipeline.py, worker_dispatch.py; phase-1.4 task-2) past the monolith guard's
+# 800-line soft limit -- see their docstrings. Re-exported under original names; no caller changed.
+AssignedTask, CommandRun = worker_pipeline.AssignedTask, worker_pipeline.CommandRun
+_norm, _load_command_catalog = worker_pipeline._norm, worker_pipeline._load_command_catalog
+_resolve_task_commands = worker_pipeline._resolve_task_commands
+_run_command_pipeline, _write_run_log = worker_pipeline._run_command_pipeline, worker_pipeline._write_run_log
+_send_message_safe, _release_claim_safe = worker_dispatch._send_message_safe, worker_dispatch._release_claim_safe
+_set_task_status_safe, _git_head_sha = worker_dispatch._set_task_status_safe, worker_dispatch._git_head_sha
+_runtime_execution_id, _inbox_interrupt = worker_dispatch._runtime_execution_id, worker_dispatch._inbox_interrupt
+_request_immediate_dispatch = worker_dispatch._request_immediate_dispatch
+_finalize_landed_done = worker_dispatch._finalize_landed_done
+
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_COMMAND_CATALOG = ROOT / "plans" / "thomas" / "worker_command_catalog.json"
@@ -45,53 +53,6 @@ DEFAULT_TASK_MANAGER_AGENT = "thomas"
 DEFAULT_POLL_SECONDS = 15.0
 DEFAULT_IDLE_HEARTBEAT_SECONDS = 300.0
 DEFAULT_LOG_DIR = ROOT / "runtime" / "workers"
-
-
-@dataclass(frozen=True)
-class AssignedTask:
-    line_no: int
-    task_id: str
-    scope: str
-    summary: str
-
-
-@dataclass(frozen=True)
-class CommandRun:
-    command: str
-    returncode: int
-    elapsed_seconds: float
-    timed_out: bool
-    stdout: str
-    stderr: str
-
-
-class _SafeFormatDict(dict):
-    def __missing__(self, key: str) -> str:  # pragma: no cover - defensive
-        return "{" + key + "}"
-
-
-def _quote_for_shell(value: str) -> str:
-    token = str(value or "")
-    if os.name == "nt":
-        return subprocess.list2cmdline([token])
-    return shlex.quote(token)
-
-
-def _norm(value: str) -> str:
-    return str(value or "").strip().lower()
-
-
-def _sanitize_token(text: str) -> str:
-    chars: list[str] = []
-    for ch in str(text or "").strip().lower():
-        if ch.isalnum():
-            chars.append(ch)
-        else:
-            chars.append("-")
-    out = "".join(chars).strip("-")
-    while "--" in out:
-        out = out.replace("--", "-")
-    return out or "worker"
 
 
 def _task_priority_rank(summary: str) -> tuple[int, int, str]:
@@ -108,10 +69,6 @@ def _task_priority_rank(summary: str) -> tuple[int, int, str]:
     elif "[later]" in text:
         urgency = 2
     return priority, urgency, text
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _load_assigned_tasks(workboard_path: Path, *, agent: str) -> tuple[bool, dict[str, object]]:
@@ -135,341 +92,6 @@ def _load_assigned_tasks(workboard_path: Path, *, agent: str) -> tuple[bool, dic
 
     tasks.sort(key=lambda item: (_task_priority_rank(item.summary), item.line_no, _norm(item.task_id)))
     return True, {"tasks": tasks, "task_count": len(tasks)}
-
-
-def _coerce_commands(raw: object, *, label: str) -> list[str]:
-    out: list[str] = []
-    if isinstance(raw, str):
-        token = str(raw).strip()
-        if token:
-            out.append(token)
-        return out
-    if isinstance(raw, list):
-        for idx, item in enumerate(raw, start=1):
-            if not isinstance(item, str):
-                raise ValueError(f"{label}[{idx}] must be a string command")
-            token = str(item).strip()
-            if token:
-                out.append(token)
-        return out
-    if raw is None:
-        return out
-    raise ValueError(f"{label} must be a string or list of strings")
-
-
-def _load_command_catalog(path: Path | None) -> tuple[bool, dict[str, object]]:
-    payload: dict[str, object] = {
-        "tasks": {},
-        "task_prefixes": [],
-        "default": [],
-    }
-    if path is None:
-        return True, payload
-    if not path.exists():
-        return False, {"error": f"catalog file not found: {path}"}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return False, {"error": f"failed to parse catalog json: {exc}"}
-    if not isinstance(raw, dict):
-        return False, {"error": "catalog root must be a JSON object"}
-
-    tasks_raw = raw.get("tasks", {})
-    if tasks_raw is None:
-        tasks_raw = {}
-    if not isinstance(tasks_raw, dict):
-        return False, {"error": "`tasks` must be a JSON object"}
-    task_commands: dict[str, list[str]] = {}
-    for task_id, commands_raw in tasks_raw.items():
-        task_key = _norm(str(task_id))
-        if not task_key:
-            continue
-        commands = _coerce_commands(commands_raw, label=f"tasks.{task_id}")
-        if commands:
-            task_commands[task_key] = commands
-
-    prefixes_raw = raw.get("task_prefixes", {})
-    if prefixes_raw is None:
-        prefixes_raw = {}
-    if not isinstance(prefixes_raw, dict):
-        return False, {"error": "`task_prefixes` must be a JSON object"}
-    prefix_rows: list[tuple[str, list[str]]] = []
-    for prefix, commands_raw in prefixes_raw.items():
-        prefix_key = _norm(str(prefix))
-        if not prefix_key:
-            continue
-        commands = _coerce_commands(commands_raw, label=f"task_prefixes.{prefix}")
-        if commands:
-            prefix_rows.append((prefix_key, commands))
-    prefix_rows.sort(key=lambda item: (-len(item[0]), item[0]))
-
-    default_commands = _coerce_commands(raw.get("default"), label="default")
-    payload["tasks"] = task_commands
-    payload["task_prefixes"] = prefix_rows
-    payload["default"] = default_commands
-    return True, payload
-
-
-def _resolve_task_commands(
-    *,
-    task: AssignedTask,
-    catalog: dict[str, object],
-    cli_default_commands: Sequence[str],
-) -> tuple[list[str], str]:
-    task_key = _norm(task.task_id)
-    task_map = dict(catalog.get("tasks") or {})
-    if task_key in task_map:
-        return list(task_map[task_key]), "catalog.tasks"
-
-    prefix_rows: list[tuple[str, list[str]]] = []
-    for item in list(catalog.get("task_prefixes") or []):
-        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str) and isinstance(item[1], list):
-            prefix_rows.append((item[0], [str(x) for x in item[1]]))
-    for prefix, commands in prefix_rows:
-        if task_key.startswith(_norm(prefix)):
-            return list(commands), f"catalog.task_prefixes:{prefix}"
-
-    defaults = [str(item).strip() for item in list(cli_default_commands or []) if str(item).strip()]
-    if defaults:
-        return defaults, "cli.default"
-
-    catalog_defaults = [str(item).strip() for item in list(catalog.get("default") or []) if str(item).strip()]
-    if catalog_defaults:
-        return catalog_defaults, "catalog.default"
-    return [], "none"
-
-
-def _render_command(template: str, context: dict[str, str]) -> str:
-    safe_context = {key: _quote_for_shell(value) for key, value in context.items()}
-    return str(template).format_map(_SafeFormatDict(safe_context)).strip()
-
-
-def _trim_log(text: str, *, limit: int = 2000) -> str:
-    payload = str(text or "")
-    if len(payload) <= limit:
-        return payload
-    return payload[:limit] + "...<trimmed>"
-
-
-def _run_command_pipeline(
-    *,
-    commands: Sequence[str],
-    context: dict[str, str],
-    timeout_seconds: float,
-) -> tuple[bool, dict[str, object]]:
-    runs: list[CommandRun] = []
-    timeout = None if float(timeout_seconds) <= 0 else float(timeout_seconds)
-    for idx, template in enumerate(commands, start=1):
-        rendered = _render_command(template, context)
-        if not rendered:
-            return False, {"error": f"command #{idx} rendered to empty text"}
-        started = time.monotonic()
-        try:
-            completed = subprocess.run(
-                rendered,
-                cwd=ROOT,
-                shell=True,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-            )
-            elapsed = time.monotonic() - started
-            run = CommandRun(
-                command=rendered,
-                returncode=int(completed.returncode),
-                elapsed_seconds=float(elapsed),
-                timed_out=False,
-                stdout=_trim_log(completed.stdout or ""),
-                stderr=_trim_log(completed.stderr or ""),
-            )
-            runs.append(run)
-            if run.returncode != 0:
-                return False, {"runs": runs, "failed_index": idx, "failed_command": rendered}
-        except subprocess.TimeoutExpired as exc:
-            elapsed = time.monotonic() - started
-            run = CommandRun(
-                command=rendered,
-                returncode=124,
-                elapsed_seconds=float(elapsed),
-                timed_out=True,
-                stdout=_trim_log(str(exc.stdout or "")),
-                stderr=_trim_log(str(exc.stderr or "")),
-            )
-            runs.append(run)
-            return False, {"runs": runs, "failed_index": idx, "failed_command": rendered, "timed_out": True}
-
-    return True, {"runs": runs}
-
-
-def _write_run_log(
-    *,
-    log_root: Path,
-    agent: str,
-    task: AssignedTask,
-    command_source: str,
-    runs: Sequence[CommandRun],
-    ok: bool,
-) -> str:
-    agent_slug = _sanitize_token(agent)
-    task_slug = _sanitize_token(task.task_id)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = log_root / agent_slug
-    path.mkdir(parents=True, exist_ok=True)
-    log_path = path / f"{stamp}-{task_slug}.log"
-    lines: list[str] = [
-        f"agent={agent}",
-        f"task_id={task.task_id}",
-        f"scope={task.scope}",
-        f"summary={task.summary}",
-        f"command_source={command_source}",
-        f"ok={str(bool(ok)).lower()}",
-        f"created_at={_now_iso()}",
-        "",
-    ]
-    for idx, run in enumerate(runs, start=1):
-        lines.extend(
-            [
-                f"[command {idx}] {run.command}",
-                f"returncode={run.returncode}; elapsed_seconds={run.elapsed_seconds:.3f}; timed_out={str(run.timed_out).lower()}",
-                "--- stdout ---",
-                run.stdout,
-                "--- stderr ---",
-                run.stderr,
-                "",
-            ]
-        )
-    log_path.write_text("\n".join(lines), encoding="utf-8")
-    return str(log_path)
-
-
-def _send_message_safe(
-    *,
-    workboard_path: Path,
-    sender: str,
-    recipient: str,
-    task_id: str,
-    summary: str,
-    kind: str,
-    priority: str,
-    requested_action: str,
-    decision: str,
-) -> tuple[bool, str]:
-    ok, payload = workboard_message.send_message(
-        workboard_path,
-        sender=sender,
-        recipient=recipient,
-        summary=summary,
-        task_id=task_id,
-        kind=kind,
-        priority=priority,
-        requested_action=requested_action,
-        decision=decision,
-    )
-    if ok:
-        return True, ""
-    message = str(payload.get("error", "message send failed")) if isinstance(payload, dict) else str(payload)
-    return False, message
-
-
-def _release_claim_safe(
-    *,
-    workboard_path: Path,
-    agent: str,
-    allow_dirty_release: bool,
-    dirty_release_reason: str,
-    require_done_state: bool = False,
-) -> tuple[bool, str]:
-    ok, payload = workboard_claim.release(
-        workboard_path,
-        agent=agent,
-        allow_dirty=bool(allow_dirty_release),
-        dirty_reason=str(dirty_release_reason or ""),
-        require_done_state=bool(require_done_state),
-    )
-    if ok:
-        return True, ""
-    return False, str(payload)
-
-
-def _set_task_status_safe(
-    *,
-    workboard_path: Path,
-    task_id: str,
-    status: str,
-    actor: str,
-    enforce_transition: bool = True,
-) -> tuple[bool, str]:
-    ok, payload = workboard_task_manager.set_task_status(
-        workboard_path,
-        task_id=task_id,
-        status=status,
-        actor=actor,
-        enforce_transition=bool(enforce_transition),
-    )
-    if ok:
-        return True, ""
-    message = str(payload.get("error", "task status update failed")) if isinstance(payload, dict) else str(payload)
-    return False, message
-
-
-def _runtime_execution_id(task_id: str) -> str:
-    try:
-        payload = task_bot_runtime.find_by_task_id(task_id, repo_root=ROOT)
-    except Exception:
-        return ""
-    return str((payload or {}).get("execution_id") or "").strip()
-
-
-def _request_immediate_dispatch(
-    *,
-    workboard_path: Path,
-    agent: str,
-    task_manager_agent: str,
-    task_id: str,
-    dispatch_lookback_minutes: float,
-) -> tuple[bool, dict[str, object]]:
-    _send_message_safe(
-        workboard_path=workboard_path,
-        sender=agent,
-        recipient=task_manager_agent,
-        task_id=task_id,
-        summary=f"request immediate redispatch after completing `{task_id}`",
-        kind="coordination",
-        priority="p1",
-        requested_action="assign next available task",
-        decision="pending",
-    )
-    ok_dispatch, payload_dispatch = workboard_task_manager.dispatch_idle_agents_once(
-        workboard_path=workboard_path,
-        task_manager_agent=task_manager_agent,
-        max_dispatch_per_cycle=1,
-        online_lookback_minutes=max(1.0, float(dispatch_lookback_minutes)),
-        apply=True,
-    )
-    if not ok_dispatch:
-        return False, payload_dispatch
-    return True, payload_dispatch
-
-
-def _inbox_interrupt(
-    *,
-    workboard_path: Path,
-    agent: str,
-) -> tuple[bool, dict[str, object]]:
-    ok, payload = workboard_message.unread_messages(workboard_path, agent=agent)
-    if not ok:
-        return False, {
-            "error": str(payload.get("error") or "failed to read worker inbox"),
-            "unread_count": 0,
-            "messages": [],
-        }
-    messages = [dict(row) for row in list(payload.get("messages") or []) if isinstance(row, dict)]
-    return True, {
-        "unread_count": len(messages),
-        "messages": messages,
-        "msg_ids": [str(row.get("msg_id") or "") for row in messages if str(row.get("msg_id") or "").strip()],
-    }
 
 
 def _worker_loop(
@@ -500,6 +122,8 @@ def _worker_loop(
     cycle_count = 0
     completion_count = 0
     failure_count = 0
+    held_count = 0
+    refused_count = 0
     noop_count = 0
     heartbeat_count = 0
     dispatch_request_count = 0
@@ -644,10 +268,7 @@ def _worker_loop(
         if not commands:
             noop_count += 1
             _set_task_status_safe(
-                workboard_path=workboard_path,
-                task_id=task.task_id,
-                status="blocked",
-                actor=agent,
+                workboard_path=workboard_path, task_id=task.task_id, status="blocked", actor=agent,
                 enforce_transition=True,
             )
             _send_message_safe(
@@ -692,10 +313,7 @@ def _worker_loop(
             continue
 
         ok_status, err_status = _set_task_status_safe(
-            workboard_path=workboard_path,
-            task_id=task.task_id,
-            status="in_progress",
-            actor=agent,
+            workboard_path=workboard_path, task_id=task.task_id, status="in_progress", actor=agent,
             enforce_transition=True,
         )
         if not ok_status:
@@ -717,6 +335,10 @@ def _worker_loop(
             if poll_interval > 0:
                 time.sleep(poll_interval)
             continue
+
+        # Proxy for claim/start time (AssignedTask has none); whole seconds since commit committer time is too.
+        task_started_at = datetime.now(timezone.utc).replace(microsecond=0)
+        head_before_run = _git_head_sha(ROOT)
 
         if send_start_message:
             _send_message_safe(
@@ -770,96 +392,62 @@ def _worker_loop(
             completion_count += 1
             elapsed_total = sum(float(item.elapsed_seconds) for item in runs)
             ok_review, err_review = _set_task_status_safe(
-                workboard_path=workboard_path,
-                task_id=task.task_id,
-                status="review",
-                actor=agent,
+                workboard_path=workboard_path, task_id=task.task_id, status="review", actor=agent,
                 enforce_transition=True,
             )
             if not ok_review and err_review:
                 errors.append(err_review)
-            ok_done, err_done = _set_task_status_safe(
-                workboard_path=workboard_path,
-                task_id=task.task_id,
-                status="done",
-                actor=agent,
-                enforce_transition=True,
-            )
-            if not ok_done and err_done:
-                errors.append(err_done)
-            if runtime_execution_id:
-                try:
-                    task_bot_runtime.complete_execution(
-                        runtime_execution_id,
-                        actor=agent,
-                        summary=f"Worker completed `{task.task_id}` in {elapsed_total:.2f}s.",
-                        repo_root=ROOT,
-                    )
-                except Exception:
-                    pass
-            _send_message_safe(
-                workboard_path=workboard_path,
-                sender=agent,
-                recipient=task_manager_agent,
-                task_id=task.task_id,
-                summary=(
-                    f"completed `{task.task_id}` using {len(runs)} command(s) in {elapsed_total:.2f}s (log: {log_path})"
-                ),
-                kind="status",
-                priority="p1",
-                requested_action="none",
-                decision="approved",
-            )
-            if auto_release_success:
-                ok_release, err_release = _release_claim_safe(
-                    workboard_path=workboard_path,
-                    agent=agent,
-                    allow_dirty_release=allow_dirty_release,
-                    dirty_release_reason=dirty_release_reason,
-                    require_done_state=True,
+
+            # Done now requires proof: auto-done only when the pipeline itself landed a commit (HEAD moved).
+            head_after_run = _git_head_sha(ROOT)
+            landed_sha = head_after_run if head_after_run and head_after_run != head_before_run else None
+
+            if not landed_sha:
+                # Held, not done: an honest regression from auto-done-on-exit-0. Mirrors the failure
+                # branch -- no completed/approved message, no release (unfinished work keeps its claim
+                # visible), and this counts as a non-clean loop outcome, never a silent success.
+                held_count += 1
+                print(f"REVIEW HOLD {task.task_id}: pipeline succeeded but landed no commit - done requires evidence")
+                _send_message_safe(
+                    workboard_path=workboard_path, sender=agent, recipient=task_manager_agent,
+                    task_id=task.task_id,
+                    summary=(
+                        f"pipeline succeeded for `{task.task_id}` but landed no commit - "
+                        "done withheld, task remains in review"
+                    ),
+                    kind="blocker", priority="p1", decision="pending",
+                    requested_action="review pipeline output and land the missing commit, or reassign",
                 )
-                if not ok_release:
-                    failure_count += 1
-                    if err_release:
-                        errors.append(err_release)
-                    _send_message_safe(
-                        workboard_path=workboard_path,
-                        sender=agent,
-                        recipient=task_manager_agent,
-                        task_id=task.task_id,
-                        summary=f"completed `{task.task_id}` but failed to release claim",
-                        kind="blocker",
-                        priority="p0",
-                        requested_action="release claim manually",
-                        decision="pending",
-                    )
-                    if stop_on_failure:
-                        break
-                elif request_dispatch_on_complete:
-                    dispatch_request_count += 1
-                    ok_dispatch, payload_dispatch = _request_immediate_dispatch(
-                        workboard_path=workboard_path,
-                        agent=agent,
-                        task_manager_agent=task_manager_agent,
-                        task_id=task.task_id,
-                        dispatch_lookback_minutes=dispatch_lookback_minutes,
-                    )
-                    if ok_dispatch:
-                        dispatch_assigned_count += int(payload_dispatch.get("assigned_count", 0) or 0)
-                    else:
+            else:
+                result = _finalize_landed_done(
+                    workboard_path=workboard_path, task_id=task.task_id, agent=agent,
+                    task_manager_agent=task_manager_agent, landed_sha=landed_sha,
+                    evidence_not_before=task_started_at, runtime_execution_id=runtime_execution_id,
+                    repo_root=ROOT, elapsed_total=elapsed_total, run_count=len(runs), log_path=str(log_path),
+                    auto_release_success=auto_release_success, allow_dirty_release=allow_dirty_release,
+                    dirty_release_reason=dirty_release_reason,
+                    request_dispatch_on_complete=request_dispatch_on_complete,
+                    dispatch_lookback_minutes=dispatch_lookback_minutes,
+                )
+                if result["refused"]:
+                    # Refused, not done: mirrors the held branch's convention (review-round
+                    # fix, coordinator-reviewed) -- no completed/approved message, no
+                    # completion credit, its own blocker message, folds into `ok`. See
+                    # _finalize_landed_done's docstring (worker_dispatch.py) for the full
+                    # "why" this branch exists at all.
+                    completion_count -= 1
+                    refused_count += 1
+                    if result["error"]:
+                        errors.append(str(result["error"]))
+                    print(f"DONE REFUSED {task.task_id}: {result['error']}")
+                else:
+                    if result["dispatch_requested"]:
+                        dispatch_request_count += 1
+                        dispatch_assigned_count += int(result["dispatch_assigned"] or 0)
+                    if result["failure"]:
                         failure_count += 1
-                        errors.append(str(payload_dispatch.get("error", "immediate dispatch request failed")))
-                        _send_message_safe(
-                            workboard_path=workboard_path,
-                            sender=agent,
-                            recipient=task_manager_agent,
-                            task_id=task.task_id,
-                            summary="immediate redispatch request failed",
-                            kind="coordination",
-                            priority="p1",
-                            requested_action="run task manager monitor/dispatch cycle",
-                            decision="pending",
-                        )
+                        if result["error"]:
+                            errors.append(str(result["error"]))
                         if stop_on_failure:
                             break
         else:
@@ -867,10 +455,7 @@ def _worker_loop(
             failed_index = int(payload_run.get("failed_index", len(runs) or 1) or 1)
             failed_command = str(payload_run.get("failed_command", "")).strip()
             _set_task_status_safe(
-                workboard_path=workboard_path,
-                task_id=task.task_id,
-                status="blocked",
-                actor=agent,
+                workboard_path=workboard_path, task_id=task.task_id, status="blocked", actor=agent,
                 enforce_transition=True,
             )
             _send_message_safe(
@@ -915,7 +500,11 @@ def _worker_loop(
         if poll_interval > 0:
             time.sleep(poll_interval)
 
-    ok = failure_count == 0 and inbox_blocked_count == 0
+    # A held task (pipeline succeeded but landed no commit) is not a clean loop outcome -- it must
+    # never read as silent success, so held_count folds into ok exactly like failure_count does.
+    # A refused done (a commit DID land, but the done transition itself was refused -- e.g. the
+    # evidence failed verification) is the same shape: not clean, folds into ok the same way.
+    ok = failure_count == 0 and held_count == 0 and refused_count == 0 and inbox_blocked_count == 0
     payload: dict[str, object] = {
         "agent": agent,
         "ok": bool(ok),
@@ -923,6 +512,8 @@ def _worker_loop(
         "cycle_count": cycle_count,
         "completed_count": completion_count,
         "failure_count": failure_count,
+        "held_count": held_count,
+        "refused_count": refused_count,
         "no_command_count": noop_count,
         "heartbeat_count": heartbeat_count,
         "dispatch_request_count": dispatch_request_count,
@@ -1167,8 +758,9 @@ def run(argv: Iterable[str] | None = None) -> int:
         print("Workboard worker: PASS" if ok_loop else "Workboard worker: FAIL")
         print(
             f"- agent={payload.get('agent')}; completed={payload.get('completed_count')}; "
-            f"failures={payload.get('failure_count')}; no_command={payload.get('no_command_count')}; "
-            f"inbox_blocked={payload.get('inbox_blocked_count')}"
+            f"failures={payload.get('failure_count')}; held={payload.get('held_count')}; "
+            f"refused={payload.get('refused_count')}; "
+            f"no_command={payload.get('no_command_count')}; inbox_blocked={payload.get('inbox_blocked_count')}"
         )
         for item in list(payload.get("errors") or []):
             print(f"- error: {item}")

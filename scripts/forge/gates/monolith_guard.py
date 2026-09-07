@@ -342,11 +342,25 @@ def run_guard(
         except Exception as exc:
             growth_lookup_error = f"{type(exc).__name__}: {exc}"
 
-    for path, ext in _iter_candidate_files(repo_root, scan_roots, hard_limits):
+    # When the caller named the files, walk those — not the whole tree and then
+    # a filter. `--staged-only` is the form pre-commit runs on every commit, and
+    # rglob over this repository takes about 2.6 minutes; the same run scoped to
+    # the staged set takes well under a second. The old order was invisible only
+    # because the root was wrong, so the walk covered 71 files of scripts/forge.
+    if scoped_files is not None:
+        candidates: Iterable[tuple[Path, str]] = (
+            (repo_root / rel, Path(rel).suffix.lstrip(".").lower())
+            for rel in sorted(scoped_files)
+            if (repo_root / rel).is_file()
+            and Path(rel).suffix.lstrip(".").lower() in hard_limits
+            and not _is_skipped(repo_root / rel)
+        )
+    else:
+        candidates = _iter_candidate_files(repo_root, scan_roots, hard_limits)
+
+    for path, ext in candidates:
         rel = path.relative_to(repo_root).as_posix()
         if tracked_files is not None and rel not in tracked_files:
-            continue
-        if scoped_files is not None and rel not in scoped_files:
             continue
         legacy_part_file = _looks_like_legacy_monolith_file(path)
         if legacy_part_file and not _is_allowed_split_file(path, rel):
@@ -562,7 +576,13 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args()
 
-    repo_root = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[1]
+    # parents[3], matching _REPO_ROOT and ROOT above and every other gate in this
+    # directory. This line said parents[1], which is scripts/forge — so the form
+    # pre-commit runs (--staged-only, no --repo-root) resolved staged paths like
+    # thomas/server/app.py against scripts/forge, found nothing, and reported
+    # success over 71 files of its own folder. Measured: a staged 1,471-line
+    # unbaselined file printed "Monolith guard OK. Scanned 0 files".
+    repo_root = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[3]
     baseline_path = Path(args.baseline)
     if not baseline_path.is_absolute():
         baseline_path = (repo_root / baseline_path).resolve()

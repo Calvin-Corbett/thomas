@@ -8,9 +8,7 @@ import importlib.util
 import json
 import re
 import sqlite3
-import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -24,31 +22,58 @@ if str(ROOT) not in sys.path:
 
 try:
     from scripts import gate_response_policy
-    from scripts.crew.workboard import message as workboard_message
+    from scripts.crew.brief import incident_surfacing, trunk_health
+    from scripts.forge import fleet_stall, trunk_divergence
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     import gate_response_policy  # type: ignore
-    from crew.workboard import message as workboard_message  # type: ignore
+    from crew.brief import incident_surfacing, trunk_health  # type: ignore
 
-# Worktree-sprawl prevention: surfaced at session start so every agent sees the
-# worktree inventory before creating a new one. Imported defensively — a failure
-# here must never break the startup router.
-try:
-    from scripts.crew import worktree_debt, worktree_ledger
-except (ImportError, ModuleNotFoundError):  # pragma: no cover
-    try:
-        from crew import worktree_debt, worktree_ledger  # type: ignore
-    except (ImportError, ModuleNotFoundError):
-        worktree_ledger = None  # type: ignore
-        worktree_debt = None  # type: ignore
+    from forge import fleet_stall, trunk_divergence  # type: ignore
 
-# Branch-sprawl prevention. Worktrees were counted; branches were not, so a repo
-# could sit under the worktree ceiling while dozens of branches accumulated
-# unseen. Surfacing this at session start is what stops an agent with no context
-# from building on top of a stale branch.
+# Session-start signal collectors (unread-inbox / current-thread / message-
+# audit checks, orphaned-dirty-state detection, worktree/branch inventory)
+# moved to startup_signals.py in the phase-1.5 Task 3 move-only split (worker.py
+# precedent, commit 7f1006d7) -- this file was over monolith_guard's unbaselined
+# 800-line soft limit. Re-imported and re-exported under their original names so
+# no external caller or test needs to change.
 try:
-    from thomas.forge import branch_custodian
+    from scripts.crew.brief.startup_signals import (
+        DATE_RE,
+        _brief_text,
+        _detect_orphaned_dirty_state,
+        _extract_keywords,
+        _matching_claims,
+        _parse_workboard_claims,
+        _paths_overlap,
+        _relpath,
+        _scan_related_branches,
+        _startup_branch_inventory,
+        _startup_current_thread,
+        _startup_inbox,
+        _startup_message_audit,
+        _startup_trunk_health,
+        _startup_worktree_inventory,
+        _unique,
+    )
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
-    branch_custodian = None  # type: ignore
+    from crew.brief.startup_signals import (  # type: ignore
+        DATE_RE,
+        _brief_text,
+        _detect_orphaned_dirty_state,
+        _extract_keywords,
+        _matching_claims,
+        _parse_workboard_claims,
+        _paths_overlap,
+        _relpath,
+        _scan_related_branches,
+        _startup_branch_inventory,
+        _startup_current_thread,
+        _startup_inbox,
+        _startup_message_audit,
+        _startup_trunk_health,
+        _startup_worktree_inventory,
+        _unique,
+    )
 
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
@@ -72,7 +97,6 @@ RISKY_PREFIXES = (
     "plans/thomas/",
 )
 WORKBOARD_REQUIRED_LANES = {"risky-edit", "multi-file", "multi-agent", "ui-proof"}
-DATE_RE = re.compile(r"Last updated:\s*(?P<value>\d{4}-\d{2}-\d{2})")
 
 
 def _load_agent_preflight_module():
@@ -86,32 +110,6 @@ def _load_agent_preflight_module():
 
 
 agent_preflight = _load_agent_preflight_module()
-
-
-def _relpath(path_value: str) -> str:
-    raw = str(path_value or "").strip().replace("\\", "/")
-    if not raw:
-        return ""
-    candidate = Path(raw)
-    if candidate.is_absolute():
-        try:
-            candidate = candidate.resolve().relative_to(ROOT)
-            return str(candidate).replace("\\", "/")
-        except (OSError, ValueError):
-            return str(candidate).replace("\\", "/")
-    return raw.lstrip("./")
-
-
-def _unique(values: list[str]) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        key = str(value or "").strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        out.append(key)
-    return out
 
 
 def _load_workflow_mode() -> str:
@@ -148,164 +146,6 @@ def _find_guardrails(paths: list[str]) -> list[str]:
             if parent == ROOT:
                 break
     return _unique(found)
-
-
-def _parse_workboard_claims(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {
-            "exists": False,
-            "active_claims": 0,
-            "matching_claims": [],
-            "conflict": False,
-            "stale": False,
-            "updated_at": "",
-        }
-    text = path.read_text(encoding="utf-8", errors="replace")
-    updated_at = ""
-    stale = False
-    for line in text.splitlines()[:20]:
-        match = DATE_RE.search(line)
-        if not match:
-            continue
-        updated_at = match.group("value")
-        try:
-            then = datetime.fromisoformat(updated_at).replace(tzinfo=timezone.utc)
-            stale = (datetime.now(timezone.utc) - then).days >= 7
-        except ValueError:
-            stale = False
-        break
-    in_claims = False
-    claims: list[dict[str, str]] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            in_claims = stripped.lower().startswith("## agent claims")
-            continue
-        if not in_claims or not stripped.startswith("- "):
-            continue
-        token = stripped[2:].strip()
-        if token.lower() in {"none", "- none"}:
-            continue
-        fields: dict[str, str] = {}
-        for part in [piece.strip() for piece in token.split(";") if piece.strip()]:
-            if "=" not in part:
-                continue
-            key, value = part.split("=", 1)
-            fields[key.strip().lower()] = value.strip()
-        if fields:
-            claims.append(fields)
-    return {
-        "exists": True,
-        "active_claims": len(claims),
-        "claims": claims,
-        "stale": stale,
-        "updated_at": updated_at,
-    }
-
-
-def _startup_inbox(workboard_path: Path, *, agent: str = "") -> dict[str, Any]:
-    actor = workboard_message.resolve_current_agent(agent)
-    if not actor:
-        return {
-            "agent": "",
-            "ok": False,
-            "unread_count": 0,
-            "messages": [],
-            "error": "agent identity unavailable; pass --agent or set AGENT_ID/THOMAS_AGENT_ID",
-        }
-    ok, payload = workboard_message.unread_messages(workboard_path, agent=actor)
-    messages = list(payload.get("messages") or []) if ok else []
-    return {
-        "agent": actor,
-        "ok": bool(ok),
-        "unread_count": len(messages),
-        "messages": messages[:8],
-        "error": "" if ok else str(payload.get("error") or "inbox check failed"),
-    }
-
-
-def _startup_current_thread(workboard_path: Path, *, agent: str = "", peer: str = "") -> dict[str, Any]:
-    actor = workboard_message.resolve_current_agent(agent)
-    peer_clean = str(peer or "").strip()
-    if not actor:
-        return {
-            "agent": "",
-            "peer": peer_clean,
-            "ok": False,
-            "message_count": 0,
-            "awaiting_me": 0,
-            "awaiting_peer": 0,
-            "messages": [],
-            "error": "agent identity unavailable; pass --agent or set AGENT_ID/THOMAS_AGENT_ID",
-        }
-    ok, payload = workboard_message.current_messages(workboard_path, agent=actor, peer=peer_clean, limit=5)
-    messages = list(payload.get("messages") or []) if ok else []
-    awaiting_me = sum(1 for row in messages if str(row.get("awaiting") or "") == "me")
-    awaiting_peer = sum(1 for row in messages if str(row.get("awaiting") or "") == "peer")
-    return {
-        "agent": actor,
-        "peer": peer_clean,
-        "ok": bool(ok),
-        "message_count": int(payload.get("message_count") or len(messages)) if ok else 0,
-        "awaiting_me": awaiting_me,
-        "awaiting_peer": awaiting_peer,
-        "messages": messages[:5],
-        "error": "" if ok else str(payload.get("error") or "current-thread check failed"),
-    }
-
-
-def _startup_message_audit(workboard_path: Path, *, agent: str = "", peer: str = "") -> dict[str, Any]:
-    actor = workboard_message.resolve_current_agent(agent)
-    peer_clean = str(peer or "").strip()
-    ok, payload = workboard_message.audit_messages(workboard_path, agent=actor, peer=peer_clean, limit=5)
-    return {
-        "agent": actor,
-        "peer": peer_clean,
-        "ok": bool(ok),
-        "problem_count": int(payload.get("problem_count") or 0),
-        "canonical_inbox_count": int(payload.get("canonical_inbox_count") or 0),
-        "canonical_current_count": int(payload.get("canonical_current_count") or 0),
-        "awaiting_me": int(payload.get("awaiting_me") or 0),
-        "awaiting_peer": int(payload.get("awaiting_peer") or 0),
-        "parse_error_count": int(payload.get("parse_error_count") or 0),
-        "candidate_mention_count": int(payload.get("candidate_mention_count") or 0),
-        "identity_mismatch_count": int(payload.get("identity_mismatch_count") or 0),
-        "stale_identity_mismatch_count": int(payload.get("stale_identity_mismatch_count") or 0),
-        "parse_errors": list(payload.get("parse_errors") or [])[:5],
-        "candidate_mentions": list(payload.get("candidate_mentions") or [])[:5],
-        "identity_mismatches": list(payload.get("identity_mismatches") or [])[:5],
-        "stale_identity_mismatches": list(payload.get("stale_identity_mismatches") or [])[:5],
-        "diagnosis": str(payload.get("diagnosis") or ""),
-        "error": "" if ok else str(payload.get("error") or "message lane audit found problems"),
-    }
-
-
-def _brief_text(value: object, *, limit: int = 180) -> str:
-    text = re.sub(r"\s+", " ", str(value or "").strip())
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 3)].rstrip() + "..."
-
-
-def _paths_overlap(path_a: str, path_b: str) -> bool:
-    a = _relpath(path_a)
-    b = _relpath(path_b)
-    if not a or not b:
-        return False
-    return a == b or a.startswith(b.rstrip("/") + "/") or b.startswith(a.rstrip("/") + "/")
-
-
-def _matching_claims(paths: list[str], workboard: dict[str, Any]) -> list[dict[str, str]]:
-    rows = list(workboard.get("claims") or [])
-    if not paths:
-        return []
-    matches: list[dict[str, str]] = []
-    for claim in rows:
-        scope_value = str(claim.get("scope") or "")
-        scopes = [item.strip() for item in scope_value.split(",") if item.strip()]
-        if any(_paths_overlap(task_path, scope_path) for task_path in paths for scope_path in scopes):
-            matches.append(claim)
-    return matches
 
 
 def _requires_ui_proof(paths: list[str]) -> bool:
@@ -349,209 +189,6 @@ def _bootstrap_command(summary: str, paths: list[str]) -> str:
         'python scripts/crew/brief/bootstrap_claim.py --agent "<agent-id>" '
         f'--scope "{scope}" --task "{task}" --no-auto-dispatch'
     )
-
-
-_BRANCH_SCAN_STOP_WORDS = frozenset(
-    {
-        "a",
-        "an",
-        "the",
-        "is",
-        "are",
-        "was",
-        "were",
-        "be",
-        "been",
-        "being",
-        "have",
-        "has",
-        "had",
-        "do",
-        "does",
-        "did",
-        "will",
-        "would",
-        "shall",
-        "should",
-        "may",
-        "might",
-        "must",
-        "can",
-        "could",
-        "to",
-        "of",
-        "in",
-        "for",
-        "on",
-        "with",
-        "at",
-        "by",
-        "from",
-        "as",
-        "into",
-        "through",
-        "during",
-        "before",
-        "after",
-        "above",
-        "below",
-        "between",
-        "out",
-        "up",
-        "down",
-        "and",
-        "but",
-        "or",
-        "nor",
-        "not",
-        "so",
-        "yet",
-        "both",
-        "either",
-        "neither",
-        "each",
-        "every",
-        "all",
-        "any",
-        "this",
-        "that",
-        "these",
-        "those",
-        "it",
-        "its",
-        "my",
-        "our",
-        "add",
-        "fix",
-        "update",
-        "create",
-        "make",
-        "build",
-        "implement",
-        "change",
-        "modify",
-        "edit",
-        "remove",
-        "delete",
-        "refactor",
-        "work",
-        "get",
-        "set",
-        "new",
-        "use",
-        "run",
-        "test",
-        "check",
-        "file",
-        "files",
-        "code",
-        "module",
-        "function",
-        "class",
-        "method",
-        "thomas",
-        "agent",
-        "feature",
-        "bug",
-        "issue",
-        "task",
-        "page",
-    }
-)
-
-
-def _extract_keywords(summary: str, paths: list[str]) -> list[str]:
-    """Extract meaningful keywords from a task summary and file paths."""
-    words: list[str] = []
-    # From summary: split on non-alphanumeric, keep words >= 3 chars
-    for token in re.split(r"[^a-zA-Z0-9_-]+", summary.lower()):
-        token = token.strip("-_")
-        if len(token) >= 3 and token not in _BRANCH_SCAN_STOP_WORDS:
-            words.append(token)
-    # From paths: extract meaningful directory/file name components
-    for raw in paths:
-        rel = _relpath(raw)
-        for part in rel.replace("\\", "/").split("/"):
-            name = part.split(".")[0].strip("-_").lower()
-            if len(name) >= 3 and name not in _BRANCH_SCAN_STOP_WORDS:
-                words.append(name)
-    return _unique(words)[:8]  # Cap at 8 keywords to keep searches fast
-
-
-def _scan_related_branches(summary: str, paths: list[str]) -> dict[str, Any]:
-    """Scan local and remote branches/commits for existing work related to the task.
-
-    Returns a dict with:
-      - keywords: list of keywords searched
-      - branches: list of matching branch names
-      - commits: list of matching commit one-liners (capped at 15)
-      - warning: human-readable warning string (empty if nothing found)
-    """
-    keywords = _extract_keywords(summary, paths)
-    if not keywords:
-        return {"keywords": [], "branches": [], "commits": [], "warning": ""}
-
-    matched_branches: list[str] = []
-    matched_commits: list[str] = []
-
-    for kw in keywords:
-        # Search branch names
-        try:
-            result = subprocess.run(
-                ["git", "branch", "-a", "--list", f"*{kw}*"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=str(ROOT),
-            )
-            for line in result.stdout.strip().splitlines():
-                branch = line.strip().lstrip("* ").strip()
-                if branch and branch not in matched_branches:
-                    matched_branches.append(branch)
-        except (subprocess.SubprocessError, OSError):
-            pass
-
-        # Search commit messages
-        try:
-            result = subprocess.run(
-                ["git", "log", "--all", "--oneline", "--grep", kw, "-n", "10"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=str(ROOT),
-            )
-            for line in result.stdout.strip().splitlines():
-                line = line.strip()
-                if line and line not in matched_commits:
-                    matched_commits.append(line)
-        except (subprocess.SubprocessError, OSError):
-            pass
-
-    # Deduplicate and cap
-    matched_branches = _unique(matched_branches)[:10]
-    matched_commits = _unique(matched_commits)[:15]
-
-    warning = ""
-    if matched_branches or matched_commits:
-        parts = []
-        if matched_branches:
-            branch_list = ", ".join(matched_branches[:5])
-            more = f" (+{len(matched_branches) - 5} more)" if len(matched_branches) > 5 else ""
-            parts.append(f"Found {len(matched_branches)} related branch(es): {branch_list}{more}")
-        if matched_commits:
-            parts.append(f"Found {len(matched_commits)} related commit(s) across all branches.")
-        parts.append(
-            "STOP and check these before creating new files. "
-            "Existing work may just need a merge. Ask the user before rebuilding."
-        )
-        warning = " ".join(parts)
-
-    return {
-        "keywords": keywords,
-        "branches": matched_branches,
-        "commits": matched_commits,
-        "warning": warning,
-    }
 
 
 def classify_task(
@@ -705,172 +342,16 @@ def classify_task(
     }
 
 
-def _detect_orphaned_dirty_state(repo_root: Path, max_age_hours: float = 24.0) -> dict[str, Any]:
-    """Crew.Brief Layer 2 — detect orphaned dirty state from prior sessions.
-
-    Scans ``runtime/heartbeat_dirty/`` for recent auto-checkpoint failures (L1
-    records its failures there). A non-zero count of recent records implies a
-    prior session left dirty work uncommitted and is no longer running. The
-    payload here is informational; the recommended remediation is to run
-    ``scripts/heartbeat.py --checkpoint --force`` before starting new work.
-    """
-    dirty_dir = repo_root / "runtime" / "heartbeat_dirty"
-    if not dirty_dir.exists():
-        return {
-            "records_found": 0,
-            "recent_records": [],
-            "orphan_detected": False,
-            "recommendation": "",
-        }
-
+def _startup_incident_surfacing(repo_root: Path) -> dict[str, Any]:
+    """Session-start count of open incidents lacking closure (phase 1.5 Task
+    3). ``incident_surfacing.summarize`` already never raises, but this
+    wrapper is a second, defensive backstop -- session start must never fail
+    on this line no matter what."""
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=float(max_age_hours))
-    except (TypeError, ValueError):
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24.0)
-
-    recent: list[dict[str, Any]] = []
-    for record_path in sorted(dirty_dir.glob("*.json"), reverse=True)[:50]:
-        try:
-            data = json.loads(record_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, ValueError):
-            continue
-        ts_raw = str(data.get("ts") or "")
-        try:
-            ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if ts >= cutoff:
-            recent.append(
-                {
-                    "ts": ts_raw,
-                    "branch": str(data.get("branch") or ""),
-                    "dirty_file_count": int(data.get("dirty_file_count") or 0),
-                    "dirty_paths": list(data.get("dirty_paths") or [])[:10],
-                    "reason": str(data.get("reason") or "")[:200],
-                    "record": record_path.name,
-                }
-            )
-
-    return {
-        "records_found": len(recent),
-        "recent_records": recent[:5],
-        "orphan_detected": bool(recent),
-        "recommendation": (
-            "Prior session left dirty work uncommitted. Recommended: "
-            "`python scripts/heartbeat.py --checkpoint --force` to auto-checkpoint, "
-            "or `python scripts/crew/brief/commit.py --message <msg>` to resolve manually "
-            "before starting new work."
-            if recent
-            else ""
-        ),
-    }
-
-
-def _startup_worktree_inventory(repo_root: Path) -> dict[str, Any]:
-    """Surface the worktree ledger + merge-debt alarm at session start.
-
-    Default-safe: with only the main checkout this returns a quiet summary and no
-    warning. Any failure degrades to an ``ok=False`` payload rather than raising.
-    """
-    if worktree_ledger is None:  # pragma: no cover - import guard
-        return {"ok": False, "error": "worktree_ledger unavailable", "summary": "", "warning": ""}
-    try:
-        ledger = worktree_ledger.collect(repo_root)
-        rows = [
-            {
-                "branch": row.branch or ("(main)" if row.is_main else "(detached)"),
-                "purpose": row.purpose,
-                "uncommitted": row.uncommitted_count,
-                "days_since_last_commit": row.days_since_last_commit,
-                "dirty": row.dirty,
-                "stale": row.stale,
-                "is_main": row.is_main,
-            }
-            for row in ledger.rows
-        ]
-        warning = ""
-        if worktree_debt is not None:
-            report = worktree_debt.assess_debt(repo_root)
-            if report.over_ceiling:
-                warning = worktree_debt.render_report(report)
-        return {
-            "ok": True,
-            "total": ledger.total,
-            "dirty": ledger.dirty_count,
-            "stale": ledger.stale_count,
-            "over_ceiling": ledger.over_ceiling,
-            "header": worktree_ledger.header_line(ledger),
-            "summary": worktree_ledger.summary_line(ledger),
-            "worktrees": rows,
-            "warning": warning,
-        }
-    except (OSError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:  # pragma: no cover
-        return {"ok": False, "error": str(exc), "summary": "", "warning": ""}
-
-
-def _startup_branch_inventory(repo_root: Path, *, trunk: str = "dev") -> dict[str, Any]:
-    """Surface branch sprawl at session start, beside the worktree inventory.
-
-    This is the awareness that prevents the recurring failure: an agent arriving
-    with no context, seeing a tidy worktree list, and happily branching again on
-    top of a pile nobody is tracking. Degrades quietly -- never raises.
-    """
-    if branch_custodian is None:  # pragma: no cover - import guard
-        return {"ok": False, "error": "branch_custodian unavailable", "summary": "", "warning": ""}
-    try:
-        git = branch_custodian.subprocess_git_runner(str(repo_root))
-        report = branch_custodian.survey(git, trunk=trunk)
-
-        # An active consolidation hold outranks everything else: it means new
-        # branches are refused, so the agent must know before it tries.
-        held = None
-        try:
-            from thomas.forge.consolidation_hold import active_hold
-
-            held = active_hold(repo_root)
-        except (ImportError, ModuleNotFoundError, OSError, ValueError):  # pragma: no cover
-            held = None
-        if held is not None:
-            return {
-                "ok": True,
-                "total": report.total,
-                "ceiling": report.ceiling,
-                "over_ceiling": report.over_ceiling,
-                "reclaimable": len(report.reclaimable),
-                "needs_decision": len(report.needs_decision),
-                "on_hold": True,
-                "summary": report.summary(),
-                "warning": held.message(),
-            }
-
-        warning = ""
-        if report.over_ceiling:
-            warning = (
-                f"BRANCH SPRAWL: {report.total} branches (ceiling {report.ceiling}). "
-                f"{len(report.reclaimable)} can be retired automatically; "
-                f"{len(report.needs_decision)} carry unique work. "
-                "Run `thomas consolidate` before creating another branch."
-            )
-        return {
-            "ok": True,
-            "total": report.total,
-            "ceiling": report.ceiling,
-            "over_ceiling": report.over_ceiling,
-            "reclaimable": len(report.reclaimable),
-            "needs_decision": len(report.needs_decision),
-            "on_hold": False,
-            "summary": report.summary(),
-            "warning": warning,
-        }
-    except (
-        OSError,
-        ValueError,
-        TypeError,
-        RuntimeError,
-        subprocess.SubprocessError,
-        branch_custodian.BranchCustodianError,
-    ) as exc:  # pragma: no cover
-        return {"ok": False, "error": str(exc), "summary": "", "warning": ""}
+        return incident_surfacing.summarize(repo_root)
+    except (OSError, ValueError, TypeError, RuntimeError, AttributeError) as exc:  # pragma: no cover
+        # Second, defensive backstop -- summarize() already catches internally.
+        return {"ok": False, "error": str(exc), "count": 0, "oldest": [], "unreadable_count": 0}
 
 
 def build_startup_payload(
@@ -907,6 +388,26 @@ def build_startup_payload(
     payload["orphaned_state"] = _detect_orphaned_dirty_state(ROOT)
     payload["worktree_inventory"] = _startup_worktree_inventory(ROOT)
     payload["branch_inventory"] = _startup_branch_inventory(ROOT)
+    payload["incident_surfacing"] = _startup_incident_surfacing(ROOT)
+    # Never let the absence watcher be the reason a session cannot start: on any
+    # failure say so on its own line rather than printing a clean zero.
+    # Where work sits outside the trunk. `thomas consolidate` counts LOCAL
+    # branches only, and read green here on 2026-09-03 while 73 commits were
+    # unpushed and the public repo was 889 behind. The clone scan walks the
+    # filesystem, so session start skips it; `python scripts/forge/
+    # trunk_divergence.py` runs the full five on demand.
+    try:
+        payload["trunk_divergence"] = trunk_divergence.build_report(scan_clones=False)
+    except (OSError, ValueError) as exc:
+        payload["trunk_divergence"] = trunk_divergence.Report(unknown=[f"unavailable ({exc})"])
+    try:
+        payload["fleet_stall"] = fleet_stall.build_report()
+    except (OSError, ValueError) as exc:
+        # Reading the board and shelling out to git are the two things here that
+        # can fail. Say which on its own line rather than printing a clean zero
+        # from an instrument that never read anything.
+        payload["fleet_stall"] = fleet_stall.Report(stall=[f"unavailable ({exc})"])
+    payload["trunk_health"] = _startup_trunk_health(ROOT)
     return payload
 
 
@@ -1111,6 +612,28 @@ def _text_output(payload: dict[str, Any]) -> str:
             "ACTION REQUIRED: Review these branches/commits before creating new files. "
             "Run 'git log --oneline master..<branch>' to inspect. Ask the user before rebuilding."
         )
+
+    incident_summary = dict(payload.get("incident_surfacing") or {})
+    if incident_summary:
+        lines.append(incident_surfacing.render_text(incident_summary))
+
+    trunk_summary = dict(payload.get("trunk_health") or {})
+    if trunk_summary:
+        lines.append(trunk_health.render_text(trunk_summary))
+
+    # Absence, printed beside the excess. Every gate in scripts/forge/gates
+    # watches for too much; on 2026-09-02 five agents held claims and landed
+    # nothing for twelve hours while all of them read clean. These three lines
+    # are the only place Thomas says out loud that work has stopped, so they
+    # print on every session start rather than waiting to be asked.
+    stall_report = payload.get("fleet_stall")
+    if stall_report is not None:
+        lines.append(fleet_stall.render(stall_report))
+
+    divergence_report = payload.get("trunk_divergence")
+    if divergence_report is not None:
+        lines.append(trunk_divergence.render(divergence_report))
+
     return "\n".join(lines)
 
 

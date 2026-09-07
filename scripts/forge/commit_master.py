@@ -1,61 +1,23 @@
 #!/usr/bin/env python3
-"""Commit-master: the only identity allowed to commit/sign/push in the cage.
+"""Privileged commit-master for the Praxis cage.
 
-Praxis "cage" finale (plans/thomas/problems/praxis-unbypassable-2026-05-29).
+Workers can only propose a patch and manifest through the one-way inbox. The
+master rebuilds that submission from pristine ``HEAD`` in a clean worktree,
+verifies protected gate code, strips bypass environment variables, runs the
+trusted gate suite, and creates a verified commit object. It optionally signs
+and pushes with credentials unavailable to the worker, then records a verdict
+through the one-way outbox.
 
-Why this exists
----------------
-The Red/Blue exercise proved every *locally* fixable gate bypass closed, but
-left one irreducible residual: **a same-OS-user shell controls local
-filesystem state**, so the worker agent could forge the success marker, delete
-hooks, reset the audit log, or self-approve. No purely-local control closes
-that while the worker IS the committer.
-
-This module changes the *shape* of the problem instead of patching another
-string. It splits the worker's two roles apart:
-
-* The worker agent becomes a **proposer**. Its ONLY sanctioned write to the
-  repo is to drop a *submission* (a patch + a small JSON manifest) into a
-  one-way ``inbox`` directory. It cannot commit, push, sign, or talk to the
-  gatekeeper.
-* A separate identity runs this **commit-master**. It treats each submission
-  as inert *data*: it rebuilds the change in a throwaway clean-room worktree
-  from pristine ``HEAD``, runs the gates with the trusted gate scripts and a
-  sanitized environment, ignores any self-asserted approval in the
-  submission, and only then commits + signs + pushes with a key the worker
-  cannot read. Verdicts go back via a one-way ``outbox``.
-
-Under the OS-level cage (``scripts/cage/provision_cage.ps1``) the channel ACLs
-make this a real privilege boundary. Before provisioning it still runs — as an
-advisory single-user pipeline — and degrades exactly like the existing local
-gates: useful, but not yet a wall. The provisioning step is what flips it from
-advisory to enforced; this module is written to be correct under separation.
-
-Security properties (each maps to a closed bypass class)
---------------------------------------------------------
-* clean-room rebuild from pristine HEAD -> B1' (no marker to mint), B6 (no hook
-  to delete; the master runs gates directly).
-* sanitized env -> B4 (GITHUB_ACTIONS CI-spoof), B5 (AGENT_ID identity-spoof),
-  R4 (THOMAS_*_DISABLE / THOMAS_SKIP_* envs).
-* submissions handled as data, master re-stamps its own trailers -> B12/B19
-  (self-asserted approval trailers / deletion records carry no authority).
-* external integrity anchor: the master hashes the clean-room gate files
-  against a trusted manifest the worker cannot write, BEFORE running any gate
-  -> B3/B7 (a patch that neuters a gate is a hash mismatch and is rejected).
-* gates run from INSIDE the clean room (they resolve their repo via __file__,
-  not cwd), so they actually inspect the submitted change, not the main repo.
-
-This file is intentionally self-contained and stdlib-only so the gatekeeper
-identity needs nothing from the worker's environment to run it.
+The operating-system cage makes this a privilege boundary by protecting this
+facade and the helper modules under ``scripts/forge/gates``. Without those ACLs
+the same flow is useful verification but remains advisory.
 """
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -65,7 +27,40 @@ from pathlib import Path
 from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.crew.brief import commit_integrity, coordination_barrier
+from scripts.crew.brief import identity as agent_identity
+from scripts.forge.gates import commit_master_cli as _commit_master_cli
+from scripts.forge.gates import commit_master_inbox as _commit_master_inbox
+from thomas.core import agent_session_identity
+
+_PROTECTED_GATE_ROOT = (_REPO_ROOT / "scripts" / "forge" / "gates").resolve()
+
+
+def _privileged_dependency_paths() -> tuple[Path, ...]:
+    """Return resolved source paths for code trusted by the commit-master."""
+    modules = (_commit_master_inbox, _commit_master_cli)
+    return tuple(Path(str(module.__file__)).resolve(strict=True) for module in modules)
+
+
+def _verify_privileged_dependencies_protected(
+    dependency_paths: tuple[Path, ...] | None = None,
+    *,
+    protected_root: Path | None = None,
+) -> tuple[Path, ...]:
+    """Refuse helper code resolved outside the cage's protected gate directory."""
+    root = (protected_root or _PROTECTED_GATE_ROOT).resolve(strict=True)
+    paths = dependency_paths or _privileged_dependency_paths()
+    unprotected = [path for item in paths if not (path := Path(item).resolve()).is_relative_to(root)]
+    if unprotected:
+        rendered = ", ".join(str(path) for path in unprotected)
+        raise RuntimeError(f"commit-master privileged dependency outside protected gate boundary: {rendered}")
+    return tuple(Path(path).resolve() for path in paths)
+
+
+_verify_privileged_dependencies_protected()
 
 # --------------------------------------------------------------------------- #
 # Environment sanitization
@@ -207,13 +202,26 @@ def _now() -> float:
     return time.time()
 
 
-def _git(repo: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _session_binding_required(repo: Path) -> bool:
+    has_session_source = any(
+        str(os.getenv(key) or "").strip() for key in ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
+    )
+    return has_session_source or repo.resolve() == _REPO_ROOT.resolve()
+
+
+def _git(
+    repo: Path,
+    *args: str,
+    env: dict[str, str] | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
         cwd=str(repo),
         env=env,
         capture_output=True,
         text=True,
+        input=input_text,
         check=False,
     )
 
@@ -232,191 +240,52 @@ def append_audit(layout: CageLayout, record: dict[str, Any]) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Coordination delivery enforcement (cage PROBLEM 2)
+# Coordination delivery enforcement (protected implementation + stable facade)
 # --------------------------------------------------------------------------- #
-# The worker's ONLY sanctioned repo action is `submit`. That makes it the exact
-# choke point at which to enforce "you cannot act past an unread directive":
-# before a submission is accepted we check whether the submitting agent has any
-# unread coordination messages and refuse if so. This is what turns the
-# pull-only message lane into guaranteed delivery for caged agents. Import is
-# LAZY + guarded so the gatekeeper's clean-room path stays stdlib-only and a
-# missing surfacing module never bricks a submission.
-class InboxBlockedError(RuntimeError):
-    """Raised when a worker tries to submit with unread messages."""
-
-    def __init__(self, agent: str, blocking: list[dict[str, Any]]) -> None:
-        self.agent = str(agent or "")
-        self.blocking = list(blocking or [])
-        super().__init__(f"{len(self.blocking)} unread coordination message(s) must be acked before submitting")
+InboxBlockedError = _commit_master_inbox.InboxBlockedError
+_ALWAYS_BLOCK_KINDS = _commit_master_inbox.ALWAYS_BLOCK_KINDS
+_PATH_TOKEN_RE = _commit_master_inbox.PATH_TOKEN_RE
+_SUBMISSION_HOLD_RE = _commit_master_inbox.SUBMISSION_HOLD_RE
 
 
 def _paths_from_patch(patch_text: str) -> list[str]:
-    """Extract changed repo paths from a unified diff's ``+++ b/<path>`` lines."""
-    out: list[str] = []
-    for line in str(patch_text or "").splitlines():
-        if line.startswith("+++ b/"):
-            path = line[6:].strip()
-            if path and path != "/dev/null" and path not in out:
-                out.append(path)
-    return out
+    return _commit_master_inbox.paths_from_patch(patch_text)
 
 
 def _submission_changed_files(repo: Path, patch_file: str | None) -> list[str]:
-    """Repo-relative paths in this submission: the patch file, else the staged diff."""
-    if patch_file:
-        try:
-            return _paths_from_patch(Path(patch_file).read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            return []
-    proc = _git(repo, "diff", "--cached", "--name-only")
-    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
-
-
-# Scope-aware relevance is Calvin's chosen policy (2026-06-02) and exact wording:
-# "block commits to claimed paths until RELEVANT messages are acked". A focused
-# worker must not be wedged by an unrelated FYI, so the cage blocks only when a
-# message is a must-read kind, an explicit submit/commit hold directive, OR
-# concerns the files in THIS submission. Kept INLINE (not a separate importable
-# module) so the cage's choke point is self-contained and cannot be silently
-# disabled by deleting a helper. It reuses message.unread_messages -- the shared
-# "what is unread for me" primitive -- so it composes with, rather than
-# duplicates, the repo-wide block-on-any pre-commit gate
-# (scripts/forge/gates/workboard_inbox.py).
-_ALWAYS_BLOCK_KINDS = frozenset({"blocker", "scope_change"})
-_PATH_TOKEN_RE = re.compile(r"(?:[A-Za-z0-9_.\-]+/)+[A-Za-z0-9_.\-]+")
-_SUBMISSION_HOLD_RE = re.compile(
-    r"\b(?:do\s+not|don't|dont|stop|hold|pause|wait|block)\s+"
-    r"(?:the\s+)?(?:submit|submission|commit|commits|land|landing|push|merge)\b"
-    r"|\b(?:submit|submission|commit|commits|land|landing|push|merge)\s+"
-    r"(?:(?:is|are)\s+)?(?:blocked|paused|held|on\s+hold)\b"
-    r"|\back\s+before\s+(?:submit|submission|commit|land|landing|push|merge)\b"
-    r"|\bread\b.*\b(?:before|prior\s+to)\s+"
-    r"(?:submit|submission|commit|land|landing|push|merge)\b",
-    re.IGNORECASE,
-)
+    return _commit_master_inbox.submission_changed_files(repo, patch_file, core=sys.modules[__name__])
 
 
 def _co_norm_path(value: str) -> str:
-    # Strip a leading "./" and surrounding slashes WITHOUT eating a leading dot
-    # (str.lstrip("./") would turn ".github/x" into "github/x").
-    raw = str(value or "").strip().replace("\\", "/").strip("`'\" ")
-    while raw.startswith("./"):
-        raw = raw[2:]
-    return raw.strip("/")
+    return _commit_master_inbox.norm_path(value)
 
 
 def _co_paths_overlap(a: str, b: str) -> bool:
-    a = _co_norm_path(a)
-    b = _co_norm_path(b)
-    if not a or not b:
-        return False
-    return a == b or a.startswith(b + "/") or b.startswith(a + "/")
+    return _commit_master_inbox.paths_overlap(a, b, core=sys.modules[__name__])
 
 
 def _co_path_tokens(text: str) -> list[str]:
-    text = str(text or "")
-    out: list[str] = []
-    for match in _PATH_TOKEN_RE.finditer(text):
-        # Skip URL bodies: the regex captures the host/path AFTER "scheme://",
-        # so check the char run immediately preceding the match for a slash.
-        if text[: match.start()].rstrip().endswith("/"):
-            continue
-        token = match.group(0).strip("`'\"()[] ").rstrip(".,;:")
-        if "://" in token or "@" in token:
-            continue
-        token = _co_norm_path(token)
-        if token and "/" in token and token not in out:
-            out.append(token)
-    return out
+    return _commit_master_inbox.path_tokens(text, core=sys.modules[__name__])
 
 
 def _co_submission_hold(text: str) -> bool:
-    """Return True when a message is explicitly about stopping submission itself."""
-    return bool(_SUBMISSION_HOLD_RE.search(str(text or "")))
+    return _commit_master_inbox.submission_hold(text, core=sys.modules[__name__])
 
 
 def _co_active_task_scopes(workboard_text: str) -> dict[str, list[str]]:
-    """Map ``task_id`` -> scope paths from the ``## Active Tasks`` section."""
-    scopes: dict[str, list[str]] = {}
-    in_section = False
-    for line in workboard_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            in_section = stripped[3:].strip().lower().startswith("active tasks")
-            continue
-        if not in_section or not stripped.startswith("- "):
-            continue
-        fields: dict[str, str] = {}
-        for part in [piece.strip() for piece in stripped[2:].split(";") if piece.strip()]:
-            if "=" in part:
-                key, value = part.split("=", 1)
-                fields[key.strip().lower()] = value.strip()
-        task_id = str(fields.get("task_id", "")).strip().lower()
-        if task_id and task_id not in {"none", "_none_"}:
-            scopes[task_id] = [seg.strip() for seg in str(fields.get("scope", "")).split(",") if seg.strip()]
-    return scopes
+    return _commit_master_inbox.active_task_scopes(workboard_text)
 
 
 def _co_unread_messages(workboard: Path, agent: str) -> list[dict[str, Any]]:
-    """Open messages addressed to ``agent`` via the shared message primitive."""
-    try:
-        if str(_REPO_ROOT) not in sys.path:
-            sys.path.insert(0, str(_REPO_ROOT))
-        from scripts.crew.workboard import message as message_mod
-    except (ImportError, ModuleNotFoundError):
-        return []
-    fn = getattr(message_mod, "unread_messages", None)
-    if fn is not None:
-        ok, payload = fn(workboard, agent=agent)
-    else:  # pragma: no cover - fallback if the helper is unavailable
-        ok, payload = message_mod.list_messages(workboard, recipient=agent, state="open")
-    return list(payload.get("messages") or []) if ok else []
+    return _commit_master_inbox.unread_messages(workboard, agent, core=sys.modules[__name__])
 
 
 def _inbox_blocking(workboard: Path, agent: str, repo: Path, patch_file: str | None) -> list[dict[str, Any]]:
-    """Relevant unread messages that should block this submission ([] if none).
-
-    Scope-aware: a message blocks only when it is a must-read kind
-    (blocker/scope_change), an explicit submit/commit hold directive, OR its
-    subject paths (its task scope, or repo paths named in its text) overlap the
-    files in THIS submission. Fails OPEN (returns []) when the workboard, agent,
-    or message module is unavailable, so a missing coordination surface never
-    bricks a submission -- the cage's real security boundary is the clean-room
-    gate + privilege separation, not this coordination-delivery check.
-    """
-    workboard = Path(workboard)
-    if not workboard.exists() or not str(agent or "").strip():
-        return []
-    messages = _co_unread_messages(workboard, agent)
-    if not messages:
-        return []
-    text = workboard.read_text(encoding="utf-8")
-    task_scopes = _co_active_task_scopes(text)
-    changed = [_co_norm_path(c) for c in _submission_changed_files(repo, patch_file) if _co_norm_path(c)]
-
-    blocking: list[dict[str, Any]] = []
-    for msg in messages:
-        kind = str(msg.get("kind", "")).strip().lower()
-        reasons: list[str] = []
-        if kind in _ALWAYS_BLOCK_KINDS:
-            reasons.append(f"{kind} addressed to you (must-read)")
-        message_text = f"{msg.get('summary', '')} {msg.get('requested_action', '')}"
-        if _co_submission_hold(message_text):
-            reasons.append("submit/commit hold directive addressed to you")
-        subject = list(task_scopes.get(str(msg.get("task_id", "")).strip().lower(), []))
-        subject += _co_path_tokens(msg.get("summary", "")) + _co_path_tokens(msg.get("requested_action", ""))
-        hits = sorted({c for c in changed for s in subject if _co_paths_overlap(c, s)})
-        if hits:
-            reasons.append("concerns paths you are committing: " + ", ".join(hits[:5]))
-        if reasons:
-            enriched = dict(msg)
-            enriched["_reasons"] = reasons
-            blocking.append(enriched)
-    return blocking
+    return _commit_master_inbox.inbox_blocking(workboard, agent, repo, patch_file, core=sys.modules[__name__])
 
 
 def _default_workboard(repo: Path) -> Path:
-    return repo / "plans" / "thomas" / "WORKBOARD.md"
+    return _commit_master_inbox.default_workboard(repo)
 
 
 # --------------------------------------------------------------------------- #
@@ -447,13 +316,18 @@ def create_submission(
     coordination messages, making the cage runtime guarantee delivery of
     "don't touch X" directives at the worker's only choke point.
     """
+    commit_integrity.validate_caller_message(message)
+    binding = agent_identity.require_bound_identity(agent, repo_root=repo) if _session_binding_required(repo) else None
+    board = workboard or _default_workboard(repo)
+    if board.exists() or repo.resolve() == _REPO_ROOT.resolve():
+        coordination_barrier.require_clear_p0(board, bound_agent=agent)
     layout.ensure()
     base_sha = _resolve_sha(repo, base)
     if not base_sha:
         raise ValueError(f"cannot resolve base ref: {base!r}")
 
     if enforce_inbox:
-        blocking = _inbox_blocking(workboard or _default_workboard(repo), agent, repo, patch_file)
+        blocking = _inbox_blocking(board, agent, repo, patch_file)
         if blocking:
             append_audit(
                 layout,
@@ -470,6 +344,8 @@ def create_submission(
     sub_dir = layout.inbox / sid
     if sub_dir.exists():
         raise FileExistsError(f"submission already exists: {sub_dir}")
+    if board.exists() or repo.resolve() == _REPO_ROOT.resolve():
+        coordination_barrier.require_clear_p0(board, bound_agent=agent)
     sub_dir.mkdir(parents=True)
 
     patch_text: str
@@ -492,6 +368,7 @@ def create_submission(
         "remote": str(remote or ""),
         "branch": str(branch or ""),
         "submitted_at": _now(),
+        "session_id": binding.session_id if binding is not None else "",
     }
     (sub_dir / "submission.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
     append_audit(layout, {"event": "submitted", "id": sid, "agent": agent, "base": base_sha, "ts": _now()})
@@ -600,6 +477,21 @@ class CommitMaster:
             verdict = Verdict(sid, "rejected", detail=f"base commit not found: {base!r}")
             self._finish(sub_dir, verdict)
             return verdict
+        agent = str(manifest.get("agent") or "")
+        session_id = str(manifest.get("session_id") or "")
+        try:
+            commit_integrity.validate_caller_message(str(manifest.get("message") or ""))
+            if session_id or self.repo.resolve() == _REPO_ROOT.resolve():
+                agent_session_identity.validate_recorded_binding(
+                    self.repo,
+                    agent_id=agent,
+                    session_id=session_id,
+                )
+            board = _default_workboard(self.repo)
+            if board.exists() or self.repo.resolve() == _REPO_ROOT.resolve():
+                coordination_barrier.require_clear_p0(board, bound_agent=agent)
+        except (coordination_barrier.CoordinationBlocked, ValueError) as exc:
+            return Verdict(sid, "rejected", detail=str(exc))
 
         clean_room = self.layout.work / f"{sid}-{int(_now())}"
         try:
@@ -661,38 +553,16 @@ class CommitMaster:
             names = ", ".join(f["name"] for f in failures)
             return Verdict(sid, "rejected", detail=f"gate(s) failed: {names}", failures=failures)
 
-        # 5. All gates green. Commit in the clean room with MASTER-stamped
+        # 5. All gates green. Create a commit object with MASTER-stamped
         #    trailers. --no-verify is correct HERE and only here: the master has
         #    already run the trusted gates in this clean room, so the worktree's
         #    shared hooks must not re-fire (they reference the worker's paths and
         #    could be tampered). The master IS the verification. Any approval
         #    trailer the worker wrote in `message` is advisory text only.
-        message = self._compose_message(manifest)
-        # Disable ALL hooks for the master's commit. --no-verify alone is not
-        # enough: it skips pre-commit/commit-msg but NOT prepare-commit-msg, and
-        # the worktree shares the repo's hooks (incl. Thomas's python-based
-        # prepare-commit-msg choke point), which can't resolve in the clean room.
-        # core.hooksPath -> an empty dir turns every hook off; the master has
-        # already run the trusted gates, so it IS the verification.
-        nohooks = self.layout.root / "_nohooks"
-        nohooks.mkdir(parents=True, exist_ok=True)
-        commit_args = [
-            "-c",
-            f"commit.gpgsign={'true' if self.sign else 'false'}",
-            "-c",
-            f"core.hooksPath={str(nohooks).replace(chr(92), '/')}",
-            "commit",
-            "--no-verify",
-            "--allow-empty-message",
-            "-m",
-            message,
-        ]
-        if self.sign:
-            commit_args.append("-S")
-        commit = _git(clean_room, *commit_args, env=env)
-        if commit.returncode != 0:
-            return Verdict(sid, "error", detail=f"commit failed: {commit.stderr.strip()[:500]}")
-        sha = _resolve_sha(clean_room, "HEAD")
+        try:
+            sha = self._create_verified_commit(clean_room, base, manifest, env)
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+            return Verdict(sid, "error", detail=f"commit failed verification: {exc}")
 
         verdict = Verdict(sid, "committed", commit_sha=sha, detail="all gates passed")
 
@@ -701,7 +571,7 @@ class CommitMaster:
         remote = str(manifest.get("remote") or "")
         branch = str(manifest.get("branch") or "")
         if self.push and remote and branch:
-            push = _git(clean_room, "push", remote, f"HEAD:refs/heads/{branch}", env=env)
+            push = _git(clean_room, "push", remote, f"{sha}:refs/heads/{branch}", env=env)
             verdict.pushed = push.returncode == 0
             if not verdict.pushed:
                 verdict.detail += f"; push failed: {push.stderr.strip()[:300]}"
@@ -793,13 +663,56 @@ class CommitMaster:
         agent = str(manifest.get("agent") or "unknown")
         sid = str(manifest.get("id") or "")
         trailers = [
-            "",
-            f"Thomas-Submitted-By: {agent}",
-            "Thomas-Committed-By: commit-master",
-            f"Thomas-Submission-Id: {sid}",
-            "Thomas-Gated: commit-master/clean-room",
+            ("Thomas-Submitted-By", agent),
+            ("Thomas-Committed-By", "commit-master"),
+            ("Thomas-Submission-Id", sid),
+            ("Thomas-Gated", "commit-master/clean-room"),
         ]
-        return body + "\n" + "\n".join(trailers) + "\n"
+        return commit_integrity.compose_message(body, trailers)
+
+    def _create_verified_commit(
+        self,
+        clean_room: Path,
+        parent: str,
+        manifest: dict[str, Any],
+        env: dict[str, str],
+    ) -> str:
+        body = str(manifest.get("message") or "").strip() or "commit-master: gated change"
+        trailers = [
+            ("Thomas-Submitted-By", str(manifest.get("agent") or "unknown")),
+            ("Thomas-Committed-By", "commit-master"),
+            ("Thomas-Submission-Id", str(manifest.get("id") or "")),
+            ("Thomas-Gated", "commit-master/clean-room"),
+        ]
+        message = commit_integrity.compose_message(body, trailers)
+        tree_proc = _git(clean_room, "write-tree", env=env)
+        if tree_proc.returncode != 0:
+            raise RuntimeError(tree_proc.stderr.strip() or "git write-tree failed")
+        tree = tree_proc.stdout.strip()
+        sign_args = ("-S",) if self.sign else ()
+        commit_proc = _git(
+            clean_room,
+            "commit-tree",
+            tree,
+            "-p",
+            parent,
+            *sign_args,
+            env=env,
+            input_text=message,
+        )
+        if commit_proc.returncode != 0:
+            raise RuntimeError(commit_proc.stderr.strip() or "git commit-tree failed")
+        sha = commit_proc.stdout.strip()
+        commit_integrity.read_verified_commit(
+            clean_room,
+            sha,
+            expected_tree=tree,
+            expected_parent=parent,
+            expected_body=body,
+            expected_trailers=trailers,
+            run=lambda repo, args: _git(repo, *args, env=env),
+        )
+        return sha
 
     # -- bookkeeping ------------------------------------------------------ #
     def _load_manifest(self, sub_dir: Path) -> dict[str, Any] | None:
@@ -837,151 +750,34 @@ class CommitMaster:
 
 
 # --------------------------------------------------------------------------- #
-# CLI
+# CLI (protected implementation + stable facade)
 # --------------------------------------------------------------------------- #
-def _resolve_layout(args: argparse.Namespace, repo: Path) -> CageLayout:
-    root = args.cage_root or os.environ.get("THOMAS_CAGE_ROOT") or str(repo / "runtime" / "cage")
-    return CageLayout(root=Path(root).expanduser())
+def _resolve_layout(args: Any, repo: Path) -> CageLayout:
+    return _commit_master_cli.resolve_layout(args, repo, core=sys.modules[__name__])
 
 
-def _cmd_submit(args: argparse.Namespace) -> int:
-    repo = Path(args.repo).resolve()
-    layout = _resolve_layout(args, repo)
-    workboard = Path(args.workboard).resolve() if getattr(args, "workboard", "") else None
-    try:
-        sub_dir = create_submission(
-            layout=layout,
-            repo=repo,
-            agent=args.agent,
-            message=args.message,
-            base=args.base,
-            patch_file=args.patch_file,
-            remote=args.remote,
-            branch=args.branch,
-            workboard=workboard,
-        )
-    except InboxBlockedError as exc:
-        ack = [
-            f"python scripts/crew/workboard/message.py --ack --msg-id {m.get('msg_id')} --by {exc.agent}"
-            for m in exc.blocking
-        ]
-        payload = {
-            "ok": False,
-            "status": "blocked_unread_messages",
-            "agent": exc.agent,
-            "blocking": [
-                {
-                    "msg_id": m.get("msg_id"),
-                    "from": m.get("from"),
-                    "kind": m.get("kind"),
-                    "summary": m.get("summary"),
-                    "reasons": m.get("_reasons"),
-                }
-                for m in exc.blocking
-            ],
-            "ack": ack,
-            "detail": "Read and ACK these coordination messages, then resubmit.",
-        }
-        print(json.dumps(payload, indent=2, sort_keys=True))
-        return 2
-    print(json.dumps({"ok": True, "submission": str(sub_dir), "id": sub_dir.name}))
-    return 0
+def _cmd_submit(args: Any) -> int:
+    return _commit_master_cli.cmd_submit(args, core=sys.modules[__name__])
 
 
-def _cmd_run_once(args: argparse.Namespace) -> int:
-    repo = Path(args.repo).resolve()
-    layout = _resolve_layout(args, repo)
-    layout.ensure()
-    master = CommitMaster(
-        repo=repo,
-        layout=layout,
-        gates_root=Path(args.gates_root).resolve() if args.gates_root else None,
-        sign=not args.no_sign,
-        push=not args.no_push,
-    )
-    verdict = master.run_once()
-    if verdict is None:
-        print(json.dumps({"ok": True, "status": "idle", "detail": "no pending submissions"}))
-        return 0
-    print(json.dumps({"ok": verdict.status == "committed", **verdict.to_dict()}))
-    return 0 if verdict.status == "committed" else 1
+def _cmd_run_once(args: Any) -> int:
+    return _commit_master_cli.cmd_run_once(args, core=sys.modules[__name__])
 
 
-def _cmd_watch(args: argparse.Namespace) -> int:
-    repo = Path(args.repo).resolve()
-    layout = _resolve_layout(args, repo)
-    layout.ensure()
-    master = CommitMaster(
-        repo=repo,
-        layout=layout,
-        gates_root=Path(args.gates_root).resolve() if args.gates_root else None,
-        sign=not args.no_sign,
-        push=not args.no_push,
-    )
-    print(f"commit-master watching {layout.inbox} (interval={args.interval}s)")
-    while True:
-        verdict = master.run_once()
-        if verdict is not None:
-            print(json.dumps(verdict.to_dict()))
-        else:
-            time.sleep(max(1.0, float(args.interval)))
+def _cmd_watch(args: Any) -> int:
+    return _commit_master_cli.cmd_watch(args, core=sys.modules[__name__])
 
 
-def _cmd_status(args: argparse.Namespace) -> int:
-    repo = Path(args.repo).resolve()
-    layout = _resolve_layout(args, repo)
-    pending = [p.name for p in (layout.inbox.iterdir() if layout.inbox.exists() else []) if p.is_dir()]
-    verdicts = [p.name for p in (layout.outbox.iterdir() if layout.outbox.exists() else [])]
-    print(
-        json.dumps({"cage_root": str(layout.root), "pending": sorted(pending), "verdicts": sorted(verdicts)}, indent=2)
-    )
-    return 0
+def _cmd_status(args: Any) -> int:
+    return _commit_master_cli.cmd_status(args, core=sys.modules[__name__])
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Commit-master: gated proposer/committer split for the Praxis cage.")
-    parser.add_argument("--repo", default=str(_REPO_ROOT), help="repository root (default: this repo)")
-    parser.add_argument(
-        "--cage-root", default="", help="cage channel root (default: $THOMAS_CAGE_ROOT or <repo>/runtime/cage)"
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p_submit = sub.add_parser("submit", help="[worker] drop a submission into the inbox")
-    p_submit.add_argument("--agent", required=True)
-    p_submit.add_argument("--message", required=True)
-    p_submit.add_argument("--base", default="HEAD")
-    p_submit.add_argument("--patch-file", default="")
-    p_submit.add_argument("--remote", default="")
-    p_submit.add_argument("--branch", default="")
-    p_submit.add_argument(
-        "--workboard", default="", help="WORKBOARD.md for inbox enforcement (default: <repo>/plans/thomas/WORKBOARD.md)"
-    )
-    p_submit.set_defaults(func=_cmd_submit)
-
-    p_run = sub.add_parser("run-once", help="[master] process the oldest pending submission")
-    p_run.add_argument("--gates-root", default="")
-    p_run.add_argument("--no-sign", action="store_true")
-    p_run.add_argument("--no-push", action="store_true")
-    p_run.set_defaults(func=_cmd_run_once)
-
-    p_watch = sub.add_parser("watch", help="[master] poll the inbox forever")
-    p_watch.add_argument("--gates-root", default="")
-    p_watch.add_argument("--interval", default="5")
-    p_watch.add_argument("--no-sign", action="store_true")
-    p_watch.add_argument("--no-push", action="store_true")
-    p_watch.set_defaults(func=_cmd_watch)
-
-    p_status = sub.add_parser("status", help="show pending submissions and verdicts")
-    p_status.set_defaults(func=_cmd_status)
-    return parser
+def build_parser() -> Any:
+    return _commit_master_cli.build_parser(core=sys.modules[__name__])
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    # Normalize empty patch_file/remote/branch to falsy for submit.
-    if getattr(args, "patch_file", None) == "":
-        args.patch_file = None
-    return int(args.func(args))
+    return _commit_master_cli.main(argv, core=sys.modules[__name__])
 
 
 if __name__ == "__main__":

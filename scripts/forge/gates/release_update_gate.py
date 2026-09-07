@@ -191,11 +191,48 @@ def _git_show_text(rev: str, rel_path: str) -> str | None:
     return proc.stdout
 
 
+def _ref_sha(ref: str) -> str | None:
+    """Resolve `ref` (an exact, fully-qualified path) via `git show-ref
+    --verify` -- NO DWIM fallback, so a same-named tag or nested lookalike
+    branch can never stand in for the intended ref (the landed
+    claim_evidence.py `_ref_resolves` pattern, 9ac14311/f7a523f0).
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "show-ref", "--verify", ref],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if proc.returncode != 0 or not (proc.stdout or "").strip():
+        return None
+    sha = (proc.stdout or "").strip().splitlines()[0].split(maxsplit=1)[0].strip()
+    return sha or None
+
+
 def _merge_base_with_canonical(head: str = "HEAD") -> str | None:
     """Merge-base with the canonical branch, or None when unresolvable."""
-    for ref in ("dev-origin/dev", "origin/dev", "dev", "origin/main", "main"):
+    # Exact, fully-qualified candidate paths -- a bare name here lets git's
+    # DWIM resolution (gitrevisions(7)) match a same-named tag before the
+    # intended branch, and a bare "origin/dev" even matches a local branch
+    # literally named origin/dev before the remote-tracking ref. `head`
+    # stays "HEAD": that is an exact $GIT_DIR/HEAD lookup (rule 1), not
+    # DWIM-reachable.
+    for ref in (
+        "refs/remotes/dev-origin/dev",
+        "refs/remotes/origin/dev",
+        "refs/heads/dev",
+        "refs/remotes/origin/main",
+        "refs/heads/main",
+    ):
+        ref_sha = _ref_sha(ref)
+        if ref_sha is None:
+            continue
         proc = subprocess.run(
-            ["git", "merge-base", head, ref],
+            ["git", "merge-base", head, ref_sha],
             cwd=ROOT,
             capture_output=True,
             text=True,

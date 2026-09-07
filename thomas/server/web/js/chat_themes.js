@@ -85,5 +85,98 @@ var THEMES = {
     }
   }
 
-  window.ThomasChatThemes = { THEMES: THEMES, THEME_META: THEME_META };
+  /* The user overlay (thomas/server/overlay). Token records patch the stock
+     payloads; overlay themes are appended in manifest order (the tab shell
+     relays a theme choice by key index, so every document must build the
+     same order) as full payloads derived from their stock parent; the five
+     META fields that are real tokens follow their token records so
+     chat.html's applyTheme (which re-applies META after vars) cannot clobber
+     them. Runs once on the view the server put in the page, and again from
+     overlay_runtime.js when a newer overlay is adopted. */
+  var META_TOKENS = { '--font-head': 'fontHead', '--font-label': 'fontLabel', '--r-card': 'rCard', '--r-composer': 'rComposer', '--c-menu-bg': 'menuBg' };
+  var STOCK_NAMES = ['nebula', 'dark', 'light', 'aurora', 'sandstone'];
+  var THEME_NAME = /^[a-z][a-z0-9-]{1,31}$/;
+  /* Theme strings end up inside chat.html's own theme menu and message markup
+     (style attributes built as text), so a value is accepted only when it can
+     neither escape a declaration nor open a tag - the server refuses the same
+     shapes; this keeps a manifest written before that rule from rendering. */
+  /* Two guards, by sink. A token or META value only ever reaches
+     style.setProperty, where a double quote cannot escape anything, so it gets
+     the same guard the server applies (font stacks carry double quotes). A
+     string that chat.html builds INTO markup (swatches, msgRule, label,
+     tagline) additionally refuses double quotes, backticks and backslashes. */
+  var CSS_UNSAFE = /url\s*\(|expression\s*\(|@import|[;{}<>]/i;
+  var ATTR_UNSAFE = /url\s*\(|expression\s*\(|@import|[;{}<>"`\\]/i;
+  var ATTR_META = { msgRule: true, composerAccent: true };
+  function safeValue(value, limit, pattern) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text || text.length > (limit || 160)) return '';
+    if ((pattern || ATTR_UNSAFE).test(text)) return '';
+    return text;
+  }
+  function patchTokens(name, source) {
+    Object.keys(source || {}).forEach(function (key) {
+      var value = safeValue(source[key], 160, CSS_UNSAFE);
+      if (!value) return;
+      if (Object.prototype.hasOwnProperty.call(THEMES[name].vars, key)) THEMES[name].vars[key] = value;
+      if (META_TOKENS[key] && THEME_META[name]) THEME_META[name][META_TOKENS[key]] = value;
+    });
+  }
+  /* The stock payloads are snapshotted once and restored at the start of every
+     merge, so a token or theme that was CLEARED since the last merge goes back
+     to stock instead of lingering in the tables the shell repaints from. The
+     objects keep their identity (keys replaced in place): chat.html and the
+     workspace shell hold references to them. */
+  var STOCK_SNAPSHOT = null;
+  function pickStock(table) { var out = {}; STOCK_NAMES.forEach(function (n) { out[n] = table[n]; }); return out; }
+  function replaceKeys(target, source) {
+    Object.keys(target).forEach(function (k) { delete target[k]; });
+    Object.keys(source).forEach(function (k) { target[k] = source[k]; });
+  }
+  function restoreStock() {
+    if (!STOCK_SNAPSHOT) { STOCK_SNAPSHOT = JSON.parse(JSON.stringify({ themes: pickStock(THEMES), meta: pickStock(THEME_META) })); return; }
+    STOCK_NAMES.forEach(function (name) {
+      var t = STOCK_SNAPSHOT.themes[name];
+      replaceKeys(THEMES[name].vars, t.vars);
+      THEMES[name].name = t.name; THEMES[name].tagline = t.tagline; THEMES[name].sw = t.sw.slice();
+      replaceKeys(THEME_META[name], JSON.parse(JSON.stringify(STOCK_SNAPSHOT.meta[name])));
+    });
+    Object.keys(THEMES).forEach(function (name) { if (THEMES[name] && THEMES[name].overlay) { delete THEMES[name]; delete THEME_META[name]; } });
+  }
+  function mergeOverlay(view) {
+    restoreStock();
+    if (!view || !view.present) return;
+    var tokens = view.tokens || {};
+    STOCK_NAMES.forEach(function (name) { patchTokens(name, tokens['*']); patchTokens(name, tokens[name]); });
+    Object.keys(view.themes || {}).forEach(function (name) {
+      var spec = view.themes[name] || {};
+      if (STOCK_NAMES.indexOf(name) !== -1 || !THEME_NAME.test(name)) return;
+      var parent = THEMES[spec.derives_from] && STOCK_NAMES.indexOf(spec.derives_from) !== -1 ? spec.derives_from : 'nebula';
+      var vars = {};
+      Object.keys(THEMES[parent].vars).forEach(function (key) { vars[key] = THEMES[parent].vars[key]; });
+      var sw = Array.isArray(spec.swatches) && spec.swatches.length === 3 && spec.swatches.every(function (s) { return safeValue(s, 80); })
+        ? spec.swatches.map(function (s) { return safeValue(s, 80); }) : THEMES[parent].sw.slice();
+      var world = STOCK_NAMES.indexOf(spec.world) !== -1 ? spec.world : parent;
+      THEMES[name] = { name: safeValue(spec.label, 80) || name, tagline: safeValue(spec.tagline, 80), sw: sw, vars: vars, overlay: true, world: world };
+      var meta = {};
+      Object.keys(THEME_META[parent] || {}).forEach(function (key) { meta[key] = THEME_META[parent][key]; });
+      Object.keys(spec.meta || {}).forEach(function (key) {
+        if (!Object.prototype.hasOwnProperty.call(meta, key)) return;
+        var given = spec.meta[key];
+        var guard = ATTR_META[key] ? ATTR_UNSAFE : CSS_UNSAFE;
+        if (typeof meta[key] === 'string') { var text = safeValue(given, 160, guard); if (text) meta[key] = text; }
+        else if (Array.isArray(meta[key]) && Array.isArray(given) && given.length === meta[key].length && given.every(function (v) { return safeValue(v); })) meta[key] = given.map(function (v) { return safeValue(v); });
+      });
+      THEME_META[name] = meta;
+      patchTokens(name, tokens[name]);
+    });
+  }
+  function readOverlayView() {
+    if (window.ThomasOverlayView) return window.ThomasOverlayView;
+    var el = document.getElementById('thomas-overlay-view');
+    try { return el ? JSON.parse(el.textContent || '{}') : null; } catch (_e) { return null; }
+  }
+  mergeOverlay(readOverlayView());
+
+  window.ThomasChatThemes = { THEMES: THEMES, THEME_META: THEME_META, mergeOverlay: mergeOverlay };
 }());

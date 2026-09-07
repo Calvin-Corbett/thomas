@@ -174,15 +174,25 @@ class Flow:
 class FlowExecutor:
     """Execute flows with branching and merging."""
 
+    MAX_STEPS = 100
+
     def __init__(self, flow: Flow):
         self.flow = flow
         self.executions: dict[str, ExecutionContext] = {}
         self._execution_counter = 0
 
-    def create_execution(self, variables: dict[str, Any] | None = None) -> str:
+    def create_execution(
+        self,
+        variables: dict[str, Any] | None = None,
+        *,
+        execution_id: str | None = None,
+    ) -> str:
         """Create a new execution."""
-        self._execution_counter += 1
-        execution_id = f"exec_{self._execution_counter}"
+        if execution_id is None:
+            self._execution_counter += 1
+            execution_id = f"exec_{self._execution_counter}"
+        if execution_id in self.executions:
+            raise ValueError(f"Execution {execution_id} already exists")
 
         ctx = ExecutionContext(execution_id=execution_id, flow_id=self.flow.flow_id, variables=variables or {})
         self.executions[execution_id] = ctx
@@ -225,17 +235,17 @@ class FlowExecutor:
         if not ctx:
             return False, f"Execution {execution_id} not found"
 
-        max_steps = 100
         steps = 0
 
-        while not ctx.completed and steps < max_steps:
+        while not ctx.completed and steps < self.MAX_STEPS:
             success, error = await self.execute_step(execution_id)
             if not success:
                 return False, error
             steps += 1
 
-        if steps >= max_steps:
-            return False, "Max steps exceeded"
+        if not ctx.completed:
+            ctx.error = "Max steps exceeded"
+            return False, ctx.error
 
         return True, None
 

@@ -93,6 +93,8 @@ enforcement_files = [
     # protected artifact — an agent must not silently edit it to re-bless
     # tampered gate scripts. Edits trip protected_files_gate.
     "scripts/forge/gates/enforcement_manifest.json",
+    "docs/ops/graveyard.json",
+    "docs/ops/accepted_risks.json",
 ]
 
 # Scripts that enforce the rules — also protected.
@@ -126,6 +128,7 @@ enforcement_scripts = [
     "scripts/forge/gates/exception_handler_gate.py",
     "scripts/forge/gates/duplicate_filename_gate.py",
     "scripts/forge/gates/circular_imports_gate.py",
+    "scripts/forge/gates/untracked_import_gate.py",
     "scripts/forge/gates/changelog_gate.py",
     "scripts/forge/gates/boot_smoke_gate.py",
     "scripts/forge/gates/type_safety_gate.py",
@@ -165,6 +168,9 @@ enforcement_scripts = [
     "scripts/test_stepup_protocol.py",
     # ── Agent commit path (not in hooks but critical) ──
     "scripts/crew/brief/commit.py",
+    "scripts/forge/gates/workboard_evidence_gate.py",
+    "scripts/forge/gates/problem_closure_gate.py",
+    "scripts/forge/gates/branch_claim_gate.py",
     "scripts/forge/gates/monolith_baseline_approval_gate.py",
     # ── Publish / pre-push secret-scan + leak hooks ──
     # Active pre-push hooks (.pre-commit-config.yaml / GitHub Publish Safety CI)
@@ -178,6 +184,8 @@ enforcement_scripts = [
     # can't widen the suppressible set or forge an activation.
     "scripts/forge/gates/_quickbuilder_guard.py",
     "scripts/quickbuilder_toggle.py",
+    "scripts/forge/gates/merge_resurrection_gate.py",
+    "scripts/forge/gates/dead_ref_gate.py",
 ]
 
 # ── Placeholder / Stub Files ────────────────────────────────────────────────
@@ -325,6 +333,15 @@ protected_hooks = [
     "thomas-workboard-audit-backstop-gate",
     "thomas-monolith-filename-pattern-gate",
     "thomas-publish-preflight",
+    # Added 2026-09-03. These three ran in .pre-commit-config.yaml from
+    # 2026-08-25 and 2026-09-01 without ever being listed here, so any agent
+    # could SKIP them with no breakglass, no Windows sign-in and no audit
+    # record - the three newest coordination gates were the three least
+    # protected. test_all_local_hooks_are_skip_protected had been failing on
+    # exactly this and is the reason it was found.
+    "thomas-problem-closure-gate",
+    "thomas-dead-ref-gate",
+    "thomas-branch-claim-gate",
 ]
 max_skip_hooks = 4
 max_staged_files_with_skip = 200

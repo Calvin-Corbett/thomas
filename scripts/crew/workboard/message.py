@@ -19,11 +19,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-# The `_REPO_ROOT` sys.path insert above this block guarantees `scripts.*` is
-# importable in both Windows local and Linux CI environments, so a fallback
-# branch with the truncated `crew.*` / `forge.*` paths is no longer needed
-# (see scripts/crew/tasks/messages.py for the same simplification).
+from scripts.crew.brief import identity as agent_identity
 from scripts.crew.workboard import issue as workboard_issue
+from scripts.crew.workboard import message_audit, message_queries
 from scripts.forge.gates import workboard_claims as claims_gate
 
 
@@ -112,6 +110,32 @@ def _is_task_manager_agent(agent: str) -> bool:
     return _norm(agent) in {"thomas", "task-manager-agent", "task-manager"}
 
 
+def _recipient_can_participate(recipient: str) -> bool:
+    """False when nothing behind *recipient* could ever act on the thread.
+
+    Presence detection reports named agents and raw OS processes through the same
+    field. ``claude`` can ack; ``process:41196`` cannot -- there is no workboard
+    identity behind a PID. Normally only the sender or the recipient may resolve a
+    message, which is right between two agents and a deadlock when one side is a
+    PID: the recipient can never act, and once the sender's session ends the
+    thread is stuck open forever with nobody able to close it. 258 of 302 open
+    messages were in exactly that state, burying the real ones.
+
+    So a thread whose recipient cannot participate may be resolved by any agent.
+    This does not loosen agent-to-agent rules -- for a real recipient the original
+    sender-or-recipient check still applies untouched.
+
+    Kept in step with ``scripts/active_folders._is_addressable_agent``, which is
+    what stops these threads being opened in the first place.
+    """
+    text = _norm(recipient)
+    if not text:
+        return False
+    if text.startswith("process:") or text.startswith("pid:"):
+        return False
+    return not text.startswith("unregistered")
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -151,17 +175,23 @@ def _file_lock(lock_file: Path = LOCK_FILE, timeout: float = LOCK_TIMEOUT_SECOND
             pass
 
 
-def resolve_current_agent(explicit: str = "") -> str:
-    candidate = str(explicit or "").strip()
-    if candidate:
-        return candidate
-    for key in AGENT_ENV_KEYS:
-        value = str(os.getenv(key) or "").strip()
-        if value:
-            return value
-    if str(os.getenv("CODEX_SHELL") or "").strip() or str(os.getenv("CODEX_THREAD_ID") or "").strip():
-        return "codex"
-    return ""
+def resolve_current_agent(explicit: str = "", *, require_binding: bool = False) -> str:
+    candidate = agent_identity.resolve_agent(explicit, include_name_fallback=False)
+    if not candidate and (
+        str(os.getenv("CODEX_SHELL") or "").strip() or str(os.getenv("CODEX_THREAD_ID") or "").strip()
+    ):
+        candidate = "codex"
+    if not candidate:
+        return ""
+    has_session = any(str(os.getenv(key) or "").strip() for key in ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID"))
+    if require_binding or has_session:
+        return agent_identity.require_bound_agent(candidate, repo_root=ROOT)
+    return candidate
+
+
+def _mutation_requires_binding(workboard_path: Path) -> bool:
+    has_session = any(str(os.getenv(key) or "").strip() for key in ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID"))
+    return has_session or workboard_path.resolve() == Path(DEFAULT_WORKBOARD).resolve()
 
 
 def _parse_iso_utc(raw: str) -> datetime | None:
@@ -418,27 +448,19 @@ def _validate_state(state: str) -> str:
 
 
 def _validate_priority(priority: str) -> str:
-    normalized = _norm(priority)
-    if normalized not in MESSAGE_PRIORITIES:
-        allowed = ", ".join(sorted(MESSAGE_PRIORITIES))
-        raise ValueError(f"priority must be one of: {allowed}")
-    return normalized
+    return message_queries.validate_message_choice(
+        priority, label="priority", allowed=MESSAGE_PRIORITIES, normalize=_norm
+    )
 
 
 def _validate_kind(kind: str) -> str:
-    normalized = _norm(kind)
-    if normalized not in MESSAGE_KINDS:
-        allowed = ", ".join(sorted(MESSAGE_KINDS))
-        raise ValueError(f"kind must be one of: {allowed}")
-    return normalized
+    return message_queries.validate_message_choice(kind, label="kind", allowed=MESSAGE_KINDS, normalize=_norm)
 
 
 def _validate_decision(decision: str) -> str:
-    normalized = _norm(decision or "none")
-    if normalized not in MESSAGE_DECISIONS:
-        allowed = ", ".join(sorted(MESSAGE_DECISIONS))
-        raise ValueError(f"decision must be one of: {allowed}")
-    return normalized
+    return message_queries.validate_message_choice(
+        decision or "none", label="decision", allowed=MESSAGE_DECISIONS, normalize=_norm
+    )
 
 
 def _format_message(fields: dict[str, str]) -> str:
@@ -624,73 +646,14 @@ def current_messages(
     task_id: str = "",
     limit: int = 20,
 ) -> tuple[bool, dict[str, object]]:
-    agent_clean = str(agent or "").strip()
-    if not agent_clean:
-        return False, {"error": "agent identity is required for current-thread checks"}
-    ok, payload = list_messages(workboard_path)
-    if not ok:
-        return False, payload
-
-    agent_key = _norm(agent_clean)
-    peer_key = _norm(peer)
-    task_key = _norm(task_id)
-    agent_is_tm = _is_task_manager_agent(agent_clean)
-    peer_is_tm = _is_task_manager_agent(peer)
-
-    def _matches_identity(value: str, key: str, is_task_manager: bool) -> bool:
-        return (is_task_manager and _is_task_manager_agent(value)) or _norm(value) == key
-
-    rows: list[dict[str, str]] = []
-    for row in list(payload.get("messages") or []):
-        if _norm(str(row.get("state", ""))) == "resolved":
-            continue
-        if task_key and _norm(str(row.get("task_id", ""))) != task_key:
-            continue
-        sender = str(row.get("from") or "")
-        recipient = str(row.get("to") or "")
-        from_agent = _matches_identity(sender, agent_key, agent_is_tm)
-        to_agent = _matches_identity(recipient, agent_key, agent_is_tm)
-        if not (from_agent or to_agent):
-            continue
-        if peer_key:
-            from_peer = _matches_identity(sender, peer_key, peer_is_tm)
-            to_peer = _matches_identity(recipient, peer_key, peer_is_tm)
-            if not (from_peer or to_peer):
-                continue
-        next_row = dict(row)
-        if to_agent:
-            next_row["direction"] = "incoming"
-            next_row["awaiting"] = "me" if _norm(str(row.get("state", ""))) == "open" else "thread"
-        else:
-            next_row["direction"] = "outgoing"
-            next_row["awaiting"] = "peer" if _norm(str(row.get("state", ""))) == "open" else "thread"
-        rows.append(next_row)
-
-    def _stamp(row: dict[str, str]) -> datetime:
-        return _parse_iso_utc(str(row.get("updated_at") or row.get("created_at") or "")) or datetime.min.replace(
-            tzinfo=timezone.utc
-        )
-
-    rows.sort(
-        key=lambda row: (
-            _stamp(row),
-            -PRIORITY_SORT.get(_norm(row.get("priority", "")), 99),
-            str(row.get("msg_id") or ""),
-        ),
-        reverse=True,
+    return message_queries.current_messages(
+        workboard_path,
+        agent=agent,
+        peer=peer,
+        task_id=task_id,
+        limit=limit,
+        core=sys.modules[__name__],
     )
-    max_rows = max(1, int(limit or 20))
-    rows = rows[:max_rows]
-    result = {
-        "messages": rows,
-        "message_count": len(rows),
-        "agent": agent_clean,
-        "peer": str(peer or "").strip(),
-        "task_id": str(task_id or "").strip(),
-    }
-    if payload.get("missing_workboard"):
-        result["missing_workboard"] = True
-    return True, result
 
 
 def audit_messages(
@@ -701,229 +664,14 @@ def audit_messages(
     task_id: str = "",
     limit: int = 20,
 ) -> tuple[bool, dict[str, object]]:
-    agent_clean = str(agent or "").strip()
-    peer_clean = str(peer or "").strip()
-    task_key = _norm(task_id)
-    max_rows = max(1, int(limit or 20))
-    if not workboard_path.exists():
-        return True, {
-            "agent": agent_clean,
-            "peer": peer_clean,
-            "task_id": str(task_id or "").strip(),
-            "canonical_inbox_count": 0,
-            "canonical_current_count": 0,
-            "awaiting_me": 0,
-            "awaiting_peer": 0,
-            "awaiting_peer_oldest_seconds": 0,
-            "awaiting_peer_msg_id": "",
-            "parse_error_count": 0,
-            "candidate_mention_count": 0,
-            "identity_mismatch_count": 0,
-            "stale_identity_mismatch_count": 0,
-            "cross_task_open_p0_count": 0,
-            "problem_count": 0,
-            "parse_errors": [],
-            "candidate_mentions": [],
-            "identity_mismatches": [],
-            "stale_identity_mismatches": [],
-            "cross_task_open_p0": [],
-            "diagnosis": "workboard missing; no message lane state is available",
-            "missing_workboard": True,
-        }
-
-    lines = workboard_path.read_text(encoding="utf-8").splitlines()
-    section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
-    if section is None:
-        return True, {
-            "agent": agent_clean,
-            "peer": peer_clean,
-            "task_id": str(task_id or "").strip(),
-            "canonical_inbox_count": 0,
-            "canonical_current_count": 0,
-            "awaiting_me": 0,
-            "awaiting_peer": 0,
-            "awaiting_peer_oldest_seconds": 0,
-            "awaiting_peer_msg_id": "",
-            "parse_error_count": 0,
-            "candidate_mention_count": 0,
-            "identity_mismatch_count": 0,
-            "stale_identity_mismatch_count": 0,
-            "cross_task_open_p0_count": 0,
-            "problem_count": 0,
-            "parse_errors": [],
-            "candidate_mentions": [],
-            "identity_mismatches": [],
-            "stale_identity_mismatches": [],
-            "cross_task_open_p0": [],
-            "diagnosis": "missing Agent Message Traffic section",
-            "missing_section": True,
-        }
-
-    rows: list[dict[str, str]] = []
-    parse_errors: list[dict[str, object]] = []
-    candidate_mentions: list[dict[str, object]] = []
-    identity_mismatches: list[dict[str, object]] = []
-    stale_identity_mismatches: list[dict[str, object]] = []
-    for idx in range(section[0], section[1]):
-        raw = lines[idx]
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("<!--"):
-            continue
-        if stripped.startswith("- "):
-            entry, fields, err = _parse_kv_entry(idx + 1, raw)
-            if err:
-                parse_errors.append({"line": idx + 1, "error": err, "text": stripped})
-                if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
-                    candidate_mentions.append({"line": idx + 1, "kind": "malformed_bullet", "text": stripped})
-                continue
-            if entry is not None and entry.lower() in claims_gate.NONE_TOKENS:
-                continue
-            if not fields:
-                continue
-            try:
-                rows.append(_normalize_message_fields(fields))
-            # Same contract as _load_messages: _format_message raises ValueError
-            # for an invalid state/priority/kind/decision or a missing required
-            # field. The audit must record a malformed bullet as a parse error
-            # and keep scanning -- raising would blind the inbox audit to every
-            # message below the first bad line.
-            except (ValueError, TypeError, KeyError, AttributeError) as exc:
-                parse_errors.append({"line": idx + 1, "error": str(exc), "text": stripped})
-                if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
-                    candidate_mentions.append({"line": idx + 1, "kind": "invalid_bullet", "text": stripped})
-            continue
-        if _mentions_agent_context(stripped, agent=agent_clean, peer=peer_clean):
-            candidate_mentions.append({"line": idx + 1, "kind": "noncanonical_text", "text": stripped})
-
-    agent_key = _norm(agent_clean)
-    peer_key = _norm(peer_clean)
-    agent_is_tm = _is_task_manager_agent(agent_clean)
-    peer_is_tm = _is_task_manager_agent(peer_clean)
-
-    def _matches(value: str, key: str, is_task_manager: bool) -> bool:
-        return (is_task_manager and _is_task_manager_agent(value)) or _norm(value) == key
-
-    inbox_rows: list[dict[str, str]] = []
-    current_rows: list[dict[str, str]] = []
-    cross_task_open_p0: list[dict[str, str]] = []
-    awaiting_me = 0
-    awaiting_peer = 0
-    awaiting_peer_oldest: dict[str, str] | None = None
-    for row in rows:
-        state = _norm(row.get("state", ""))
-        sender = str(row.get("from") or "")
-        recipient = str(row.get("to") or "")
-        from_agent = bool(agent_key) and _matches(sender, agent_key, agent_is_tm)
-        to_agent = bool(agent_key) and _matches(recipient, agent_key, agent_is_tm)
-        from_peer = bool(peer_key) and _matches(sender, peer_key, peer_is_tm)
-        row_task_key = _norm(row.get("task_id", ""))
-        if task_key and row_task_key != task_key:
-            if state == "open" and to_agent and (not peer_key or from_peer) and _norm(row.get("priority", "")) == "p0":
-                cross_task_open_p0.append(_decorate_message(dict(row)))
-            continue
-        message_text = _message_search_text(row)
-        if to_agent and state == "open":
-            inbox_rows.append(_decorate_message(dict(row)))
-        elif (
-            state == "open"
-            and agent_key
-            and not from_agent
-            and (
-                (from_peer and _is_ephemeral_agent_identity(recipient))
-                or _mentions_agent_context(message_text, agent=agent_clean, peer=peer_clean)
-            )
-        ):
-            mismatch = _decorate_message(dict(row))
-            mismatch["expected_to"] = agent_clean
-            mismatch["actual_to"] = recipient
-            mismatch["reason"] = (
-                "open peer message is addressed to an ephemeral/unregistered identity"
-                if _is_ephemeral_agent_identity(recipient)
-                else "open message mentions this agent but is not addressed to its canonical identity"
-            )
-            if not task_key and int(mismatch.get("age_seconds") or 0) > IDENTITY_MISMATCH_STALE_SECONDS:
-                stale_identity_mismatches.append(mismatch)
-            else:
-                identity_mismatches.append(mismatch)
-        if not (from_agent or to_agent):
-            continue
-        if peer_key:
-            to_peer = _matches(recipient, peer_key, peer_is_tm)
-            if not (from_peer or to_peer):
-                continue
-        if state == "resolved":
-            continue
-        next_row = _decorate_message(dict(row))
-        if to_agent:
-            next_row["direction"] = "incoming"
-            next_row["awaiting"] = "me" if state == "open" else "thread"
-            if state == "open":
-                awaiting_me += 1
-        else:
-            next_row["direction"] = "outgoing"
-            next_row["awaiting"] = "peer" if state == "open" else "thread"
-            if state == "open":
-                awaiting_peer += 1
-                if awaiting_peer_oldest is None or int(next_row.get("age_seconds") or 0) > int(
-                    awaiting_peer_oldest.get("age_seconds") or 0
-                ):
-                    awaiting_peer_oldest = next_row
-        current_rows.append(next_row)
-
-    current_rows.sort(
-        key=lambda row: (
-            _parse_iso_utc(str(row.get("updated_at") or row.get("created_at") or ""))
-            or datetime.min.replace(tzinfo=timezone.utc),
-            str(row.get("msg_id") or ""),
-        ),
-        reverse=True,
+    return message_audit.audit_messages(
+        workboard_path,
+        agent=agent,
+        peer=peer,
+        task_id=task_id,
+        limit=limit,
+        core=sys.modules[__name__],
     )
-    problem_count = len(parse_errors) + len(candidate_mentions) + len(identity_mismatches) + len(cross_task_open_p0)
-    if parse_errors:
-        diagnosis = "message section has parse errors; canonical inbox/current views may be incomplete"
-    elif candidate_mentions:
-        diagnosis = "message section contains noncanonical agent mentions that inbox/current views ignore"
-    elif identity_mismatches:
-        diagnosis = (
-            "message section has open messages routed to noncanonical identities; canonical inbox may be incomplete"
-        )
-    elif cross_task_open_p0:
-        diagnosis = "task filter hides open p0 inbound message(s) on other task ids"
-    elif inbox_rows:
-        diagnosis = "canonical inbox has open messages for this agent"
-    elif awaiting_peer:
-        diagnosis = "canonical inbox is empty; current thread is waiting on the peer"
-    else:
-        diagnosis = "canonical inbox is empty and no suspicious message-section mentions were found"
-    payload: dict[str, object] = {
-        "agent": agent_clean,
-        "peer": peer_clean,
-        "task_id": str(task_id or "").strip(),
-        "canonical_inbox_count": len(inbox_rows),
-        "canonical_current_count": len(current_rows),
-        "awaiting_me": awaiting_me,
-        "awaiting_peer": awaiting_peer,
-        "awaiting_peer_oldest_seconds": int(awaiting_peer_oldest.get("age_seconds") or 0)
-        if awaiting_peer_oldest
-        else 0,
-        "awaiting_peer_msg_id": str(awaiting_peer_oldest.get("msg_id") or "") if awaiting_peer_oldest else "",
-        "parse_error_count": len(parse_errors),
-        "candidate_mention_count": len(candidate_mentions),
-        "identity_mismatch_count": len(identity_mismatches),
-        "stale_identity_mismatch_count": len(stale_identity_mismatches),
-        "cross_task_open_p0_count": len(cross_task_open_p0),
-        "problem_count": problem_count,
-        "parse_errors": parse_errors[:max_rows],
-        "candidate_mentions": candidate_mentions[:max_rows],
-        "identity_mismatches": identity_mismatches[:max_rows],
-        "stale_identity_mismatches": stale_identity_mismatches[:max_rows],
-        "cross_task_open_p0": cross_task_open_p0[:max_rows],
-        "messages": current_rows[:max_rows],
-        "diagnosis": diagnosis,
-    }
-    if problem_count:
-        payload["error"] = "message lane audit found problems"
-    return problem_count == 0, payload
 
 
 def wait_for_messages(
@@ -936,34 +684,16 @@ def wait_for_messages(
     timeout_seconds: float = 60.0,
     poll_interval_seconds: float = 5.0,
 ) -> tuple[bool, dict[str, object]]:
-    deadline = time.monotonic() + max(0.0, float(timeout_seconds or 0.0))
-    poll_interval = max(0.05, float(poll_interval_seconds or 0.0))
-    attempts = 0
-    while True:
-        attempts += 1
-        ok, payload = audit_messages(
-            workboard_path,
-            agent=agent,
-            peer=peer,
-            task_id=task_id,
-            limit=limit,
-        )
-        payload["wait_attempts"] = attempts
-        payload["timeout_seconds"] = float(timeout_seconds or 0.0)
-        payload["poll_interval_seconds"] = poll_interval
-        if not ok:
-            payload["wait_status"] = "problem"
-            return False, payload
-        if int(payload.get("awaiting_me") or 0) > 0:
-            payload["wait_status"] = "ready"
-            payload["timed_out"] = False
-            return True, payload
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            payload["wait_status"] = "timeout"
-            payload["timed_out"] = True
-            return True, payload
-        time.sleep(min(poll_interval, remaining))
+    return message_queries.wait_for_messages(
+        workboard_path,
+        agent=agent,
+        peer=peer,
+        task_id=task_id,
+        limit=limit,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        core=sys.modules[__name__],
+    )
 
 
 def unread_messages(
@@ -1093,28 +823,11 @@ def latest_activity_by_task(
     *,
     kinds: Sequence[str] | None = None,
 ) -> tuple[bool, dict[str, object]]:
-    ok, payload = list_messages(workboard_path)
-    if not ok:
-        return False, payload
-    allowed = {_norm(item) for item in list(kinds or []) if _norm(item)}
-    latest: dict[str, datetime] = {}
-    for row in list(payload.get("messages") or []):
-        task_key = _norm(str(row.get("task_id", "")))
-        if task_key in {"", "none", "_none_"}:
-            continue
-        kind = _norm(str(row.get("kind", "")))
-        if allowed and kind not in allowed:
-            continue
-        stamp = _parse_iso_utc(str(row.get("updated_at", "")).strip() or str(row.get("created_at", "")).strip())
-        if stamp is None:
-            continue
-        prior = latest.get(task_key)
-        if prior is None or stamp > prior:
-            latest[task_key] = stamp
-    return True, {
-        "task_count": len(latest),
-        "latest_by_task": {task_id: stamp.isoformat() for task_id, stamp in sorted(latest.items())},
-    }
+    return message_queries.latest_activity_by_task(
+        workboard_path,
+        kinds=kinds,
+        core=sys.modules[__name__],
+    )
 
 
 def _set_message_state(
@@ -1166,7 +879,11 @@ def _set_message_state(
             }
         if state_clean == "resolved":
             allowed = {sender_key, recipient_key}
-            if actor_key not in allowed and not _is_task_manager_agent(actor_clean):
+            if (
+                actor_key not in allowed
+                and not _is_task_manager_agent(actor_clean)
+                and _recipient_can_participate(target.get("to", ""))
+            ):
                 return False, {
                     "error": (
                         f"only sender `{target.get('from', '')}` or recipient `{target.get('to', '')}` "
@@ -1300,9 +1017,15 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.send:
+            sender = resolve_current_agent(
+                args.from_agent or args.agent,
+                require_binding=_mutation_requires_binding(workboard_path),
+            )
+            if not sender:
+                raise ValueError("--send requires a bound --from-agent/--agent identity")
             ok, payload = send_message(
                 workboard_path,
-                sender=args.from_agent,
+                sender=sender,
                 recipient=args.to_agent,
                 summary=args.summary,
                 task_id=args.task_id,

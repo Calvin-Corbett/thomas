@@ -63,9 +63,33 @@ class TestServerCompanionPage(AioHTTPTestCase):
         self.assertEqual(js_resp.status, 200, f"expected 200 for {js_url}")
         js_text = await js_resp.text()
         self.assertIn("setActivePanel", js_text)
-        self.assertIn("tabChat", js_text)
-        self.assertIn("tabApps", js_text)
-        self.assertIn("tabAdd", js_text)
+        # The rail replaced the mode tabs; these are the destinations it drives.
+        self.assertIn("panelHome", js_text)
+        self.assertIn("panelChat", js_text)
+        self.assertIn("panelApps", js_text)
+        self.assertIn("panelAdd", js_text)
+
+    async def test_companion_page_serves_the_shell_stylesheet_and_modules(self):
+        page_resp = await self.client.get("/companion")
+        page_text = await page_resp.text()
+
+        shell_css = re.search(
+            r'href="(?P<url>/static/css/companion_shell\.css(?:\?[^\"]*)?)"', page_text
+        )
+        self.assertIsNotNone(shell_css, "companion_shell.css link missing from /companion")
+        css_resp = await self.client.get(shell_css.group("url"))
+        self.assertEqual(css_resp.status, 200)
+
+        # The rail is the shell's only persistent chrome, so it has to be in the
+        # served markup rather than built at runtime.
+        self.assertIn('id="rail"', page_text)
+        self.assertIn('data-rail="home"', page_text)
+        self.assertIn('id="railStatus"', page_text)
+        self.assertIn('id="homeGrid"', page_text)
+
+        for module in ("companion_home.js", "companion_surface.js"):
+            mod_resp = await self.client.get(f"/static/js/{module}")
+            self.assertEqual(mod_resp.status, 200, f"expected 200 for {module}")
 
 
 if __name__ == "__main__":

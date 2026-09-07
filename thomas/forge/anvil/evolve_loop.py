@@ -227,7 +227,7 @@ def run_evolve_loop(
                 save_loop_state(root, state)
                 append_event(root, {"type": "planned", "count": len(kept), "signals": state.signals}, event_sink)
                 if not state.backlog:
-                    stop_reason = "backlog empty -- nothing left to improve"
+                    stop_reason = "no unattempted eligible goals remain"
                     break
 
             goal = EvolveGoal.from_dict(state.backlog.pop(0))
@@ -380,7 +380,13 @@ def run_evolve_loop(
     save_loop_state(root, state)
     append_event(
         root,
-        {"type": "loop_done", "status": state.status, "reason": stop_reason, "counters": dict(state.counters)},
+        {
+            "type": "loop_done",
+            "status": state.status,
+            "reason": stop_reason,
+            "counters": dict(state.counters),
+            "signals": dict(state.signals),
+        },
         event_sink,
     )
     return state.to_dict()

@@ -1,6 +1,7 @@
 """Tools for flow builder operations."""
 
 from typing import Any
+from uuid import uuid4
 
 from thomas.flows import core
 from thomas.tools.base import Tool, ToolResult
@@ -35,8 +36,8 @@ class FlowDesignTool(Tool):
         "required": ["action"],
     }
 
-    def __init__(self):
-        self.flows: dict[str, core.Flow] = {}
+    def __init__(self, flows: dict[str, core.Flow] | None = None):
+        self.flows = flows if flows is not None else {}
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
@@ -135,8 +136,8 @@ class FlowExecutionTool(Tool):
         "required": ["action"],
     }
 
-    def __init__(self):
-        self.flows: dict[str, core.Flow] = {}
+    def __init__(self, flows: dict[str, core.Flow] | None = None):
+        self.flows = flows if flows is not None else {}
         self.executors: dict[str, core.FlowExecutor] = {}
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
@@ -153,9 +154,14 @@ class FlowExecutionTool(Tool):
                 if not flow:
                     return ToolResult(ok=False, error=f"Flow {flow_id} not found")
 
+                is_valid, error = flow.validate()
+                if not is_valid:
+                    return ToolResult(ok=False, error=f"Flow {flow_id} is invalid: {error}")
+
                 executor = core.FlowExecutor(flow)
                 variables = args.get("variables", {})
-                exec_id = executor.create_execution(variables)
+                exec_id = f"flow_exec_{uuid4().hex}"
+                executor.create_execution(variables, execution_id=exec_id)
                 self.executors[exec_id] = executor
                 return ToolResult(ok=True, data={"execution_id": exec_id})
 
@@ -169,7 +175,7 @@ class FlowExecutionTool(Tool):
 
                 success, error = await executor.execute_step(execution_id)
                 state = executor.get_execution_state(execution_id)
-                return ToolResult(ok=success, data=state or {"error": error})
+                return ToolResult(ok=success, data=state, error=error)
 
             elif action == "execute_full":
                 if not execution_id:
@@ -181,7 +187,7 @@ class FlowExecutionTool(Tool):
 
                 success, error = await executor.execute_full(execution_id)
                 state = executor.get_execution_state(execution_id)
-                return ToolResult(ok=success, data=state or {"error": error})
+                return ToolResult(ok=success, data=state, error=error)
 
             elif action == "get_state":
                 if not execution_id:
@@ -201,7 +207,8 @@ class FlowExecutionTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-def register_flows_tools(registry):
-    """Register all flow tools."""
-    registry.register(FlowDesignTool())
-    registry.register(FlowExecutionTool())
+def register_flows_tools(registry: Any) -> None:
+    """Register flow tools backed by one shared in-memory flow store."""
+    flows: dict[str, core.Flow] = {}
+    registry.register(FlowDesignTool(flows))
+    registry.register(FlowExecutionTool(flows))

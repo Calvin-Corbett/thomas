@@ -1,4 +1,11 @@
-# Runtime Protection Bypass Fix (2026-05-27)
+# PLAN for runtime-protection-fix-2026-05-27
+
+_Runtime Protection Bypass Fix (2026-05-27)_
+
+- Owner: unassigned
+- Status: up_for_grabs
+- Updated At: 2026-09-03T12:53:23+00:00
+- Scope: thomas/tools/filesystem.py,scripts/runtime_protection_toggle.py,tests/test_filesystem_protection_adversarial.py,tests/test_native_auth_filesystem_guard.py,docs/SAFETY_ARCHITECTURE.md,CHANGELOG.md
 
 ## Problem
 

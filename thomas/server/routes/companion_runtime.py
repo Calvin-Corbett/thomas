@@ -12,7 +12,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.companion.audit import CompanionAuditLog
-from thomas.companion.contracts import allowed_permissions
+from thomas.companion.contracts import allowed_permissions, allowed_surface_types
 from thomas.companion.devices import DeviceRegistry
 from thomas.companion.kernel import CompanionKernel
 from thomas.companion.policy import (
@@ -207,8 +207,10 @@ def _studio_capability_catalog() -> dict[str, Any]:
             "ui_schema_version",
             "display_name",
             "description",
+            "surface_type",
         ],
         "permission_allowlist": allowed_permissions(),
+        "surface_types": allowed_surface_types(),
         "default_slots": [
             "home.main",
             "home.secondary",

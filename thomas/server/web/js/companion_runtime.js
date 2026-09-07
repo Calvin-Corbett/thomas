@@ -12,6 +12,13 @@ export function attachCompanionRuntime(runtime) {
     buildAuthHeaders,
     loadAppStore,
     pushModuleToDevice,
+    openSurface,
+    toggleRail,
+    setRailExpanded,
+    refreshHome,
+    refreshHostStatus,
+    setHomeMode,
+    buildAppFromDescription,
     persistModelState,
     persistDeviceState,
     refreshModelSelector,
@@ -243,14 +250,69 @@ export function attachCompanionRuntime(runtime) {
       });
     }
 
-    if (refs.tabChat) {
-      refs.tabChat.addEventListener("click", () => setActivePanel("chat"));
+    if (refs.rail) {
+      refs.rail.addEventListener("click", (event) => {
+        const element = event.target instanceof Element ? event.target : null;
+        const target = element ? element.closest("[data-rail]") : null;
+        if (!target) {
+          return;
+        }
+        const key = asText(target.getAttribute("data-rail"), "");
+        if (key === "build") {
+          // Build is not a separate screen — it is the home composer in its
+          // other mode, which is where an app actually gets asked for.
+          setActivePanel("home");
+          setHomeMode("build");
+          if (refs.homeComposerInput) {
+            refs.homeComposerInput.focus();
+          }
+          return;
+        }
+        if (key) {
+          setActivePanel(key);
+        }
+      });
     }
-    if (refs.tabApps) {
-      refs.tabApps.addEventListener("click", () => setActivePanel("apps"));
+
+    if (refs.railToggle) {
+      refs.railToggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleRail();
+      });
     }
-    if (refs.tabAdd) {
-      refs.tabAdd.addEventListener("click", () => setActivePanel("add"));
+
+    if (refs.railScrim) {
+      refs.railScrim.addEventListener("click", () => setRailExpanded(false));
+    }
+
+    if (refs.homeComposerMode) {
+      refs.homeComposerMode.addEventListener("click", () => {
+        setHomeMode(state.home.mode === "build" ? "ask" : "build");
+        if (refs.homeComposerInput) {
+          refs.homeComposerInput.focus();
+        }
+      });
+    }
+
+    if (refs.homeComposerForm) {
+      refs.homeComposerForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const input = refs.homeComposerInput;
+        const text = asText(input && input.value, "").trim();
+        if (!text) {
+          return;
+        }
+        if (input) {
+          input.value = "";
+        }
+        if (state.home.mode === "build") {
+          // Stay on home: the icon appearing in the grid is the answer.
+          void buildAppFromDescription(text);
+          return;
+        }
+        setActivePanel("chat");
+        void sendChatMessage(text);
+      });
     }
 
     if (refs.appsRefreshBtn) {
@@ -261,7 +323,21 @@ export function attachCompanionRuntime(runtime) {
 
     if (refs.appsList) {
       refs.appsList.addEventListener("click", (event) => {
-        const target = event.target instanceof Element ? event.target.closest("[data-app-push]") : null;
+        const element = event.target instanceof Element ? event.target : null;
+        if (!element) {
+          return;
+        }
+
+        const openTarget = element.closest("[data-app-open]");
+        if (openTarget) {
+          const openId = asText(openTarget.getAttribute("data-app-open"), "");
+          if (openId && typeof openSurface === "function") {
+            openSurface(openId);
+          }
+          return;
+        }
+
+        const target = element.closest("[data-app-push]");
         if (!target) {
           return;
         }
@@ -301,8 +377,17 @@ export function attachCompanionRuntime(runtime) {
 
     persistModelState();
     persistDeviceState();
-    setActivePanel(asText(state.panel, "chat"));
+    setActivePanel(asText(state.panel, "home"));
+    setHomeMode(state.home.mode);
     render();
+
+    void refreshHome();
+    void refreshHostStatus();
+    // Slow on purpose: this answers "is the computer awake", which changes on
+    // the order of minutes, and every check costs the phone a radio wake.
+    window.setInterval(() => {
+      void refreshHostStatus();
+    }, 45000);
   }
 
   return { bootstrap };

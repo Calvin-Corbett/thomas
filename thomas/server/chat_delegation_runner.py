@@ -7,10 +7,12 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from thomas.core import task_bot_runtime
+from thomas.core import task_bot_runtime, task_checklist
 from thomas.core.file_access import is_file_access_refusal as _is_file_access_refusal
 from thomas.marketplace.specialists.reasoning_task_briefs import brief_scope as _brief_scope
 from thomas.server.chat_delegation_artifact_verification import _hidden_completion_review_passes
+from thomas.server.chat_delegation_checklist import extract_read_paths as _extract_read_paths
+from thomas.server.chat_delegation_checklist import extract_task_type_label as _extract_task_type_label
 from thomas.server.chat_delegation_deliverable import (
     _artifacts_from_created,
     _build_result_summary,
@@ -47,6 +49,7 @@ from thomas.server.chat_delegation_session import (
     _normalize_record,
     _worker_has_started_progress,
 )
+from thomas.server.chat_delegation_tool_receipts import ToolReceiptLog
 from thomas.server.chat_delegation_worker_config import (
     _WORKER_FIRST_EVENT_TIMEOUT_S,
     _WORKER_IDLE_EVENT_TIMEOUT_S,
@@ -62,127 +65,17 @@ from thomas.server.worker_runtime import run_agent_worker_events
 
 log = logging.getLogger(__name__)
 
-# Progress lines are USER-FACING (the activity card under "Handed off to ...").
-# Raw tool telemetry ("Finished fs.read_file; continuing.") reads like a stack
-# trace to the owner; phrase every step like a teammate's status update.
-_TOOL_PHRASES = {
-    "fs.read_file": ("Reading files", "Read what I needed"),
-    "fs.write_file": ("Writing the file", "Saved the file"),
-    "fs.list_dir": ("Looking through the workspace", "Scanned the workspace"),
-    "fs.search": ("Searching the workspace", "Searched the workspace"),
-    "web.search": ("Searching the web", "Found some sources"),
-    "web.fetch": ("Reading a web page", "Read the page"),
-    "shell.exec": ("Running a command", "Command finished"),
-    "ssh.exec": ("Running a remote command", "Remote command finished"),
-}
-
-
-def _tool_phrase(tool_name: str, *, done: bool = False, failed: bool = False) -> str:
-    active, finished = _TOOL_PHRASES.get(str(tool_name or "tool"), ("Working on the next step", "Step finished"))
-    if failed:
-        return f"{active} hit a snag — trying another way."
-    return f"{finished} — moving on." if done else f"{active}…"
-
-
-_MAX_EFFORT_IDLE_EVENT_TIMEOUT_S = 360.0
-# A worker that fails the same step this many times IN A ROW stops spinning
-# "hit a snag" and hands control to the recovery machinery instead.
-_MAX_CONSECUTIVE_SNAGS = 6
-
-
-def _record_tool_outcome(
-    tool_name: str,
-    *,
-    ok: bool,
-    succeeded_tools: list[str],
-    failed_tools: list[str],
-) -> None:
-    """Keep every failed action visible; a later same-named call is not proof of recovery."""
-    target = succeeded_tools if ok else failed_tools
-    if tool_name not in target:
-        target.append(tool_name)
-
-
-def _supervisor_worker_timeout_s(worker_kwargs: dict[str, Any], *, has_progress: bool) -> float:
-    """Return a bounded watchdog window appropriate to the active worker tier."""
-
-    base = _WORKER_IDLE_EVENT_TIMEOUT_S if has_progress else _WORKER_FIRST_EVENT_TIMEOUT_S
-    effort = str(worker_kwargs.get("effort") or "").strip().lower()
-    if has_progress and effort in {"max", "exhaustive"}:
-        return max(base, _MAX_EFFORT_IDLE_EVENT_TIMEOUT_S)
-    return base
-
-
-async def _next_worker_event(stream: Any, *, saw_event: bool, timeout_s: float | None = None) -> dict[str, Any] | None:
-    """Wait for the worker's next event, cancelling the stream if it never comes.
-
-    `timeout_s` exists because this watchdog and `_supervisor_worker_timeout_s`
-    were two spellings of one decision and they disagreed. The supervisor reads the
-    effort dial and grants 360s for "max"/"exhaustive" -- Thorough in the UI -- while
-    this function took no effort argument and always used the 120s idle constant.
-    The stricter one wins, so choosing Thorough changed nothing and a worker that
-    thought for over two minutes was cut off mid-step.
-
-    Worth knowing what the cut costs: the timeout path cancels the pending
-    `__anext__()`, which destroys the generator. After that StopAsyncIteration reads
-    downstream as "the worker said nothing" rather than "we stopped listening", so
-    the run is reported as silent rather than interrupted.
-    """
-
-    if timeout_s is None:
-        timeout_s = _WORKER_IDLE_EVENT_TIMEOUT_S if saw_event else _WORKER_FIRST_EVENT_TIMEOUT_S
-    next_task = asyncio.create_task(stream.__anext__())
-    done, _pending = await asyncio.wait({next_task}, timeout=max(0.001, float(timeout_s)))
-    if done:
-        try:
-            return next_task.result()
-        except StopAsyncIteration:
-            return None
-
-    def _consume_background_result(task: asyncio.Task[Any]) -> None:
-        try:
-            task.result()
-        except (asyncio.CancelledError, StopAsyncIteration):
-            pass
-        except (RuntimeError, OSError, ValueError, TypeError):
-            log.debug("worker event stream background cleanup failed", exc_info=True)
-
-    next_task.cancel()
-    cancelled, _pending = await asyncio.wait({next_task}, timeout=_WORKER_STREAM_CLOSE_TIMEOUT_S)
-    if cancelled:
-        _consume_background_result(next_task)
-    else:
-        next_task.add_done_callback(_consume_background_result)
-    await _close_worker_event_stream(stream, consume_result=_consume_background_result)
-    phase = "first event" if not saw_event else "next event"
-    raise _WorkerRetry(f"provider-native worker produced no {phase} within {timeout_s:g}s")
-
-
-async def _close_worker_event_stream(
-    stream: Any,
-    *,
-    consume_result: Callable[[asyncio.Task[Any]], None] | None = None,
-) -> None:
-    close = getattr(stream, "aclose", None)
-    if callable(close):
-        try:
-            close_task = asyncio.ensure_future(close())
-            closed, _pending = await asyncio.wait({close_task}, timeout=_WORKER_STREAM_CLOSE_TIMEOUT_S)
-            if closed:
-                if consume_result is not None:
-                    consume_result(close_task)
-                else:
-                    close_task.result()
-            else:
-                close_task.cancel()
-                if consume_result is not None:
-                    close_task.add_done_callback(consume_result)
-        except (RuntimeError, OSError, ValueError, TypeError):
-            log.debug("worker event stream close failed", exc_info=True)
-
-
-def _run_worker_thread_entry(runner: Callable[..., Awaitable[None]], app: Any, kwargs: dict[str, Any]) -> None:
-    asyncio.run(runner(app, **kwargs))
+from thomas.server.chat_delegation_runner_events import (  # split out; names re-exported here
+    _MAX_CONSECUTIVE_SNAGS,
+    _MAX_EFFORT_IDLE_EVENT_TIMEOUT_S,
+    _TOOL_PHRASES,
+    _close_worker_event_stream,
+    _next_worker_event,
+    _record_tool_outcome,
+    _run_worker_thread_entry,
+    _supervisor_worker_timeout_s,
+    _tool_phrase,
+)
 
 
 async def _run_agent_worker_supervised(
@@ -301,6 +194,7 @@ async def _finalize_worker_completion(
     specialist_id: str,
     repo_root: str | Path | None,
     policy_refusals: list[str] | None = None,
+    tool_receipts: ToolReceiptLog | None = None,
 ) -> None:
     """Finalize a normal worker with honest evidence and proof artifacts."""
     # Verification scopes to THIS worker's brief: the multi-task context block
@@ -338,8 +232,17 @@ async def _finalize_worker_completion(
         result_text_parts, prompt=scope_prompt, succeeded_tools=succeeded_tools, failed_tools=failed_tools
     )
     verified_success &= _hidden_completion_review_passes(
-        scope_prompt, work_dir, created, result_summary, verified_success, failed_tools, succeeded_tools=succeeded_tools
+        scope_prompt, work_dir, created, result_summary, verified_success, failed_tools,
+        succeeded_tools=succeeded_tools, tool_receipts=tool_receipts,
     )
+    if failed_tools and not verified_success:
+        # Older proof on a resumed task must not override this attempt's failure.
+        record = task_bot_runtime.fail_execution(
+            execution_id, actor=bot.name, summary=result_summary,
+            blocker="unrecovered_tool_failure", salvaged_artifacts=created, repo_root=repo_root,
+        )
+        await emitter.failed(_normalize_record(record), specialist_id=specialist_id, bot=bot, text=result_summary)
+        return
     artifacts = _artifacts_from_created(created)
     # The engine's own artifact verification just PASSED (issues would have
     # raised _WorkerRetry above, _hidden_completion_review_passes agreed, and
@@ -383,6 +286,11 @@ async def _finalize_worker_completion(
         else task_bot_runtime.get_execution(execution_id, repo_root)
     )
     record = _normalize_record(record_payload)
+    if str((record or {}).get("state") or "") == "awaiting_proof":
+        # The checklist gate held the task back: say what is missing, never a false done.
+        blocker = str((record or {}).get("blocker") or "task checklist not satisfied")
+        await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=f"Holding for task checklist: {blocker}")
+        return
     if str((record or {}).get("state") or "") == "completed" or (
         not isinstance(completion_payload, dict) and verified_success
     ):
@@ -403,6 +311,7 @@ async def _finalize_live_repo_completion(
     failed_tools: list[str],
     bot: Any,
     specialist_id: str,
+    tool_receipts: ToolReceiptLog | None = None,
 ) -> None:
     changed = _live_repo_files_changed_since(repo_root, attempt_baseline)
     if not changed:
@@ -420,7 +329,8 @@ async def _finalize_live_repo_completion(
         )
     result_summary = _live_repo_result_summary(result_text_parts, changed)
     if not _hidden_completion_review_passes(
-        prompt, repo_root, changed, result_summary, True, failed_tools, succeeded_tools=succeeded_tools
+        prompt, repo_root, changed, result_summary, True, failed_tools, succeeded_tools=succeeded_tools,
+        **({"tool_receipts": tool_receipts} if tool_receipts is not None else {}),
     ):
         raise _WorkerRetry("self-development hidden completion review failed")
     artifacts = _artifacts_from_created(changed)
@@ -515,6 +425,7 @@ async def _run_agent_worker(
         await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
     max_attempts = _self_recovery_attempts(autonomy_level)
     last_error = ""
+    tool_receipts = ToolReceiptLog(preflight_events)
     for attempt in range(1, max_attempts + 1):
         result_text_parts: list[str] = []
         tools_used = list(base_tools_used)
@@ -524,6 +435,8 @@ async def _run_agent_worker(
         policy_refusals = list(base_policy_refusals)
         saw_event = False
         worker_runtime_received = False
+        checklist_read_paths: list[str] = []  # real reads only, for the task checklist gate
+        checklist_label_set = False
         # Consecutive tool failures within THIS attempt: a worker that keeps
         # snagging must not spin "hit a snag" forever — cap it and let the
         # recovery machinery (or an honest failure) take over.
@@ -588,6 +501,7 @@ async def _run_agent_worker(
                 saw_event = True
                 if _execution_is_terminal(execution_id, repo_root):
                     return
+                tool_receipts.observe(event)
                 # In-flight cancellation: honour user stop between steps.
                 if task_bot_runtime.is_cancel_requested(execution_id, repo_root=repo_root):
                     task_bot_runtime.cancel_execution(
@@ -622,6 +536,11 @@ async def _run_agent_worker(
                     chunk = str(event.get("text") or "")
                     if chunk:
                         result_text_parts.append(chunk)
+                    if task_checklist.checklists_enabled() and not checklist_label_set:
+                        label = _extract_task_type_label("".join(result_text_parts))
+                        if label:
+                            checklist_label_set = True
+                            task_bot_runtime.set_task_type(execution_id, label, repo_root=repo_root)
                 elif event_type == "progress":
                     progress = str(
                         event.get("text") or event.get("message") or "Provider-native worker is running."
@@ -633,6 +552,7 @@ async def _run_agent_worker(
                         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
                         await emitter.progress(record, specialist_id=specialist_id, bot=bot, text=progress)
                 elif event_type == "tool_start":
+                    checklist_read_paths.extend(_extract_read_paths(event))
                     tool_name = str(event.get("name") or "tool").strip() or "tool"
                     if tool_name not in tools_used:
                         tools_used.append(tool_name)
@@ -653,6 +573,8 @@ async def _run_agent_worker(
                         failed_tools=failed_tools,
                     )
                     if not tool_ok:
+                        if last_tool not in base_failed_tools:
+                            base_failed_tools.append(last_tool)
                         consecutive_snags += 1
                         refusal_text = str(event.get("result_text") or "")
                         if _is_file_access_refusal(refusal_text) and refusal_text not in policy_refusals:
@@ -692,6 +614,14 @@ async def _run_agent_worker(
                 elif event_type == "done":
                     if not worker_runtime_received:
                         raise _WorkerRetry("provider-native worker model runtime receipt missing")
+                    if task_checklist.checklists_enabled() and not checklist_label_set:
+                        # Never labelled: a run that wrote files is a deliverable, anything else
+                        # fails closed to the strictest type.
+                        wrote = any(str(t).lower().startswith("edit:") or "write" in str(t).lower() for t in succeeded_tools)
+                        task_bot_runtime.set_task_type(execution_id, "code_change" if wrote else "review_explain", repo_root=repo_root)
+                    task_bot_runtime.record_checklist_evidence(  # checklist + acceptance contract, both evidence-only
+                        execution_id, read_paths=list(checklist_read_paths), output_text="".join(result_text_parts), repo_root=repo_root
+                    )
                     if requires_live_repo_change:
                         await _finalize_live_repo_completion(
                             emitter,
@@ -705,6 +635,7 @@ async def _run_agent_worker(
                             failed_tools,
                             bot,
                             specialist_id,
+                            tool_receipts=tool_receipts,
                         )
                     else:
                         await _finalize_worker_completion(
@@ -722,6 +653,7 @@ async def _run_agent_worker(
                             specialist_id,
                             repo_root,
                             policy_refusals=policy_refusals,
+                            tool_receipts=tool_receipts,
                         )
                     return
 
@@ -741,6 +673,7 @@ async def _run_agent_worker(
                     failed_tools,
                     bot,
                     specialist_id,
+                    tool_receipts=tool_receipts,
                 )
             else:
                 await _finalize_worker_completion(
@@ -758,6 +691,7 @@ async def _run_agent_worker(
                     specialist_id,
                     repo_root,
                     policy_refusals=policy_refusals,
+                    tool_receipts=tool_receipts,
                 )
             return
         except asyncio.CancelledError:

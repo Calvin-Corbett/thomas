@@ -4,7 +4,12 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from PIL import Image, ImageEnhance, ImageOps
+try:
+    from PIL import Image, ImageEnhance, ImageOps  # type: ignore
+except ImportError:  # Pillow is a `test` extra, not a runtime dependency
+    Image = None  # type: ignore
+    ImageEnhance = None  # type: ignore
+    ImageOps = None  # type: ignore
 
 
 def _get_tesseract_cmd() -> str | None:
@@ -56,6 +61,9 @@ def extract_text_from_images(image_paths: Sequence[Path]) -> list[str]:
     """
     if not image_paths:
         return []
+
+    if Image is None:
+        return ["(OCR unavailable: Pillow is not installed.)" for _ in image_paths]
 
     if not _tesseract_available():
         return ["(OCR unavailable: install pytesseract + tesseract, or set TESSERACT_CMD.)" for _ in image_paths]

@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.acceptance_runtime import begin_contract, hold_at_finish
 from thomas.agent.checkin_policy import resolve_checkin_policy
 from thomas.agent.constraint_envelope import ConstraintEnvelope, envelope_events
 from thomas.agent.hook_events import HookEvent, emit_hook
@@ -57,6 +58,7 @@ from thomas.agent.skills_runtime import (
     format_runtime_skills_context,
     resolve_runtime_skills,
 )
+from thomas.core import capture_context
 from thomas.core.autonomy import autonomy_spec
 from thomas.core.config import load_config
 from thomas.core.events import AgentEvent, EventType
@@ -73,6 +75,7 @@ from thomas.core.token_economy import (
     runtime_overhead_policy,
 )
 from thomas.core.tokens import estimate_tokens
+from thomas.marketplace.observability import derive_messages as honesty_shadow
 
 if TYPE_CHECKING:
     from thomas.agent.loop import AgentLoop
@@ -391,6 +394,14 @@ async def _agent_loop_run(
 
         memory_tokens = estimate_tokens(memory_text)
 
+    # The acceptance contract goes in front of the model before any work, as turn context -
+    # never into the stored conversation (see acceptance_runtime).
+    contract_block = begin_contract(
+        self, prompt_text=prompt_text, route_path=str(route.path or ""), attempt=int(_quality_retry_count)
+    )
+    if contract_block:
+        memory_text = f"{memory_text}\n\n{contract_block}".strip() if memory_text else contract_block
+        memory_tokens = estimate_tokens(memory_text)
     # Add user message to conversation for history
     self._conversation.append({"role": "user", "content": prompt})
     turn_user_content: Any = prompt
@@ -411,6 +422,14 @@ async def _agent_loop_run(
         # Auto-compact conversation if approaching token budget.
         # This runs before _build_messages to avoid hard truncation.
         if iteration >= 1:
+            # Honesty-spine correlation: auto-compact used to run OUTSIDE the
+            # set_capture_run bracket below (which only wrapped the model
+            # call), so its history/compaction event fell back to the
+            # uncorrelated ambient run instead of landing on this turn's own
+            # run_id -- the same tight-scope-reset discipline as the model
+            # call, applied to the one other call site this iteration makes
+            # before it.
+            _compact_capture_token = capture_context.set_capture_run(self._run_id)
             try:
                 compact_result = await self._auto_compact_if_needed(
                     hard_cap=self._context_window,
@@ -426,6 +445,8 @@ async def _agent_loop_run(
                     )
             except Exception as _ac_err:
                 log.debug("Auto-compaction check failed (non-fatal): %s", _ac_err)
+            finally:
+                capture_context.reset(_compact_capture_token)
 
         # Build messages with context window management
         # Only inject memory on first iteration
@@ -461,6 +482,15 @@ async def _agent_loop_run(
         iter_token_estimates.append(int(state.token_estimate))
         cumulative_context_tokens += int(state.token_estimate)
         peak_context_tokens = max(peak_context_tokens, int(state.token_estimate))
+        # Defense-in-depth: shadow_diff_if_enabled already guards its own body
+        # with this same named tuple, but a zero-effect diagnostic must not be
+        # able to kill a live turn even via a bug outside that inner try --
+        # matching the neighboring auto-compact block's non-fatal pattern.
+        try:
+            honesty_shadow.shadow_diff_if_enabled(self._run_id, messages)
+        except honesty_shadow.SHADOW_EXCEPTIONS as _shadow_err:
+            honesty_shadow.shadow_diff_failures += 1
+            log.debug("Shadow diff call site failed (non-fatal): %s", _shadow_err)
 
         if provider_tpm_budget > 0:
             while True:
@@ -520,6 +550,12 @@ async def _agent_loop_run(
             {"messages": messages, "model": str(getattr(self.llm.config, "model", "") or "")},
         )
 
+        # Honesty-spine correlation: tag every model call this turn's LLM
+        # client makes with the AgentLoop's own run_id, so the capture hook
+        # in LLMClient.stream_chat lands under the run this turn belongs to
+        # instead of falling back to the uncorrelated ambient run. Scoped
+        # tightly around the model-call try/except below; reset unconditionally.
+        _capture_token = capture_context.set_capture_run(self._run_id)
         try:
             llm_stream_error: str | None = None
             await _ensure_llm_hardened_client(self.llm)
@@ -632,6 +668,9 @@ async def _agent_loop_run(
             state.finished = True
             break
 
+        finally:
+            capture_context.reset(_capture_token)
+
         # Accumulate text response
         iter_text = "".join(text_chunks)
         iter_text, suppressed = self._sanitize_assistant_text(
@@ -709,8 +748,19 @@ async def _agent_loop_run(
 
         state.aggregate_response += iter_text
 
-        # If no tool calls, we're done
+        # If no tool calls, we're done - unless the acceptance contract says the
+        # text was commentary: then its gaps become the next user turn of this
+        # same loop and the model keeps working (a text reply is never "done").
         if not pending_tool_calls:
+            hold_text = await hold_at_finish(self, response_text=iter_text, tool_events=quality_tool_events)
+            if hold_text:
+                if iter_text:
+                    self._conversation.append({"role": "assistant", "content": iter_text})
+                self._conversation.append({"role": "user", "content": hold_text})
+                yield AgentEvent.status(
+                    "Reply checked against the acceptance contract: not finished yet.", iteration=iteration
+                )
+                continue
             if iter_text:
                 # Keep the user-facing handoff separate from prose emitted while
                 # tools were still running. ``aggregate_response`` retains the
@@ -769,11 +819,13 @@ async def _agent_loop_run(
                 if str(maybe_tc.get("id", "")) == tc_id:
                     tc = maybe_tc
                     break
+            matched_tool_call = bool(tc)
             if not tc:
                 tc = {"id": tc_id, "name": result_event.data.get("tool_name", "tool"), "arguments": "{}"}
 
             parsed_args, _parse_err = self._parse_tool_args(tc.get("arguments"))
-
+            # The worker's completion receipt identifies the invocation that ran.
+            result_event.data["arguments"] = parsed_args if matched_tool_call else None
             yield result_event
             tool_results.append(result_event)
             tool_results_by_id[tc_id] = result_event

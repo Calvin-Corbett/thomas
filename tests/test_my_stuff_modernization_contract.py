@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 HTML_PATH = ROOT / "thomas/server/web/static/my_stuff.html"
 CSS_PATH = ROOT / "thomas/server/web/static/my_stuff.style01.css"

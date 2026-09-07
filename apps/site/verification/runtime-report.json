@@ -1,5 +1,5 @@
 {
-  "captured_at_utc": "2026-06-03T00:36:00.159Z",
+  "captured_at_utc": "2026-09-01T14:11:56.024Z",
   "target_url": "http://127.0.0.1:3108",
   "viewport": {
     "width": 1424,
@@ -331,9 +331,9 @@
     "console_error_count": 0,
     "console_error_samples": [],
     "pixel_diff_threshold_ratio": 0.02,
-    "pixel_diff_full_page_ratio": 0.0,
+    "pixel_diff_full_page_ratio": 0.0028651408099204722,
     "pixel_diff_footer_focus_ratio": 0.0,
-    "pixel_diff_max_ratio": 0.0,
+    "pixel_diff_max_ratio": 0.0028651408099204722,
     "pixel_diff_size_mismatch_count": 0
   },
   "assertions": {
@@ -352,18 +352,18 @@
     "threshold_ratio": 0.02,
     "comparisons": {
       "full_page": {
-        "changed_pixels": 0,
+        "changed_pixels": 12399,
         "total_pixels": 4327536,
-        "diff_ratio": 0.0,
+        "diff_ratio": 0.0028651408099204722,
         "size_mismatch": false,
         "width": 1424,
         "height": 3039,
         "baseline_path": "apps/site/verification/baselines/full-page.png",
         "current_path": "apps/site/verification/screenshots/full-page.png",
         "diff_path": "apps/site/verification/diffs/full-page-diff.png",
-        "baseline_sha256": "73918ce93d9bc12845593268a990f237f9754b085e756021295bf132210d1424",
-        "current_sha256": "73918ce93d9bc12845593268a990f237f9754b085e756021295bf132210d1424",
-        "diff_sha256": "c7deace3be0c9bc2aa0929c16d5f2b20d834bb6adfc06d0dbaf91755fb68e7bb"
+        "baseline_sha256": "e9b30e28bc39924f42cf5254914c83573a09490421a8ef3446fdf297cf83b0e3",
+        "current_sha256": "a504fbf96540c59ba2109ced7adb000f19351fd84d6d70b700c339c3ed9b28bb",
+        "diff_sha256": "dc4d297996192d61d56cda1eb3779cc42d771b06d6409b19c253ab408c20964b"
       },
       "footer_focus": {
         "changed_pixels": 0,
@@ -375,9 +375,9 @@
         "baseline_path": "apps/site/verification/baselines/footer-focus.png",
         "current_path": "apps/site/verification/screenshots/footer-focus.png",
         "diff_path": "apps/site/verification/diffs/footer-focus-diff.png",
-        "baseline_sha256": "4ac5e75f2a57acf28f28e2c4b928ee8bf142506b87e9f8667744dfb44ebfce3f",
-        "current_sha256": "4ac5e75f2a57acf28f28e2c4b928ee8bf142506b87e9f8667744dfb44ebfce3f",
-        "diff_sha256": "cdddeca5528622a5345a60b6708c6b29ef7a020fa6e08ba8275c26011491abd0"
+        "baseline_sha256": "7de8546307ef354c6a6b647217dc367656ec4a814f5a061e15764d93e6e4fbe2",
+        "current_sha256": "7de8546307ef354c6a6b647217dc367656ec4a814f5a061e15764d93e6e4fbe2",
+        "diff_sha256": "7da2e296efe81d43352e49c31dad867a6e9f24c5e880608c56b0e670cb46bee9"
       }
     }
   }

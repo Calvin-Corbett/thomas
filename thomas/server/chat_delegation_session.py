@@ -19,7 +19,10 @@ _TERMINAL_TASK_STATES = {"completed", "verified", "failed", "abandoned", "cancel
 
 
 def _resolve_repo_root(repo_root: str | Path | None = None) -> Path:
-    return (Path(repo_root).expanduser() if repo_root is not None else ROOT).resolve()
+    # The root is the project the work is about, not where Thomas is installed.
+    from thomas.core.project_root import resolve_project_root
+
+    return resolve_project_root(explicit=repo_root)
 
 
 def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:

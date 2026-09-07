@@ -1,267 +1,226 @@
-# Thomas Project - Documentation Index
+# Thomas Project Documentation Index
 
-Complete documentation for the Thomas agentic AI system. Read these files to understand every major component and avoid breaking things.
+This index points to the current Thomas runtime. Source code, import wiring, and
+loader manifests outrank prose when they disagree. Numeric file counts are
+deliberately omitted because the runtime changes as modules are added or retired.
 
-## Quick Start for AI Agents
+## Quick Start for Contributors
 
-**You are here to work on Thomas code?** Start with this sequence:
+Read these in order before changing code:
 
-1. Read [`thomas/README.md`](thomas/README.md) — Get the big picture (5 min)
-2. Read [`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md) — Understand how chat works (10 min)
-3. Read the specific README for your area (see below)
-4. Explore the actual code
+1. [`AGENTS.md`](AGENTS.md) — repository workflow, safety, and coordination rules.
+2. [`ARCHITECTURE.md`](ARCHITECTURE.md) — live module boundaries and data flow.
+3. [`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md) — authoritative
+   model-owned chat and dispatch contract.
+4. [`docs/AGENT_FILE_EDITING_RULES.md`](docs/AGENT_FILE_EDITING_RULES.md) — how
+   to identify the source file that actually runs.
+5. [`thomas/README.md`](thomas/README.md) — package-level runtime map.
+6. Open the current entrypoint, its imports, and any loader manifest before editing.
 
-## Documentation Files by Component
+## Authority Order
 
-### Core Architecture
-- **[`thomas/README.md`](thomas/README.md)** — Entire app overview. Start here. Explains dispatch-first architecture, monolith pattern, and common mistakes.
+When two descriptions conflict, use this order:
 
-### Main Systems
+1. Active source, import wiring, manifests, and executable tests.
+2. `ARCHITECTURE.md` and `docs/CHAT_EXECUTION_MODEL.md`.
+3. `docs/AGENT_FILE_EDITING_RULES.md`.
+4. Package and component READMEs.
+5. Historical plans, ledgers, and archived material.
 
-| Component | README | Purpose |
+A count copied into prose is never an architecture contract. Derive collections
+from their source manifest or directory at verification time.
+
+## Live Runtime Map
+
+| Area | Start here | What it owns |
 |---|---|---|
-| **Orchestrator** | [`thomas/orchestrator/README.md`](thomas/orchestrator/README.md) | Brain that delegates to specialists |
-| **Specialists** | [`thomas/specialists/README.md`](thomas/specialists/README.md) | Sub-agents that execute work |
-| **Memory** | [`thomas/memory/README.md`](thomas/memory/README.md) | Episodic memory, retrieval, embeddings |
-| **Chat** | [`thomas/chat/README.md`](thomas/chat/README.md) | Conversation context and session management |
-| **Core** | [`thomas/core/README.md`](thomas/core/README.md) | LLM client, config, RAG, tools, events |
-| **Tools** | [`thomas/tools/README.md`](thomas/tools/README.md) | Built-in capabilities (file ops, database, web, etc.) |
+| CLI | `thomas/cli/main.py` and `thomas/cli/repl_runtime.py` | Command registration and local operator flows |
+| HTTP app | `thomas/server/app.py`, `thomas/server/app_core.py`, `thomas/server/app_routes_init.py` | App composition, lifecycle, and route registration |
+| Chat registration | `thomas/server/routes/chat_v2_registration.py` | Exclusive live registrar for `/api/chat` and `/api/v2/chat` |
+| Chat ingress | `thomas/server/routes/chat_v2.py` | Unified handling for both registered chat routes |
+| Model orchestration | `thomas/marketplace/orchestrator/brain.py` | Model-owned response and structured-capability decisions |
+| Governed delegation | `thomas/server/chat_delegation.py` | Background task start, update, and lifecycle bridge |
+| Specialist registration | `thomas/server/routes/chat_v2_registration.py` and `thomas/marketplace/orchestrator/registry.py` | Registers the specialist implementations exposed to chat |
+| Agent execution | `thomas/agent/loop.py` and `thomas/agent/loop_*.py` | LLM streaming, tool execution, context, and completion |
+| Conversations | `thomas/chat/session_store.py` and `thomas/chat/conversation.py` | Session persistence and bounded conversation context |
+| Memory | `thomas/memory/store.py` and `thomas/memory/v2/` | Active stores and retrieval primitives |
+| Tools | `thomas/tools/base.py` and `thomas/tools/registry.py` | Tool contracts and registration |
+| Classic web runtime | `thomas/server/web/js/app_runtime_loader.js` and `thomas/server/web/js/runtime/` | Declared-order browser modules |
+| Web shell | `thomas/server/web/index.html` | Direct scripts, templates, styles, and runtime-loader entry |
+| Crew automation | `scripts/crew/tasks/manager.py` and `scripts/crew/tasks/*.py` | Workboard task-management commands |
 
-### Server and Frontend
+## Chat Execution
 
-| Component | README | Purpose |
-|---|---|---|
-| **Server** | [`thomas/server/README.md`](thomas/server/README.md) | HTTP server, middleware, plugins |
-| **Routes** | [`thomas/server/routes/README.md`](thomas/server/routes/README.md) | API endpoints (/chat, /memory, /tasks, etc.) |
-| **Web** | [`thomas/server/web/README.md`](thomas/server/web/README.md) | Frontend runtime and UI |
+Thomas does not classify natural-language prose into a local casual/actionable
+fork. The configured frontier model sees the conversation and allowed structured
+capabilities, then decides whether to answer directly or make a structured call.
 
-### Automation and Operations
-
-| Component | README | Purpose |
-|---|---|---|
-| **Scripts** | [`scripts/README.md`](scripts/README.md) | Workboard, quality checks, release automation |
-
-### Other Documentation
-
-| File | Purpose |
-|---|---|
-| **[`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md)** | **AUTHORITATIVE**. How Thomas chat works end-to-end |
-| **[`README.md`](README.md)** | Project-level readme (if exists) |
-
-## Key Concepts Explained in These Docs
-
-### Dispatch-First Architecture
-A fast binary classifier routes user messages:
-- **CASUAL** (greetings, thanks, filler) → Reply instantly
-- **ACTIONABLE** (anything else) → Acknowledge + dispatch to specialists
-
-See: `thomas/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
-
-### Module Organization
-Large subsystems are split into focused modules with normal Python imports.
-
-**Python**: The `*_partXX.py` monolith-split pattern is BANNED (see `CLAUDE.md` / `agent_safety.toml`). Large files are split into named modules and wired together with regular imports — e.g. the server app lives in `thomas/server/app.py` + `app_core.py` + `app_routes_init.py`, and the agent loop in `thomas/agent/loop.py` + `loop_core.py` + `loop_execution.py` (etc.).
-- Edit the real module file, then clear `.pyc` caches and restart the server
-- Do NOT create any new `*_part*.py` file
-
-**JavaScript**: All frontend runs through `thomas/server/web/js/runtime/` (45 numbered files, combined 41K lines)
-- Edit files in `runtime/` directory (001–045) only
-- `app_runtime_primary.mjs` is a dead code legacy monolith—ignore it
-- `app_parts/` directory is dead code—ignore it
-- Clear browser cache after editing
-
-See: `thomas/README.md`, `thomas/server/README.md`, `thomas/server/web/README.md`
-
-### Orchestrator Delegation
-The brain routes work via binding contracts:
-1. Classify user intent
-2. Find matching specialists
-3. Create DelegationContract (token budget, constraints)
-4. Specialist executes and returns DelegationResult
-5. Synthesize final response
-
-See: `thomas/orchestrator/README.md`
-
-### Specialists and Capability Tokens
-Sub-agents with narrow responsibilities:
-- Reasoning (analysis, planning)
-- Coding (code generation, fixing)
-- Research (web search, synthesis)
-- Synthesis (combine outputs, summarize)
-- Tools (execute built-in capabilities)
-
-Each specialist declares what tools it can use via capability tokens.
-
-See: `thomas/specialists/README.md`, `thomas/tools/README.md`
-
-### Memory System
-Three-layer memory:
-1. **Episodic** (conversation history)
-2. **Retrieval** (find relevant context)
-3. **Embeddings** (semantic search)
-
-**Warning**: Some memory files are placeholders (episodic.py, episodic_store.py, summarization.py).
-
-See: `thomas/memory/README.md`
-
-### Chat Flow
-```
-User Message → dispatch.py → CASUAL or ACTIONABLE
-    ↓
-    CASUAL: Fast reply → Done
-    ACTIONABLE: "On it." → orchestrator/brain.py → specialists
-         ↓
-         Tools, memory, reasoning
-         ↓
-         EventDispatcher streams to UI
-         ↓
-         SessionStore saves conversation
-         ↓
-         Browser (app_runtime_primary.mjs) updates
+```text
+Natural-language turn
+        |
+        v
+thomas/server/routes/chat_v2.py
+        |
+        v
+frontier model via thomas/marketplace/orchestrator/brain.py
+        |                         |
+        | direct response         | structured capability
+        v                         v
+stream to chat             schema + policy validation
+                                  |
+                       governed execution + receipt
+                                  |
+                                  v
+                         model explains the result
 ```
 
-See: `thomas/chat/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
+`send_task` is the structured bridge for governed background work. Deterministic
+code validates the call and enforces policy; it does not rediscover intent from
+keywords, regexes, scores, or fallback classifiers. See
+[`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md) for the complete
+contract.
 
-## Common Tasks and Where to Look
+## Frontend Source of Truth
 
-### To change chat response behavior
-→ Read: `thomas/server/web/README.md` or `thomas/chat/README.md`
-→ Edit: `thomas/agent/dispatch.py` (classification) or specialist code
+`thomas/server/web/js/app_runtime_loader.js` owns the `RUNTIME_SCRIPTS` manifest.
+Every JavaScript module declared there is active, in declared order. Names may be
+numbered or descriptive. The number of entries can change, so documentation and
+tests must derive it from `RUNTIME_SCRIPTS` rather than copy a snapshot.
 
-### To add a new tool
-→ Read: `thomas/tools/README.md` and `thomas/core/README.md`
-→ Create: New file in `thomas/tools/`
-→ Register: In `thomas/core/tool_factory.py`
+For a classic-runtime change:
 
-### To add a new specialist
-→ Read: `thomas/specialists/README.md` and `thomas/orchestrator/README.md`
-→ Create: New class inheriting from `BaseSpecialist`
-→ Register: In `thomas/orchestrator/registry.py`
+1. Find the feature in `thomas/server/web/js/runtime/`.
+2. Confirm the file is declared in `RUNTIME_SCRIPTS`.
+3. Preserve dependency order when adding or moving an entry.
+4. Check `thomas/server/web/index.html` for scripts loaded directly outside the
+   runtime manifest.
+5. Verify the affected browser behavior and targeted contract tests.
 
-### To add a new HTTP endpoint
-→ Read: `thomas/server/routes/README.md`
-→ Create/Edit: File in `thomas/server/routes/`
-→ Register: In `thomas/server/app_routes_init.py`
+CSS tokens live in `thomas/server/web/css/tokens.css`. Component and layout rules
+live under `thomas/server/web/css/component_styles/` and
+`thomas/server/web/css/layout_styles/`; their top-level CSS files are import hubs.
 
-### To update the UI
-→ Read: `thomas/server/web/README.md`
-→ Edit: `thomas/server/web/js/runtime/` (numbered 001–045) or standalone scripts
-→ Clear browser cache (Ctrl+Shift+Delete)
-→ Hard-reload (Ctrl+Shift+R)
+## Desktop Shell
 
-### To work on memory/context
-→ Read: `thomas/memory/README.md` and `thomas/chat/README.md`
-→ Edit: Files in `thomas/memory/` or `thomas/chat/`
-→ Note: Some memory files are stubs—check README for status
+[`docs/DESKTOP.md`](docs/DESKTOP.md) — Thomas as its own windowed browser
+(`desktop.cmd`): why Electron, the security posture that may not be lowered, the
+single CDP agent channel and its verbs, where the browser profile lives, the
+gauntlet that must pass on every Electron bump, and the three silent reasons a
+click can land nowhere. The browser chrome (`browser_shell*.js` under
+`thomas/server/web/js/`) is served from `/static` but attached by
+`desktop/preload.js`, not linked from `chat.html`.
 
-### To work on automation/workboard
-→ Read: `scripts/README.md`
-→ Edit: Scripts in `scripts/`
-→ Reference: `plans/thomas/WORKBOARD.md` (task queue)
+## Python Source Composition
 
-## Critical Warnings
+Normal Python imports are the default. `thomas/agent/loop.py` is a real facade over
+named modules, `thomas/server/routes/chat_aiohttp.py` is a compatibility shim with
+normal imports rather than a live chat-route registrar, and
+`scripts/crew/tasks/manager.py` imports named task modules.
 
-### Do NOT Do This
-
-1. **Edit `app_parts/*.js`** — They're dead code. Edit files in `js/runtime/` instead.
-2. **Edit `app_runtime_primary.mjs`** — It's a dead code legacy monolith. Edit files in `js/runtime/` instead.
-3. **Ignore `.pyc` caches** — Clear them: `find . -name "*.pyc" -delete`
-4. **Forget to restart server** — Server caches Python modules.
-5. **Assume all code is active** — Check for `_archived/`, placeholders, and dead code markers.
-6. **Call LLM directly** — Always use `thomas.core.llm_client.LLMClient`.
-7. **Bypass memory system** — Use specialist interface, not raw tools.
-8. **Create `*_part*.py` files** — The monolith-split pattern is banned. Split large files into named modules with normal imports.
-
-### Placeholder/Incomplete Code
-
-**Memory System** (partially stubbed):
-- `thomas/memory/episodic.py` — Not fully implemented
-- `thomas/memory/episodic_store.py` — Partially stubbed
-- `thomas/memory/summarization.py` — Mostly stubs
-Use active modules: `retrieval.py`, `embedder.py`, `store.py`
-
-**Active Core Modules**:
-- `thomas/agent/loop.py` — Primary `AgentLoop` entry point (facade over `loop_core.py`); imported by the CLI, server chat routes, and `thomas/agent/__init__.py`. NOT dead.
-
-**Dead Code**:
-- `thomas/agent/routing.py` — Deprecated, use `dispatch.py`
-- `thomas/server/web/js/app_parts/` — Never loaded
-- `thomas/server/web/js/app_runtime_primary.mjs` — Legacy pre-split monolith, never loaded
-
-**Domain Skeletons** (all placeholder):
-- All `thomas/{domain}/` folders (agriculture, autonomous_vehicles, blockchain, etc.)
-
-## File Locations (Repo-Relative)
-
-All documentation and code is under the repository root:
-```
-.
-├── thomas/                  # Main app code
-│   ├── README.md           # Start here
-│   ├── orchestrator/        # Brain
-│   ├── specialists/         # Sub-agents
-│   ├── memory/              # Memory system
-│   ├── chat/                # Conversation context
-│   ├── core/                # Foundation
-│   ├── tools/               # Built-in capabilities
-│   ├── server/              # HTTP server
-│   │   ├── routes/          # API endpoints
-│   │   └── web/             # Frontend
-│   └── agent/               # Chat dispatch + agent loop (active)
-├── scripts/                 # Automation
-├── docs/                    # Additional docs
-│   └── CHAT_EXECUTION_MODEL.md  # AUTHORITATIVE
-├── plans/                   # Planning docs
-│   └── thomas/
-│       └── WORKBOARD.md     # Task queue
-└── DOCUMENTATION_INDEX.md   # This file
-```
-
-## How to Use This Documentation
-
-### For New Agents
-1. Start with `thomas/README.md` (overview)
-2. Read `docs/CHAT_EXECUTION_MODEL.md` (chat flow)
-3. Read the specific README for your task area
-4. Explore the code
-
-### For Debugging
-1. Find the relevant README (see "Common Tasks" above)
-2. Check the "Common Mistakes" section
-3. Follow the debugging tips
-4. Review the example code
-
-### For Adding Features
-1. Find the relevant README
-2. Read "For AI Agents" section
-3. Follow the patterns shown in code examples
-4. Test with `force_inline: true` in chat payload first
-
-## Before You Commit Changes
-
-After editing code:
+Never create a missing `*_part*.py` file or a new exec-based source loader. A small
+amount of migration compatibility can remain on a branch, so discover it instead
+of trusting a hard-coded list:
 
 ```bash
-# Clear Python caches
-find . -name "*.pyc" -delete
-find . -name "__pycache__" -type d -exec rm -rf {} +
-
-# Restart server
-# (For JS: clear browser cache and hard-reload)
-
-# Test your changes
-# (Use force_inline: true to bypass workboard and test directly)
+rg -l "load_monolith_source" thomas --glob "*.py"
 ```
 
-## See Also
+A loader reference is a migration signal, not permission to recreate absent parts.
+Open the file, verify every referenced path exists, follow its active fallback or
+named imports, and test the actual import surface.
 
-- `CONTRIBUTING.md` (if exists) — Contribution guidelines
-- `.github/` — GitHub workflows and CI/CD
-- `docs/` — Additional documentation
-- `plans/thomas/WORKBOARD.md` — Current tasks and agent claims
+## Common Tasks
+
+### Change chat behavior
+
+- Read [`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md).
+- Trace `thomas/server/routes/chat_v2.py` into
+  `thomas/marketplace/orchestrator/brain.py` and the structured capability being
+  changed.
+- Use `thomas/agent/loop.py` for agent-loop behavior, not for pre-model prose
+  classification.
+
+### Add or change a specialist
+
+- Inspect `thomas/server/routes/chat_v2_registration.py` for the live registration
+  set.
+- Implement the appropriate interface under
+  `thomas/marketplace/specialists/`.
+- Use `thomas/marketplace/orchestrator/registry.py` for registry behavior.
+
+### Add or change a tool
+
+- Start with `thomas/tools/base.py` and `thomas/tools/registry.py`.
+- Trace construction through `thomas/core/tool_factory.py` and the surface that
+  exposes the tool.
+- Use the shared `thomas/core/llm.py` facade for model access rather than creating
+  a parallel provider client.
+- Add contract tests for registration, arguments, policy, and failure receipts.
+
+### Add an HTTP endpoint
+
+- Add the route in the focused module under `thomas/server/routes/`.
+- Wire it through `thomas/server/app_routes_init.py`.
+- Add a route-level contract test.
+
+### Change the classic UI
+
+- Use `RUNTIME_SCRIPTS` to locate active runtime modules.
+- Use `thomas/server/web/index.html` for directly loaded scripts and styles.
+- Test both the source contract and the visible behavior.
+
+### Work on memory
+
+- Start with `thomas/memory/store.py` and `thomas/memory/v2/`.
+- Confirm the caller and configured persistence path before changing storage.
+
+### Work on automation or the workboard
+
+- Read [`scripts/README.md`](scripts/README.md).
+- Start with `scripts/crew/tasks/manager.py` and its named imports.
+- Treat `plans/thomas/WORKBOARD.md` as coordination state, not application source.
+
+## Debugging and Handoff
+
+1. Trace the failing surface from its current entrypoint.
+2. Search for every implementation and caller before changing code.
+3. Confirm the edited path is imported, registered, or declared by a live caller.
+4. Follow `AGENTS.md` for protected-file approval, versioning, and coordination.
+5. After Python changes, clear only project bytecode and restart the foreground
+   server:
+
+   ```powershell
+   Get-ChildItem -LiteralPath thomas -Recurse -File -Filter *.pyc | Remove-Item -Force
+   .\.venv\Scripts\python.exe -m thomas serve
+   ```
+
+   ```bash
+   find thomas -type f -name '*.pyc' -delete
+   .venv/bin/python -m thomas serve
+   ```
+
+   Stop the existing foreground server with `Ctrl+C` before restarting it; do not
+   kill every Python process on the machine.
+6. After JavaScript or CSS changes, hard-refresh the affected page
+   (`Ctrl+Shift+R` on Windows/Linux; `Cmd+Shift+R` on macOS).
+7. Run focused tests first, then the required broader gates for the change.
+8. Report exact items scanned and distinguish source checks from live runtime
+   proof.
+
+## Documentation Verification
+
+The focused contract is `tests/test_documentation_truth.py`. It verifies:
+
+- local Markdown links in the four onboarding documents resolve;
+- repo-relative source paths cited in code spans exist;
+- retired architecture names do not return;
+- the runtime manifest has no duplicates, missing files, or unlisted files; and
+- each onboarding document describes the runtime through `RUNTIME_SCRIPTS`
+  without freezing a file count or numeric range.
+
+When reporting a check, include the number of documents, links, path references,
+manifest entries, and runtime files examined.
 
 ---
 
-**Last Updated**: 2026-03-18
-
-This documentation ensures ANY AI agent can understand and work on Thomas without breaking things. Read the README for your component. Follow the patterns. Test incrementally. You've got this!
+**Last updated:** 2026-08-13

@@ -186,7 +186,27 @@ def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -
         else:
             reconciled.append(item)
 
-    return "\n".join(part for part in instructions if part), reconciled
+    # The mirror image: a ``function_call`` whose output never made it into the
+    # request ("No tool output found for function call call_..." -> HTTP 400).
+    # Trimming that keeps the assistant's tool-call message but drops the tool
+    # result, or a parallel batch whose failed member never produced a result,
+    # leaves exactly that. It killed the second pass of two Terminal-Bench runs on
+    # 2026-09-04. Give every unanswered call a placeholder output right after it,
+    # so the model still sees what it did and the request stays well-formed.
+    answered = {str(item.get("call_id") or "") for item in reconciled if item.get("type") == "function_call_output"}
+    completed: list[dict[str, Any]] = []
+    for item in reconciled:
+        completed.append(item)
+        if item.get("type") == "function_call" and str(item.get("call_id") or "") not in answered:
+            completed.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": str(item.get("call_id") or ""),
+                    "output": "[tool output not retained in history]",
+                }
+            )
+
+    return "\n".join(part for part in instructions if part), completed
 
 
 def _responses_tools(owner: Any, tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -277,7 +297,25 @@ def _extract_responses_usage(event_data: dict[str, Any]) -> TokenUsage | None:
         t = int(total_tokens if total_tokens is not None else p + c)
     except (TypeError, ValueError, OverflowError):
         return None
-    return TokenUsage(prompt_tokens=max(0, p), completion_tokens=max(0, c), total_tokens=max(0, t))
+    return TokenUsage(
+        prompt_tokens=max(0, p),
+        completion_tokens=max(0, c),
+        total_tokens=max(0, t),
+        cached_prompt_tokens=_cached_prompt_tokens(usage),
+    )
+
+
+def _cached_prompt_tokens(usage: dict[str, Any]) -> int:
+    """Cache reads as the Responses API (input_tokens_details) or chat completions (prompt_tokens_details) report them."""
+    for key in ("input_tokens_details", "prompt_tokens_details"):
+        details = usage.get(key)
+        if not isinstance(details, dict):
+            continue
+        try:
+            return max(0, int(details.get("cached_tokens") or 0))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+    return 0
 
 
 def _response_item(event_data: dict[str, Any]) -> dict[str, Any]:

@@ -68,6 +68,24 @@ def _declares_a_path_parameter(registry: Any, name: str) -> bool:
     return any(key in properties for key in _WRITE_TOOL_PATH_KEYS)
 
 
+def _absolute_path_within(path_text: str, root: Path) -> tuple[str | None, str | None]:
+    """Accept an absolute path only when it resolves under ``root``."""
+    try:
+        resolved = Path(path_text).expanduser().resolve()
+        resolved_root = root.resolve()
+    except OSError as exc:
+        return None, f"absolute path could not be resolved: {exc}"
+    try:
+        common = Path(os.path.commonpath([str(resolved_root), str(resolved)]))
+    except ValueError:
+        common = None
+    if common is None or common.resolve() != resolved_root:
+        return None, (
+            f"absolute paths are not allowed outside the sandbox root {resolved_root}; this path resolves outside it"
+        )
+    return str(resolved), None
+
+
 def _validate_filesystem_path(
     path_value: Any,
     *,
@@ -107,7 +125,11 @@ def _validate_filesystem_path(
     path_text = str(path_text).strip()
 
     if path_text == "":
-        return None, "path cannot be empty"
+        # The project root. Counted on one day's Build transcripts: 23 calls to
+        # code.project_structure and code.search were refused here for asking
+        # for the root with an empty path. The tool decides what "." means for
+        # it; a write to a directory fails on its own terms.
+        return ".", None
 
     if "\x00" in path_text:
         return None, "path cannot contain null bytes"
@@ -117,6 +139,15 @@ def _validate_filesystem_path(
 
     if os.path.isabs(path_text) or path_text.startswith(("/", "\\")):
         if benchmark_root is None and file_access is None:
+            # No ladder level and no benchmark lane: the sandbox root is the only
+            # authority left. Measured on TB-4.0 run 3 (2026-09-04): 26 first calls
+            # (fs.read_file, fs.list_dir, code.project_structure, eng.lint ...) were
+            # refused with a bare "absolute paths are not allowed" for paths that sat
+            # INSIDE the sandbox root, which the tools themselves would have accepted.
+            # An absolute path that resolves under the root passes; one outside it is
+            # refused with the root named so the model can rewrite the path.
+            if sandbox_root is not None:
+                return _absolute_path_within(path_text, sandbox_root)
             return None, "absolute paths are not allowed"
         try:
             resolved = Path(path_text).expanduser().resolve()
@@ -174,6 +205,91 @@ def _validate_filesystem_path(
     return path_text, None
 
 
+_PATCH_TEXT_KEYS = ("patch", "diff", "unified_diff")
+_UNIFIED_HEADER_RE = re.compile(r"^(?:\+\+\+|---)\s+(?:[ab]/)?(?P<path>[^\t\r\n]+?)\s*(?:\t.*)?$", re.MULTILINE)
+_GIT_HEADER_RE = re.compile(r"^diff --git a/(?P<a>\S+) b/(?P<b>\S+)", re.MULTILINE)
+_RENAME_RE = re.compile(r"^rename (?:from|to) (?P<path>\S+)", re.MULTILINE)
+_CODEX_HEADER_RE = re.compile(r"^\*\*\* (?:Update|Add|Delete) File: (?P<path>.+?)\s*$", re.MULTILINE)
+_CODEX_MOVE_RE = re.compile(r"^\*\*\* Move to: (?P<path>.+?)\s*$", re.MULTILINE)
+
+
+def patch_target_paths(text: str) -> list[str]:
+    """Every file a patch names, in either format the patch tool accepts.
+
+    Unified diffs name files in ``---``/``+++`` headers (``/dev/null`` is not a
+    file), ``diff --git`` lines and renames; the codex format names them in
+    ``*** Update/Add/Delete File:`` and ``*** Move to:`` lines.
+    """
+
+    found: list[str] = []
+    body = str(text or "")
+    for regex in (_UNIFIED_HEADER_RE, _GIT_HEADER_RE, _RENAME_RE, _CODEX_HEADER_RE, _CODEX_MOVE_RE):
+        for match in regex.finditer(body):
+            for key in ("path", "a", "b"):
+                try:
+                    value = match.group(key)
+                except IndexError:
+                    continue
+                if not value:
+                    continue
+                value = value.strip().replace("\\", "/")
+                if value and value != "/dev/null" and value not in found:
+                    found.append(value)
+    return found
+
+
+def fenced_patch_target(args: Any, sandbox_root: Path | None, protected_paths: Any) -> str | None:
+    """The fenced file a patch argument targets, or None.
+
+    A patch carries its targets in its text, not in a path argument, so the
+    path sanitizer never sees them; an audit drove the real patch tool through
+    the fence that way (2026-09-07). Same fence, read from the patch.
+    """
+
+    if not protected_paths or not isinstance(args, dict):
+        return None
+    for key in _PATCH_TEXT_KEYS:
+        text = args.get(key)
+        if not isinstance(text, str) or not text.strip():
+            continue
+        for target in patch_target_paths(text):
+            fence = _fenced_by(target, sandbox_root, protected_paths)
+            if fence is not None:
+                return fence
+    return None
+
+
+def _fenced_by(checked_path: str, sandbox_root: Path | None, protected_paths: Any) -> str | None:
+    """The fenced entry ``checked_path`` falls under, or None. Entries are relative to the sandbox root."""
+
+    if not protected_paths:
+        return None
+    root = Path(sandbox_root).resolve() if sandbox_root else None
+    try:
+        raw = Path(checked_path)
+        # The sanitizer hands relative targets back relative to the sandbox;
+        # judge them there, never against the process cwd.
+        target = (raw if raw.is_absolute() or root is None else root / raw).resolve()
+    except OSError:
+        return None
+    for entry in protected_paths:
+        text = str(entry or "").strip().replace("\\", "/")
+        if not text:
+            continue
+        candidate = Path(text)
+        if not candidate.is_absolute():
+            if root is None:
+                continue
+            candidate = root / candidate
+        try:
+            fenced = candidate.resolve()
+        except OSError:
+            continue
+        if target == fenced or fenced in target.parents:
+            return text
+    return None
+
+
 def _sanitize_write_tool_path(
     args: dict[str, Any],
     *,
@@ -181,6 +297,7 @@ def _sanitize_write_tool_path(
     sandbox_root: Path | None = None,
     benchmark_root: Path | None = None,
     file_access: int | None = None,
+    protected_paths: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[str | None, str | None]:
     if not isinstance(args, dict):
         return None, "tool arguments must be an object"
@@ -209,6 +326,16 @@ def _sanitize_write_tool_path(
                 # shape the worker prompt names and the sentence the user needs.
                 return None, error
             return None, f"invalid {key}: {error}"
+        fence = _fenced_by(checked_path, sandbox_root, protected_paths)
+        if fence is not None:
+            # A run's file fence is enforced here, not in its brief: a Build
+            # run told in prose not to edit another agent's files edited two
+            # of them anyway (2026-09-06). The refusal names the fence so the
+            # model can say so instead of trying again.
+            return None, (
+                f"BLOCKED: {fence} is fenced off for this run (another agent or the run's brief holds it); "
+                "write elsewhere or report the change as not yours to make."
+            )
         args[key] = checked_path
         if validated_path is None:
             validated_path = checked_path
@@ -221,6 +348,9 @@ def _sanitize_write_tool_path(
 
 __all__ = [
     "_WRITE_TOOL_PATH_KEYS",
+    "_fenced_by",
+    "fenced_patch_target",
+    "patch_target_paths",
     "_declares_a_path_parameter",
     "_sanitize_write_tool_path",
     "_validate_filesystem_path",

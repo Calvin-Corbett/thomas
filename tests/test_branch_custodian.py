@@ -9,6 +9,7 @@ apply, and any git failure must degrade to "assume unique work" rather than
 from __future__ import annotations
 
 import pytest
+from scripts.forge import graveyard
 
 from thomas.forge.branch_custodian import (
     Action,
@@ -238,3 +239,116 @@ def test_unique_files_are_surfaced_so_a_human_sees_what_is_at_stake() -> None:
 def test_active_window_boundary(age: int, expected: BranchStatus) -> None:
     fake = FakeGit({TRUNK: ("aaa", 0, 0, []), "b": ("bbb", age, 0, [])})
     assert _row(_survey(fake), "b").status is expected
+
+
+# ---------------------------------------------------------------------------
+# Graveyard integration: ARCHIVE_AND_DELETE records a branch death
+# (graveyard-with-teeth Task 4).
+# ---------------------------------------------------------------------------
+
+
+def test_archive_and_delete_records_a_graveyard_death_when_repo_root_is_given(tmp_path) -> None:
+    fake = _fixture()
+    result = consolidate(fake, _survey(fake), apply=True, repo_root=tmp_path)
+
+    assert "stale/superseded" in result.archived
+    assert result.ok
+
+    gy = graveyard.load(tmp_path)
+    assert "stale/superseded" in gy.dead_ref_names()
+    record = next(r for r in gy.records if r["kind"] == "branch" and r["name"] == "stale/superseded")
+    assert record["dead_sha"] == "ccc"  # the branch's real sha, per the fixture
+    assert record["by"] == "branch-custodian"
+
+    # I7: the write's success is visible in the report, not just on disk.
+    assert result.graveyard_records_written == 1
+    assert result.graveyard_failures == 0
+
+
+def test_a_failed_archive_step_writes_no_graveyard_record(tmp_path) -> None:
+    """Ordering guarantee: the graveyard death is recorded strictly AFTER the
+    refs/archive update-ref succeeds, never before and never regardless of
+    outcome. Mirrors test_delete_failure_is_reported_not_swallowed's
+    fail_on='branch -D' pattern, but fails the EARLIER step (update-ref) --
+    if _record_branch_death ran before that succeeded, a graveyard could
+    record a death that was never actually archived (git raises, the branch
+    stays live, but the registry would claim it is dead)."""
+    fake = FakeGit(
+        {TRUNK: ("aaa", 0, 0, []), "stale/superseded": ("ccc", 40, 12, [])},
+        fail_on="update-ref",
+    )
+    result = consolidate(fake, _survey(fake), apply=True, repo_root=tmp_path)
+
+    assert not result.ok
+    assert any("stale/superseded" in e for e in result.errors)
+    assert "stale/superseded" not in result.archived
+    assert "stale/superseded" not in result.deleted
+    assert "stale/superseded" in fake.branches  # the branch itself survives the failed archive
+
+    branch_names = [r["name"] for r in graveyard.load(tmp_path).records if r["kind"] == "branch"]
+    assert "stale/superseded" not in branch_names
+    assert not (tmp_path / "docs" / "ops" / "graveyard.json").exists()
+
+
+def test_a_plain_delete_with_no_archive_step_records_nothing_for_that_branch(tmp_path) -> None:
+    """CONTAINED branches (Action.DELETE) are never archived under
+    refs/archive, so there is no death to record for them -- even though the
+    same run archives a DIFFERENT branch (stale/superseded) and does write a
+    graveyard.json for that one."""
+    fake = _fixture()
+    result = consolidate(fake, _survey(fake), apply=True, repo_root=tmp_path)
+
+    assert "merged/feature" in result.deleted
+    assert "merged/feature" not in result.archived
+
+    branch_names = [r["name"] for r in graveyard.load(tmp_path).records if r["kind"] == "branch"]
+    assert "merged/feature" not in branch_names
+    assert "stale/superseded" in branch_names  # sanity: the archived one IS recorded
+
+
+def test_omitting_repo_root_preserves_the_old_behaviour_exactly(tmp_path) -> None:
+    """The default (no repo_root) must not attempt a graveyard write at
+    all -- proves this integration is additive, not a behaviour change for
+    every existing caller that does not pass repo_root."""
+    fake = _fixture()
+    result = consolidate(fake, _survey(fake), apply=True)  # no repo_root
+
+    assert "stale/superseded" in result.archived
+    assert result.ok
+    assert not (tmp_path / "docs" / "ops" / "graveyard.json").exists()
+
+
+def test_graveyard_import_failure_is_logged_and_never_crashes_the_custodian(tmp_path, monkeypatch) -> None:
+    """Import-guarded: if the graveyard module cannot be imported, the
+    branch retirement that already succeeded (update-ref under
+    refs/archive, branch -D) must still complete -- never crash, never roll
+    back.
+
+    Simulating "cannot be imported" needs two monkeypatches, not one:
+    ``from scripts.forge import graveyard`` first checks whether the
+    ``scripts.forge`` package already has a ``graveyard`` attribute (it does,
+    from every other test importing it at module scope) before it ever
+    consults ``sys.modules`` for the submodule -- so the attribute has to be
+    removed too, or the cached attribute short-circuits the whole test.
+    """
+    import sys
+
+    import scripts.forge as forge_pkg
+
+    monkeypatch.delattr(forge_pkg, "graveyard", raising=False)
+    monkeypatch.setitem(sys.modules, "scripts.forge.graveyard", None)
+
+    fake = _fixture()
+    result = consolidate(fake, _survey(fake), apply=True, repo_root=tmp_path)
+
+    assert "stale/superseded" in result.archived
+    assert "stale/superseded" in result.deleted
+    assert "stale/superseded" not in fake.branches
+    assert result.ok
+    assert not (tmp_path / "docs" / "ops" / "graveyard.json").exists()
+
+    # I7: an import failure is a graveyard failure too -- the branch
+    # retirement still succeeds, but the report must not stay silent about
+    # the record that never got written.
+    assert result.graveyard_records_written == 0
+    assert result.graveyard_failures == 1

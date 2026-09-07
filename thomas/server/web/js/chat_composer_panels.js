@@ -27,27 +27,137 @@
     // predicate is deliberately the same one unified_code_lifecycle.js applies when
     // it builds the request -- two spellings of one rule is how they drift apart.
     function codeRunsClaudeCli() {
-      return state.surfaceMode === 'code' && !String(state.modelId || '').startsWith('gpt-');
+      if (state.surfaceMode !== 'code') return false;
+      const picked = String(state.modelId || '');
+      // An empty modelId is "we lost the client's model state", NOT "a non-GPT
+      // model was chosen". unified_code_lifecycle.js already draws that line —
+      // `model: modelId ? (...) : undefined` sends no model at all and lets the
+      // server resolve the configured default. This predicate did not, so a
+      // dropped modelId made the sheet announce the Claude executor under a chip
+      // reading GPT-5.6 Sol, whose id (gpt-5.6-sol) routes to ChatGPT. The two
+      // spellings of one rule had drifted in exactly the way the comment above
+      // warns about; say nothing when we do not know what was picked.
+      if (!picked) return false;
+      return !picked.startsWith('gpt-');
+    }
+
+    // Build has two engines: ChatGPT for GPT models, the Claude CLI for Claude
+    // models. Mirrors forge_code_settings.from_payload, which is the authority
+    // and now REFUSES what it cannot run instead of substituting — so drift here
+    // costs a clear refusal naming the model, never a silent swap. Lives in this
+    // module rather than chat.html, which is at its frontend size ceiling.
+    function buildCanRunModel(p, m) {
+      const id = String((m && m.id) || '').toLowerCase().replace(/^claude:/, '');
+      const provider = String((p && p.provider) || '').toLowerCase();
+      const profileName = String((p && p.name) || '').toLowerCase();
+      if (id.startsWith('gpt-') || provider === 'openai_codex') return true;
+      if (profileName.startsWith('codex') || profileName.startsWith('chatgpt')) return true;
+      return /^(claude\b|claude-|sonnet|opus|haiku)/.test(id);
+    }
+
+    function hiddenForBuildNote(count) {
+      return count + (count === 1 ? ' model is' : ' models are')
+        + ' hidden here: Build runs GPT models through your ChatGPT account and Claude models'
+        + ' through the Claude CLI. They are still available in Chat.';
     }
 
     function dialUnsupportedNote(key) {
       if (key !== 'effort' || !codeRunsClaudeCli()) return '';
-      return 'Not applied in Code: this model runs on the Claude executor, which has no '
-        + 'reasoning-effort control.';
+      // Say the cause, not just the consequence.
+      //
+      // This used to read "this model runs on the Claude executor, which has no
+      // reasoning-effort control" -- true, and useless. It explained why one
+      // dial was inert while stepping over the thing worth knowing: Build has
+      // exactly two engines (ChatGPT for gpt-* ids, the Claude CLI for
+      // everything else), so a non-gpt pick is rewritten to claude:sonnet
+      // before dispatch. The model named in the picker is not the model that
+      // writes the code. Reasoning effort being ignored is a symptom of that.
+      return 'Build runs this on Claude Sonnet. Thomas Code has two engines — ChatGPT for '
+        + 'GPT models and the Claude CLI for everything else — so the model above is '
+        + 'substituted here, and reasoning effort does not apply.';
+    }
+
+    // Options can be limited to certain surfaces (see DIAL_FIELDS). An option the
+    // current surface does not offer must never be silently dropped while it is
+    // the stored value -- that would show a control whose displayed selection is
+    // not the one being sent.
+    function optionsFor(f) {
+      return f.opts.filter(o => {
+        const meta = o[3] || {};
+        if (!meta.modes) return true;
+        if (String(state.dials[f.key]) === String(o[0])) return true;
+        return meta.modes.indexOf(String(state.surfaceMode || 'chat')) !== -1;
+      });
+    }
+
+    // Levels retired from the picker still exist in localStorage and in the
+    // engine. 'read_only' and 'full' were removed from this sheet -- the first
+    // because Autonomy already owns "do nothing without me", the second because
+    // it meant every drive on the machine while sitting under a label ('Full')
+    // one word away from 'Full PC'. Map each to the nearest surviving level
+    // rather than leaving a select whose value it cannot display.
+    const RETIRED_DIAL_VALUES = { fileAccess: { read_only: 'workspace', full: 'pc' } };
+    function migrateRetiredDials() {
+      let changed = false;
+      Object.keys(RETIRED_DIAL_VALUES).forEach(key => {
+        const replacement = RETIRED_DIAL_VALUES[key][String(state.dials[key])];
+        if (replacement) { state.dials[key] = replacement; changed = true; }
+      });
+      if (state.dials.tokenEconomy !== undefined) { delete state.dials.tokenEconomy; changed = true; }
+      if (changed) saveDials();
+    }
+
+    // Raising a limit is a decision, so it gets a sentence and a confirmation.
+    // Lowering one never asks: being handed a smaller blast radius needs no
+    // defending, and a prompt on the safe direction teaches people to click
+    // through prompts.
+    function confirmElevation(fieldLabel, optionLabel, description) {
+      return window.confirm(
+        fieldLabel + ' → ' + optionLabel + '\n\n' + description
+        + '\n\nThis applies to every message from now on. You can change it back in this panel at any time.'
+      );
     }
 
     function renderToolsMenu() {
       const wrap = document.getElementById('tc-tools-menu'); if (!wrap) return;
+      migrateRetiredDials();
       wrap.innerHTML = '<div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--c-muted);padding:2px 2px 10px;">AI settings</div>';
       DIAL_FIELDS.forEach(f => {
         const row = document.createElement('label');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px;font-size:13px;';
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;font-size:13px;';
         const span = document.createElement('span'); span.textContent = f.label; span.style.color = 'var(--c-dim)';
         const sel = document.createElement('select');
-        sel.style.cssText = 'flex:0 0 auto;min-width:140px;background:var(--c-surface);color:var(--c-text);border:1px solid var(--c-border);border-radius:8px;padding:5px 8px;font-family:inherit;font-size:12.5px;cursor:pointer;';
-        f.opts.forEach(([val, lbl]) => { const o = document.createElement('option'); o.value = String(val); o.textContent = lbl; if (String(val) === String(state.dials[f.key])) o.selected = true; sel.appendChild(o); });
-        sel.addEventListener('change', () => { state.dials[f.key] = f.num ? parseInt(sel.value, 10) : sel.value; saveDials(); });
+        sel.style.cssText = 'flex:0 0 auto;min-width:150px;background:var(--c-surface);color:var(--c-text);border:1px solid var(--c-border);border-radius:8px;padding:5px 8px;font-family:inherit;font-size:12.5px;cursor:pointer;';
+        const shown = optionsFor(f);
+        shown.forEach(o => { const el = document.createElement('option'); el.value = String(o[0]); el.textContent = o[1]; if (String(o[0]) === String(state.dials[f.key])) el.selected = true; sel.appendChild(el); });
         row.appendChild(span); row.appendChild(sel); wrap.appendChild(row);
+
+        // The description of whatever is selected, always on screen. The label
+        // alone could not carry the difference between "your home folder" and
+        // "every drive", and that difference is the whole point of the control.
+        const desc = document.createElement('div');
+        desc.className = 'tc-dial-desc';
+        desc.style.cssText = 'margin:0 0 10px;font-size:11px;line-height:1.4;color:var(--c-muted);max-width:100%;';
+        const describe = () => {
+          const current = f.opts.filter(o => String(o[0]) === String(state.dials[f.key]))[0];
+          desc.textContent = current ? String(current[2] || '') : '';
+        };
+        describe();
+
+        sel.addEventListener('change', () => {
+          const picked = f.opts.filter(o => String(o[0]) === String(sel.value))[0];
+          const meta = (picked && picked[3]) || {};
+          const previous = state.dials[f.key];
+          if (meta.elevates && String(sel.value) !== String(previous)
+              && !confirmElevation(f.label, picked[1], String(picked[2] || ''))) {
+            sel.value = String(previous);
+            return;
+          }
+          state.dials[f.key] = f.num ? parseInt(sel.value, 10) : sel.value;
+          saveDials();
+          describe();
+        });
+        wrap.appendChild(desc);
         // Say it BEFORE the run, not after.
         //
         // Code has exactly two executors: anything whose id does not start with
@@ -404,7 +514,7 @@
     }
 
     return {
-      toggleToolsMenu, closeToolsMenu, renderToolsMenu,
+      toggleToolsMenu, closeToolsMenu, renderToolsMenu, buildCanRunModel, hiddenForBuildNote,
       toggleLibraryMenu, closeLibraryMenu, positionLibraryMenu, renderLibraryMenu,
       libraryVisibleProjects, libraryCardHTML, mountLibraryPreviews,
       teardownLibraryPreviews, loadLibraryProjects, chooseLibraryProject,

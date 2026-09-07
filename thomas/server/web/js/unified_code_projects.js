@@ -598,6 +598,9 @@
   }
 
   function bootSurfaceRestore() {
+    // A tab document is not the reload target: it neither restores nor records
+    // the last surface, or every hidden Build tab would rewrite it each second.
+    if (window.parent !== window) return;
     restoreLastSurface();
     // Feature-guarded because sibling node harnesses evaluate this classic
     // script with a minimal window/document; in a real page every guard holds.

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -17,13 +18,28 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.crew.brief import coordination_barrier
     from scripts.crew.brief import identity as agent_identity
     from scripts.crew.workboard import claim as claim_tool
 except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
+    from crew.brief import coordination_barrier  # type: ignore
     from crew.brief import identity as agent_identity  # type: ignore
     from crew.workboard import claim as claim_tool  # type: ignore
 
-from thomas.core import agent_presence
+from scripts.crew.brief import bootstrap_claim_state
+from scripts.crew.brief.bootstrap_processes import (
+    spawn_task_manager_loop as _spawn_task_manager_loop,
+)
+from scripts.crew.brief.bootstrap_processes import (
+    spawn_worker_loop as _spawn_worker_loop,
+)
+from scripts.crew.brief.bootstrap_processes import (
+    start_task_manager_loop as _start_task_manager_loop,
+)
+from scripts.crew.brief.bootstrap_processes import (
+    start_worker_loop as _start_worker_loop,
+)
+from thomas.core import agent_presence, agent_session_identity
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
@@ -133,261 +149,25 @@ def _to_bool(value: bool | int | None) -> bool:
     return bool(value)
 
 
-def _bytecode_suppressed_env() -> dict[str, str]:
-    env = dict(os.environ)
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return env
+_normalize_scope_name = bootstrap_claim_state.normalize_scope_name
+_normalize_dispatch_target_workers = bootstrap_claim_state.normalize_dispatch_target_workers
+_is_worker_claim = bootstrap_claim_state.is_worker_claim
+_extract_claim_agent = bootstrap_claim_state.extract_claim_agent
+_extract_claim_field = bootstrap_claim_state.extract_claim_field
+_task_subject = bootstrap_claim_state.task_subject
+_is_task_manager_claimed = bootstrap_claim_state.is_task_manager_claimed
+_default_task_manager_scope = bootstrap_claim_state.default_task_manager_scope
+_claim_task_manager_position = bootstrap_claim_state.claim_task_manager_position
 
 
-def _spawn_worker_loop(
-    *,
-    workboard_path: Path,
-    worker_agent: str,
-    task_manager_agent: str,
-    poll_seconds: float,
-) -> tuple[bool, dict[str, object] | None, str | None]:
-    worker_script = (ROOT / "scripts" / "crew" / "workboard" / "worker.py").resolve()
-    command = [
-        sys.executable,
-        str(worker_script),
-        "--workboard",
-        str(workboard_path),
-        "--agent",
-        str(worker_agent),
-        "--task-manager-agent",
-        str(task_manager_agent),
-        "--cycles",
-        "0",
-        "--poll-seconds",
-        str(float(poll_seconds)),
-    ]
-    creation_flags = 0
-    close_fds = True
-    if os.name == "nt":
-        if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-            creation_flags |= subprocess.CREATE_NEW_PROCESS_GROUP
-        if hasattr(subprocess, "DETACHED_PROCESS"):
-            creation_flags |= subprocess.DETACHED_PROCESS
-        close_fds = False
-    try:
-        env = _bytecode_suppressed_env()
-        for key in agent_presence.SESSION_ENV_KEYS:
-            env.pop(str(key), None)
-        process = subprocess.Popen(
-            command,
-            cwd=str(ROOT),
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=close_fds,
-            creationflags=creation_flags,
-        )
-    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
-        return False, None, str(exc)
-    return (
-        True,
-        {
-            "agent": str(worker_agent),
-            "pid": int(process.pid),
-            "command": " ".join(command),
-            "poll_seconds": float(poll_seconds),
-        },
-        None,
-    )
-
-
-def _spawn_task_manager_loop(
-    *,
-    workboard_path: Path,
-    task_manager_agent: str,
-    interval_seconds: float,
-) -> tuple[bool, dict[str, object] | None, str | None]:
-    manager_script = (ROOT / "scripts" / "workboard_task_manager.py").resolve()
-    command = [
-        sys.executable,
-        str(manager_script),
-        "--workboard",
-        str(workboard_path),
-        "--monitor",
-        "--apply",
-        "--cycles",
-        "0",
-        "--interval-seconds",
-        str(float(interval_seconds)),
-        "--task-manager-agent",
-        task_manager_agent,
-    ]
-    creation_flags = 0
-    close_fds = True
-    if os.name == "nt":
-        if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-            creation_flags |= subprocess.CREATE_NEW_PROCESS_GROUP
-        if hasattr(subprocess, "DETACHED_PROCESS"):
-            creation_flags |= subprocess.DETACHED_PROCESS
-        close_fds = False
-    try:
-        env = _bytecode_suppressed_env()
-        for key in agent_presence.SESSION_ENV_KEYS:
-            env.pop(str(key), None)
-        process = subprocess.Popen(
-            command,
-            cwd=str(ROOT),
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=close_fds,
-            creationflags=creation_flags,
-        )
-    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError) as exc:
-        return False, None, str(exc)
-    return (
-        True,
-        {
-            "agent": str(task_manager_agent),
-            "pid": int(process.pid),
-            "command": " ".join(command),
-            "interval_seconds": float(interval_seconds),
-        },
-        None,
-    )
-
-
-def _normalize_scope_name(value: str | None) -> str:
-    return str(value or "").strip()
-
-
-def _normalize_dispatch_target_workers(value: int | None) -> int:
-    candidate = DEFAULT_AUTO_DISPATCH_TARGET_WORKERS if value is None else int(value)
-    return max(DEFAULT_MIN_AUTO_DISPATCH_TARGET_WORKERS, candidate)
-
-
-def _is_worker_claim(role: str | None, parent: str | None) -> bool:
-    if _agent_key(role) == "worker":
-        return True
-    return _agent_key(parent) not in {"", "none"}
-
-
-def _extract_claim_agent(claim_row: object) -> str:
-    if claim_row is None:
-        return ""
-    if isinstance(claim_row, str):
-        raw = str(claim_row).strip()
-        if raw.startswith("- "):
-            raw = raw[2:]
-        for piece in raw.split(";"):
-            if "=" not in piece:
-                continue
-            key, value = piece.split("=", 1)
-            if key.strip().lower() == "agent":
-                return value.strip()
-        return ""
-    if isinstance(claim_row, dict):
-        return str(claim_row.get("agent", "") or "")
-    return str(getattr(claim_row, "agent", "") or "")
-
-
-def _is_task_manager_claimed(workboard_path: Path, task_manager_agent: str) -> bool:
-    manager_key = _agent_key(task_manager_agent)
-    try:
-        ok, active_claims = claim_tool.list_claims(workboard_path)  # type: ignore[misc]
-    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
-        return False
-    if not ok or not isinstance(active_claims, Sequence):
-        return False
-    for row in active_claims:
-        if _agent_key(_extract_claim_agent(row)) == manager_key:
-            return True
-    return False
-
-
-def _default_task_manager_scope(workboard_path: Path) -> str:
-    try:
-        scoped = workboard_path.parent.resolve().relative_to(ROOT.resolve())
-        return str(scoped).replace("\\", "/")
-    except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
-        return str(workboard_path.parent).replace("\\", "/")
-
-
-def _claim_task_manager_position(
-    *,
-    workboard_path: Path,
-    task_manager_agent: str,
-    allow_dirty: bool = False,
-    dirty_reason: str = "",
-) -> tuple[bool, str]:
-    claim_scope = _default_task_manager_scope(workboard_path)
-    ok, message = claim_tool.claim(
+def _select_bootstrap_task(workboard_path: Path, *, agent: str, requested: str, ticket: str) -> str:
+    return bootstrap_claim_state.select_bootstrap_task(
         workboard_path,
-        agent=task_manager_agent,
-        scope=claim_scope,
-        task="[WIP][TM] task-manager control loop",
-        name=task_manager_agent,
-        role="solo",
-        parent="none",
-        allow_dirty=bool(allow_dirty),
-        dirty_reason=str(dirty_reason or ""),
-        allow_presence_override=False,
-        presence_override_reason="",
+        agent=agent,
+        requested=requested,
+        ticket=ticket,
+        build_task=lambda task, task_ticket: _build_task(task, task_ticket),
     )
-    if not ok:
-        return False, str(message)
-    return True, str(message)
-
-
-def _start_task_manager_loop(
-    *,
-    workboard_path: Path,
-    task_manager_agent: str,
-    interval_seconds: float = DEFAULT_TASK_MANAGER_LOOP_INTERVAL_SECONDS,
-) -> tuple[bool, str, int]:
-    manager_script = (ROOT / "scripts" / "workboard_task_manager.py").resolve()
-    command = [
-        sys.executable,
-        str(manager_script),
-        "--workboard",
-        str(workboard_path),
-        "--monitor",
-        "--apply",
-        "--cycles",
-        "0",
-        "--interval-seconds",
-        str(float(interval_seconds)),
-        "--task-manager-agent",
-        task_manager_agent,
-    ]
-    try:
-        process = subprocess.run(command, cwd=str(ROOT), env=_bytecode_suppressed_env(), check=False)
-    except FileNotFoundError as exc:
-        return False, str(exc), 1
-    return True, "", int(process.returncode or 0)
-
-
-def _start_worker_loop(
-    *,
-    workboard_path: Path,
-    agent: str,
-    poll_seconds: float = 15.0,
-) -> tuple[bool, str, int]:
-    worker_script = (ROOT / "scripts" / "crew" / "workboard" / "worker.py").resolve()
-    command = [
-        sys.executable,
-        str(worker_script),
-        "--workboard",
-        str(workboard_path),
-        "--agent",
-        agent,
-        "--cycles",
-        "0",
-        "--poll-seconds",
-        str(float(poll_seconds)),
-    ]
-    try:
-        process = subprocess.run(command, cwd=str(ROOT), env=_bytecode_suppressed_env(), check=False)
-    except FileNotFoundError as exc:
-        return False, str(exc), 1
-    return True, "", int(process.returncode or 0)
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -588,6 +368,29 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- {message}")
         return 1
 
+    try:
+        coordination_barrier.require_clear_p0(workboard_path, bound_agent=agent)
+    except coordination_barrier.CoordinationBlocked as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "agent": agent, "workboard": str(workboard_path), "error": str(exc)}))
+        else:
+            print("Agent bootstrap claim: FAIL")
+            print(f"- {exc}")
+        return 1
+
+    presence_repo_root = _presence_repo_root(workboard_path)
+    existing_session_id = agent_presence.current_session_id()
+    if existing_session_id:
+        try:
+            agent_identity.require_bound_identity(agent, repo_root=presence_repo_root)
+        except ValueError as exc:
+            if args.json:
+                print(json.dumps({"ok": False, "agent": agent, "workboard": str(workboard_path), "error": str(exc)}))
+            else:
+                print("Agent bootstrap claim: FAIL")
+                print(f"- {exc}")
+            return 1
+
     task_manager_agent = _normalize_scope_name(args.dispatch_task_manager_agent or DEFAULT_TASK_MANAGER_AGENT)
     if not task_manager_agent:
         task_manager_agent = DEFAULT_TASK_MANAGER_AGENT
@@ -642,7 +445,20 @@ def run(argv: Sequence[str] | None = None) -> int:
         agent=agent or "",
         auto_dispatch=_to_bool(args.auto_dispatch),
     )
-    task = _build_task(args.task, args.ticket)
+    try:
+        task = _select_bootstrap_task(
+            workboard_path,
+            agent=agent,
+            requested=str(args.task or ""),
+            ticket=str(args.ticket or ""),
+        )
+    except ValueError as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "agent": agent, "workboard": str(workboard_path), "error": str(exc)}))
+        else:
+            print("Agent bootstrap claim: FAIL")
+            print(f"- {exc}")
+        return 1
     ok, message = claim_tool.claim(
         workboard_path,
         agent=agent,
@@ -745,23 +561,48 @@ def run(argv: Sequence[str] | None = None) -> int:
             if worker_loop_failures and isinstance(dispatch_result, dict):
                 dispatch_result["worker_loop_failures"] = worker_loop_failures
 
-    presence_repo_root = _presence_repo_root(workboard_path)
-    session = agent_presence.register_session(
-        repo_root=presence_repo_root,
-        agent_id=agent,
-        display_name=claim_name or agent,
-        launcher="agent_bootstrap_claim",
-        task_summary=task,
-        scope=args.scope,
-        claim_status="claimed",
-        origin="bootstrap_claim",
-    )
+    try:
+        coordination_barrier.require_clear_p0(workboard_path, bound_agent=agent)
+    except coordination_barrier.CoordinationBlocked as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "agent": agent, "workboard": str(workboard_path), "error": str(exc)}))
+        else:
+            print("Agent bootstrap claim: FAIL")
+            print(f"- {exc}")
+        return 1
+    handoff_secret = str(os.getenv(agent_session_identity.ATTESTATION_SECRET_ENV) or "")
+    if not handoff_secret:
+        handoff_secret = secrets.token_urlsafe(32)
+    if existing_session_id:
+        session = agent_presence.heartbeat_session(
+            repo_root=presence_repo_root,
+            session_id=existing_session_id,
+            task_summary=task,
+            scope=args.scope,
+            claim_status="claimed",
+            handoff_secret=handoff_secret,
+        )
+        if session is None:
+            raise RuntimeError(f"live session disappeared during bootstrap: {existing_session_id}")
+    else:
+        session = agent_presence.register_session(
+            repo_root=presence_repo_root,
+            agent_id=agent,
+            display_name=claim_name or agent,
+            launcher="agent_bootstrap_claim",
+            task_summary=task,
+            scope=args.scope,
+            claim_status="claimed",
+            origin="bootstrap_claim",
+            handoff_secret=handoff_secret,
+        )
     session_id = str(session.get("session_id") or "")
-    exports = agent_presence.session_env_exports(session_id)
+    exports = agent_presence.session_env_exports(session_id, handoff_secret=handoff_secret)
     ps_cmd = (
         f'$env:AGENT_ID="{agent}"; $env:THOMAS_AGENT_ID="{agent}"; '
         f'$env:AGENT_SESSION_ID="{exports.get("AGENT_SESSION_ID", "")}"; '
-        f'$env:THOMAS_AGENT_SESSION_ID="{exports.get("THOMAS_AGENT_SESSION_ID", "")}"'
+        f'$env:THOMAS_AGENT_SESSION_ID="{exports.get("THOMAS_AGENT_SESSION_ID", "")}"; '
+        f'$env:{agent_session_identity.ATTESTATION_SECRET_ENV}="{handoff_secret}"'
     )
     if args.json:
         payload = {

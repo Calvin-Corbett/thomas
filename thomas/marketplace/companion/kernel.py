@@ -18,6 +18,7 @@ class CompanionKernelPaths:
     bundles_dir: Path
     backups_dir: Path
     logs_dir: Path
+    data_dir: Path
     registry_file: Path
     policy_file: Path
     devices_file: Path
@@ -44,6 +45,7 @@ def build_kernel_paths(root: Path) -> CompanionKernelPaths:
         bundles_dir=root / "bundles",
         backups_dir=root / "backups",
         logs_dir=root / "logs",
+        data_dir=root / "data",
         registry_file=root / "registry.json",
         policy_file=root / "policy.json",
         devices_file=root / "devices.json",
@@ -72,6 +74,7 @@ class CompanionKernel:
         p.bundles_dir.mkdir(parents=True, exist_ok=True)
         p.backups_dir.mkdir(parents=True, exist_ok=True)
         p.logs_dir.mkdir(parents=True, exist_ok=True)
+        p.data_dir.mkdir(parents=True, exist_ok=True)
         if not p.registry_file.exists():
             p.registry_file.write_text(
                 json.dumps({"schema_version": 1, "modules": {}}, indent=2, ensure_ascii=True) + "\n",
@@ -108,6 +111,7 @@ class CompanionKernel:
                 "registry.json",
                 "backups/",
                 "logs/",
+                "data/",
             ],
             "allowed_module_permissions": [
                 "ui.render",

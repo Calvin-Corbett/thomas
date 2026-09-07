@@ -33,8 +33,39 @@ from thomas.core.llm import LLMClient  # noqa: F401  -- re-export for tests
 
 app = cli
 
+# Commands that talk to a model. Only these pay for the server-side sign-in
+# import; `thomas status` and friends stay as light as they were.
+_MODEL_COMMANDS = frozenset({"chat", "repl", "agent"})
+
+
+def _register_transport_signins(argv: list[str]) -> bool:
+    """Give the CLI the ChatGPT sign-in the server has, before a model command runs.
+
+    The core transport asks ``codex_auth`` for a registered resolver; until
+    2026-09-05 only ``thomas.server.openai_codex_oauth`` registered one, so
+    ``thomas chat`` with the default profile failed in every shell with
+    "ChatGPT OAuth is not connected". Returns True when the import happened.
+    """
+    first = next((arg for arg in argv if not arg.startswith("-")), "")
+    if first not in _MODEL_COMMANDS:
+        return False
+    try:
+        from thomas.core import codex_auth
+        from thomas.server import openai_codex_oauth
+    except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as exc:
+        log.warning("ChatGPT sign-in unavailable to the CLI: %s", exc)
+        return False
+    # Importing registers the resolver once; a module already loaded (or a
+    # slot cleared since) needs the explicit call.
+    if codex_auth._access_token_resolver is None:
+        codex_auth.register_access_token_resolver(openai_codex_oauth._resolve_registered_access_token)
+    return True
+
 
 def main() -> None:
+    import sys
+
+    _register_transport_signins(sys.argv[1:])
     cli(obj={})
 
 

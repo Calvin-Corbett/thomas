@@ -927,7 +927,7 @@ def _merge_row(target: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     target["activity_count"] = max(
         _safe_int(target.get("activity_count"), 0), _safe_int(patch.get("activity_count"), 0)
     )
-    state_rank = {"active": 5, "alive": 4, "unregistered": 3, "declared": 2, "stale": 1}
+    state_rank = {"active": 5, "alive": 4, "unregistered": 3, "stale": 2, "declared": 1}
     confidence_rank = {"high": 3, "medium": 2, "low": 1}
     patch_state = str(patch.get("state") or target.get("state") or "declared")
     patch_confidence = str(patch.get("confidence") or target.get("confidence") or "medium")

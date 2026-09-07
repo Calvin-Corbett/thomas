@@ -76,6 +76,39 @@ def _validate_permissions(values: list[str]) -> list[str]:
     return sorted(set(out))
 
 
+SURFACE_TYPE_DECLARATIVE = "declarative"
+SURFACE_TYPE_SURFACE = "surface"
+SURFACE_TYPE_LIVE = "live"
+
+# How a module's entrypoint should be interpreted by the companion host:
+#   declarative — entrypoint is a JSON component tree the host renders natively
+#   surface     — entrypoint is an HTML document rendered in a sandboxed frame
+#   live        — entrypoint is a path served live by Thomas (no offline copy)
+_ALLOWED_SURFACE_TYPES = {
+    SURFACE_TYPE_DECLARATIVE,
+    SURFACE_TYPE_SURFACE,
+    SURFACE_TYPE_LIVE,
+}
+
+DEFAULT_SURFACE_TYPE = SURFACE_TYPE_DECLARATIVE
+
+
+def allowed_surface_types() -> list[str]:
+    return sorted(_ALLOWED_SURFACE_TYPES)
+
+
+def _validate_surface_type(value: Any) -> str:
+    """Default to declarative so manifests written before this field stay valid."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return DEFAULT_SURFACE_TYPE
+    if text not in _ALLOWED_SURFACE_TYPES:
+        raise ValueError(
+            f"module.surface_type must be one of {sorted(_ALLOWED_SURFACE_TYPES)}: got {text!r}"
+        )
+    return text
+
+
 def _validate_slots(values: list[str]) -> list[str]:
     out: list[str] = []
     for item in values:
@@ -106,6 +139,7 @@ class ModuleContract:
     ui_schema_version: str
     display_name: str
     description: str
+    surface_type: str = DEFAULT_SURFACE_TYPE
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModuleContract:
@@ -119,6 +153,7 @@ class ModuleContract:
         ui_schema_version = _validate_semver(str(data.get("ui_schema_version") or ""), field="module.ui_schema_version")
         display_name = _norm_text(data.get("display_name"), field="module.display_name")
         description = str(data.get("description") or "").strip()
+        surface_type = _validate_surface_type(data.get("surface_type"))
         return cls(
             module_id=module_id,
             version=version,
@@ -128,10 +163,11 @@ class ModuleContract:
             ui_schema_version=ui_schema_version,
             display_name=display_name,
             description=description,
+            surface_type=surface_type,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "id": self.module_id,
             "version": self.version,
             "entrypoint": self.entrypoint,
@@ -141,6 +177,14 @@ class ModuleContract:
             "display_name": self.display_name,
             "description": self.description,
         }
+        # Only emit surface_type when it is not the default. This dict feeds
+        # canonical_json_for_signature(), so always emitting it would change the
+        # signed bytes of every manifest written before the field existed and
+        # break verification for bundles already signed in the field. An explicit
+        # surface_type still lands in the payload, so the signature covers it.
+        if self.surface_type != DEFAULT_SURFACE_TYPE:
+            payload["surface_type"] = self.surface_type
+        return payload
 
 
 @dataclass(frozen=True)

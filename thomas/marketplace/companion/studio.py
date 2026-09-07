@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .contracts import ModuleContract
+from .contracts import DEFAULT_SURFACE_TYPE, SURFACE_TYPE_SURFACE, ModuleContract
 from .kernel import KERNEL_VERSION, CompanionKernel
 from .policy.validator import collect_command_invocation_paths
 
@@ -108,8 +108,11 @@ class BundleStudio:
         module_id = str(module_payload.get("id") or "").strip()
         if not module_id:
             raise ValueError("module.id is required")
+        surface_type = str(module_payload.get("surface_type") or DEFAULT_SURFACE_TYPE).strip().lower()
+        default_ext = "html" if surface_type == SURFACE_TYPE_SURFACE else "json"
         module_payload["entrypoint"] = (
-            str(module_payload.get("entrypoint") or "").strip() or f"modules/{module_id}/ui/screen.json"
+            str(module_payload.get("entrypoint") or "").strip()
+            or f"modules/{module_id}/ui/screen.{default_ext}"
         )
         slots = module_payload.get("slots")
         if not isinstance(slots, list) or not slots:
@@ -153,19 +156,28 @@ class BundleStudio:
         entry_rel = str(module.entrypoint).replace("\\", "/")
         entry_path = payload_root / entry_rel
         entry_path.parent.mkdir(parents=True, exist_ok=True)
-        screen_payload = payload.get("screen_payload")
-        if screen_payload is None:
-            screen_payload = {
-                "screen_id": "home",
-                "title": module.display_name,
-                "components": [{"type": "text", "value": "hello from Thomas studio"}],
-            }
-        screen_payload_obj = _as_json_container(screen_payload, source="screen_payload")
-        _require_no_command_invocation(screen_payload_obj, source="screen_payload")
-        entry_path.write_text(
-            json.dumps(screen_payload_obj, ensure_ascii=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        if module.surface_type == SURFACE_TYPE_SURFACE:
+            # A surface is an HTML document, not a component tree. It is written
+            # verbatim: the isolation that makes it safe is the sandboxed frame
+            # and the CSP the host serves it under, not a rewrite here.
+            surface_html = str(payload.get("surface_html") or "")
+            if not surface_html.strip():
+                raise ValueError("surface_html is required for surface_type=surface")
+            entry_path.write_text(surface_html, encoding="utf-8")
+        else:
+            screen_payload = payload.get("screen_payload")
+            if screen_payload is None:
+                screen_payload = {
+                    "screen_id": "home",
+                    "title": module.display_name,
+                    "components": [{"type": "text", "value": "hello from Thomas studio"}],
+                }
+            screen_payload_obj = _as_json_container(screen_payload, source="screen_payload")
+            _require_no_command_invocation(screen_payload_obj, source="screen_payload")
+            entry_path.write_text(
+                json.dumps(screen_payload_obj, ensure_ascii=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
         extra_files = payload.get("extra_files")
         if isinstance(extra_files, list):

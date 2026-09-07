@@ -410,7 +410,9 @@ def _build_open_risks(
     risks.extend(_unopened_page_risks(events, validations, changed_files))
     risks.extend(_decorative_navigation_risks(validations, events))
     if foreign_writes:
-        shown = ", ".join(foreign_writes[:3]) + (f" (+{len(foreign_writes) - 3} more)" if len(foreign_writes) > 3 else "")
+        shown = ", ".join(foreign_writes[:3]) + (
+            f" (+{len(foreign_writes) - 3} more)" if len(foreign_writes) > 3 else ""
+        )
         # Says "shows up in this run's changes", not "overwritten here", because
         # the second is a claim about authorship this data cannot support.
         # `changed_files` is the git diff of a SHARED folder, not a record of what
@@ -672,6 +674,34 @@ def _extract_criteria(goal: str, definition: str) -> list[str]:
     return criteria[:_MAX_CRITERIA]
 
 
+def _contract_rows(acceptance: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """One rubric row per requirement the acceptance contract settled."""
+    if not isinstance(acceptance, dict):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in acceptance.get("items") or []:
+        if not isinstance(item, dict) or str(item.get("kind") or "") != "requirement":
+            continue  # machine items are the engine's checks, listed as validations
+        description = _flat(item.get("description")) or _flat(item.get("item_id")) or "requirement"
+        detail = _snippet(_flat(item.get("detail")), _SNIPPET_CHARS)
+        if not item.get("checked"):
+            status, evidence = "unverified", detail or "the judge did not reach a verdict on this item"
+        elif item.get("satisfied"):
+            status, evidence = "met", detail or "checked and satisfied by the acceptance contract"
+        else:
+            status, evidence = "not_met", detail or "checked and found unmet by the acceptance contract"
+        rows.append({"criterion": description, "status": status, "evidence": evidence})
+    return rows
+
+
+def _last_acceptance_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The settlement the dispatcher recorded for the run's last pass, if any."""
+    for event in reversed(events):
+        if event.get("fc") == "acceptance" and isinstance(event.get("items"), list):
+            return event
+    return None
+
+
 def _build_rubric_mapping(
     goal: str,
     definition: str,
@@ -680,6 +710,7 @@ def _build_rubric_mapping(
     ok: bool,
     outcome: str,
     reason: str,
+    acceptance: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     goal_text = _snippet(goal, 200)
     if not goal_text:
@@ -692,9 +723,7 @@ def _build_rubric_mapping(
     skipped = sum(1 for v in validations if v["passed"] and _was_skipped(v))
     passed = sum(1 for v in validations if v["passed"]) - skipped
     failed = len(validations) - passed - skipped
-    counts = f"engine checks: {passed} passed, {failed} failed" + (
-        f", {skipped} skipped" if skipped else ""
-    )
+    counts = f"engine checks: {passed} passed, {failed} failed" + (f", {skipped} skipped" if skipped else "")
     evidence = _snippet(
         f"outcome={outcome or ('completed' if ok else 'failed')}; {reason}; {counts}",
         _SNIPPET_CHARS,
@@ -719,6 +748,16 @@ def _build_rubric_mapping(
             "evidence": _snippet(f"{evidence}; goal: {goal_text}", _SNIPPET_CHARS),
         }
     ]
+    # When the acceptance contract settled this run, its items ARE the
+    # requirements, each with the verdict the judge reached. Reporting them
+    # is a reading of the run; guessing criteria from bullets, or saying
+    # nothing was extracted, would contradict the settlement one line above
+    # (seen live 2026-09-06: "every item checked and satisfied" over "no
+    # individual requirement was extracted or checked on its own").
+    contract_rows = _contract_rows(acceptance)
+    if contract_rows:
+        mapping.extend(contract_rows)
+        return mapping
     criteria = _extract_criteria(goal, definition)
     for criterion in criteria:
         # Sub-criteria are never individually re-verified by the engine, so they
@@ -815,7 +854,15 @@ def build_run_report(
         "attention_pointers": _build_attention_pointers(
             parsed, validations, changed, foreign_writes=list(foreign_writes or [])
         ),
-        "rubric_mapping": _build_rubric_mapping(goal, definition, validations, ok=ok, outcome=outcome, reason=reason),
+        "rubric_mapping": _build_rubric_mapping(
+            goal,
+            definition,
+            validations,
+            ok=ok,
+            outcome=outcome,
+            reason=reason,
+            acceptance=_last_acceptance_event(parsed),
+        ),
     }
 
 

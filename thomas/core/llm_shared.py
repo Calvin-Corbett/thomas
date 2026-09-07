@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import inspect
+import json
+import re
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -42,11 +45,16 @@ class TokenUsage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    # Prompt tokens the provider served from its cache (a subset of
+    # prompt_tokens). Every transport reported it; until 2026-09-05 the
+    # count dissolved here and the reply receipt could not show it.
+    cached_prompt_tokens: int = 0
 
     def add(self, other: TokenUsage) -> None:
         self.prompt_tokens += other.prompt_tokens
         self.completion_tokens += other.completion_tokens
         self.total_tokens += other.total_tokens
+        self.cached_prompt_tokens += getattr(other, "cached_prompt_tokens", 0) or 0
 
 
 @dataclass
@@ -65,3 +73,53 @@ class ToolCallAccumulator:
     name: str = ""
     arguments: str = ""
     finished: bool = False
+
+
+_FENCE_RE = re.compile(r"^\s*```(?:json|JSON)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def embedded_tool_call(text: str, tool_names: Collection[str]) -> tuple[str, str] | None:
+    """The one tool call a model wrote into its text, as ``(name, arguments_json)``.
+
+    Models without native tool calling answer with the call itself, often in a
+    ```json fence: ``{"name": "recall", "arguments": {...}}``, or the OpenAI
+    shape ``{"function": {"name": ..., "arguments": ...}}``. The whole text
+    must be that one object and the name must be a tool that was offered;
+    anything else (prose, other JSON, a call plus commentary, an unknown
+    tool) is None and stays text.
+    """
+
+    raw = str(text or "").strip()
+    fenced = _FENCE_RE.match(raw)
+    if fenced:
+        raw = fenced.group(1).strip()
+    if not raw.startswith("{") or not raw.endswith("}"):
+        return None
+    try:
+        call = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(call, dict):
+        return None
+    function = call.get("function")
+    if isinstance(function, dict):
+        call = function
+    name = call.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    name = name.strip()
+    offered = {str(item) for item in tool_names}
+    if name not in offered:
+        lowered = {item.lower(): item for item in offered}
+        if name.lower() not in lowered:
+            return None
+        name = lowered[name.lower()]
+    arguments = call.get("arguments", call.get("parameters", {}))
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments) if arguments.strip() else {}
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(arguments, dict):
+        return None
+    return name, json.dumps(arguments, ensure_ascii=False)

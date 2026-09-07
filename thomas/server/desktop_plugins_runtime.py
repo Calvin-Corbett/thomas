@@ -35,7 +35,7 @@ from thomas.server.desktop_plugins_manifest import (
     load_bundled_desktop_plugin_manifest,
     load_desktop_plugin_manifest_from_data,
 )
-from thomas.server.net_safety import validate_public_url
+from thomas.server.net_safety import request_validated
 
 
 def _is_production_plugin_store_mode(config: AppConfig | None = None) -> bool:
@@ -558,23 +558,28 @@ def install_plugin_from_store(
     api_key = get_or_create_plugin_store_api_key(config)
     token_url = urljoin(base_url + "/", "api/v1/plugins/download-token")
     verify_url = urljoin(base_url + "/", "api/v1/plugins/verify")
-    with httpx.Client(timeout=25.0, follow_redirects=True) as client:
-        token_response = client.post(
-            validate_public_url(token_url),
+    # Redirects are followed by request_validated, which re-runs the SSRF guard on
+    # every hop. A client-level follow_redirects=True validated only the first URL
+    # and then went wherever a Location header pointed.
+    with httpx.Client(timeout=25.0) as client:
+        token_response = request_validated(
+            client,
+            "POST",
+            token_url,
             headers={"X-Thomas-API-Key": api_key},
             json={"plugin_id": plugin_id, "channel": _safe_text(channel) or "stable"},
         )
         token_response.raise_for_status()
         token_payload = token_response.json()
         download_url = urljoin(base_url + "/", _safe_text(token_payload.get("download_url")).lstrip("/"))
-        bundle_response = client.get(validate_public_url(download_url))
+        bundle_response = request_validated(client, "GET", download_url)
         bundle_response.raise_for_status()
         bundle_bytes = bundle_response.content
         expected_sha256 = _safe_text(token_payload.get("sha256"))
         actual_sha256 = hashlib.sha256(bundle_bytes).hexdigest()
         if expected_sha256 and expected_sha256 != actual_sha256:
             raise ValueError("Hosted plugin download checksum mismatch")
-        verify_response = client.post(validate_public_url(verify_url), json={"plugin_id": plugin_id})
+        verify_response = request_validated(client, "POST", verify_url, json={"plugin_id": plugin_id})
         verify_response.raise_for_status()
         verify_payload = verify_response.json()
         if not bool(verify_payload.get("valid")):

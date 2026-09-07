@@ -12,6 +12,7 @@ only a human should decide about. It changes nothing unless asked with
 from __future__ import annotations
 
 import json as _json
+from pathlib import Path
 
 import click
 
@@ -25,6 +26,8 @@ from thomas.forge.branch_custodian import (
     subprocess_git_runner,
     survey,
 )
+from thomas.forge.consolidation_plan import advise, render_plan
+from thomas.forge.consolidation_plan import subprocess_git_runner as plan_git_runner
 
 _MAX_LISTED = 15
 
@@ -56,7 +59,19 @@ def _run_audit(git, *, repo: str, trunk: str, ceiling: int, namespace: str, as_j
 
     click.echo(click.style(result.report.summary(), bold=True))
     if result.hold_placed:
-        click.echo(click.style("Consolidation hold PLACED -- new branches are blocked until this clears.", fg="yellow"))
+        # FIX ROUND 1 (2026-08-27, adversarial review IMP-2): this used to
+        # claim "new branches are blocked until this clears" -- false.
+        # guard_new_branch (the only function that could make that true) has
+        # zero callers anywhere in this codebase. Say what is actually true.
+        click.echo(
+            click.style(
+                "Consolidation hold PLACED -- recorded only; nothing currently consults it "
+                "at branch creation, so this does not by itself block a new branch. "
+                "Push-time enforcement is branch_claim_gate.py (CI today; local pre-push "
+                "wiring rides the prepared tap).",
+                fg="yellow",
+            )
+        )
     elif result.hold_released:
         click.echo(click.style("Consolidation hold lifted -- back under the ceiling.", fg="green"))
     for note in result.notes:
@@ -67,6 +82,29 @@ def _utc_stamp() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _divergence_plan(repo: Path, trunk: str):
+    """Every OTHER way work sits outside the trunk, and the next move for each.
+
+    Branch count is one dimension of five. This command read green on
+    2026-09-03 while the trunk was 75 commits unpushed and the public repo 891
+    behind, and a person did that consolidation by hand. Never let a failure
+    here break the branch audit that already worked: an empty plan is honest,
+    a crashed command is not.
+    """
+    try:
+        import sys as _sys
+
+        scripts_forge = Path(__file__).resolve().parents[2] / "scripts" / "forge"
+        if str(scripts_forge) not in _sys.path:
+            _sys.path.insert(0, str(scripts_forge))
+        import trunk_divergence  # type: ignore[import-not-found]
+
+        findings = trunk_divergence.build_report(repo=repo, trunk=trunk, scan_clones=False).findings
+        return advise(findings, git=plan_git_runner(repo), trunk=trunk)
+    except (ImportError, OSError, ValueError):
+        return []
 
 
 @click.command("consolidate")
@@ -112,13 +150,27 @@ def consolidate_command(
     except BranchCustodianError as exc:
         raise click.ClickException(f"Could not read the repository: {exc}") from exc
 
-    result = consolidate(git, report, apply=apply_)
+    result = consolidate(git, report, apply=apply_, repo_root=Path(repo))
+    plan = _divergence_plan(Path(repo), trunk)
 
     if as_json:
-        click.echo(_json.dumps({"report": report.as_dict(), "result": result.as_dict()}, indent=2, sort_keys=True))
+        click.echo(
+            _json.dumps(
+                {
+                    "report": report.as_dict(),
+                    "result": result.as_dict(),
+                    "plan": [{"dimension": a.dimension, "do": a.do, "why": a.why, "actor": a.actor} for a in plan],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
         raise SystemExit(0 if result.ok else 1)
 
     click.echo(click.style(report.summary(), bold=True))
+    if plan:
+        click.echo("")
+        click.echo(render_plan(plan))
     if report.over_ceiling:
         click.echo(
             click.style(

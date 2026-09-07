@@ -33,7 +33,7 @@ def test_the_create_button_sits_above_the_search_box_and_is_short() -> None:
 
     assert html.index('id="tc-newchat"') < html.index('id="tc-search"')
     # It used to be padded to ~36px and crowded its neighbours.
-    new_button = html[html.index('id="tc-newchat"'):html.index('id="tc-newchat"') + 700]
+    new_button = html[html.index('id="tc-newchat"') : html.index('id="tc-newchat"') + 700]
     assert "height: 30px" in new_button
 
 
@@ -84,8 +84,8 @@ def test_the_hover_card_and_tooltip_are_restrained() -> None:
 def test_last_touched_is_the_last_message_not_the_last_open() -> None:
     html = _read("chat.html")
 
-    select = html[html.index("function selectChat(id)"):]
-    select = select[:select.index("function ", 40)]
+    select = html[html.index("function selectChat(id)") :]
+    select = select[: select.index("function ", 40)]
     # Opening a chat must not write it back, or every chat you glance at jumps
     # to the top of the list.
     assert "fetch(" not in select
@@ -96,7 +96,7 @@ def test_right_click_offers_the_row_actions() -> None:
     history = _read("js/sidebar_history.js")
 
     assert "contextmenu" in history
-    for action in ("rename", "pin", "archive", "delete"):
+    for action in ("rename", "pin", "archive", "export", "branch", "delete"):
         assert f"action: '{action}'" in history
     # Deleting reports from the response instead of assuming it worked.
     assert "if (!response.ok) throw new Error" in history
@@ -234,8 +234,8 @@ def test_the_sticky_date_heading_is_opaque() -> None:
 
     # --c-sidebar is rgba(...,0.72); painting a sticky heading with it lets
     # rows scroll straight through it.
-    day = css[css.index(".tc-history-day {"):]
-    day = day[:day.index("}")]
+    day = css[css.index(".tc-history-day {") :]
+    day = day[: day.index("}")]
     assert "linear-gradient(var(--c-sidebar), var(--c-sidebar)), var(--c-bg)" in day
     assert "transparent" not in day
 
@@ -243,7 +243,7 @@ def test_the_sticky_date_heading_is_opaque() -> None:
 def test_the_sidebar_controls_are_drawn_not_glyphs() -> None:
     html = _read("chat.html")
 
-    head = html[html.index('class="tc-history-head"'):html.index('id="tc-chats"')]
+    head = html[html.index('class="tc-history-head"') : html.index('id="tc-chats"')]
     # The icon map's caret is "\2304", a thin stray mark, and its funnel did
     # not exist at all. Both are inline SVG now.
     assert "<svg" in head
@@ -265,11 +265,21 @@ def test_undo_is_always_offered_and_says_why_when_it_cannot_run() -> None:
     assert "layout.remove(id);" in select
 
 
+def test_sent_redesign_card_keeps_source_undo_visible_with_an_honest_reason() -> None:
+    select = _read("js/ui_redesign_select.js")
+
+    assert 'data-tr="source-undo"' in select
+    assert "codeUndo.available && !codeUndo.busy" in select
+    assert "Undo unavailable:" in select
+    assert "No pre-image exists for this Redesign run." in select
+    assert "fetch('/api/evolve/agent/redesign-undo'" in select
+
+
 def test_the_redesign_cursor_is_a_blacksmith_hammer() -> None:
     css = _read("css/ui_redesign.css")
 
-    cursor = css[css.index("html.tr-selecting,"):]
-    cursor = cursor[:cursor.index("}")]
+    cursor = css[css.index("html.tr-selecting,") :]
+    cursor = cursor[: cursor.index("}")]
     assert "image/svg+xml" in cursor
     # Chunky head with the handle passing through it, tilted, small wedge peen.
     # Thin-head versions read as a pickaxe and then as a flag on a pole.
@@ -287,16 +297,16 @@ def test_the_modes_are_three_faces_of_thomas() -> None:
     # tabs read as aspects of one product rather than three unrelated buttons.
     assert "const HEAD =" in icons and "const EYES =" in icons
     for mode, tool in (("chat", "chat"), ("code", "build"), ("work", "work")):
-        tab = html[html.index(f'data-thomas-mode="{mode}"'):]
-        tab = tab[:tab.index("</button>")]
+        tab = html[html.index(f'data-thomas-mode="{mode}"') :]
+        tab = tab[: tab.index("</button>")]
         assert f'data-thomas-icon="{tool}"' in tab
         assert "ph-" not in tab, f"{mode} still uses a Unicode stand-in"
     # Build wears a hammer, not an anvil.
-    build = icons[icons.index("build: HEAD"):icons.index("work: HEAD")]
+    build = icons[icons.index("build: HEAD") : icons.index("work: HEAD")]
     assert "rotate(-22 12 12)" in build
 
     # The sidebar header stays the Thomas mark.
-    header = html[html.index('class="tc-sidebar"'):html.index('id="tc-mode-switch"')]
+    header = html[html.index('class="tc-sidebar"') : html.index('id="tc-mode-switch"')]
     assert "<svg" not in header
 
 
@@ -304,7 +314,7 @@ def test_code_is_called_build_but_keeps_its_adapter_id() -> None:
     shell = _read("js/unified_mode_shell.js")
     html = _read("chat.html")
 
-    cfg = shell[shell.index("code: {"):shell.index("};", shell.index("code: {"))]
+    cfg = shell[shell.index("code: {") : shell.index("};", shell.index("code: {"))]
     assert "label: 'Build'" in cfg
     assert "history: 'Builds'" in cfg
     assert "create: 'New build'" in cfg
@@ -318,7 +328,7 @@ def test_the_sidebar_has_no_unicode_stand_in_icons_left() -> None:
     html = _read("chat.html")
     icons = _read("js/thomas_icons.js")
 
-    sidebar = html[html.index('class="tc-sidebar"'):html.index("</aside>")]
+    sidebar = html[html.index('class="tc-sidebar"') : html.index("</aside>")]
     assert 'class="ph ph-' not in sidebar, "a Unicode stand-in survives in the sidebar"
     # Every workspace row names a drawn glyph that actually exists.
     for name in re.findall(r"\{ icon: '([a-z]+)',", html):
@@ -332,3 +342,27 @@ def test_browser_only_overrides_say_so() -> None:
     # three stores. The menu has to admit that rather than imply they sync.
     assert "OVERLAY_KEY" in history
     assert "saved in this browser" in history
+
+
+def test_a_bare_preview_cannot_escape_its_row_and_cover_the_sidebar() -> None:
+    """Every sidebar click in Work opened the last job (2026-09-06).
+
+    Driving Work: Build opened a second "Primary job" tab, then Chat opened a
+    third. The shared rule positioned every ``.tc-history-preview`` absolutely
+    with ``inset: 0`` for the cross-fade inside the positioned
+    ``.tc-history-sub`` box that Chat rows carry. Work rows put the preview
+    straight into a static button, so it escaped to the sidebar itself: one
+    invisible 279x611 span per job, stacked, eating the mode buttons, New
+    chat and search. The absolute placement now belongs to the wrapper alone;
+    a bare preview flows as a plain second line.
+    """
+    css = re.sub(r"/\*.*?\*/", "", _read("css/sidebar_history.css"), flags=re.S)
+    absolute = re.search(r"([^{}]*)\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*\}", css)
+    assert absolute, "the preview/meta cross-fade rule is gone"
+    selectors = [s.strip() for s in absolute.group(1).split(",")]
+    assert selectors, absolute.group(1)
+    for selector in selectors:
+        assert selector.startswith(".tc-history-sub >"), (
+            f"{selector!r} places an element absolutely wherever it is rendered; "
+            "outside a .tc-history-sub box it lands on the sidebar and swallows clicks"
+        )

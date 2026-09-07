@@ -79,6 +79,47 @@ def test_clicking_inside_a_control_selects_the_control() -> None:
     assert "area(region) <= area(node) * MAX_PROMOTE_GROWTH" in target
 
 
+def test_a_protected_region_is_refused_at_pick_with_edit_modes_wording() -> None:
+    target = _read("ui_redesign_target.js")
+    select = _read("ui_redesign_select.js")
+
+    assert "policy: String(node.dataset.uiPolicy || (owner ? owner.dataset.uiPolicy : '') || '')" in target
+    assert "/\\b(protected|no-edit)\\b/.test(String(descriptor.policy || ''))" in select
+    assert "is protected`" in select
+    assert "const stockSource = /^thomas\\/server\\/web\\//" in select
+    assert "&& !stockSource" in select
+    # Refused BEFORE the pick lands, so no model call and no local restyle ever happens.
+    assert select.index("is protected`") < select.index("state.picks.push({ descriptor, element })")
+
+
+def test_browser_refresh_is_pointable_when_redesign_will_edit_its_stock_source() -> None:
+    browser_shell = (WEB / "js" / "browser_shell.js").read_text(encoding="utf-8")
+
+    assert 'data-ui-id="browser.action.reload"' in browser_shell
+    assert 'data-ui-policy="protected source-edit"' in browser_shell
+    assert 'data-redesign-source="thomas/server/web/js/browser_shell.js"' in browser_shell
+
+
+def test_apply_records_what_it_changed_in_the_overlay_and_says_where_it_landed() -> None:
+    select = _read("ui_redesign_select.js")
+
+    assert "applyLayout(data.layout, iconRejected, applied)" in select
+    assert "overlay.record({ actor: 'redesign', instruction" in select
+    assert "kind: 'element', address: `element:${workspace}:${point}:${row.uiId}`" in select
+    assert "kind: 'token', address: `token:${themeName}:${key}`" in select
+    assert "kind: 'identity', address: `identity:${field}`" in select
+    assert "theme: (((document.getElementById('tc-shell') || {}).dataset) || {}).theme || 'nebula'" in select
+    # Honest result lines: saved with its revision, or kept in this browser with the reason.
+    assert "Saved to your overlay (rev ${reply.rev}) - applies on every tab and every reload" in select
+    assert "notApplied('this server predates the overlay endpoint; restart it and Apply again')" in select
+    assert "`Kept in this browser only - ${reason}.${themeNote}` : `Not applied - ${reason}.`" in select
+    # A rolled-back icon is not recorded, and an accepted element leaves the local book.
+    assert "what was rolled back is not recorded" in select
+    assert "layout.forgetLocal(address.slice(prefix.length))" in select, (
+        "pruning after a save drops the local copy only, never the overlay entry"
+    )
+
+
 def test_icons_are_their_own_target_not_swallowed_by_the_button() -> None:
     target = _read("ui_redesign_target.js")
 
@@ -121,7 +162,7 @@ def test_every_change_records_a_version_that_can_be_reverted() -> None:
     assert "function versionCount(" in layout
     # normalizeSlot rebuilds the slot from a fixed field list; omitting
     # `versions` silently wiped the undo stack on the next ensureSlot call.
-    assert "versions: slot.versions && typeof slot.versions === \"object\"" in layout
+    assert 'versions: slot.versions && typeof slot.versions === "object"' in layout
     assert "layout.pushVersion(uiId)" in select
     # The Revert button only appears when something selected can actually move.
     assert "function editedPicks()" in select
@@ -159,3 +200,39 @@ def test_the_selector_reports_rather_than_guesses() -> None:
     assert "if (JSON.stringify(merged) === before) return;" in select
     assert "Thomas returned no edit for this one" in select
     assert "Nothing changed." in select
+
+
+def test_a_text_record_changes_what_the_element_says_and_a_removed_one_restores_it() -> None:
+    """Redesign can change what an element SAYS (2026-09-06).
+
+    You asked that AI Redesign be able to change anything. "Change its label to
+    Start a build" turned the button green and left the label alone, because
+    nothing carried the words from the plan to the element. The layout runtime
+    now applies ``text`` to the element's own text runs, keeps the icon, and
+    puts the stock words back exactly when the record goes away.
+    """
+    import json
+    import subprocess
+
+    harness = ROOT / "tests" / "web_node" / "ui_edit_layout_text.mjs"
+    out = subprocess.run(
+        ["node", str(harness), str(WEB / "js" / "ui_edit_layout.js")],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    assert got["changed"].strip() == "Start a build"
+    assert got["restored"] == "\n  \n  New build\n", got  # every stock run back, whitespace included
+    assert got["restoredCount"] == 3
+    assert got["bareChanged"] == "New"
+    assert got["bareRestored"] == "" and got["bareCount"] == 1, got  # the appended run is gone again
+
+
+def test_the_redesign_client_carries_text_from_the_plan_to_the_record() -> None:
+    select = _read("ui_redesign_select.js")
+    assert "merged.text = " in select, (
+        "applyLayout drops entry.text, so a planned label change never reaches the overlay"
+    )

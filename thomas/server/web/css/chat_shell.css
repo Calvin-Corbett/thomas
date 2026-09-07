@@ -27,6 +27,7 @@
 .ph-arrow-up::before { content: "\2191"; }
 .ph-arrow-right::before { content: "\2192"; }
 .ph-arrow-clockwise::before { content: "\21BB"; }
+.ph-server::before { content: "\25A4"; }
 .ph-arrow-square-out::before { content: "\2197"; }
 /* Expand / shrink for the result viewer. Without an entry here a name falls
    through to the `\2022` bullet at the top of this file, so the button renders
@@ -71,6 +72,8 @@
 .ph-code::before { content: "<>"; font-size: .72em; }
 .ph-copy::before { content: "\25A3"; }
 .ph-thumbs-up::before { content: "+"; }
+.ph-thumbs-down::before { content: "\2212"; }
+.ph-share::before { content: "\2197"; }
 /* Everything below was USED and never mapped, so each one drew the `\2022`
    bullet above. Found by diffing every `ph-` class in the Code surface against
    the names defined here: 17 of them, including `ph-robot` -- Thomas's own
@@ -89,6 +92,8 @@
 .ph-folder-simple::before { content: "\25B1"; }
 .ph-folder-open::before { content: "\25B0"; }
 .ph-image::before { content: "\25A7"; }
+.ph-video::before { content: "\25B6"; }
+.ph-music-note::before { content: "\266B"; }
 .ph-pen-nib::before { content: "\2712"; }
 .ph-pencil-simple::before { content: "\270F"; }
 .ph-play-circle::before { content: "\25B6"; }
@@ -119,8 +124,9 @@
    presentation forms of the same idea. */
 .ph-lightning::before { content: "\2607"; }
 .ph-spinner::before, .ph-hourglass::before { content: "\29D6"; }
-.ph-clock-countdown::before, .ph-clock-counter-clockwise::before { content: "\29D7"; }
+.ph-clock::before, .ph-clock-countdown::before, .ph-clock-counter-clockwise::before { content: "\29D7"; }
 .ph-eye::before { content: "\25C9"; }
+.ph-monitor-play::before { content: "\25B6"; }
 .ph-eye-slash::before { content: "\2298"; }
 .ph-trash::before { content: "\2326"; }
 .ph-list::before, .ph-rows::before { content: "\2261"; }
@@ -309,8 +315,41 @@ html, body { margin: 0; padding: 0; height: 100%; }
 /* Chat content "rail": its left edge is anchored to a VIEWPORT-relative
    position (not the column's width), so when the Canvas opens and the chat
    column shrinks from the right, the composer/thread DON'T slide — they only
-   narrow. 524 = 140 (half sidebar) + 384 (half of the 768 content width). */
-.tc-rail { margin-left: max(16px, calc(50vw - 524px)) !important; margin-right: auto !important; }
+   narrow. The anchor is half the space the sidebar OCCUPIES plus half the
+   rail's own width, subtracted from the viewport centre.
+
+   This used to read `50vw - 524px`, with 524 spelled out in a comment as
+   140 (half sidebar) + 384 (half of the 768 content width). Both halves were
+   frozen, and both were wrong somewhere:
+
+   * Collapsing the sidebar sets `--sidebar-margin: -280px`, so it occupies no
+     width — but the 140px allowance stayed in the sum and pulled every rail
+     140px left of centre. In the desktop shell, where the sidebar is usually
+     collapsed, that is the whole page sitting off to one side.
+   * Only two of the three rails are 768 wide. `#tc-welcome` is 720, so the
+     384 put it 24px left of centre at every width, sidebar or no sidebar.
+
+   Deriving both halves instead of writing them down keeps the anchor honest
+   when the sidebar moves or a rail changes width. */
+/* `--sidebar-margin` is declared inline on #tc-shell as a unitless `0`, and
+   `toggleSidebar` then writes `0px` or `-280px`. A unitless zero is not a
+   length, so `calc(280px + var(--sidebar-margin))` would be invalid until the
+   first toggle - the rule would be dropped and the rails would centre only by
+   accident, on the inline `margin: 0 auto` they happen to carry. Registering
+   the property makes that impossible: a value that is not a length is invalid
+   at computed-value time and falls back to the initial-value below, so the
+   anchor is correct on first paint without the markup having to change. */
+@property --sidebar-margin {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+#tc-shell { --tc-rail-w: 768px; }
+#tc-welcome { --tc-rail-w: 720px; }
+.tc-rail {
+  margin-left: max(16px, calc(50vw - (280px + var(--sidebar-margin, 0px)) / 2 - var(--tc-rail-w, 768px) / 2)) !important;
+  margin-right: auto !important;
+}
 @media (max-width: 1080px) {
   /* Small screens: space "demands it" — re-center content and let the Canvas
      overlay the chat instead of squeezing it. */
@@ -346,6 +385,102 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tc-doc-page th { background: #f2f4f9; font-weight: 700; }
 .tc-doc-cursor { display: inline-block; width: 6px; height: 1.02em; background: #2f6bff; margin-left: 1px; vertical-align: text-bottom; border-radius: 1px; animation: tc-blink 1s step-end infinite; }
 @keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+.tc-create-wrap { position: relative; }
+#tc-attach-btn[aria-expanded="true"] { color: var(--c-text) !important; background: var(--c-surface-2) !important; border-color: var(--c-border-2) !important; }
+#tc-attach-btn .ph { font-size: 18px; transition: transform .15s ease; }
+#tc-attach-btn[aria-expanded="true"] .ph { transform: rotate(45deg); }
+.tc-create-menu {
+  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 70; width: 236px;
+  padding: 7px; border: 1px solid var(--c-border-2); border-radius: 14px;
+  background: var(--c-menu-bg, var(--c-composer-bg)); box-shadow: var(--c-shadow);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+}
+.tc-create-menu[hidden] { display: none; }
+.tc-create-menu button {
+  width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--c-text); display: flex; align-items: center;
+  gap: 10px; font: 600 13px/1.2 var(--font-sans); text-align: left; cursor: pointer;
+}
+.tc-create-menu button:hover, .tc-create-menu button:focus-visible { background: var(--c-hover); outline: none; }
+.tc-create-menu button .ph { color: var(--c-accent); font-size: 16px; }
+.tc-create-menu button:first-child { margin-bottom: 5px; border-bottom: 1px solid var(--c-border); border-radius: 9px 9px 0 0; padding-bottom: 5px; }
+.tc-media-setup { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: rgba(4, 7, 14, .72); color: var(--c-text); backdrop-filter: blur(5px); }
+.tc-media-setup[hidden] { display: none; }
+.tc-media-card { width: min(460px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--c-border-2); border-radius: 18px; background: #111521; box-shadow: var(--c-shadow); }
+.tc-media-card h2 { margin: 0 0 6px; font-size: 20px; }
+.tc-media-kicker { margin-bottom: 5px; color: var(--c-accent); font: 700 10px/1 var(--font-label); letter-spacing: .12em; }
+.tc-media-card p { margin: 0 0 16px; color: var(--c-muted); font-size: 13px; line-height: 1.5; }
+.tc-media-options { display: grid; gap: 12px; }
+.tc-media-options > button { display: flex; align-items: center; gap: 10px; text-align: left; }
+.tc-media-options > button span { display: grid; gap: 3px; }
+.tc-media-options small { color: var(--c-muted); font-weight: 400; }
+.tc-media-api { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.tc-media-api label { grid-column: 1 / -1; color: var(--c-muted); font-size: 12px; }
+#tc-media-key { min-width: 0; padding: 10px 11px; border: 1px solid var(--c-border-2); border-radius: 10px; background: #181d2b; color: var(--c-text); font: 13px var(--font-sans); }
+.tc-media-error { margin: 10px 0 0 !important; color: #ff9292 !important; }
+.tc-media-card button { min-height: 40px; padding: 0 12px; border: 1px solid var(--c-border-2); border-radius: 10px; background: var(--c-surface-2); color: var(--c-text); font: 650 13px var(--font-sans); cursor: pointer; }
+.tc-media-card button:hover { border-color: var(--c-accent); }
+.tc-media-close { width: 100%; margin-top: 10px; background: transparent !important; color: var(--c-muted) !important; }
+.tc-media-lane-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; padding: 5px 7px 5px 10px; border: 1px solid color-mix(in srgb, var(--c-accent) 45%, var(--c-border)); border-radius: 999px; background: color-mix(in srgb, var(--c-accent) 12%, transparent); color: var(--c-text); font: 700 12px/1 var(--font-sans); }
+.tc-media-lane-chip[hidden] { display: none; }
+.tc-media-lane-chip button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--c-muted); cursor: pointer; }
+.tc-media-lane-chip button:hover, .tc-media-lane-chip button:focus-visible { background: var(--c-hover); color: var(--c-text); outline: none; }
+.tc-media-lane-chip .ph { font-size: 11px; }
+.tc-media-deliverable { width: min(620px, 100%); margin: 6px 0 0; overflow: hidden; border: 1px solid var(--c-border-2); border-radius: 14px; background: var(--c-surface); }
+.tc-media-deliverable img, .tc-media-deliverable video { display: block; width: 100%; max-height: 460px; object-fit: contain; background: #07090e; }
+.tc-media-deliverable audio { display: block; width: calc(100% - 24px); margin: 14px 12px; }
+.tc-media-deliverable figcaption { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; font-size: 12px; }
+.tc-media-deliverable figcaption a { color: var(--c-accent); }
+.tc-activity-empty { margin: auto; max-width: 260px; color: var(--c-muted); font-size: 13px; line-height: 1.5; text-align: center; }
+.tc-activity-record { display: grid; gap: 9px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-surface); }
+.tc-activity-record > header { display: grid; grid-template-columns: auto 1fr; gap: 4px 9px; align-items: center; }
+.tc-activity-record > header span { color: var(--c-accent); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tc-activity-record > header strong { overflow: hidden; color: var(--c-text); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.tc-activity-record > header time { grid-column: 2; color: var(--c-muted); font-size: 10px; }
+.tc-activity-item { display: grid; gap: 8px; padding-top: 9px; border-top: 1px solid var(--c-border); }
+.tc-activity-meta { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.tc-activity-meta span { color: var(--c-muted); font-size: 10px; text-transform: uppercase; }
+.tc-activity-meta strong { overflow: hidden; color: var(--c-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.tc-activity-item img, .tc-activity-item video { width: 100%; max-height: 280px; border-radius: 9px; object-fit: contain; background: #07090e; }
+.tc-activity-item audio { width: 100%; }
+.tc-activity-item > a { justify-self: start; color: var(--c-accent); font-size: 12px; font-weight: 700; }
+
+/* Tools is a shell panel, not a browser-default form. Keep every label and native
+   option readable against the same dark glass used by the composer. */
+.tc-tools-wrap { position: relative; }
+#tc-tools-btn[aria-expanded="true"] { color: var(--c-text) !important; background: var(--c-surface-2) !important; border-color: var(--c-border-2) !important; }
+.tc-tools-menu[hidden] { display: none; }
+.tc-tools-menu {
+  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 70;
+  width: min(312px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
+  box-sizing: border-box; overscroll-behavior: contain;
+  padding: 12px; border: 1px solid var(--c-border-2); border-radius: 14px;
+  background: #111521; color: var(--c-text); box-shadow: var(--c-shadow);
+}
+.tc-tools-heading { padding: 2px 2px 10px; color: var(--c-muted); font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.tc-tools-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; color: var(--c-dim); font-size: 13px; }
+.tc-tools-field select { flex: 0 0 auto; min-width: 150px; padding: 5px 8px; border: 1px solid var(--c-border-2); border-radius: 8px; background: #181d2b; color: var(--c-text); color-scheme: dark; font: 12.5px/1.3 var(--font-sans); cursor: pointer; }
+.tc-tools-field select option { background: #181d2b; color: #eef0fb; }
+.tc-dial-desc { margin: 0 0 10px; max-width: 100%; color: var(--c-muted); font-size: 11px; line-height: 1.4; }
+.tc-tools-divider { height: 1px; margin: 10px 0; background: var(--c-border); }
+.tc-tools-action { width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--c-text); display: flex; align-items: center; gap: 10px; font: 600 13px/1.2 var(--font-sans); text-align: left; cursor: pointer; }
+.tc-tools-action:hover, .tc-tools-action:focus-visible { background: var(--c-hover); outline: none; }
+.tc-tools-action .ph { color: var(--c-accent); font-size: 16px; }
+.tc-tools-action small { display: block; margin-top: 2px; color: var(--c-muted); font-size: 10.5px; font-weight: 400; }
+.tc-tools-toggle { margin: 4px 0; }
+.tc-tools-toggle > span { display: flex; align-items: center; gap: 10px; }
+.tc-tools-toggle input, .tc-tools-temp-controls input { margin-left: auto; accent-color: var(--c-accent); }
+.tc-tools-temporary { margin-top: 4px; padding: 10px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-surface); }
+.tc-tools-temp-copy, .tc-tools-temp-copy > span { display: flex; align-items: center; gap: 10px; color: var(--c-text); font-size: 13px; }
+.tc-tools-temp-copy > span { display: block; }
+.tc-tools-temporary .ph { color: var(--c-accent); }
+.tc-tools-temporary small { display: block; margin-top: 3px; color: var(--c-muted); font-size: 10.5px; line-height: 1.4; }
+.tc-tools-temp-controls { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.tc-tools-temporary select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--c-border-2); border-radius: 8px; background: #181d2b; color: #eef0fb; color-scheme: dark; font: 12px/1.3 var(--font-sans); }
+.tc-tools-temporary select option { background: #181d2b; color: #eef0fb; }
+.tc-tools-keep { width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--c-accent-line); border-radius: 9px; background: var(--c-accent-soft); color: var(--c-text); font: 600 12px/1.2 var(--font-sans); cursor: pointer; }
+.tc-shell.tc-temporary-chat #tc-tools-btn { color: var(--c-accent) !important; border-color: var(--c-accent-line) !important; background: var(--c-accent-soft) !important; }
+
 /* "Queued — will send when this reply finishes": the note under a message
    typed while Thomas was still answering (js/chat_turn_flow.js attaches it to
    the user bubble at queue time and removes it the moment it auto-sends). The
@@ -429,3 +564,42 @@ html[data-theme="sandstone"] .tc-workspace-frame { color-scheme: light; }
    are low-emphasis and the badge is 55% opaque, so this is untidy rather
    than misleading. Nothing reads as wrong; it just looks unfinished. */
 @media (max-width: 640px) { #tc-build-badge { display: none; } }
+
+/* Shell context menu. It uses the same surfaces, borders and restrained motion
+   as the rest of the shell instead of inheriting Chromium's native menu. */
+.tc-shell-menu {
+  position: fixed; z-index: 10000; min-width: 180px; padding: 6px;
+  border: 1px solid var(--c-border-2); border-radius: 12px;
+  background: color-mix(in srgb, var(--c-sidebar) 94%, transparent);
+  box-shadow: 0 18px 48px rgba(0,0,0,.34); backdrop-filter: blur(18px);
+  animation: tc-shell-menu-in .14s ease-out both;
+}
+.tc-shell-menu[hidden] { display: none; }
+.tc-shell-menu-item {
+  width: 100%; min-height: 36px; display: flex; align-items: center; gap: 10px;
+  padding: 7px 9px; border: 0; border-radius: 8px; color: var(--c-text);
+  background: transparent; font: 500 12.5px/1.2 var(--font-body); text-align: left;
+  cursor: default;
+}
+.tc-shell-menu-item:hover, .tc-shell-menu-item:focus-visible { background: var(--c-surface-hover); outline: none; }
+.tc-shell-menu-item .ph { color: var(--c-muted); }
+.tc-shell-menu-item-label { flex: 1; }
+.tc-shell-menu-item[data-state="restarting"] .ph-arrow-clockwise { animation: tc-restart-turn .8s cubic-bezier(.5,.1,.4,.9) infinite; }
+.tc-shell-menu-item[data-state="failed"] { color: var(--c-danger, #ef7777); }
+@keyframes tc-shell-menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes tc-restart-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .tc-shell-menu { animation: none; }
+  .tc-shell-menu-item[data-state="restarting"] .ph-arrow-clockwise { animation: tc-restart-pulse 1s ease-in-out infinite; }
+  @keyframes tc-restart-pulse { 50% { opacity: .35; } }
+}
+
+/* A tab document is controlled by the browser bar above it. Keep workspace-only
+   header actions out of embedded Chat, Build and Work pages so the browser bar
+   remains the app's one model selector. */
+html.is-embedded main > header [data-model-switch],
+html.is-embedded main > header [data-theme-switch],
+html.is-embedded main > header #tc-sidebar-toggle { display: none !important; }
+html.is-embedded #tc-build-badge { display: none !important; }
+/* A hidden tab keeps its DOM but not its animations. */
+html.bt-doc-hidden .tc-world, html.bt-doc-hidden .tc-world * { animation-play-state: paused !important; }

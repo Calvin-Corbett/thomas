@@ -32,14 +32,24 @@
 
 .tc-history-preview,
 .tc-history-meta {
-  position: absolute;
-  inset: 0;
+  display: block;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--c-muted);
   transition: opacity .12s ease;
+}
+
+/* The absolute placement belongs to the cross-fade box alone. A renderer
+   that drops a bare preview into a static row (Work's job rows did) must get
+   a plain second line, not a span that escapes to the sidebar's own box and
+   sits over the mode buttons, New chat and search: every click on the
+   sidebar then opened the last job in the list. */
+.tc-history-sub > .tc-history-preview,
+.tc-history-sub > .tc-history-meta {
+  position: absolute;
+  inset: 0;
 }
 
 .tc-history-preview {

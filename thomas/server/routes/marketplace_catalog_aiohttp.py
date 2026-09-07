@@ -34,7 +34,7 @@ from thomas.server.desktop_plugins import (
 )
 from thomas.server.desktop_plugins_runtime import get_installed_plugin
 from thomas.server.marketplace_bundle_download import download_plugin_bundle
-from thomas.server.net_safety import validate_public_url
+from thomas.server.net_safety import request_validated_async
 
 log = logging.getLogger(__name__)
 
@@ -394,10 +394,12 @@ async def _load_hosted_marketplace_catalog(*, store_url: str, channel: str) -> d
         urljoin(store_url.rstrip("/") + "/", f"api/v1/plugins/catalog?channel={quote(channel, safe='')}"),
     ]
     errors: list[str] = []
-    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+    # request_validated_async re-runs the SSRF guard on every redirect hop; a
+    # client-level follow_redirects=True checked only the first URL.
+    async with httpx.AsyncClient(timeout=25.0) as client:
         for catalog_url in catalog_urls:
             try:
-                response = await client.get(validate_public_url(catalog_url))
+                response = await request_validated_async(client, "GET", catalog_url)
                 response.raise_for_status()
                 payload = response.json()
             except (httpx.HTTPError, ValueError) as exc:

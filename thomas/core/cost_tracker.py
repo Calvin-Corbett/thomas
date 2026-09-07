@@ -5,8 +5,10 @@ import os
 import threading
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 try:
     import tomllib  # Python 3.11+
@@ -29,6 +31,26 @@ DEFAULT_PRICING: dict[str, dict[str, float]] = {
 }
 
 FALLBACK_UNKNOWN: dict[str, float] = {"input_per_1k": 0.002, "output_per_1k": 0.002}
+
+
+def is_local_base_url(url: str) -> bool:
+    """True when a model's base URL points at this machine or a private network.
+
+    A model served from here bills nothing; pricing it at the cloud defaults put
+    a dollar figure on every free reply. The provider name cannot say so (a local
+    Ollama is configured as ``openai_compat``); the address can.
+    """
+
+    host = str(urlsplit(str(url or "").strip()).hostname or "").strip().lower()
+    if not host:
+        return False
+    if host in {"localhost", "host.docker.internal"} or host.endswith(".local") or host.endswith(".localhost"):
+        return True
+    try:
+        addr = ip_address(host)
+    except ValueError:
+        return False
+    return bool(addr.is_loopback or addr.is_private or addr.is_link_local)
 
 
 # ----------------------------
@@ -518,6 +540,7 @@ class CostTracker:
             input_per_1k = float(v["input_per_1k"])
             output_per_1k = float(v["output_per_1k"])
             out[k] = {
+                **({"local": True} if v.get("local") else {}),
                 "input_per_1k": input_per_1k,
                 "output_per_1k": output_per_1k,
                 "input_per_1m": input_per_1k * 1000.0,
@@ -640,6 +663,23 @@ class CostTracker:
                     "input_per_1k": float(inp) if inp is not None else float(base["input_per_1k"]),
                     "output_per_1k": float(outp) if outp is not None else float(base["output_per_1k"]),
                 }
+
+        # Configured models served from this machine cost nothing: a zero row,
+        # flagged local, unless [pricing] priced that model on purpose.
+        models = raw.get("models", {}) if isinstance(raw, dict) else {}
+        explicit = {str(k).lower() for k in pricing} if isinstance(pricing, dict) else set()
+        if isinstance(models, dict):
+            for cfg in models.values():
+                if not isinstance(cfg, dict) or not is_local_base_url(str(cfg.get("base_url") or "")):
+                    continue
+                provider = str(cfg.get("provider") or "").strip()
+                model = str(cfg.get("model") or "").strip()
+                if not model:
+                    continue
+                for key in (f"{provider}:{model}", f"{provider}/{model}") if provider else (model,):
+                    if key.lower() in explicit or key in merged:
+                        continue
+                    merged[key] = {"input_per_1k": 0.0, "output_per_1k": 0.0, "local": True}
 
         # lowercase aliases
         for k, v in list(merged.items()):

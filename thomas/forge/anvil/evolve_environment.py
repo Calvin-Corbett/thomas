@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from thomas.core.config import load_config
-from thomas.core.model_resolution import resolve_effective_model, resolve_model_profile_name
+from thomas.core.model_resolution import resolve_model_profile_name
+from thomas.preferences.model_resolution import resolve_effective_model
 
 from .doppelganger import _GREEN_SUPPORT_DIRS, _GREEN_SUPPORT_FILES, _IGNORE_NAMES, _INCLUDE_DIRS, _INCLUDE_FILES
 from .evolve_delta_analysis import _delta_fingerprint_for_root

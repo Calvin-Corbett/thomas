@@ -303,8 +303,86 @@ def setup_middleware_and_handlers(
         except ValueError:
             return False
 
+    def _require_local_host_authority(request: web.Request) -> None:
+        """Reject Host authorities that cannot name this local-only server."""
+        raw_host_values: list[str] = []
+        for raw_name, raw_value in request.raw_headers:
+            if raw_name.lower() != b"host":
+                continue
+            try:
+                raw_host_values.append(raw_value.decode("ascii"))
+            except UnicodeDecodeError as exc:
+                raise web.HTTPForbidden(text="Invalid Host header for local access.") from exc
+
+        if len(raw_host_values) != 1:
+            raise web.HTTPForbidden(text="A single valid Host header is required for local access.")
+
+        authority = raw_host_values[0]
+        if (
+            not authority
+            or authority != authority.strip()
+            or any(ord(char) <= 32 or ord(char) == 127 for char in authority)
+            or any(char in authority for char in "/\\?#,@")
+        ):
+            raise web.HTTPForbidden(text="Invalid Host header for local access.")
+
+        bracketed = authority.startswith("[")
+        port_text: str | None = None
+        if bracketed:
+            closing_bracket = authority.find("]")
+            if closing_bracket <= 1:
+                raise web.HTTPForbidden(text="Invalid Host header for local access.")
+            host = authority[1:closing_bracket]
+            remainder = authority[closing_bracket + 1 :]
+            if "[" in host or "]" in remainder or (remainder and not remainder.startswith(":")):
+                raise web.HTTPForbidden(text="Invalid Host header for local access.")
+            if remainder:
+                port_text = remainder[1:]
+        else:
+            if "[" in authority or "]" in authority or authority.count(":") > 1:
+                raise web.HTTPForbidden(text="Invalid Host header for local access.")
+            if ":" in authority:
+                host, port_text = authority.rsplit(":", 1)
+            else:
+                host = authority
+
+        if port_text is not None and (
+            not port_text or len(port_text) > 5 or not port_text.isdecimal() or not 1 <= int(port_text) <= 65535
+        ):
+            raise web.HTTPForbidden(text="Invalid Host header for local access.")
+
+        normalized_host = host.lower()
+        try:
+            address = ipaddress.ip_address(normalized_host)
+        except ValueError:
+            labels = normalized_host.split(".")
+            valid_name = (
+                bool(normalized_host)
+                and len(normalized_host) <= 253
+                and all(
+                    1 <= len(label) <= 63
+                    and label[0].isalnum()
+                    and label[-1].isalnum()
+                    and all(char.isalnum() or char == "-" for char in label)
+                    for label in labels
+                )
+            )
+            allowed = valid_name and (normalized_host == "localhost" or normalized_host.endswith(".localhost"))
+        else:
+            allowed = (bracketed and address.version == 6 and address.is_loopback and "%" not in normalized_host) or (
+                not bracketed and (address.is_loopback or normalized_host in {"10.0.2.2", "10.0.3.2"})
+            )
+
+        if not allowed:
+            raise web.HTTPForbidden(text="Host header is not valid for local access.")
+
     def _require_same_origin_browser_request(request: web.Request) -> None:
         """Reject cross-origin browser requests to localhost-only endpoints."""
+        cfg_for_host: AppConfig = _resolve_runtime_config(app)
+        access_mode = str(getattr(getattr(cfg_for_host, "server", None), "access_mode", "local") or "local")
+        if access_mode.strip().lower() != "remote":
+            _require_local_host_authority(request)
+
         fetch_site = str(request.headers.get("Sec-Fetch-Site") or "").strip().lower()
         if (
             fetch_site
@@ -385,6 +463,35 @@ def setup_middleware_and_handlers(
             return True
         return token in {"10.0.2.2", "10.0.3.2"}
 
+    def _has_affirmative_same_origin_browser_evidence(request: web.Request) -> bool:
+        """Accept browser-proven same-origin instead of the token, LOCAL MODE ONLY.
+
+        What this defends against is the real CSRF shape: a page on another
+        origin making the browser POST to this loopback server. A browser sets
+        Origin itself and a page cannot override it, so a same-origin Origin is
+        genuine evidence against that attack — which is why the UI, having no
+        token client, is allowed through on it.
+
+        What it is NOT evidence of is that a browser sent the request at all: a
+        local process can write any header it likes. That is tolerable on
+        loopback, where such a process could reach the server regardless, and
+        not tolerable in remote mode, where it let a stolen bearer token plus a
+        forged loopback Origin through without the CSRF secret. Remote keeps
+        the unconditional requirement every earlier commit had.
+        """
+        cfg_mode: AppConfig = _resolve_runtime_config(app)
+        srv_mode = getattr(cfg_mode, "server", None)
+        if str(getattr(srv_mode, "access_mode", "local") or "local").strip().lower() == "remote":
+            return False
+        raw_origin = str(request.headers.get("Origin") or "").strip()
+        if not raw_origin:
+            # Sec-Fetch-Site alone proves nothing: with no Origin to compare,
+            # _require_same_origin_browser_request has nothing to check and
+            # returns without raising.
+            return False
+        _require_same_origin_browser_request(request)
+        return True
+
     def _require_csrf_guard(request: web.Request) -> None:
         raw_token = str(os.environ.get("THOMAS_MUTATING_CSRF_TOKEN", "") or "").strip()
         if not raw_token:
@@ -399,10 +506,13 @@ def setup_middleware_and_handlers(
                 )
             return
         provided = str(request.headers.get("X-CSRF-Token") or "").strip()
-        if not provided:
-            raise web.HTTPForbidden(text="Missing X-CSRF-Token for this mutating request.")
-        if not hmac.compare_digest(provided.encode("utf-8"), raw_token.encode("utf-8")):
-            raise web.HTTPForbidden(text="Invalid X-CSRF-Token for this request.")
+        if provided:
+            if not hmac.compare_digest(provided.encode("utf-8"), raw_token.encode("utf-8")):
+                raise web.HTTPForbidden(text="Invalid X-CSRF-Token for this request.")
+            return
+        if _has_affirmative_same_origin_browser_evidence(request):
+            return
+        raise web.HTTPForbidden(text="Missing X-CSRF-Token for this mutating request.")
 
     @web.middleware
     async def csrf_guard_mutating_api(request: web.Request, handler):  # type: ignore[no-untyped-def]

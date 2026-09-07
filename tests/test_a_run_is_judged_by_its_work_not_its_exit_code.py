@@ -10,9 +10,8 @@ written into the conversation as ``failed / exited 1``.
 The evidence hierarchy these tests pin, in the order the recorder now applies
 it:
 
-- Files changed  -> ``completed``, whatever the exit code says. The nonzero
-  code is still visible in the reason, so nothing is hidden -- it just stops
-  outvoting the work.
+- Files changed plus an explicit successful terminal verdict -> ``completed``.
+  Files alone are recovery evidence, not proof that a crashed run finished.
 - No changes, but the transcript carries a ``final`` frame -- the frame the
   stream translator emits ONLY for a non-error CLI ``result`` message -- and
   no mutating tool ran -> ``conversation``. The protocol said the answer
@@ -67,7 +66,7 @@ def _record(repo: Path, conversation_id: str, transcript: Path, proc: Any, snap:
     )
 
 
-def test_files_landed_but_the_cli_exited_1_records_completed(tmp_path: Path, monkeypatch: Any) -> None:
+def test_files_without_terminal_verdict_do_not_outvote_exit_one(tmp_path: Path, monkeypatch: Any) -> None:
     repo = _new_repo(tmp_path)
     conversation = forge_code_store.new_conversation(repo)
     transcript = repo / "transcript.txt"
@@ -76,14 +75,13 @@ def test_files_landed_but_the_cli_exited_1_records_completed(tmp_path: Path, mon
 
     result = _record(repo, conversation["id"], transcript, _ExitedProcess(1), {})
 
-    assert result["ok"] is True
+    assert result["ok"] is False
     assert result["noop"] is False
-    assert result["outcome"] == "completed"
+    assert result["outcome"] == "failed"
     saved = forge_code_store.load_conversation(repo, conversation["id"])
     reason = saved["turns"][-1]["reason"]
-    assert "2 file(s) changed" in reason
-    # The exit code is still on the record -- visible, just no longer a verdict.
-    assert "1" in reason.replace("2 file(s)", "")
+    assert "without a terminal engine verdict" in reason
+    assert "2 file(s) had changed by then" in reason
 
 
 def test_a_confirmed_final_answer_outvotes_a_lying_exit_code(tmp_path: Path) -> None:

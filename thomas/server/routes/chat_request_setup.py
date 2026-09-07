@@ -63,7 +63,7 @@ async def setup_chat_request(
         try:
             from os import environ
 
-            from thomas.core.model_resolution import resolve_effective_model
+            from thomas.preferences.model_resolution import resolve_effective_model
             from thomas.preferences.store import get_db_path
 
             resolved_profile, resolved_model_id = resolve_effective_model(

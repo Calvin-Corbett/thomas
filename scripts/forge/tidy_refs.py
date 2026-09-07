@@ -83,6 +83,56 @@ def _branch_checked_out(branch: str, worktrees: list[dict[str, str]]) -> bool:
     return any(wt.get("branch") == branch for wt in worktrees)
 
 
+def _ref_resolves(ref: str, repo_root: Path) -> str | None:
+    """Return the commit sha `ref` names in `repo_root` if it exists as an
+    EXACT ref path, or `None` if it does not. `git show-ref --verify`
+    performs NO DWIM fallback disambiguation, unlike `git rev-parse
+    --verify` or a bare name handed straight to `git merge-base` -- both of
+    those retry a name that fails its own exact lookup under `refs/`,
+    `refs/tags/`, `refs/heads/`, `refs/remotes/` in turn (gitrevisions(7)).
+    That matters here: a local branch can be created with any exact string,
+    slashes included (`git branch refs/tags/v1 <sha>` is legal), so a
+    same-named tag or a nested `refs/heads/<name>` branch could otherwise
+    stand in for the ref this janitor means to check -- the exact class
+    fixed in scripts/crew/workboard/claim_evidence.py (`_ref_resolves`,
+    "the last ref trick"), mirrored here. Any OSError running the probe is
+    treated as "does not resolve" -- if this process cannot even ask, it
+    must not guess which branch it is looking at.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "show-ref", "--verify", ref],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    line = str(proc.stdout or "").strip().splitlines()[0] if proc.stdout else ""
+    if not line:
+        return None
+    sha = line.split(maxsplit=1)[0].strip()
+    return sha or None
+
+
+def _resolve_base(base: str) -> str | None:
+    """Fully-qualified-path resolution of `--base` via `_ref_resolves` -- no
+    DWIM, no shadowing. `--base` is documented as a bare LOCAL branch name
+    (default `dev`), so a bare string resolves ONLY as `refs/heads/<base>`;
+    also trying it under refs/remotes/ or refs/tags/ would reopen exactly
+    the shadow this fix closes for any slash-containing value (e.g. `--base
+    origin/protected`), where `refs/heads/origin/protected` -- a LEGAL local
+    branch name (`git branch origin/protected <sha>`) -- would still be
+    tried and could still be attacker-created. A caller who already passes a
+    fully-qualified `refs/...` string is resolved exactly as given.
+    """
+    ref = base if base.startswith("refs/") else f"refs/heads/{base}"
+    return _ref_resolves(ref, ROOT)
+
+
 def reap_worktrees(*, apply: bool) -> tuple[list[str], list[str]]:
     """Remove worktrees with no uncommitted work. Returns (removed, kept_dirty)."""
     main = str(ROOT).replace("\\", "/").rstrip("/")
@@ -112,9 +162,27 @@ def classify_branches(base: str) -> dict[str, list[tuple[str, str]]]:
     reapable: list[tuple[str, str]] = []
     kept: list[tuple[str, str]] = []
 
-    fmt = "%(refname:short)|%(upstream:short)"
+    # Resolved once, exact-path (fix: ref names never guess which branch
+    # they watch) -- `base` is a bare CLI string (default `dev`), and
+    # handing it straight to `merge-base` would let git's ordinary DWIM
+    # resolution match a same-named tag or nested lookalike branch instead
+    # of the intended base. `None` here means "does not resolve at all",
+    # which must never be silently treated as "merged" -- see below.
+    base_sha = _resolve_base(base)
+
+    # `%(refname)` (the full path, e.g. `refs/heads/topic`) is fetched
+    # alongside `%(refname:short)` and used to resolve each branch's SHA --
+    # NOT a `refs/heads/<name>` reconstruction from the short form. Git's
+    # own short-name disambiguation already lengthens `name` (e.g. to
+    # `heads/topic`) when a same-named tag exists (core.warnAmbiguousRefs);
+    # re-qualifying THAT would build a nonexistent `refs/heads/heads/topic`
+    # and silently fail to resolve a real, unambiguous branch. The full
+    # refname for-each-ref just enumerated needs no reconstruction at all.
+    fmt = "%(refname)|%(refname:short)|%(upstream:short)"
     for row in _git(["for-each-ref", "--format", fmt, "refs/heads/"]).splitlines():
-        name, _, upstream = row.partition("|")
+        full, _, rest = row.partition("|")
+        name, _, upstream = rest.partition("|")
+        full = full.strip()
         name = name.strip()
         upstream = upstream.strip()
         if not name or name in {base, current}:
@@ -122,8 +190,17 @@ def classify_branches(base: str) -> dict[str, list[tuple[str, str]]]:
         if _branch_checked_out(name, worktrees):
             kept.append((name, "checked out in a worktree (holds WIP)"))
             continue
-        # Ancestor of base -> truly merged.
-        if subprocess.run(["git", "merge-base", "--is-ancestor", name, base], cwd=ROOT).returncode == 0:
+        # Ancestor of base -> truly merged. Resolve `full` (the exact ref
+        # for-each-ref enumerated) via the same DWIM-free probe as
+        # `base_sha`, then pass BOTH shas to merge-base. Passing `name` (or
+        # `base`) as bare strings would re-run git's own DWIM resolution one
+        # call later, undoing the fix (see `_ref_resolves`'s docstring).
+        name_sha = _ref_resolves(full, ROOT)
+        if (
+            base_sha is not None
+            and name_sha is not None
+            and subprocess.run(["git", "merge-base", "--is-ancestor", name_sha, base_sha], cwd=ROOT).returncode == 0
+        ):
             reapable.append((name, f"merged into {base}"))
             continue
         # Fully on its upstream -> every commit is on the remote (recoverable via fetch).

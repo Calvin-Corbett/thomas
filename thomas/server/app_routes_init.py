@@ -32,8 +32,10 @@ from thomas.server.app_keys import (
     ChatSession,
 )
 from thomas.server.routes.chat_surface_namespace import normalize_workspace_context_id
+from thomas.server.routes.evolve_agent_run_state import APP_EVOLVE_AGENT_RUNS, slot_active
 from thomas.tools.registry import ToolRegistry
 
+from .app_chat_store import _v2_sessions_as_chats, delete_live_chat
 from .app_runtime_guard import _runtime_guard_loop
 
 if TYPE_CHECKING:
@@ -42,84 +44,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 _RUN_STORE_JANITOR_INTERVAL_SECONDS = 120
 _RUN_STORE_STALE_IDLE_SECONDS = 10 * 60
-
-
-def _v2_sessions_as_chats(
-    sessions_dir: Path,
-    *,
-    limit: int = 300,
-    surface_mode: str = "",
-    context_id: str = "",
-) -> list[dict[str, Any]]:
-    """Convert the LIVE v2 session store (``.thomas/sessions_v2/chat_*.json`` — where
-    every chat conducted through /api/v2/chat is saved) into the sidebar's chat-list
-    schema. GET /api/chats historically read ONLY the legacy ``.thomas/chats`` directory
-    (written by the old SPA's PUT /api/chats), which the current chat UI never writes —
-    so brand-new chats never showed up in Recent (no entry, no date). This bridges the
-    two so real, current chats appear with their dates. (chat history fix, 2026-06-28)"""
-    out: list[dict[str, Any]] = []
-    try:
-        files = list(sessions_dir.glob("chat_*.json"))
-    except OSError:
-        return out
-
-    def _mtime(path: Path) -> float:
-        try:
-            return path.stat().st_mtime
-        except OSError:
-            return 0.0
-
-    files.sort(key=_mtime, reverse=True)
-    result_limit = max(1, int(limit))
-    for path in files:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        sid = str(data.get("session_id") or "").strip()
-        if not sid:
-            continue
-        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
-        stored_surface = str(meta.get("surface_mode") or "chat").strip().lower()
-        stored_context = str(meta.get("context_id") or "").strip()
-        if surface_mode and stored_surface != surface_mode:
-            continue
-        if context_id and stored_context != context_id:
-            continue
-        conv = data.get("conversation") if isinstance(data.get("conversation"), dict) else {}
-        msgs: list[dict[str, Any]] = []
-        for msg in conv.get("messages") or []:
-            if not isinstance(msg, dict):
-                continue
-            role = str(msg.get("role") or "")
-            content = msg.get("content")
-            if role in ("user", "assistant") and isinstance(content, str) and content.strip():
-                msgs.append({"role": role, "content": content})
-        if not msgs:
-            continue  # empty / system-only session — nothing to show in the sidebar
-        first_user = next((m["content"] for m in msgs if m["role"] == "user"), "")
-        title = (first_user.strip().splitlines()[0][:60] if first_user.strip() else "New chat") or "New chat"
-        saved_at = data.get("saved_at")
-        updated_ms = int(float(saved_at) * 1000) if isinstance(saved_at, (int, float)) else int(_mtime(path) * 1000)
-        out.append(
-            {
-                "id": sid,
-                "sessionId": sid,
-                "title": title,
-                "surfaceMode": stored_surface,
-                "contextId": stored_context,
-                "model": str(meta.get("model_id") or ""),
-                "messages": msgs,
-                "createdAt": updated_ms,
-                "updatedAt": updated_ms,
-                "pinned": False,
-            }
-        )
-        if len(out) >= result_limit:
-            break
-    return out
 
 
 def _setup_routes_and_handlers(
@@ -329,13 +253,15 @@ def _setup_routes_and_handlers(
                 requested_context = normalize_workspace_context_id(requested_context)
             except ValueError as exc:
                 raise web.HTTPBadRequest(text=str(exc)) from exc
-        legacy = await _load_all_chats_from_disk()
         sessions_dir = config.memory.root_path / ".thomas" / "sessions_v2"
-        live = await asyncio.to_thread(
-            _v2_sessions_as_chats,
-            sessions_dir,
-            surface_mode=requested_surface,
-            context_id=requested_context,
+        legacy, live = await asyncio.gather(
+            _load_all_chats_from_disk(),
+            asyncio.to_thread(
+                _v2_sessions_as_chats,
+                sessions_dir,
+                surface_mode=requested_surface,
+                context_id=requested_context,
+            ),
         )
 
         def _ms(chat: dict[str, Any]) -> int:
@@ -394,11 +320,22 @@ def _setup_routes_and_handlers(
         if not chat_id:
             raise web.HTTPBadRequest(text="missing chat_id")
 
-        deleted = await _delete_chat_from_disk(chat_id)
+        # Delete the compatibility record first. Optional V2 route modules are
+        # deliberately unavailable in legacy-only app configurations, but that
+        # must not turn a successful legacy deletion into a 500 response.
+        legacy_deleted = await _delete_chat_from_disk(chat_id)
+        try:
+            live_result = await delete_live_chat(request.app, chat_id)
+        except ModuleNotFoundError:
+            # V2 chat storage is optional in compatibility-only app setups. Treat
+            # its unavailable lazy dependency as an empty V2 store; the legacy
+            # record above remains authoritative for both success and 404.
+            live_result = {"deleted": False, "memory_purge": {"completed": False}, "task_records_removed": 0}
+        deleted = live_result["deleted"] or legacy_deleted
         if not deleted:
             raise web.HTTPNotFound(text=f"chat {chat_id} not found")
         # Tests expect 200 with a small JSON ack (was 204 no-content).
-        return web.json_response({"ok": True, "deleted": chat_id})
+        return web.json_response({**live_result, "ok": True, "deleted": chat_id})
 
     run_store_janitor_task: asyncio.Task | None = None
 
@@ -807,24 +744,11 @@ def _setup_routes_and_handlers(
 
     _register_webhooks_routes(app)
 
-    def _register_companion_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
-        """Register companion-app management API routes (/api/companion/v1/*)."""
-        if not callable(_require_api_access) or not callable(_read_json):
-            log.warning("Companion route registration skipped: missing dependencies")
-            return
-        try:
-            from thomas.server.routes.companion_aiohttp import register_companion_routes
+    # The companion route family lives in app_routes_companion.py: this body
+    # sits under the 1,500-line hard ceiling test_file_sizes enforces on push.
+    from thomas.server.app_routes_companion import register_companion_route_family
 
-            register_companion_routes(
-                app_ref,
-                require_api_access=_require_api_access,
-                read_json=_read_json,
-                config=cfg_ref,
-            )
-        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
-            log.warning("Companion routes unavailable: %s", e)
-
-    _register_companion_routes(app, config)
+    register_companion_route_family(app, config, require_api_access=_require_api_access, read_json=_read_json, log=log)
 
     def _register_asset_studio_routes(app_ref: web.Application) -> None:
         """Register Asset Studio API routes (/api/asset-studio/v1/*).
@@ -995,10 +919,16 @@ def _setup_routes_and_handlers(
 
     def _register_observability_routes(app_ref: web.Application) -> None:
         """Register system monitoring APIs used by the main shell."""
+        if not callable(_require_api_access):
+            log.warning("Observability routes unavailable: missing API access guard")
+            return
         try:
             from thomas.server.routes.observability import register_observability_routes
 
-            register_observability_routes(app_ref)
+            register_observability_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Observability routes unavailable: %s", e)
 
@@ -1225,8 +1155,10 @@ def _setup_routes_and_handlers(
                     store.get_job(job_id)
                 except KeyError as exc:
                     raise RuntimeError("Mission job is unavailable") from exc
-                store.cancel_job(job_id, actor="work")
-                job = store.get_job(job_id)
+                engine = app_ref.get("autonomy_engine")
+                if engine is None:
+                    raise RuntimeError("Mission runtime is unavailable; stop cannot be confirmed")
+                job = await engine.cancel_job(job_id, actor="work")
                 return {
                     "id": str(getattr(job, "id", "") or ""),
                     "status": str(getattr(job, "status", "") or ""),
@@ -1250,13 +1182,46 @@ def _setup_routes_and_handlers(
 
     # Server restart endpoint
     async def api_server_restart(request: web.Request) -> web.Response:
-        """Request server restart."""
+        """Request server restart unless it would terminate live Build work."""
         _require_loopback(request)
-        app[APP_RESTART_REQUESTED] = True
+        registry = app.get(APP_EVOLVE_AGENT_RUNS)
+        active_run_ids: list[str] = []
+        active_conversation_ids: list[str] = []
+        if isinstance(registry, dict):
+            for conversation_id, slot in registry.items():
+                if not isinstance(slot, dict) or not slot_active(slot):
+                    continue
+                active_conversation_ids.append(str(conversation_id))
+                session = slot.get("session") if isinstance(slot.get("session"), dict) else {}
+                drain = slot.get("drain") if isinstance(slot.get("drain"), dict) else {}
+                # A run remains active while its result recorder drains, even after
+                # the subprocess exits. The registry keeps the same run id on both
+                # records; read either so the 409 always names the live Build run.
+                run_id = str(session.get("run_id") or drain.get("run_id") or conversation_id).strip()
+                if run_id:
+                    active_run_ids.append(run_id)
+        active_run_ids = sorted(set(active_run_ids))
+        active_conversation_ids = sorted(set(active_conversation_ids))
+        if active_run_ids:
+            reason = "Restart refused while Build work is active: " + ", ".join(active_run_ids)
+            return web.json_response(
+                {
+                    "ok": False,
+                    "error": reason,
+                    "active_run_ids": active_run_ids,
+                    "active_conversation_ids": active_conversation_ids,
+                },
+                status=409,
+            )
+        # This key is initialized before AppRunner freezes the application. Updating
+        # it through MutableMapping.__setitem__ during a request emits aiohttp's
+        # started-app DeprecationWarning (and warning-as-error test runs turn that
+        # into a 500), so update the existing backing slot without changing keys.
+        app._state[APP_RESTART_REQUESTED] = True
         shutdown_event = app.get(APP_SHUTDOWN_EVENT)
         if shutdown_event:
             shutdown_event.set()
-        return web.json_response({"restarting": True})
+        return web.json_response({"ok": True, "restarting": True})
 
     # Register routes
     app.router.add_post("/api/server/restart", api_server_restart)

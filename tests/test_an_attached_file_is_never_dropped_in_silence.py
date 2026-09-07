@@ -15,11 +15,17 @@ than quietly shortening the file.
 
 from __future__ import annotations
 
-from thomas.server.routes.chat_v2 import (
-    _ATTACHED_DOCS_BUDGET,
-    _ATTACHED_IMAGE_LIMIT,
-    _images_for_request,
-    _prompt_with_documents,
+from thomas.server.routes.chat_prompt_attachments import (
+    ATTACHED_DOCS_BUDGET as _ATTACHED_DOCS_BUDGET,
+)
+from thomas.server.routes.chat_prompt_attachments import (
+    ATTACHED_IMAGE_LIMIT as _ATTACHED_IMAGE_LIMIT,
+)
+from thomas.server.routes.chat_prompt_attachments import (
+    images_for_request as _images_for_request,
+)
+from thomas.server.routes.chat_prompt_attachments import (
+    prompt_with_documents as _prompt_with_documents,
 )
 
 

@@ -15,25 +15,84 @@
   <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__">
   <link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__">
   <link rel="stylesheet" href="/static/css/companion.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/companion_shell.css?v=__THOMAS_VERSION__">
 </head>
 <body class="companion-phone-host">
   <div class="companion-device-stage">
     <div class="companion-device-shell">
       <main id="app" class="infinite-chat-app">
+        <div class="rail-scrim" id="railScrim" hidden></div>
+
+        <nav class="infinite-rail" id="rail" aria-label="Infinite">
+          <button class="rail-mark" id="railToggle" type="button" aria-expanded="false"
+                  aria-controls="rail" title="Expand menu">
+            <span class="rail-mark-glyph" aria-hidden="true">&#9672;</span>
+            <span class="rail-label">Infinite</span>
+          </button>
+
+          <div class="rail-group" role="group" aria-label="Sections">
+            <button class="rail-item active" data-rail="home" type="button" aria-current="page">
+              <span class="rail-glyph" aria-hidden="true">&#8962;</span><span class="rail-label">Home</span>
+            </button>
+            <button class="rail-item" data-rail="chat" type="button">
+              <span class="rail-glyph" aria-hidden="true">&#10022;</span><span class="rail-label">Chat</span>
+            </button>
+            <button class="rail-item" data-rail="apps" type="button">
+              <span class="rail-glyph" aria-hidden="true">&#9638;</span><span class="rail-label">Library</span>
+            </button>
+            <button class="rail-item" data-rail="build" type="button">
+              <span class="rail-glyph" aria-hidden="true">&#10010;</span><span class="rail-label">Build</span>
+            </button>
+          </div>
+
+          <div class="rail-pins" id="railPins" role="group" aria-label="Pinned apps"></div>
+
+          <div class="rail-foot">
+            <button class="rail-item" data-rail="add" type="button">
+              <span class="rail-glyph" aria-hidden="true">&#9881;</span><span class="rail-label">Setup</span>
+            </button>
+            <div class="rail-status" id="railStatus" role="status" data-state="unknown">
+              <span class="rail-status-dot" aria-hidden="true"></span>
+              <span class="rail-label" id="railStatusLabel">Checking</span>
+            </div>
+          </div>
+        </nav>
+
+        <div class="companion-content">
         <nav class="infinite-top-nav">
           <div class="model-select-wrapper">
             <button id="modelSetupBtn" class="model-setup-btn" title="Configure Model">Model</button>
           </div>
         </nav>
 
-        <nav class="infinite-mode-tabs" aria-label="Companion modes">
-          <button id="tabChat" class="infinite-mode-tab active" type="button" aria-current="page">Chat</button>
-          <button id="tabApps" class="infinite-mode-tab" type="button">Apps</button>
-          <button id="tabAdd" class="infinite-mode-tab" type="button">Setup</button>
-        </nav>
+        <section class="companion-surface-mount" id="surfaceMount" hidden></section>
 
         <section class="infinite-panels">
-          <section class="infinite-panel active" id="panelChat">
+          <section class="infinite-panel active" id="panelHome">
+            <div class="home-scroll">
+              <header class="home-head">
+                <h1 class="home-greeting" id="homeGreeting">Your apps</h1>
+                <p class="home-sub">Ask for something, or build an app for it.</p>
+              </header>
+
+              <form class="home-composer" id="homeComposerForm" data-mode="ask">
+                <button class="home-composer-mode" id="homeComposerMode" type="button"
+                        aria-label="Switch between asking and building">Ask</button>
+                <input class="home-composer-input" id="homeComposerInput" type="text"
+                       maxlength="600" placeholder="Ask Thomas anything&hellip;"
+                       autocomplete="off">
+                <button class="home-composer-send" id="homeComposerSend" type="submit"
+                        aria-label="Send">&#8593;</button>
+              </form>
+
+              <p class="home-status" id="homeStatus" role="status" hidden></p>
+
+              <div class="home-grid" id="homeGrid" aria-live="polite"></div>
+              <p class="home-empty-note" id="homeMeta"></p>
+            </div>
+          </section>
+
+          <section class="infinite-panel" id="panelChat">
             <section class="infinite-chat-screen">
               <div class="infinite-chat-thread" id="chatThread" aria-live="polite"></div>
             </section>
@@ -121,6 +180,7 @@
             </form>
           </section>
         </section>
+        </div>
 
         <div class="thomas-modal hidden" id="modelSetupModal">
           <div class="modal-backdrop" id="modelSetupBackdrop"></div>

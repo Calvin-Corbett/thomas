@@ -288,6 +288,7 @@ def evaluate_rules(
     skill_required_checks: list[dict[str, Any]] | None = None,
     attempt: int = 0,
     repo_root: str | Path | None = None,
+    monolith_guard_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     prompt_text = str(prompt_text or "")
@@ -452,12 +453,24 @@ def evaluate_rules(
                 detail="A test command run after code edits reported failure (ok=False). Fix the failing tests before finalizing.",
             )
         if writes_detected and require_monolith_guard_for_coding and monolith_guard_available:
+            # A run whose toolset has no shell cannot run the guard; the harness
+            # runs it and passes the receipt. The receipt is judged, not trusted:
+            # a failing guard fails the check with its own findings.
+            receipt = monolith_guard_receipt if isinstance(monolith_guard_receipt, dict) else None
+            if receipt is not None:
+                guard_passed = bool(receipt.get("ok"))
+                guard_detail = "The harness ran the monolith guard for this run (its toolset has no shell): " + str(
+                    receipt.get("detail") or "no output"
+                )
+            else:
+                guard_passed = monolith_guard_ran
+                guard_detail = "Run `python scripts/forge/gates/monolith_guard.py` after code mutations."
             add_check(
                 "coding_monolith_guard",
                 "Monolith guard ran after code edits",
                 required=True,
-                passed=monolith_guard_ran,
-                detail="Run `python scripts/forge/gates/monolith_guard.py` after code mutations.",
+                passed=guard_passed,
+                detail=guard_detail,
             )
         if placeholder_reports:
             detail = (

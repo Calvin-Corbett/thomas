@@ -109,10 +109,13 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
         done = done_events[0]
         self.assertEqual(
             done.get("usage"),
-            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18, "cached_prompt_tokens": 0},
             events,
         )
-        self.assertEqual(done.get("run_usage"), {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
+        self.assertEqual(
+            done.get("run_usage"),
+            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18, "cached_prompt_tokens": 0},
+        )
         session_usage = done.get("session_usage") or {}
         self.assertIn("prompt_tokens", session_usage)
         self.assertIn("completion_tokens", session_usage)
@@ -151,15 +154,30 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
         self.assertEqual(response.status, 200)
         done = [event for event in _parse_ndjson(response_body) if event.get("type") == "done"]
         self.assertEqual(len(done), 1)
-        self.assertEqual(done[0]["usage"], {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
-        self.assertEqual(done[0]["run_usage"], {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18})
-        self.assertEqual(done[0]["session_usage"], {"prompt_tokens": 22, "completion_tokens": 14, "total_tokens": 36})
+        self.assertEqual(
+            done[0]["usage"],
+            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18, "cached_prompt_tokens": 0},
+        )
+        self.assertEqual(
+            done[0]["run_usage"],
+            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18, "cached_prompt_tokens": 0},
+        )
+        self.assertEqual(
+            done[0]["session_usage"],
+            {"prompt_tokens": 22, "completion_tokens": 14, "total_tokens": 36, "cached_prompt_tokens": 0},
+        )
 
     async def test_malformed_and_missing_provider_usage_are_normalized(self):
         for index, (processor, expected) in enumerate(
             (
-                (_fake_process_malformed_usage, {"prompt_tokens": 9, "completion_tokens": 0, "total_tokens": 9}),
-                (_fake_process_missing_usage, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}),
+                (
+                    _fake_process_malformed_usage,
+                    {"prompt_tokens": 9, "completion_tokens": 0, "total_tokens": 9, "cached_prompt_tokens": 0},
+                ),
+                (
+                    _fake_process_missing_usage,
+                    {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cached_prompt_tokens": 0},
+                ),
             )
         ):
             session_id = f"usage-normalization-{index}"

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -14,6 +15,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.crew.brief import identity as agent_identity
     from scripts.crew.workboard.claim_dispatch import dispatch_workers, release_temp_task_creator, suggest_delegation
     from scripts.crew.workboard.claim_ops import claim, list_claims, release
     from scripts.crew.workboard.claim_utils import (
@@ -39,6 +41,7 @@ try:
         claims_gate,
     )
 except ImportError:  # pragma: no cover
+    from crew.brief import identity as agent_identity  # type: ignore
     from crew.workboard.claim_dispatch import (  # type: ignore
         dispatch_workers,
         release_temp_task_creator,
@@ -68,6 +71,13 @@ except ImportError:  # pragma: no cover
     )
 
 ROOT = DEFAULT_WORKBOARD.parent.parent
+
+
+def _binding_repo_root(workboard_path: Path) -> Path:
+    resolved = workboard_path.resolve()
+    if resolved.name.casefold() == "workboard.md" and resolved.parent.name.casefold() == "thomas":
+        return resolved.parents[2]
+    return resolved.parent
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -199,6 +209,24 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--dirty-claim-reason",
         default="",
         help="Required reason (>=12 chars) when --allow-dirty-claim is used.",
+    )
+    parser.add_argument(
+        "--allow-scope-takeover",
+        action="store_true",
+        help=(
+            "Claim a scope another agent's active claim already covers. "
+            "Requires --takeover-reason and is written to the claim override audit log."
+        ),
+    )
+    parser.add_argument(
+        "--takeover-reason",
+        default="",
+        help="Required reason (>=12 chars) when --allow-scope-takeover is used: who agreed to the handover, and where.",
+    )
+    parser.add_argument(
+        "--takeover-authorization-id",
+        default="",
+        help="Durable exact takeover authorization audit id (required while the holder is not verifiably stale/dead).",
     )
     parser.add_argument(
         "--allow-presence-override",
@@ -429,6 +457,15 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("Workboard claim tool: FAIL\n- --scope is required for --claim")
                 return 1
             agent = _resolve_agent(args.agent)
+            has_session_source = any(
+                str(os.getenv(key) or "").strip() for key in ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
+            )
+            if has_session_source or workboard_path.resolve() == Path(DEFAULT_WORKBOARD).resolve():
+                try:
+                    agent = agent_identity.require_bound_agent(agent, repo_root=_binding_repo_root(workboard_path))
+                except ValueError as exc:
+                    print(f"Workboard claim tool: FAIL\n- {exc}")
+                    return 1
             task = _resolve_task(args.task)
             ok, msg = claim(
                 workboard_path,
@@ -442,6 +479,9 @@ def run(argv: Sequence[str] | None = None) -> int:
                 dirty_reason=str(args.dirty_claim_reason or ""),
                 allow_presence_override=bool(args.allow_presence_override),
                 presence_override_reason=str(args.presence_override_reason or ""),
+                allow_scope_takeover=bool(args.allow_scope_takeover),
+                takeover_reason=str(args.takeover_reason or ""),
+                takeover_authorization_id=str(args.takeover_authorization_id or ""),
             )
             if not ok:
                 print(f"Workboard claim tool: FAIL\n- {msg}")

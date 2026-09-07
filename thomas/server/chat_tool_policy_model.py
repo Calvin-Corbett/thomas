@@ -31,6 +31,9 @@ _WRITE_PREFIXES = (
     "deploy.",
 )
 _WRITE_TOOLS = {
+    # goal.add / goal.done write the project's goal book, a file under the project root (2026-09-06)
+    "goal.add",
+    "goal.done",
     "api.import",
     "api.reload_imported",
     "api.remove",
@@ -163,6 +166,14 @@ _CHANNEL_TOOLS = {
 _SAFE_READ_PREFIXES = ("code.", "investigate.")
 _SAFE_READ_TOOLS = {
     "api.list_imported",
+    # ask_user only asks the person and waits; it touches nothing (2026-09-05)
+    "ask_user",
+    # todo.write only updates the checklist the page shows; it touches nothing (2026-09-05)
+    "todo.write",
+    # recent_work.list reads the Build and chat record the Library shows; it touches nothing (2026-09-06)
+    "recent_work.list",
+    # goal.list only reads the project's goal book (2026-09-06)
+    "goal.list",
     "config_mgmt.check_compliance",
     "config_mgmt.get_statistics",
     "config_mgmt.list_resources",

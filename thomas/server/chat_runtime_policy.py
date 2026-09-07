@@ -23,6 +23,7 @@ from thomas.server.chat_tool_policy import (
     canonical_tool_name,
     tool_policy_from_payload,
 )
+from thomas.tools.site_policy import configure_site_policy
 
 
 def resolve_chat_runtime_policy(
@@ -181,6 +182,13 @@ def resolve_chat_runtime_policy(
         max_parallel_tools=int(tool_prefs.max_parallel_tools),
         allowed_paths=_csv_lines(tool_prefs.allowed_paths),
         blocked_commands=_csv_lines(tool_prefs.blocked_commands, lower=True),
+    )
+    # The sensitive-site pause the browser tools consult is process-wide; the
+    # saved preference is the source of truth, installed on every resolve so a
+    # settings change reaches the next turn without a restart.
+    configure_site_policy(
+        extra_hosts=str(getattr(tool_prefs, "browser_sensitive_hosts", "") or ""),
+        mode=str(getattr(tool_prefs, "browser_sensitive_mode", "pause") or "pause"),
     )
 
     base_memory = bool(

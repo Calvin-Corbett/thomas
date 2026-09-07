@@ -91,10 +91,10 @@ def test_workflow_rail_is_a_list_and_setup_owns_configuration() -> None:
     for banished in ("Add workflow", "Selected workflow", "Configure ", "Mark ready", "Run once"):
         assert banished not in rail, f"{banished!r} still lives in the rail"
 
-    setup = support[support.index("function workflowsSetupHtml()"):support.index("function jobHtml()")]
+    setup = support[support.index("function workflowsSetupHtml()") : support.index("function jobHtml()")]
     for kept in ("Mark ready", "Run once", "Add workflow", "Configure "):
         assert kept in setup, f"{kept!r} was lost instead of moved"
-    assert "workflowsSetupHtml()" in support[support.index("function setupTabHtml()"):]
+    assert "workflowsSetupHtml()" in support[support.index("function setupTabHtml()") :]
 
 
 def test_every_dashboard_item_carries_a_spec_address() -> None:
@@ -122,8 +122,10 @@ def test_redesign_is_global_chrome_not_a_dashboard_footer() -> None:
     html = _read(WEB / "chat.html")
     support = _read(WEB / "js" / "unified_work_support.js")
 
-    assert 'id="tc-redesign-btn"' in html
-    assert 'data-ui-id="chat.action.redesign"' in html
+    # Since 2026-09-06 Redesign lives in the composer's plus menu (the owner: the
+    # Redesign button next to Canvas is gone), still global chrome, still one entry.
+    assert 'data-create-action="redesign"' in html
+    assert 'id="tc-redesign-btn"' not in html
     # The old footer button re-rolled the whole dashboard with no instruction.
     assert "Redesign with AI" not in support
     assert "tc-work-dash-foot" not in support

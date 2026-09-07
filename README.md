@@ -1,29 +1,94 @@
 # Thomas
 
-**Thomas is an AI workspace platform.** You install it once, give it your model API key, and from then on it runs locally — chat, memory, tool calls, browser automation, planning, swarms, marketplace plugins — all gated by your machine and your providers.
+**Thomas is a local AI workspace you own.** One server on your machine, one browser-shaped app, one CLI. You give it a model (a cloud key or a local model) and from then on it chats, remembers, builds and verifies software, runs scheduled work, drives a browser, and edits its own interface when you ask it to. Everything runs and is stored on your computer.
 
-Fresh install: run `run-ui.cmd`, open `http://127.0.0.1:8899`, and finish Easy Setup.
+Fresh install: run `run-ui.cmd`, open `http://127.0.0.1:8899`, finish Easy Setup. The desktop app (`desktop.cmd`) wraps the same server in a window whose tabs Thomas can see and act on.
 
-> **Status (2026-05-21):** Early product release, actively stabilizing. Core flows (Easy Setup → chat → memory → task dispatch → tool calls → mission control) are wired and exercised by CI. Edges (mobile companion, swarm wiring in `/api/chat`, desktop operator runtime helpers, some marketplace domain packages) are still mid-build. See [`CHANGELOG.md`](CHANGELOG.md) for what shipped recently.
+> **Status (2026-09-07):** version 0.19.x, in active development on a private `dev` branch that lands here as squashed releases. The lanes below are wired end to end and are exercised daily by the people building it; the "Known rough edges" section says exactly what is not yet right.
 
 ---
 
-## What Thomas actually is
+## What Thomas is
 
-Thomas is **one local server + one web UI + one CLI**. The server hosts everything: chat, memory, plugins, tools, mission control, marketplace, autonomy engine. The UI is a static web app served from the same process. The CLI is a separate entry that drives the same code paths.
+Thomas is not a chat window in front of an API. It is a workspace with three lanes in one shell:
 
-The architecture in 30 seconds:
+- **Chat** is the home tab. It answers, remembers, calls tools, and hands real work off to the other lanes with a task card you can follow.
+- **Build** takes a request for software, writes it in a workspace, runs it, plays it in a browser, and holds itself to an acceptance contract drawn from your own words before it says "done".
+- **Work** turns a job into a scheduled automation with its own inputs, runs, and outcomes, watched from Mission Control.
 
-- `thomas/core/` — config, persistence, token economy, LLM clients (bottom of the dependency tree; a few legacy `core`→`tools`/`server` imports remain and are tracked as debt in `thomas/_architecture.py`)
-- `thomas/agent/` — chat dispatch and the agent loop. Casual messages get fast replies, actionable messages get dispatched to the task manager
-- `thomas/server/` — aiohttp web app, routes, the web UI assets
-- `thomas/cli/` — CLI and REPL
-- `thomas/tools/` — tool definitions and registry
-- `thomas/memory/` — conversation and context stores
-- `thomas/marketplace/` — domain modules (asset studio, companion, observability, autonomy engine, cv, vision, etc.) that the agent can call into
-- `extensions/` + `thomas/plugins/` — installable plugins and the manifest catalog
+Around the lanes sits a browser: Chrome-style tabs, an omnibox, back and forward, a refresh button with a right-click "Restart server". Every Chat, Build or Work tab is its own page; the pinned home tab is Chat.
 
-Domain modules under `thomas/` are intentionally broad. The repo is a kitchen-sink platform on purpose — Thomas's value is that one workspace covers tasks that today require a half-dozen separate tools.
+Thomas is honest by construction. A reply with no evidence is never "done". A receipt says what a turn cost, or that the model server reported nothing. A run that fails says so, and the record keeps what it did produce. When the harness cannot verify something, it says it could not, rather than presenting a guess as a result.
+
+---
+
+## Everything Thomas can do
+
+Grouped by lane. Every item names something that exists in this tree and is reachable from the app; the tool counts come from the server's own registry.
+
+### Chat
+
+- Streams replies from any configured model: OpenAI-compatible endpoints (including a local Ollama or LM Studio), Anthropic, and an OpenAI Codex account, with a per-turn model switch in the top bar.
+- Hears a tool call even when a smaller model writes it into its text instead of calling it natively, and executes it through the same fence and policy as a native call.
+- Remembers across sessions with `remember` and `recall` tools and a memory fabric (scored retrieval, contradiction tracking, token-aware packing); temporary chats keep nothing.
+- Creates images, music and video from the plus menu, with a local model or an API key per medium, and shows the result in the chat's Activity panel.
+- Points at any part of its own interface and takes an instruction (**Redesign**): visual changes apply as a per-browser overlay you can undo; anything deeper becomes a Build run on Thomas's own source, fenced off from files other agents hold.
+- Keeps a visible checklist, asks one clear question with options when a decision is yours, records standing goals every later turn is held to, and shows what it made recently.
+- Prices every reply on the receipt line; a locally served model reads "local, no charge".
+- Exports a chat, branches a conversation from any message, rates a reply, and speaks or listens through a realtime voice surface.
+
+### Build
+
+- Turns a request into a workspace, writes the files, and runs them; web pages get a real browser playtest (`web.playtest`) against a served preview, never a file opened from disk.
+- Holds itself to an **acceptance contract** extracted from your ask (data-file fields, outputs, commands), checked in the workspace by a separate evaluator; the finish is a checked declaration, not a sentence.
+- Snapshots by manifest so a project without version control still has a before-and-after record of every run.
+- Previews deliverables on an isolated origin that serves the page's own packages and nothing beside them (no secrets, no git config).
+- Refuses to write into files another agent has claimed, in both dispatch paths (the in-process loop and the Claude CLI).
+- Records every run: transcript, tool receipts, changed files, verdict, tokens.
+
+### Work
+
+- Defines jobs with inputs, connectors and schedules; a job can link a one-time automation and a recurring one.
+- Runs them through Mission Control, with run history, outcomes, cancellation that waits for owned cleanup, and time-zone-consistent scheduling.
+- Suggests only connectors that are installed, and refuses to promise a hand-off it cannot perform.
+
+### Tools the model can call (170 registered)
+
+| Area | What is there |
+|---|---|
+| Files and code | read, write, search, list; unified-diff patches with per-hunk preflight; definition and reference lookup, project structure, hybrid semantic + lexical code search |
+| Shell and git | shell in the project directory (policy-gated); git status, diff, log, blame, commit, pull request; SSH exec and SFTP |
+| Browser | open, click, extract, console and network capture, screenshots, playtest of a served page |
+| Web | fetch a page as clean text; search |
+| Knowledge | library entries and research notes with a build-context step; RAG index over the repo and your documents |
+| Communication | email read, reply, send; calendar today, week, create, suggest times; Google Drive list, get, search, share; Telegram and Discord channels; notifications and webhooks |
+| Media and vision | image generation; vision analysis and OCR; realtime publish and subscribe |
+| Engineering | complexity, dead code, dependency tree, encoding and type detection, formatting, security audit, dependency policy, threat-model cadence |
+| Operations | blue/green upgrade with backup, promote and rollback; system tray agent; config drift and compliance; policy evaluation; preferences |
+| Workflow | flows with nodes and edges, sagas with compensation, two-phase transactions, templates, task management |
+| Trading (paper) | account, quotes, bars, positions, proposals against a simulated account |
+| Self | create a skill from a workflow, list and use trusted skills, ask the user, keep a todo, record a goal, list recent work |
+
+### Under the hood
+
+- **Coordination board.** Every agent working in this repository claims files on `plans/thomas/WORKBOARD.md`, binds a session before any mutation, and lands through a commit tool that runs the whole gate stack; 34 pre-commit hooks stand behind it, including one that refuses a commit importing a module git does not track.
+- **Verification.** A separate evaluator judges a Build against its contract; a monolith guard, an exception-handler gate, a changelog gate and an enforcement-integrity manifest stop the usual ways a codebase rots.
+- **Observability.** Runs are persisted and replayable (`/api/runs/{id}/events`, replay seek and step), with secrets redacted; a task ledger tracks chat to in-progress to complete.
+- **Self-update.** Doppelganger blue/green upgrades with rollback; Evolve runs let Thomas change its own code under the same fence and verification as any other build.
+- **Security posture.** Local-only by default; remote mode needs an API token and a CSRF token; runtime protection refuses agent writes into Thomas's own runtime unless a Windows Hello approval window is open; secrets are stored, never committed; a publish preflight scans for them before anything reaches this repository.
+
+---
+
+## Known rough edges
+
+Read this before assuming a lane is broken everywhere.
+
+- The isolated self-edit flow (demo a change in a candidate copy, then apply) is built but blocked: runtime protection currently fires inside the candidate copy, so a Redesign that needs source changes runs but cannot write there yet.
+- The first message sent after a page reload can be hidden by the previous chat being restored over it. The turn completes on the server; the fix is in progress.
+- A background build worker can be filed as failed by a stall watchdog whose window is shorter than a long reasoning turn, even when the deliverable exists and works.
+- The mobile companion (`thomas/companion/`) is a scaffold with API contracts, not a shipping app.
+- The desktop app is blocked on machines with Windows Smart App Control enabled; `docs/DESKTOP.md` explains.
+- Many domain modules under `thomas/marketplace/` were generated in one burst, are wired into the tool registry, and have no real caller. They are debt, not features; the catalogue above lists only what has one.
 
 ---
 
@@ -34,17 +99,15 @@ Domain modules under `thomas/` are intentionally broad. The repo is a kitchen-si
 3. Open `http://127.0.0.1:8899` if it does not open automatically
 4. Complete Easy Setup. Thomas verifies the connection before it unlocks chat, memory, and automation.
 
-Optional advanced/manual setup: run `setup.cmd`.
-If setup breaks, run `repair.cmd` (or use **Auto Repair** in the onboarding wizard).
+Optional advanced/manual setup: run `setup.cmd`. If setup breaks, run `repair.cmd` (or use **Auto Repair** in the onboarding wizard).
 
-Troubleshooting and model setup details: [`ONBOARDING.md`](ONBOARDING.md).
-Security policy: [`SECURITY.md`](SECURITY.md).
+Troubleshooting and model setup: [`ONBOARDING.md`](ONBOARDING.md). Desktop app: [`docs/DESKTOP.md`](docs/DESKTOP.md). Security policy: [`SECURITY.md`](SECURITY.md).
 
 ---
 
 ## Production / remote deploy
 
-Thomas defaults to **local-only**. To run remote/production, you copy `.env.thomas.production.example` → `.env.thomas.production` (or set the env inline) and:
+Thomas defaults to **local-only**. To run remote/production, copy `.env.thomas.production.example` to `.env.thomas.production` (or set the env inline) and:
 
 1. Set a strong `THOMAS_SERVER_API_TOKEN`
 2. Set `THOMAS_MUTATING_CSRF_TOKEN` for request-level protection on mutating `/api` and `/gateway` routes
@@ -53,52 +116,23 @@ Thomas defaults to **local-only**. To run remote/production, you copy `.env.thom
 5. Keep logs rotating via `THOMAS_LOG_FILE`, `THOMAS_LOG_MAX_BYTES`, `THOMAS_LOG_BACKUP_COUNT`
 6. Set `THOMAS_ALLOW_REMOTE_PRODUCTION=1` only for explicitly approved remote deployments
 
-Gateway security runbook: [`docs/ops/GATEWAY_SECURITY_RUNBOOK.md`](docs/ops/GATEWAY_SECURITY_RUNBOOK.md).
-Docker deploy: [`docs/ops/DOCKER_DEPLOY.md`](docs/ops/DOCKER_DEPLOY.md).
-Retry guidance: [`docs/ops/RETRY_POLICY.md`](docs/ops/RETRY_POLICY.md).
-Installer build docs: [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md).
+Gateway security runbook: [`docs/ops/GATEWAY_SECURITY_RUNBOOK.md`](docs/ops/GATEWAY_SECURITY_RUNBOOK.md). Docker deploy: [`docs/ops/DOCKER_DEPLOY.md`](docs/ops/DOCKER_DEPLOY.md). Retry guidance: [`docs/ops/RETRY_POLICY.md`](docs/ops/RETRY_POLICY.md). Installer build: [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md).
 
 ---
 
-## Everyday Use
+## The architecture in 30 seconds
 
-The normal-user contract is intentionally simple:
-
-- **Chat** — ask Thomas questions, plan work, keep the main surface calm
-- **Tasks** — turn requests into checklists, follow-ups, and next actions
-- **Memory** — keeps context between sessions only when you want it
-- **Integrations** — connect providers and tools gradually instead of all at once
-- **Repair** — `status`, `quickstart`, `setup`, or `repair.cmd` when something drifts
-
-## Grow Into Advanced Thomas Safely
-
-The deeper systems (mission control, workboards, swarms, autonomy engine, marketplace builder, companion mobile) are intentional. They exist so Thomas can expand without becoming fragile. Normal use should not require understanding those systems on day one.
-
----
-
-## What works today vs. what's still rough
-
-**Works:**
-
-- Easy Setup → first chat (Sections 1–5 of the design spec are wired end-to-end)
-- Memory store + retrieval across sessions
-- Task ledger (`/api/task-ledger`) tracking chat → in-progress → complete transitions
-- Asset Studio routes (`/api/asset-studio/v1/*`)
-- Marketplace catalog + plugin install/uninstall (`/api/marketplace/*`)
-- Discord bridge for chat (`channel=discord`)
-- Codex bridge for ChatGPT-account-based model use
-- Mission control (`/api/mission/*`) including autopilot intent detection
-- 90+ CI gates (linting, type safety, secret scanning, repo hygiene, audit trails)
-
-**Rough or partial (don't be surprised):**
-
-- Mobile companion (`thomas/companion/`) — scaffold + API contracts exist, app handoff still in flight
-- Desktop operator (`thomas/desktop_operator/`) — runtime helpers have signature mismatches under refactor (xfailed in CI)
-- Swarm in `/api/chat` — `thomas/agent/swarm.py` is fully tested but not called from the chat route (planned: see CHANGELOG)
-- Some marketplace domain packages — STATUS.md says one thing, code says another (gradual cleanup in progress)
-- UI polish — expect transient layout artifacts in dense composer / overlay screens
-
-If you find a layer that's misrepresented, please open an issue rather than assuming it's broken everywhere.
+- `thomas/core/` — config, persistence, token economy, LLM clients (bottom of the dependency tree)
+- `thomas/agent/` — chat dispatch and the agent loop; casual messages get fast replies, actionable ones go to the task manager
+- `thomas/server/` — aiohttp web app, routes, the web UI (the browser shell, the three lanes, Redesign)
+- `thomas/forge/` — Build: dispatchers, verification, manifests, previews, self-edit
+- `thomas/work/` — Work: job store and mission delegation
+- `thomas/cli/` — CLI and REPL
+- `thomas/tools/` — tool definitions and the registry
+- `thomas/memory/` — conversation and context stores
+- `thomas/marketplace/` — domain modules; see the rough edges above
+- `extensions/` + `thomas/plugins/` — installable plugins and the manifest catalogue
+- `scripts/forge/gates/` — the commit gates; `scripts/crew/` — the coordination board and its tools
 
 ---
 
@@ -110,7 +144,7 @@ If you find a layer that's misrepresented, please open an issue rather than assu
 python scripts/crew/brief/startup_router.py --summary "<task summary>"
 ```
 
-Canonical router doc: [`docs/ai/AGENT_ROUTER.md`](docs/ai/AGENT_ROUTER.md). The router replaces "read every doc in the repo first" — the long docs are reference, not first-pass reading.
+Canonical router doc: [`docs/ai/AGENT_ROUTER.md`](docs/ai/AGENT_ROUTER.md).
 
 **Before you build:**
 
@@ -120,52 +154,31 @@ Canonical router doc: [`docs/ai/AGENT_ROUTER.md`](docs/ai/AGENT_ROUTER.md). The 
 4. Check `agent_safety.toml` for protected files, forbidden patterns, circular-import rules
 5. Check the planning board: [`plans/thomas/WORKBOARD.md`](plans/thomas/WORKBOARD.md)
 
-**Planning & coordination:**
+**Planning & coordination:** the board is `plans/thomas/WORKBOARD.md`; the planning hub is `plans/thomas/README.md`; repo structure is `docs/REPO_STRUCTURE_PROTOCOL.md`; the task ecosystem protocol is `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`. Active plans go in `plans/thomas/` (`tasks/`, `problems/`), enforced by a gate.
 
-- Active planning board: `plans/thomas/WORKBOARD.md`
-- Planning hub: `plans/thomas/README.md`
-- Repo structure source of truth: `docs/REPO_STRUCTURE_PROTOCOL.md`
-- Task ecosystem protocol: `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`
-
-Active plans go in `plans/thomas/` (`tasks/`, `problems/`, canonical plan files), NOT randomly in `docs/` or repo root. Enforced by `scripts/forge/gates/plan_structure_gate.py` + `scripts/forge/gates/release_update_gate.py`.
-
-**Branch awareness (required — prevents duplicate work):**
-
-Before creating any new file or feature, check for existing work on other branches:
+**Branch awareness (required):** before creating any new file or feature, check for existing work on other branches:
 
 ```bash
-git branch -a --list '*<keyword>*'          # branches named after the feature
-git log --all --oneline --grep='<keyword>'  # commits mentioning it anywhere
+git branch -a --list '*<keyword>*'
+git log --all --oneline --grep='<keyword>'
 ```
 
-If you find matching branches or commits, READ the diff before building anything new.
-
----
+**Landing code:** commits go through `scripts/crew/brief/commit.py`, which runs every gate and refuses what the board does not allow. `--no-verify` is banned. Run `ruff check` on any Python you touch.
 
 ## Common contributor commands
 
 ```bash
 # Pre-commit + pre-push hooks (run these once per checkout)
-pre-commit install
-pre-commit install --hook-type pre-push
+pre-commit install && pre-commit install --hook-type pre-push
 
 # Fast static checks
-python scripts/auto_checks.py --quick
-
-# Full auto checks (lint + gates + step-up test protocol)
-python scripts/auto_checks.py
+ruff check . && ruff format --check .
 
 # Full pytest ladder
-python scripts/test_stepup_protocol.py
-
-# Repo-wide tests including the monolithic suite (slow)
-python scripts/test_stepup_protocol.py --max-stage full
-
-# Clean junk artifacts + report worktree cleanliness
-thomas repo-clean --apply --strict
+python -m pytest -q
 
 # Status check (gate-ready)
-thomas status --json --strict-worktree
+python scripts/crew/brief/commit.py --agent <you> --message "x" --dry-run
 ```
 
 ---
@@ -178,40 +191,26 @@ Thomas indexes its own source so the agent can answer questions about the codeba
 pip install chromadb sentence-transformers
 ```
 
-Lexical search uses SQLite FTS5 (built into many Python sqlite builds). If FTS5 isn't available, lexical auto-disables.
-
-Query operators inside the search string (no schema changes):
-
-- `path:thomas/tools ToolRegistry`
-- `file:rag_index.py build`
-- `ext:.py registry register`
-- `symbol:ToolRegistry kind:class`
-- `phrase:"ToolRegistry class"`
-- `regex:/rag\.search/`
-
-Results come with line-numbered previews when the file is on disk.
+Lexical search uses SQLite FTS5. Query operators inside the search string: `path:thomas/tools ToolRegistry`, `file:rag_index.py build`, `ext:.py registry register`, `symbol:ToolRegistry kind:class`, `phrase:"ToolRegistry class"`, `regex:/rag\.search/`.
 
 ---
 
 ## How Thomas is documented
 
-Every Thomas instance has its own **private bible** (`docs/THOMAS_BIBLE.md`) — a per-user, accurate record of what's actually true about that workspace's code. The bible is intentionally not committed to the public repo; it captures internal honesty (what works, what doesn't, what STATUS.md files lied about) for the operator who maintains that copy.
+Every Thomas instance has its own **bible** (`docs/THOMAS_BIBLE.md`): an accurate record of what is true about that workspace's code, traced one user step at a time. `docs/FEATURE_CATALOG.md` is the map of major capabilities; `docs/FRONTIER_PARITY.md` is the running ledger of what was checked against frontier tools and what was found. `CHANGELOG.md` says what changed and why, in plain sentences.
 
-This README is the public-facing summary. If something here disagrees with reality, file an issue — the bible was almost certainly right.
+This README is the public-facing summary. If something here disagrees with reality, file an issue; the bible was almost certainly right.
 
 ---
 
-## Release safety
+## How this repository is published
 
-The public repo enforces:
+Development happens on a private `dev` branch with the coordination board and the full gate stack. Releases reach this repository's `main` as a single squashed landing after `scripts/forge/publish/preflight.py` (secret scan, blocked-file check, private-marker sweep) passes. The public repo enforces the same in CI:
 
-- `scripts/forge/gates/public_repo_leak_guard.py` — blocks any push that re-introduces competitor names or internal-only doc patterns (installed 2026-05-21 after a manual cleanup arc)
-- `scripts/forge/publish/preflight.py` — secret scan + blocked-file check before push to public main
-- `.github/workflows/github-publish-safety.yml` — same gates run server-side in CI
-- `.github/workflows/robustness-gates.yml` — full test ladder, module audits, repo hygiene
-- `.github/workflows/site-release.yml` — `apps/site/` deploy guard with visual proof
-
-If you fork the repo and want to extend any of these, the gates' configuration is intentionally readable — `FORBIDDEN_SUBSTRINGS` / `FORBIDDEN_PATHS` / `ALLOWLIST_PATHS` lists at the top of each gate file.
+- `scripts/forge/gates/public_repo_leak_guard.py` blocks any push that re-introduces internal-only patterns
+- `.github/workflows/github-publish-safety.yml` runs the publish gates server-side
+- `.github/workflows/robustness-gates.yml` runs the full test ladder, module audits, repo hygiene
+- `.github/workflows/publish.yml` builds to PyPI only when a version tag is pushed
 
 ---
 

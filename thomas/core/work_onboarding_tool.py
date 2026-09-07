@@ -45,6 +45,13 @@ WORK_ONBOARDING_UPDATE_TOOL: dict = {
                             "connector_suggestions": {
                                 "type": "array",
                                 "items": {"type": "string"},
+                                "description": (
+                                    "Ids of INSTALLED Thomas connectors this workflow will sign in through "
+                                    "(the ids the Work connectors list shows, e.g. gmail). Usually an empty "
+                                    "list: a plain HTTP check, a shell step, a file, or a Mission Control "
+                                    "note needs no connector. Never invent a name; a job cannot be created "
+                                    "with a suggestion that is not installed."
+                                ),
                             },
                         },
                         "required": ["id", "name", "purpose", "type", "connector_suggestions"],

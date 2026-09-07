@@ -9,7 +9,7 @@ from typing import Any
 
 from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.instruction_contract import apply_root_instructions
-from thomas.core import task_bot_runtime
+from thomas.core import task_bot_runtime, task_checklist
 from thomas.core.file_access import PROJECT, READ_ONLY, clamp_file_access_level
 from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
@@ -21,6 +21,15 @@ from thomas.server.chat_delegation_canvas import (
     run_canvas_worker,
 )
 from thomas.server.chat_delegation_canvas_completion import complete_canvas_delivery
+from thomas.server.chat_delegation_checklist import (
+    TASK_TYPE_INSTRUCTION,
+)
+from thomas.server.chat_delegation_checklist import (  # re-exported for the checklist gate
+    extract_read_paths as _extract_read_paths,
+)
+from thomas.server.chat_delegation_checklist import (
+    extract_task_type_label as _extract_task_type_label,
+)
 from thomas.server.chat_delegation_deliverable import (  # noqa: F401
     _build_result_summary,
     _files_changed_since,
@@ -138,7 +147,7 @@ def apply_task_update(
     eid = resolve_active_task_ref(session_id, task_ref, repo_root=repo_root)
     if not eid:
         return {"ok": False, "error": f"No running task matches reference '{task_ref}'."}
-    root = _resolve_repo_root(repo_root)
+    root = repo_root
     try:
         if cancel:
             task_bot_runtime.request_cancel(eid, actor="user", repo_root=root)
@@ -191,6 +200,11 @@ async def start_background_delegation(
     workspace = str(workspace or "isolated").strip().lower()
     if workspace not in {"isolated", "project"}:
         workspace = "isolated"
+    # A job on the live repo coordinates at that repo's board; an isolated one-off
+    # (a document, a deliverable) at the user's own board in the data dir.
+    from thomas.core.project_root import coordination_root
+
+    repo_root = coordination_root(repo_root, workspace)
     emitter = _DelegationEmitter(emit_event)
     bot = pick_bot_for_specialist(specialist_id)
     declared_surface = str(surface or "task").strip().lower()
@@ -718,6 +732,11 @@ async def _start_agent_worker_delegation(
     # Honor the same root instruction contract on delegated workers as the main
     # agent surface: resolve project instructions rooted at the worker's cwd and
     # fold them into its system prompt. Empty workspaces degrade cleanly (no-op).
+    if task_checklist.checklists_enabled():  # the worker labels its own task type; no extra model call
+        instructions += TASK_TYPE_INSTRUCTION
+    contract_block = task_bot_runtime.task_checklist_runtime.attach_contract(execution_id, prompt, work_dir, repo_root=root)
+    if contract_block:  # what "done" means, fixed before the worker starts (see acceptance_contract)
+        instructions = f"{instructions}\n\n{contract_block}"
     instructions = apply_root_instructions(instructions, cwd=work_dir)
 
     from thomas.server.exhaustive_runtime import is_exhaustive

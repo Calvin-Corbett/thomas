@@ -236,3 +236,100 @@ def test_claim_releases_folder_claim_when_workboard_sync_fails(monkeypatch, caps
     assert payload["ok"] is False
     assert payload["error"] == "workboard failed"
     assert released == [("claim-1", None)]
+
+
+# --- coordination threads must only open with someone who can reply -----------
+
+
+def test_only_addressable_agents_get_coordination_threads() -> None:
+    """Presence reports agents and raw OS processes under one field.
+
+    A named agent can run `message.py --ack`. `process:41196` cannot -- nothing
+    behind a PID has a workboard identity. Opening a thread with one produced a
+    p1 message that stayed open forever, and because the dedup keys on the PAIR,
+    every new PID minted a fresh permanent thread. 254 of 303 open messages ended
+    up un-ackable, which buried the real ones.
+    """
+    from scripts.active_folders import _is_addressable_agent
+
+    for identity in ("claude", "codex-auto", "claude-repair", "Codex 1"):
+        assert _is_addressable_agent(identity) is True, identity
+
+    for identity in (
+        "process:41196",
+        "process:7668",
+        "pid:900",
+        "PID:900",
+        "unregistered-worktree",
+        "Unregistered-Thing",
+        "",
+        "   ",
+    ):
+        assert _is_addressable_agent(identity) is False, identity
+
+
+def test_presence_only_peers_do_not_create_messages(tmp_path, monkeypatch) -> None:
+    """A presence warning naming a PID must notify nobody."""
+    import scripts.active_folders as af
+
+    sent: list[str] = []
+
+    class _FakeTool:
+        @staticmethod
+        def list_messages(path, state=None):
+            return True, {"messages": []}
+
+        @staticmethod
+        def send_message(path, **kwargs):
+            sent.append(str(kwargs.get("recipient")))
+            return True, {}
+
+    workboard = tmp_path / "WORKBOARD.md"
+    workboard.write_text("# Thomas Workboard\n", encoding="utf-8")
+    monkeypatch.setattr(af, "workboard_message_tool", _FakeTool)
+    monkeypatch.setattr(af, "_find_conflicts", lambda paths, ignore_agent=None: [])
+
+    notified = af._notify_overlap_coordination(
+        "claude",
+        ["thomas/core/config.py"],
+        presence_warnings=[
+            {"agent_id": "process:41196", "message": "Unregistered activity detected"},
+            {"agent_id": "unregistered-worktree", "message": "Unregistered worktree"},
+        ],
+        workboard_path=workboard,
+    )
+
+    assert notified == [], notified
+    assert sent == [], sent
+
+
+def test_a_real_agent_peer_still_gets_a_thread(tmp_path, monkeypatch) -> None:
+    """The narrowing must not silence genuine agent-to-agent coordination."""
+    import scripts.active_folders as af
+
+    sent: list[str] = []
+
+    class _FakeTool:
+        @staticmethod
+        def list_messages(path, state=None):
+            return True, {"messages": []}
+
+        @staticmethod
+        def send_message(path, **kwargs):
+            sent.append(str(kwargs.get("recipient")))
+            return True, {}
+
+    workboard = tmp_path / "WORKBOARD.md"
+    workboard.write_text("# Thomas Workboard\n", encoding="utf-8")
+    monkeypatch.setattr(af, "workboard_message_tool", _FakeTool)
+    monkeypatch.setattr(af, "_find_conflicts", lambda paths, ignore_agent=None: [])
+
+    notified = af._notify_overlap_coordination(
+        "claude",
+        ["thomas/core/config.py"],
+        presence_warnings=[{"agent_id": "codex-auto", "message": "active in this repo"}],
+        workboard_path=workboard,
+    )
+
+    assert notified == ["codex-auto"], notified
+    assert sent == ["codex-auto"], sent

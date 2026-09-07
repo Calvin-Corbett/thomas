@@ -1,4 +1,4 @@
-"""thomas doctor — architecture health check command.
+"""Architecture health check for ``thomas architecture-doctor``.
 
 Runs all fitness checks from _architecture.py and reports results.
 """
@@ -76,7 +76,7 @@ def _check_ext_isolation(thomas_root: pathlib.Path) -> list[str]:
     return violations
 
 
-@click.command("doctor")
+@click.command("architecture-doctor")
 def doctor_command() -> None:
     """Run Thomas architecture health checks."""
     from thomas import __version__

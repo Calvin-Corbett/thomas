@@ -12,6 +12,7 @@ from typing import Any
 from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
 from .build_verify import _verify_and_iterate
+from .forge_code_settings import direct_shell_allowed
 from .forge_event_stream import (
     CLAUDE_CLI_LOGIN_GUIDANCE,
     CLI_READ_ONLY_TOOL_NAMES,
@@ -21,11 +22,30 @@ from .forge_event_stream import (
     _stream_cli,
     is_claude_cli_login_error,
 )
+from .task_context import repo_context_for
 
 # Safe default toolset for a dispatched headless build: edit files only — NO shell,
 # git, or network. The dispatched agent can change code; it cannot run commands or
 # touch the network. The human watcher reviews the resulting diff and runs the tests.
 SAFE_CLI_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep", "MultiEdit", "NotebookEdit")
+
+
+def _claude_cli_tools(
+    allowed_tools: tuple[str, ...],
+    guardrails: str,
+    *,
+    autonomy_level: int,
+    file_access: str,
+) -> tuple[tuple[str, ...], bool]:
+    """Return the exact built-in surface and whether Bash must be denied."""
+
+    _ = allowed_tools  # caller rules never widen the exact built-in surface
+    direct_shell = direct_shell_allowed(
+        autonomy_level=autonomy_level,
+        file_access=file_access,
+        guardrails=guardrails,
+    )
+    return SAFE_CLI_TOOLS + (("Bash",) if direct_shell else ()), not direct_shell
 
 
 def _is_read_only_cli_tool(tool_name: str) -> bool:
@@ -49,6 +69,14 @@ class CliDispatchResult:
     returncode: int = 0
     changed_files: list[str] = field(default_factory=list)
     stdout_tail: str = ""
+    # What Claude actually SAID. The stream carries it, `emit_event` reads it to
+    # set `saw_reply`, and before 2026-09-03 it was dropped there — so a caller
+    # could learn that a reply arrived but never what it was. A benchmark run on
+    # that day recorded two tasks as `ok chars=0` while 368 lines of real work
+    # sat in the worktree: the dispatcher had no field to return the answer in.
+    # `stdout_tail` is not a substitute; it is a truncated tail of raw stream
+    # JSON, not the reply.
+    reply: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +85,9 @@ class CliDispatchResult:
             "returncode": self.returncode,
             "changed_files": self.changed_files,
             "prompt_chars": len(self.prompt),
+            # Counted, not inlined: a summary line stays readable, and a zero
+            # here is the visible symptom of the bug above.
+            "reply_chars": len(self.reply),
         }
 
 
@@ -108,6 +139,36 @@ def _is_action_refusal(text: str) -> bool:
     return inability and blocker
 
 
+# Claude Code consults only Edit(path) (and Read) rules for file permissions; a Write,
+# NotebookEdit or MultiEdit path rule is accepted, never consulted, and warned about at
+# startup (docs: permissions, "Read and Edit"). Edit(path) governs every built-in write.
+_FENCE_RULE_TOOLS = ("Edit",)
+
+
+def _fence_settings_file(cwd: str | Path, protected_paths: list[str] | None) -> Path | None:
+    """Write a Claude Code settings file whose deny rules cover the run's fence.
+
+    A directory entry becomes a glob over everything under it. Returns None when
+    there is nothing to fence, so the command line stays as it was.
+    """
+    entries = []
+    for raw in protected_paths or []:
+        text = str(raw or "").strip().replace("\\", "/")
+        if not text:
+            continue
+        if text.endswith("/") or (Path(cwd) / text).is_dir():
+            text = text.rstrip("/") + "/**"
+        entries.append(text)
+    if not entries:
+        return None
+    rules = [f"{tool}({entry})" for entry in entries for tool in _FENCE_RULE_TOOLS]
+    folder = Path(cwd) / ".thomas"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / "claude-fence-settings.json"
+    target.write_text(json.dumps({"permissions": {"deny": rules}}, indent=2), encoding="utf-8")
+    return target
+
+
 def dispatch_via_claude_cli(
     goal: str,
     *,
@@ -129,6 +190,8 @@ def dispatch_via_claude_cli(
     file_access: str = "project",
     guardrails: str = "guarded",
     autonomy_level: int = 3,
+    protected_paths: list[str] | None = None,
+    allow_without_history: bool = False,
 ) -> CliDispatchResult:
     """Dispatch a build task to Claude Code HEADLESSLY (``claude -p``) — the safe,
     observable bridge that needs no GUI/PC control.
@@ -153,6 +216,14 @@ def dispatch_via_claude_cli(
     """
     import shutil
 
+    # An empty `definition` is what made every dispatch start amnesiac: the
+    # model got the task sentence and nothing else, and paid in turns to
+    # rediscover a repository the index already knows. Fill it only when the
+    # caller supplied nothing, so an explicit definition always wins, and treat
+    # retrieval failure as no context rather than as a failed dispatch.
+    if not str(definition or "").strip():
+        definition = repo_context_for(goal)
+
     prompt = compose_headless_prompt(
         goal,
         definition=definition,
@@ -176,16 +247,18 @@ def dispatch_via_claude_cli(
 
     emit_sink = emit or _default_emit
     saw_reply = False
+    saw_final = False
     saw_refusal = False
     saw_tool_activity = False
     saw_named_tool = False
     saw_mutating_tool = False
     saw_failed_tool_result = False
     saw_login_failure = False
+    final_reply = ""
 
     def emit_event(event: dict[str, Any]) -> None:
-        nonlocal saw_reply, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
-        nonlocal saw_failed_tool_result, saw_login_failure
+        nonlocal saw_reply, saw_final, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
+        nonlocal saw_failed_tool_result, saw_login_failure, final_reply
         kind = str(event.get(FORGE_EVENT_KEY) or "")
         if kind == "error" and is_claude_cli_login_error(str(event.get("text") or "")):
             # The CLI died unauthenticated. Remember it so the run's recorded
@@ -196,6 +269,19 @@ def dispatch_via_claude_cli(
             saw_login_failure = True
         if kind in {"final", "say"}:
             reply_text = str(event.get("text") or "")
+            # A `final` is the whole answer and replaces what came before; a
+            # `say` is one chunk of a streamed one, so those accumulate. Keeping
+            # only the last `say` would truncate every multi-chunk reply to its
+            # tail.
+            if kind == "final":
+                final_reply = reply_text
+            elif reply_text:
+                final_reply += reply_text
+            if kind == "final":
+                # ``final`` comes only from a Claude result whose ``is_error``
+                # is false. That protocol verdict is stronger than the process
+                # code: Claude can exit 1 after landing and reporting the work.
+                saw_final = True
             if _is_conversational_reply(reply_text):
                 saw_reply = True
             if _is_action_refusal(reply_text):
@@ -232,13 +318,28 @@ def dispatch_via_claude_cli(
         # turn / no edits), so we MUST also set --input-format stream-json and feed
         # a {"type":"user",...} line. (Verified: raw stdin -> only system events;
         # stream-json user message -> assistant + result.)
+        cli_tools, deny_bash = _claude_cli_tools(
+            allowed_tools,
+            guardrails,
+            autonomy_level=autonomy_level,
+            file_access=file_access,
+        )
+        # The run's file fence, as Claude Code permission deny rules: a fenced
+        # write is refused by the CLI itself, never left to the brief's prose.
+        fence_settings = _fence_settings_file(cwd, protected_paths)
         cmd = [
             claude,
             "-p",
             "--model",
             model,
+            "--permission-mode",
+            "dontAsk",
+            *(["--settings", str(fence_settings)] if fence_settings else []),
+            "--tools",
+            *cli_tools,
             "--allowedTools",
-            *allowed_tools,
+            *cli_tools,
+            *(["--disallowedTools", "Bash"] if deny_bash else []),
             "--output-format",
             "stream-json",
             "--input-format",
@@ -271,11 +372,15 @@ def dispatch_via_claude_cli(
 
     verify_failed = False
     try:
-        snap_before = forge_code_git.snapshot(cwd)
+        # The person's open-time choice to work without history arrives as this
+        # argument, never inferred; with it the snapshot is a content manifest.
+        snap_before = forge_code_git.snapshot(cwd, allow_without_history=allow_without_history)
         rc, out = _run_pass(prompt)
-        # The RUN/TEST step: only verify a clean edit pass (a non-zero edit pass
-        # is already a failure to surface). The engine runs the real check.
-        if verify and rc == 0:
+        # The RUN/TEST step follows protocol truth, not only process truth.
+        # Claude can emit a confirmed successful ``result`` and then exit 1;
+        # that run is eligible to succeed, so its changed files must still pass
+        # the real verifier before we accept it.
+        if verify and (rc == 0 or saw_final):
             vrc = _verify_and_iterate(
                 cwd, snap_before, emit_event, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
             )
@@ -297,8 +402,16 @@ def dispatch_via_claude_cli(
     # failure was manufacturing an error out of the tool's NAME. Unnamed tool
     # activity still disqualifies: nothing is known about what it did.
     tools_disqualify = saw_tool_activity and not read_only_run and (saw_failed_tool_result or not saw_named_tool)
-    conversation_reply = rc == 0 and not changed and saw_reply and not tools_disqualify and not action_refused
-    if rc != 0:
+    process_completed = rc == 0 or saw_final
+    conversation_reply = process_completed and not changed and saw_reply and not tools_disqualify and not action_refused
+    succeeded = (
+        process_completed
+        and not saw_login_failure
+        and not verify_failed
+        and not action_refused
+        and (bool(changed) or conversation_reply)
+    )
+    if rc != 0 and not succeeded:
         if saw_login_failure:
             # Not a build failure at all — the executor could never start work.
             # The exit code is kept in `returncode`; the sentence carries what
@@ -316,13 +429,19 @@ def dispatch_via_claude_cli(
             reason = "Claude replied without changing files"
         else:
             reason = "claude ran but made NO repo changes (no-op) — nothing to review"
+    elif rc:
+        reason = (
+            f"dispatched via claude CLI ({len(changed)} file(s) changed; "
+            f"Claude reported success; build process exited {rc})"
+        )
     else:
         reason = f"dispatched via claude CLI ({len(changed)} file(s) changed; engine checks passed)"
     return CliDispatchResult(
-        ok=(rc == 0 and not action_refused and (bool(changed) or conversation_reply)),
+        ok=succeeded,
         reason=reason,
         prompt=prompt,
         returncode=rc,
         changed_files=changed,
         stdout_tail=str(out)[-2000:],
+        reply=final_reply,
     )

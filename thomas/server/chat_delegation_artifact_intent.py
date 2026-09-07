@@ -114,8 +114,27 @@ _STOPWORDS = frozenset(_STOPWORD_TEXT.split())
 _MIN_SUBJECT_TOKENS = 3
 
 
+# Structured data payloads share no prose with any request: a CSV of SKUs and
+# quantities matched 0 words of "build the closing stock CSV" while being exactly
+# right, and the reply said it might not be what was asked. Word overlap cannot
+# judge them; silence means not checkable, as promised above.
+_DATA_SUFFIXES = {".csv", ".tsv", ".json", ".jsonl"}
+# A stage brief carries private context ("active_workflow_id", "app-75c1...",
+# {"assigned": "ops"}): identifiers and brace blocks are not the subject.
+_IDENTIFIER_RE = re.compile(r"[_0-9]")
+_BRACE_BLOCK_RE = re.compile(r"\{[^{}]*\}|```.*?```", re.DOTALL)
+
+
 def _tokens(text: str) -> set[str]:
-    return {t for t in _TOKEN_RE.findall(str(text or "").casefold()) if t not in _STOPWORDS}
+    return {
+        t
+        for t in _TOKEN_RE.findall(str(text or "").casefold())
+        if t not in _STOPWORDS and not _IDENTIFIER_RE.search(t)
+    }
+
+
+def _subject_tokens(prompt: str) -> set[str]:
+    return _tokens(_BRACE_BLOCK_RE.sub(" ", str(prompt or "")))
 
 
 def _readable_text(path: Path) -> str:
@@ -161,7 +180,7 @@ def artifact_intent_issues(
     no request, no artifacts, a request too vague to have a subject, or files we
     cannot read. Silence here means "not checkable", never "checked and fine".
     """
-    subject = _tokens(prompt)
+    subject = _subject_tokens(prompt)
     if len(subject) < _MIN_SUBJECT_TOKENS:
         return []
     if work_dir is None or not created_files:
@@ -195,7 +214,7 @@ def artifact_intent_issues(
                 continue
         except (OSError, ValueError):
             continue
-        if path.suffix.casefold() not in _READABLE_SUFFIXES:
+        if path.suffix.casefold() not in _READABLE_SUFFIXES or path.suffix.casefold() in _DATA_SUFFIXES:
             continue
         text = _readable_text(path)
         if not text.strip():

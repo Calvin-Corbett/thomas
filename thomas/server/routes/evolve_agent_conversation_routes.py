@@ -215,6 +215,14 @@ def build_evolve_agent_conversation_handlers(
             project_root,
             title=title or None,
             source_evolve_item=source or None,
+            # A Redesign thread on Thomas's own UI: the person asked for this
+            # change on purpose, so the source-repo guard lets it run there.
+            self_edit=bool((body or {}).get("self_edit")),
+            # The board's fence for a self-edit thread, computed server-side at send time
+            # (work_dashboard_runtime.fenced_paths_for) and handed to the run's write tools.
+            protected_paths=[
+                str(p)[:400] for p in ((body or {}).get("protected_paths") or []) if isinstance(p, str) and p.strip()
+            ],
         )
         report = settings.capability_report()
         forge_code_projects.bind_conversation(

@@ -74,11 +74,18 @@ def _add_task_to_workboard(
     summary: str,
     scope: str = "",
     workboard_path: Path | None = None,
+    repo_root: Path | None = None,
 ) -> bool:
-    wb = workboard_path or _DEFAULT_WORKBOARD
-    if not wb.exists():
-        log.error("Workboard not found at %s", wb)
-        return False
+    # The board belongs to the project the task is about. A project that has
+    # none yet gets one made, the way `git init` sets a repo up - coordination
+    # is never dropped because the folder was new.
+    if workboard_path is None:
+        from thomas.core.praxis_scaffold import ensure_praxis
+        from thomas.core.project_root import resolve_project_root
+
+        wb = ensure_praxis(resolve_project_root(explicit=repo_root)).board
+    else:
+        wb = workboard_path
 
     lines = wb.read_text(encoding="utf-8").splitlines(keepends=True)
     new_line = (
@@ -162,7 +169,9 @@ def dispatch_to_workboard(
     if len(text) > 200:
         summary += "..."
 
-    repo_root_path = Path(repo_root).resolve() if repo_root is not None else _ROOT
+    from thomas.core.project_root import resolve_project_root
+
+    repo_root_path = resolve_project_root(explicit=repo_root)
     scope_tokens = [scope] if str(scope or "").strip() else ["chat"]
     execution = task_bot_runtime.create_execution(
         session_id=session_id,
@@ -190,6 +199,7 @@ def dispatch_to_workboard(
             summary=summary,
             scope=scope,
             workboard_path=workboard_path,
+            repo_root=repo_root_path,
         )
         if not added:
             task_bot_runtime.fail_execution(

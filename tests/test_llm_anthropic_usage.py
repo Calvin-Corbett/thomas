@@ -103,6 +103,8 @@ class TestAnthropicUsageAccounting(unittest.TestCase):
         self.assertEqual(usage.prompt_tokens, 15)
         self.assertEqual(usage.completion_tokens, 5)
         self.assertEqual(usage.total_tokens, 20)
+        # the cache-read count reaches the receipt instead of dissolving into prompt_tokens
+        self.assertEqual(usage.cached_prompt_tokens, 2)
 
 
 if __name__ == "__main__":

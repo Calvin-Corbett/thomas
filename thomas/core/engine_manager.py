@@ -103,25 +103,28 @@ class EngineManager:
         # 2. Tool Factory
         results["tool_factory"] = self._start_tool_factory()
 
-        # 3. Initiative Engine (autonomous work when idle)
+        # 3. Aliveness sweep (cheap world sampling; records, never speaks)
+        results["aliveness"] = self._start_aliveness()
+
+        # 4. Initiative Engine (autonomous work when idle)
         results["initiative"] = self._start_initiative(executor_fn, notify_fn)
 
-        # 4. Testing Suite (background quality testing)
+        # 5. Testing Suite (background quality testing)
         results["testing_suite"] = self._start_testing_suite(executor_fn, notify_fn)
 
-        # 5. Code Issue Engine (iterative detect/fix loops)
+        # 6. Code Issue Engine (iterative detect/fix loops)
         results["code_issue_engine"] = self._start_code_issue_engine(notify_fn)
 
-        # 6. Self Upgrade Engine (upgrade opportunity management)
+        # 7. Self Upgrade Engine (upgrade opportunity management)
         results["self_upgrade_engine"] = self._start_self_upgrade_engine(notify_fn)
 
-        # 7. UI Workflow Engine (UI consistency + effects + assets)
+        # 8. UI Workflow Engine (UI consistency + effects + assets)
         results["ui_workflow_engine"] = self._start_ui_workflow_engine(notify_fn)
 
-        # 8. Workspace Sync Engine (automatic git commit/push workflow)
+        # 9. Workspace Sync Engine (automatic git commit/push workflow)
         results["workspace_sync_engine"] = self._start_workspace_sync_engine(notify_fn)
 
-        # 9. Local Agent Engine (hardware-aware local background tasks)
+        # 10. Local Agent Engine (hardware-aware local background tasks)
         results["local_agent_engine"] = self._start_local_agent_engine(notify_fn)
 
         self._running = True
@@ -137,6 +140,14 @@ class EngineManager:
     def stop_all(self) -> None:
         """Stop all engines gracefully."""
         self._running = False
+
+        # Stop the aliveness sweep
+        try:
+            from thomas.core.aliveness import get_aliveness_loop
+
+            get_aliveness_loop().stop()
+        except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as exc:
+            log.debug("aliveness loop stop skipped: %s", exc)
 
         # Stop initiative
         try:
@@ -345,6 +356,59 @@ class EngineManager:
             self._status[name] = EngineStatus(name=name, error=str(e))
             return False
 
+    def _start_aliveness(self) -> bool:
+        """Start the periodic world sweep, when the loop is switched on.
+
+        Separate from the InitiativeEngine on purpose. The engine only fires
+        after 30 minutes of silence with an open goal; a mute run needs to
+        record what changed regardless of whether there was work to do, or the
+        log it exists to produce comes back empty.
+        """
+        name = "aliveness"
+        try:
+            from thomas.core.aliveness import get_aliveness_loop, is_enabled, sweep_interval_s
+        except (ImportError, ModuleNotFoundError) as exc:
+            self._status[name] = EngineStatus(name=name, error=f"unavailable: {exc}")
+            return True
+        if not is_enabled():
+            self._status[name] = EngineStatus(
+                name=name, running=False, error="disabled: THOMAS_ALIVENESS_ENABLED not set"
+            )
+            return True
+        try:
+            loop = get_aliveness_loop()
+            loop.start()
+            self._engines[name] = loop
+            self._status[name] = EngineStatus(
+                name=name,
+                running=True,
+                started_at=datetime.now(timezone.utc).isoformat(),
+                details={"mode": "mute", "interval_s": sweep_interval_s()},
+            )
+            log.info("AlivenessLoop: started (mute, every %.0fs)", sweep_interval_s())
+            return True
+        except (RuntimeError, OSError, ValueError) as exc:
+            log.error("AlivenessLoop: failed to start: %s", exc)
+            self._status[name] = EngineStatus(name=name, error=str(exc))
+            return False
+
+    @staticmethod
+    def _aliveness_executor() -> Callable | None:
+        """Return the mute-mode aliveness executor, or None when it is off.
+
+        Off unless THOMAS_ALIVENESS_ENABLED is set. Nothing about the engine's
+        behaviour changes for anyone who has not opted in.
+        """
+        try:
+            from thomas.core.aliveness import build_initiative_executor, is_enabled
+        except (ImportError, ModuleNotFoundError) as exc:
+            log.debug("aliveness loop unavailable: %s", exc)
+            return None
+        if not is_enabled():
+            return None
+        log.info("InitiativeEngine: aliveness loop enabled — mute mode executor")
+        return build_initiative_executor()
+
     def _start_initiative(
         self,
         executor_fn: Callable | None,
@@ -357,6 +421,15 @@ class EngineManager:
         # None). Production callers (app_core.start_all, agents_runtime) currently
         # supply no executor, so starting the daemon and reporting running=True
         # would be a false-positive. Skip starting and report disabled instead.
+        #
+        # THOMAS_ALIVENESS_ENABLED supplies one: the mute-mode executor from
+        # thomas.core.aliveness, which observes and records instead of acting.
+        # It runs dry-run, so no goal is executed, closed, or announced. See
+        # plans/thomas/ALIVENESS_DESIGN_2026-08-27.md.
+        dry_run = False
+        if executor_fn is None:
+            executor_fn = self._aliveness_executor()
+            dry_run = executor_fn is not None
         if executor_fn is None:
             self._status[name] = EngineStatus(
                 name=name,
@@ -369,14 +442,18 @@ class EngineManager:
             from thomas.core.initiative import get_initiative_engine
 
             ie = get_initiative_engine()
-            ie.start(executor_fn=executor_fn, notify_fn=notify_fn)
+            ie.start(executor_fn=executor_fn, notify_fn=notify_fn, dry_run=dry_run)
             self._engines[name] = ie
             self._status[name] = EngineStatus(
                 name=name,
                 running=True,
                 started_at=datetime.now(timezone.utc).isoformat(),
+                details={"mode": "mute (aliveness)" if dry_run else "executing"},
             )
-            log.info("InitiativeEngine: started (idle threshold: 30min)")
+            log.info(
+                "InitiativeEngine: started (idle threshold: 30min, dry_run=%s)",
+                dry_run,
+            )
             return True
         except Exception as e:
             log.error("InitiativeEngine: failed to start: %s", e)

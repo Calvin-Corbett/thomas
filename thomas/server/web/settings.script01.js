@@ -73,15 +73,17 @@
       };
     }
 
+    // Overlay themes (thomas/server/overlay) are known names too; their labels come from the view the server put in the page.
+    const overlayThemeNames = () => { const v = window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.overlayView ? window.ThomasWorkspaceShell.overlayView() : null; const out = {}; Object.entries((v && v.themes) || {}).forEach(([k, s]) => { out[k] = String((s && s.label) || k); }); return out; };
     function normalizeChatTheme(theme, fallback = 'nebula') {
       const normalized = String(theme || '').trim().toLowerCase();
-      return Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, normalized) ? normalized : fallback;
+      return Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, normalized) || overlayThemeNames()[normalized] ? normalized : fallback;
     }
 
     function readStoredChatTheme() {
       try {
         const stored = window.localStorage.getItem(CHAT_THEME_STORAGE_KEY);
-        return stored && Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, stored) ? stored : null;
+        return stored && (Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, stored) || overlayThemeNames()[stored]) ? stored : null;
       } catch (error) {
         return null;
       }
@@ -99,20 +101,17 @@
 
     function applyChatTheme(theme, options = {}) {
       const normalized = normalizeChatTheme(theme);
+      settings.theme = normalized;   // recorded FIRST: the engine's themechange event comes back here
       /* The unified engine owns BOTH root attributes and color-scheme; setting
          only data-theme left a stale data-thomas-theme outranking the change. */
-      if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) {
-        window.ThomasWorkspaceShell.applyTheme(normalized, { persist: false });
-      } else {
-        document.documentElement.dataset.theme = normalized;
-        document.documentElement.dataset.thomasTheme = normalized;
-      }
+      if (window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.applyTheme) window.ThomasWorkspaceShell.applyTheme(normalized, { persist: false });
+      else { document.documentElement.dataset.theme = normalized; document.documentElement.dataset.thomasTheme = normalized; }
       if (document.body) document.body.dataset.theme = normalized;
-      settings.theme = normalized;
       const select = document.getElementById('theme');
+      if (select) Object.entries(overlayThemeNames()).forEach(([k, l]) => { if (!Array.from(select.options).some((o) => o.value === k)) select.add(new Option(l, k)); });
       if (select && select.value !== normalized) select.value = normalized;
       const label = document.getElementById('activeThemeName');
-      if (label) label.textContent = CHAT_THEME_NAMES[normalized];
+      if (label) label.textContent = CHAT_THEME_NAMES[normalized] || overlayThemeNames()[normalized] || normalized;
       if (options.persist) {
         try { window.localStorage.setItem(CHAT_THEME_STORAGE_KEY, normalized); } catch (error) { /* localStorage is optional */ }
       }
@@ -500,7 +499,8 @@
       });
 
       window.addEventListener('thomas:themechange', event => {
-        if (event.detail && event.detail.theme) applyChatTheme(event.detail.theme);
+        // The engine fires this from inside applyChatTheme too: a recorded theme is not re-applied (that looped forever).
+        if (event.detail && event.detail.theme && event.detail.theme !== settings.theme) applyChatTheme(event.detail.theme);
       });
 
       window.addEventListener('message', event => {
@@ -743,67 +743,16 @@
       button.setAttribute('aria-label', isPassword ? 'Hide key' : 'Show key');
     }
 
-    // These buttons are intentionally honest until real authorization routes exist.
-    function showUnavailableIntegration(name) {
-      showToast(`${name} setup is not available in this build. No account changes were made.`, 'info');
-    }
-
-    function connectGoogleWorkspace() { showUnavailableIntegration('Google Workspace'); }
-    function connectSlack() { showUnavailableIntegration('Slack'); }
-    function connectNotion() { showUnavailableIntegration('Notion'); }
-
-    // Maintenance functions
-    function clearCache() {
-      pendingConfirmAction = async () => {
-        try {
-          const response = await fetch('/api/cache/clear', { method: 'POST' });
-          if (!response.ok) throw new Error('Failed to clear cache');
-          showToast('Cache cleared successfully', 'success');
-        } catch (error) {
-          showToast('Failed to clear cache', 'error');
-        }
-      };
-      showConfirmModal('Clear Cache?', 'This will remove all cached data. This operation cannot be undone.', 'Clear');
-    }
-
-    function exportLogs() {
-      try {
-        fetch('/api/logs/export')
-          .then(r => r.blob())
-          .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `thomas-logs-${new Date().toISOString()}.zip`;
-            a.click();
-            showToast('Logs exported successfully', 'success');
-          });
-      } catch (error) {
-        showToast('Failed to export logs', 'error');
-      }
-    }
-
-    function confirmReset() {
-      pendingConfirmAction = async () => {
-        try {
-          settings.__themeDirty = true;
-          const response = await fetch(PREFERENCES_API, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(buildPreferencesPatch(defaultLegacySettings())),
-          });
-          if (!response.ok) throw new Error('Failed to reset settings');
-          const data = await response.json();
-          applyChatTheme(defaultLegacySettings().theme, { persist: true });
-          Object.assign(settings, buildLegacySettings(data));
-          populateForm();
-          showToast('All settings reset to factory defaults', 'success');
-        } catch (error) {
-          showToast('Failed to reset settings', 'error');
-        }
-      };
-      showConfirmModal('Reset All Settings?', 'This will restore all settings to factory defaults. This action cannot be undone.', 'Reset All');
-    }
+    // The integration and maintenance buttons live in settings.maintenance.js,
+    // moved verbatim so this file stays under the 800-line limit. Loaded from
+    // here because settings.html is past the HTML limit and cannot change; the
+    // sibling is a classic script and shares this file's top-level scope.
+    (function loadMaintenance() {
+      const el = document.createElement('script');
+      el.src = '/static/settings.maintenance.js';
+      el.addEventListener('error', () => console.error('[thomas] settings.maintenance.js failed to load'));
+      document.head.appendChild(el);
+    }());
 
     // Modal functions
     function showConfirmModal(title, message, confirmText) {

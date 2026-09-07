@@ -12,7 +12,6 @@ import os
 import shutil
 import sys
 from collections.abc import Sequence
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from thomas.core.config import (
@@ -99,7 +98,11 @@ def _setup_logging(environment: str) -> None:
         backup_count = 7
 
     root = logging.getLogger()
-    handler = RotatingFileHandler(
+    # Two servers on one data dir share this file; a refused rotation must
+    # not drop the record (thomas.server.log_handlers).
+    from thomas.server.log_handlers import SharedRotatingFileHandler
+
+    handler = SharedRotatingFileHandler(
         log_path,
         maxBytes=max(1024 * 1024, max_bytes),
         backupCount=max(1, backup_count),

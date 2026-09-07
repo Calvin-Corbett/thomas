@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "branch": "integration/unify-2026-08-14",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "awaiting archive-push before deletion (worktree-fleet closure remnant, local-only, per plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/dead-legacy-phase-c-3a884c61",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktree dlc3, head c679adee)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/release-preflight-repair-20260723",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktree trp, head 3a884c61)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/dead-legacy-retirement-20260723",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktrees thomas-dead-legacy-retirement/w426, head 4e7bce5f; duplicate content also pushed as codex/privacy-public-release-integration-4e7bce5f)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/installer-hardening-candidate-2c84f452",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktrees thomas-installer-hardening/thomas-unified-permissions-artifact-2c84f452, head 2c84f452; duplicate content also pushed as codex/unified-permissions-artifact-2c84f452-20260723)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/unified-permissions-artifact-579b3c98-20260723",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktrees thomas-code-gpt-provider-route-579b3c98/thomas-installer-hardening-579b3c98/thomas-unified-permissions-artifact-579b3c98/thomas-public-release-c679adee, head 579b3c98; duplicate content also pushed as codex/code-gpt-provider-route-579b3c98-20260723, codex/installer-hardening-candidate-579b3c98, codex/privacy-public-release-c679adee)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/organic-routing-no-regex-20260722",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktrees thomas-organic-routing-no-regex/thomas-organic-profile-frontier-phaseb/thomas-public-release-e6420c41, head e6420c41; duplicate content also pushed as codex/organic-profile-frontier-phaseb-20260723, codex/privacy-public-release-candidate-e6420c41)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    },
+    {
+      "branch": "codex/release-history-20260723",
+      "owner": "calvin (standing delegation 2026-08-24, claude-recorded)",
+      "purpose": "held for unlanded-work inspection per the cleanup (Phase 0.3 worktree salvage; commit content matches archived worktrees thomas-public-release-audit/thomas-release-history, head 5f852179; duplicate content also pushed as codex/privacy-public-release-audit-20260723)",
+      "created_on": "2026-08-27",
+      "expires_on": "2026-09-30",
+      "refs": "plans/thomas/tasks/PRAXIS-PHASE0-WORKTREES/closure_report.md"
+    }
+  ]
+}

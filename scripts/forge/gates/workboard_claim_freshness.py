@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -77,6 +78,46 @@ def _line_commit_unix(workboard_path: Path, line_no: int) -> int | None:
             except Exception:
                 return None
     return None
+
+
+_CLAIMED_AT_RE = re.compile(r"(?:^|;)\s*claimed_at=([^;]+)")
+
+
+def _declared_claim_unix(workboard_path: Path, line_no: int) -> int | None:
+    """The age the claim states about ITSELF, or None if it does not say.
+
+    `git blame` cannot answer this. The claim tools rewrite the whole claims
+    block whenever any agent claims or releases, so every line inherits the
+    timestamp of the most recent board write no matter how old the claim is.
+    Measured on 2026-09-03: a claim made on 2026-09-01 - roughly 74 hours, past
+    the 72-hour limit - reported 12.23 hours, the same figure as three claims
+    made that morning, because one commit had rewritten all four lines.
+
+    An age that can never exceed the time since the last board write cannot
+    expire anything, which is why `claim_adopt` and `claim_cleanup` never fired.
+    """
+    try:
+        line = workboard_path.read_text(encoding="utf-8", errors="replace").splitlines()[line_no - 1]
+    except (OSError, IndexError):
+        return None
+    match = _CLAIMED_AT_RE.search(line)
+    if not match:
+        return None
+    try:
+        parsed = datetime.fromisoformat(match.group(1).strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+def _claim_unix(workboard_path: Path, line_no: int) -> int | None:
+    """What the claim says, else what git can infer. Stated age wins."""
+    declared = _declared_claim_unix(workboard_path, line_no)
+    if declared is not None:
+        return declared
+    return _line_commit_unix(workboard_path, line_no)
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -171,7 +212,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     max_age_seconds = float(args.max_age_hours) * 3600.0
     now_ts = now.timestamp()
     for claim in claims:
-        claim_ts = _line_commit_unix(workboard_path, int(claim.line_no))
+        claim_ts = _claim_unix(workboard_path, int(claim.line_no))
         if claim_ts is None:
             stale_claims.append(
                 {

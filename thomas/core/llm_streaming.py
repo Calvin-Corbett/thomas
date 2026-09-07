@@ -19,7 +19,14 @@ import httpx
 
 from thomas.core.codex_auth import resolve_access_token
 from thomas.core.codex_provider import OPENAI_CODEX_BASE_URL
-from thomas.core.llm_shared import RETRYABLE_STATUS, LLMError, StreamEvent, TokenUsage, ToolCallAccumulator
+from thomas.core.llm_shared import (
+    RETRYABLE_STATUS,
+    LLMError,
+    StreamEvent,
+    TokenUsage,
+    ToolCallAccumulator,
+    embedded_tool_call,
+)
 from thomas.core.llm_streaming_anthropic import stream_anthropic
 from thomas.core.llm_streaming_codex import (
     _build_openai_codex_request,
@@ -98,6 +105,48 @@ async def stream_openai(
                 tool_calls: dict[int, ToolCallAccumulator] = {}
                 tool_call_idx_by_id: dict[str, int] = {}
                 legacy_tool_idx = -1
+                # A model without native tool calling writes the call into its
+                # content. While a request carried tools, content that opens like
+                # JSON is held rather than streamed; at the end it is either the
+                # one call it turned out to be (emitted as tool-call events, so
+                # the loop's fence, policy and execution see a real call) or
+                # text released whole. Prose is never held, and a request that
+                # offered no tools is never touched.
+                offered_names: set[str] = set()
+                for spec in tools or []:
+                    fn = spec.get("function") if isinstance(spec, dict) else None
+                    fn_name = str((fn or {}).get("name") or "") if isinstance(fn, dict) else ""
+                    if fn_name:
+                        offered_names.add(fn_name)
+                        offered_names.add(owner._openai_tool_name_map.get(fn_name, fn_name))
+                held_text = ""
+                holding = bool(offered_names)
+                held_flushed = False
+
+                def _release_held() -> list[StreamEvent]:
+                    nonlocal held_text, holding
+                    holding = False
+                    if not held_text:
+                        return []
+                    text, held_text = held_text, ""
+                    return [StreamEvent(type="token", data={"text": text})]
+
+                def _held_as_call() -> list[StreamEvent]:
+                    nonlocal held_text, holding
+                    holding = False
+                    call = embedded_tool_call(held_text, offered_names) if not tool_calls else None
+                    if call is None:
+                        return _release_held()
+                    name, arguments = call
+                    held_text = ""
+                    idx = _next_tool_idx()
+                    tc_id = f"call_content_{idx}"
+                    tool_calls[idx] = ToolCallAccumulator(id=tc_id, name=name, arguments=arguments, finished=True)
+                    return [
+                        StreamEvent(type="tool_call_start", data={"id": tc_id, "name": name, "index": idx}),
+                        StreamEvent(type="tool_call_delta", data={"id": tc_id, "delta": arguments}),
+                        StreamEvent(type="tool_call_end", data={"id": tc_id, "name": name, "arguments": arguments}),
+                    ]
 
                 def _next_tool_idx() -> int:
                     idx = 0
@@ -144,6 +193,10 @@ async def stream_openai(
                     # while others emit "data: <json>"; accept both.
                     data_str = line[5:].lstrip()
                     if data_str.strip() == "[DONE]":
+                        if not held_flushed:
+                            held_flushed = True
+                            for ev in _held_as_call():
+                                yield ev
                         # Emit end events for any unfinished tool calls
                         await _emit_pending_tool_ends()
                         for ev in pending_events:
@@ -159,10 +212,13 @@ async def stream_openai(
 
                     # Extract usage if present
                     if "usage" in chunk and chunk["usage"]:
+                        details = chunk["usage"].get("prompt_tokens_details")
+                        cached = details.get("cached_tokens", 0) if isinstance(details, dict) else 0
                         usage = TokenUsage(
                             prompt_tokens=chunk["usage"].get("prompt_tokens", 0),
                             completion_tokens=chunk["usage"].get("completion_tokens", 0),
                             total_tokens=chunk["usage"].get("total_tokens", 0),
+                            cached_prompt_tokens=int(cached or 0) if isinstance(cached, (int, float)) else 0,
                         )
                         owner.session_usage.add(usage)
                         yield StreamEvent(type="usage", data={"usage": usage})
@@ -174,7 +230,14 @@ async def stream_openai(
 
                     # Text content
                     content = delta.get("content")
-                    if content:
+                    if content and holding:
+                        held_text += content
+                        probe = held_text.lstrip()
+                        looks_like_json = not probe or probe[0] in "{`"
+                        if not looks_like_json or len(held_text) > 12_000:
+                            for ev in _release_held():
+                                yield ev
+                    elif content:
                         yield StreamEvent(type="token", data={"text": content})
 
                     # Tool calls (providers may emit list or a single object)
@@ -280,6 +343,9 @@ async def stream_openai(
                     # Finish reason
                     finish = choices[0].get("finish_reason")
                     if finish in ("tool_calls", "function_call", "stop"):
+                        if not held_flushed:
+                            held_flushed = True
+                            pending_events[0:0] = _held_as_call()
                         await _emit_pending_tool_ends()
 
                     for ev in pending_events:

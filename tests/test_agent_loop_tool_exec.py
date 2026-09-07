@@ -321,3 +321,78 @@ def test_sanitize_write_tool_path_allows_benchmark_absolute_paths(tmp_path: Path
 
     assert approved == str(target.resolve())
     assert error is None
+
+
+# ── Absolute paths inside the sandbox (TB-4.0 run 3: 26 refusals, all first calls) ──
+
+
+class _SandboxLoopStub(_LoopStub):
+    def __init__(self, sandbox: Path) -> None:
+        super().__init__(autonomy_level=4, runner=_SpyRunner())
+        self.config = SimpleNamespace(
+            tools=SimpleNamespace(sandbox_path=str(sandbox)),
+            memory=SimpleNamespace(root_path=str(sandbox / "memory")),
+        )
+
+
+def test_read_tool_accepts_an_absolute_path_inside_the_sandbox(tmp_path: Path) -> None:
+    target = tmp_path / "app" / "main.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("print(1)\n", encoding="utf-8")
+    loop = _SandboxLoopStub(tmp_path)
+
+    events = asyncio.run(
+        _run_execute_tools(loop, [{"id": "t1", "name": "fs.read_file", "arguments": {"path": str(target)}}])
+    )
+
+    assert events[0].data["ok"] is True, events[0].data
+
+
+def test_read_tool_absolute_path_outside_the_sandbox_is_refused_without_calling_it_a_write_tool(
+    tmp_path: Path,
+) -> None:
+    sandbox = tmp_path / "ws"
+    sandbox.mkdir()
+    outside = tmp_path / "elsewhere.txt"
+    loop = _SandboxLoopStub(sandbox)
+
+    events = asyncio.run(
+        _run_execute_tools(loop, [{"id": "t1", "name": "fs.read_file", "arguments": {"path": str(outside)}}])
+    )
+
+    text = str(events[0].data["result_text"])
+    assert events[0].data["ok"] is False
+    assert "write tool" not in text
+    assert "fs.read_file" in text
+    assert "outside" in text
+    assert str(sandbox.resolve()) in text
+
+
+# ── Repeated identical failure: disable the call, keep the run ─────────────────
+
+
+class _AlwaysFailingRegistry:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def execute(self, name: str, args: dict[str, Any]) -> ToolResult:  # noqa: ARG002
+        self.calls += 1
+        return ToolResult(ok=False, error="fatal: not a git repository")
+
+
+def test_third_identical_failure_carries_the_disable_note_and_the_fourth_never_runs() -> None:
+    loop = _LoopStub(autonomy_level=4, runner=_SpyRunner())
+    registry = _AlwaysFailingRegistry()
+    loop.tools = registry
+    call = [{"id": "t1", "name": "git.status", "arguments": {}}]
+
+    texts = []
+    for _ in range(4):
+        events = asyncio.run(_run_execute_tools(loop, call))
+        texts.append(str(events[0].data["result_text"]))
+
+    assert "disabled" not in texts[0]
+    assert "disabled" not in texts[1]
+    assert "disabled" in texts[2]
+    assert "disabled" in texts[3]
+    assert registry.calls == 3

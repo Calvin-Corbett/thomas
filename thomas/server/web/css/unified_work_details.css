@@ -116,9 +116,47 @@
   color: var(--c-text);
   font-size: 11px;
 }
-.tc-work-onboarding-map span {
+/* The chooser holds a label and one button per mapped workflow; each button
+   names the workflow and, under it, what it is for. Without these rules the
+   buttons were default grey boxes with the name running into the purpose. */
+.tc-work-onboarding-map > strong {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 6px;
+  font: 700 11px var(--font-sans);
+}
+.tc-work-onboarding-map > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.tc-work-onboarding-map button {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  text-align: left;
+  cursor: pointer;
+}
+.tc-work-onboarding-map button:hover,
+.tc-work-onboarding-map button.is-selected {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+.tc-work-onboarding-map button strong {
+  display: block;
+  font: 700 12px var(--font-sans);
+}
+.tc-work-onboarding-map button span {
+  display: block;
+  margin-top: 3px;
   color: var(--c-dim);
-  text-align: right;
+  font-size: 11px;
+  line-height: 1.45;
 }
 .tc-work-check {
   display: flex;

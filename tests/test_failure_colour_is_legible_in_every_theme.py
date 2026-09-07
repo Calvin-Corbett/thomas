@@ -33,6 +33,7 @@ WEB = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web"
 CHAT_HTML = WEB / "chat.html"
 CHAT_THEMES_JS = WEB / "js" / "chat_themes.js"
 THEME_SOURCES = (CHAT_HTML, CHAT_THEMES_JS)
+CHAT_ERROR_SURFACES = (CHAT_HTML, WEB / "js" / "chat_connect_prompt.js")
 
 # 4.5:1 is the AA floor for body text. The verdict text and the run summary use
 # this colour, not just the icon, so the stricter figure is the right one.
@@ -71,10 +72,7 @@ def test_every_theme_defines_a_failure_colour() -> None:
 
     for token in ("--c-danger", "--c-warn"):
         missing = [name for name, tokens in themes.items() if not tokens.get(token)]
-        assert not missing, (
-            f"these themes have no {token}, so that state falls back to a dark-theme "
-            f"literal: {missing}"
-        )
+        assert not missing, f"these themes have no {token}, so that state falls back to a dark-theme literal: {missing}"
 
 
 def test_the_failure_colour_is_readable_on_its_own_background() -> None:
@@ -146,3 +144,25 @@ def test_the_light_worlds_do_not_reuse_the_dark_red() -> None:
         assert tokens.get("--c-danger", "").lower() != "#ff9a9a", (
             f"{name} is back on the dark-theme red, which measured about 2:1 there"
         )
+
+
+def test_chat_error_surfaces_never_bypass_the_theme_danger_token() -> None:
+    """Live chat errors must resolve the danger colour from the active theme."""
+
+    offenders: list[str] = []
+    for path in CHAT_ERROR_SURFACES:
+        source = path.read_text(encoding="utf-8")
+        without_token_fallbacks = re.sub(
+            r"var\(\s*--c-danger\s*,\s*#ff9a9a\s*\)",
+            "",
+            source,
+            flags=re.I,
+        )
+        if "#ff9a9a" in without_token_fallbacks.lower():
+            offenders.append(path.relative_to(WEB).as_posix())
+
+    assert len(CHAT_ERROR_SURFACES) == 2
+    assert not offenders, (
+        "bare #ff9a9a is unreadable in the light and sandstone themes; "
+        "use var(--c-danger, #ff9a9a) in these live chat surfaces -> " + "; ".join(offenders)
+    )

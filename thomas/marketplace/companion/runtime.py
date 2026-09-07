@@ -8,7 +8,8 @@ from .kernel import CompanionKernel
 from .registry import ModuleRegistry, ModuleState
 
 
-def _entrypoint_fs_path(kernel: CompanionKernel, module: ModuleState) -> Path:
+def entrypoint_fs_path(kernel: CompanionKernel, module: ModuleState) -> Path:
+    """Resolve a module entrypoint to a real path, pinned inside its own namespace."""
     rel = str(module.entrypoint or "").replace("\\", "/").strip()
     prefix = f"modules/{module.module_id}/"
     if not rel.startswith(prefix):
@@ -62,7 +63,7 @@ class ModuleRuntime:
             if slot_key not in list(row.slots or []):
                 continue
             try:
-                fs_path = _entrypoint_fs_path(self.kernel, row)
+                fs_path = entrypoint_fs_path(self.kernel, row)
             except Exception as exc:
                 errors.append({"module_id": row.module_id, "error": str(exc)})
                 continue

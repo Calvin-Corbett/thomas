@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
 import subprocess
 import sys
@@ -18,9 +16,14 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.crew.brief import commit_integrity, coordination_barrier
     from scripts.crew.brief import identity as agent_identity
     from scripts.forge.gates import workboard_claims as claims_gate
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
+    from crew.brief import (
+        commit_integrity,  # type: ignore
+        coordination_barrier,  # type: ignore
+    )
     from crew.brief import identity as agent_identity  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
@@ -38,6 +41,8 @@ PATH_SCOPED_GATES: dict[str, tuple[str, ...]] = {
 }
 LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("protected_files", (sys.executable, "scripts/forge/gates/protected_files_gate.py")),
+    ("merge_resurrection", (sys.executable, "scripts/forge/gates/merge_resurrection_gate.py")),
+    ("workboard_evidence", (sys.executable, "scripts/forge/gates/workboard_evidence_gate.py")),
     ("agent_safety", (sys.executable, "scripts/validate_agent_changes.py")),
     ("exception_handler", (sys.executable, "scripts/forge/gates/exception_handler_gate.py")),
     ("duplicate_filename", (sys.executable, "scripts/forge/gates/duplicate_filename_gate.py")),
@@ -60,7 +65,9 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("worktree_rules", (sys.executable, "scripts/forge/gates/worktree_rules_gate.py")),
     ("worktree_branch", (sys.executable, "scripts/forge/gates/worktree_branch_guard.py")),
     ("workboard_claims", (sys.executable, "scripts/forge/gates/workboard_claims.py", "--require-identity-metadata")),
+    ("workboard_task_plans", (sys.executable, "scripts/forge/gates/workboard_task_plans.py", "--staged")),
     ("workboard_task_problems", (sys.executable, "scripts/forge/gates/workboard_task_problems.py")),
+    ("problem_closure", (sys.executable, "scripts/forge/gates/problem_closure_gate.py")),
     (
         "workboard_changed_files",
         (
@@ -359,27 +366,45 @@ def _selected_paths(repo_root: Path, scope_selection: ScopeSelection, include_pa
         ]
 
     selected = sorted(dict.fromkeys(in_scope))
-    if selected:
-        for path in RELEASE_METADATA_FILES:
-            if path in changed_set and path not in selected:
-                selected.append(path)
+    # Release metadata is never swept into a scoped commit. Auto-appending any dirty
+    # CHANGELOG.md / pyproject.toml / thomas/__init__.py meant whoever committed next
+    # carried everyone else's prose under their own name (11e35e95 shipped another
+    # session's 0.19.34 entry inside the verification contract), and the two version
+    # files could land half (pyproject.toml is protected, __init__.py is not).
+    # CHANGELOG.md lands only when the committer includes it; a dirty version bump
+    # outside the selection refuses the commit (see _stray_version_files) so its
+    # owner lands both files as one.
     return selected
 
 
-def _build_commit_message(message: str, *, agent: str, scope_selection: ScopeSelection) -> str:
-    base = str(message or "").strip()
-    if not base:
-        raise ValueError("commit message is required")
+def _stray_version_files(repo_root: Path, selected: Sequence[str]) -> list[str]:
+    """Version files that are dirty but not part of this commit."""
+
+    changed = set(_parse_status_paths(repo_root))
+    return [path for path in ("pyproject.toml", "thomas/__init__.py") if path in changed and path not in selected]
+
+
+def _commit_trailers(*, agent: str, scope_selection: ScopeSelection) -> list[tuple[str, str]]:
     trailers = [
-        f"Thomas-Agent: {agent}",
-        f"Thomas-Scope: {','.join(scope_selection.scopes)}",
-        f"Thomas-Commit-Mode: {'scoped-fallback' if scope_selection.source == FALLBACK_SOURCE else 'scoped-local'}",
+        ("Thomas-Agent", agent),
+        ("Thomas-Scope", ",".join(scope_selection.scopes)),
+        (
+            "Thomas-Commit-Mode",
+            "scoped-fallback" if scope_selection.source == FALLBACK_SOURCE else "scoped-local",
+        ),
     ]
     if scope_selection.source == CLAIM_SOURCE:
-        trailers.insert(1, f"Thomas-Claim: {','.join(scope_selection.scopes)}")
+        trailers.insert(1, ("Thomas-Claim", ",".join(scope_selection.scopes)))
     if scope_selection.reason:
-        trailers.append(f"Thomas-Fallback-Reason: {scope_selection.reason}")
-    return base.rstrip() + "\n\n" + "\n".join(trailers) + "\n"
+        trailers.append(("Thomas-Fallback-Reason", scope_selection.reason))
+    return trailers
+
+
+def _build_commit_message(message: str, *, agent: str, scope_selection: ScopeSelection) -> str:
+    return commit_integrity.compose_message(
+        message,
+        _commit_trailers(agent=agent, scope_selection=scope_selection),
+    )
 
 
 def _temp_index_env(agent: str, index_path: Path, *, scope_selection: ScopeSelection | None = None) -> dict[str, str]:
@@ -434,6 +459,36 @@ def _prepare_temp_index(
     return index_path, holder
 
 
+def _gate_script(command: Sequence[str]) -> str:
+    """The gate's own script path, if the command runs one."""
+    for token in command:
+        text = str(token)
+        if text.endswith(".py") and text != str(sys.executable):
+            return text.replace("\\", "/")
+    return ""
+
+
+def _is_untracked(repo_root: Path, path: str) -> bool:
+    """True when git does not track `path` at all.
+
+    Encoding is explicit: capturing git output as platform text broke a gate on
+    Windows over a single 0x9d byte, and the failure surfaced as a file
+    appearing absent from the index.
+    """
+    if not path:
+        return False
+    proc = subprocess.run(
+        ("git", "ls-files", "--", path),
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return proc.returncode == 0 and not proc.stdout.strip()
+
+
 def _run_local_gates(
     repo_root: Path,
     *,
@@ -446,8 +501,20 @@ def _run_local_gates(
 ) -> tuple[bool, str | None, str]:
     env = _temp_index_env(agent, index_path, scope_selection=scope_selection)
     env["THOMAS_COMMIT_MESSAGE"] = str(commit_message or "")
+    skipped: list[str] = []
     for gate_name, command in local_gate_commands:
         if not _gate_applies(gate_name, selected_paths):
+            continue
+        # Authority requires review. An untracked gate script is one nobody has
+        # committed, and on 2026-09-02 exactly that refused every agent in this
+        # repo for twelve hours - its own author included - with no trace but
+        # commits stopping. It does not get to block the fleet. It is not hidden
+        # either: it is named below and on every session start by
+        # scripts/forge/fleet_stall.py, whose UNVERSIONED TOOLING line exists
+        # for this. Commit the gate and it takes effect again immediately.
+        script = _gate_script(command)
+        if _is_untracked(repo_root, script):
+            skipped.append(f"{gate_name} ({script})")
             continue
         resolved_command = _resolved_gate_command(
             gate_name,
@@ -465,10 +532,21 @@ def _run_local_gates(
         output = ((proc.stdout or "") + (proc.stderr or "")).strip()
         if proc.returncode != 0:
             return False, gate_name, output
+    if skipped:
+        return True, None, "skipped unreviewed gate(s), commit them to restore: " + ", ".join(skipped)
     return True, None, ""
 
 
-def _create_commit_object(repo_root: Path, *, agent: str, index_path: Path, parent_head: str, message: str) -> str:
+def _create_commit_object(
+    repo_root: Path,
+    *,
+    agent: str,
+    index_path: Path,
+    parent_head: str,
+    message: str,
+    expected_body: str | None = None,
+    expected_trailers: Sequence[tuple[str, str]] | None = None,
+) -> str:
     env = _temp_index_env(agent, index_path)
     tree = _git_output(repo_root, ["write-tree"], env=env)
     # `git commit-tree` is plumbing and does NOT honor commit.gpgsign, so every
@@ -483,7 +561,18 @@ def _create_commit_object(repo_root: Path, *, agent: str, index_path: Path, pare
     proc = _run_git(repo_root, ["commit-tree", tree, "-p", parent_head, *sign_args], env=env, input_text=message)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or "git commit-tree failed")
-    return str(proc.stdout or "").strip()
+    commit_sha = str(proc.stdout or "").strip()
+    if expected_body is not None and expected_trailers is not None:
+        commit_integrity.read_verified_commit(
+            repo_root,
+            commit_sha,
+            expected_tree=tree,
+            expected_parent=parent_head,
+            expected_body=expected_body,
+            expected_trailers=expected_trailers,
+            run=lambda repo, args: _run_git(repo, args),
+        )
+    return commit_sha
 
 
 def _update_branch_ref(repo_root: Path, *, branch: str, commit_sha: str, expected_head: str) -> None:
@@ -526,7 +615,26 @@ def commit_scoped_changes(
     workboard_path: Path = DEFAULT_WORKBOARD,
     local_gate_commands: Sequence[tuple[str, Sequence[str]]] = LOCAL_GATE_COMMANDS,
 ) -> CommitResult:
-    resolved_agent = agent_identity.resolve_agent(agent, include_name_fallback=True)
+    has_session_source = any(
+        str(os.getenv(key) or "").strip() for key in ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
+    )
+    if has_session_source or repo_root.resolve() == ROOT.resolve():
+        try:
+            resolved_agent = agent_identity.require_bound_agent(agent, repo_root=repo_root)
+        except ValueError as exc:
+            return CommitResult(
+                ok=False,
+                blocker_class="session_identity",
+                message=str(exc),
+                agent=str(agent or ""),
+                branch=None,
+                claim_scopes=(),
+                selected_paths=(),
+                dry_run=bool(dry_run),
+                next_step="Bootstrap a live agent session and use its immutable agent id before committing.",
+            )
+    else:
+        resolved_agent = agent_identity.resolve_agent(agent, include_name_fallback=True)
     if not resolved_agent:
         return CommitResult(
             ok=False,
@@ -539,6 +647,21 @@ def commit_scoped_changes(
             dry_run=bool(dry_run),
             next_step="Re-run with --agent <agent-id> or export THOMAS_AGENT_ID before committing.",
             suggested_command='python scripts/agent_commit.py --agent <agent-id> --message "<message>"',
+        )
+
+    try:
+        coordination_barrier.require_clear_p0(workboard_path, bound_agent=resolved_agent)
+    except coordination_barrier.CoordinationBlocked as exc:
+        return CommitResult(
+            ok=False,
+            blocker_class="coordination_p0",
+            message=str(exc),
+            agent=resolved_agent,
+            branch=None,
+            claim_scopes=(),
+            selected_paths=(),
+            dry_run=bool(dry_run),
+            next_step="ACK the named P0 coordination message before committing.",
         )
 
     scope_selection: ScopeSelection | None = None
@@ -643,6 +766,24 @@ def commit_scoped_changes(
             scope_source=scope_selection.source,
         )
 
+    stray_versions = _stray_version_files(repo_root, selected_paths)
+    if stray_versions:
+        return CommitResult(
+            ok=False,
+            blocker_class="release_metadata_dirty",
+            message=(
+                "a version bump is in progress outside this commit: "
+                + ", ".join(stray_versions)
+                + ". It is never swept in. Include both pyproject.toml and thomas/__init__.py to land the"
+                " bump as one, or park them (git stash push -- pyproject.toml thomas/__init__.py) first."
+            ),
+            agent=resolved_agent,
+            branch=None,
+            claim_scopes=tuple(scope_selection.scopes),
+            selected_paths=tuple(selected_paths),
+            dry_run=bool(dry_run),
+            scope_source=scope_selection.source,
+        )
     claimed_changed = [path for path in selected_paths if path not in RELEASE_METADATA_FILES]
     if not claimed_changed:
         scope_label = (
@@ -666,7 +807,9 @@ def commit_scoped_changes(
     try:
         branch = _current_branch(repo_root)
         head_before = _current_head(repo_root)
-        full_message = _build_commit_message(message, agent=resolved_agent, scope_selection=scope_selection)
+        generated_trailers = _commit_trailers(agent=resolved_agent, scope_selection=scope_selection)
+        full_message = commit_integrity.compose_message(message, generated_trailers)
+        coordination_barrier.require_clear_p0(workboard_path, bound_agent=resolved_agent)
         index_path, holder = _prepare_temp_index(
             repo_root,
             agent=resolved_agent,
@@ -711,12 +854,15 @@ def commit_scoped_changes(
                 dry_run=True,
                 scope_source=scope_selection.source,
             )
+        coordination_barrier.require_clear_p0(workboard_path, bound_agent=resolved_agent)
         commit_sha = _create_commit_object(
             repo_root,
             agent=resolved_agent,
             index_path=index_path,
             parent_head=head_before,
             message=full_message,
+            expected_body=message,
+            expected_trailers=generated_trailers,
         )
         if _current_head(repo_root) != head_before:
             return CommitResult(
@@ -762,84 +908,13 @@ def commit_scoped_changes(
             holder.cleanup()
 
 
-def _render_result(result: CommitResult) -> str:
-    lines = ["Scoped agent commit: PASS" if result.ok else "Scoped agent commit: FAIL"]
-    if result.ok and result.dry_run:
-        lines[0] += " (dry-run)"
-    if result.agent:
-        lines.append(f"- agent: {result.agent}")
-    if result.branch:
-        lines.append(f"- branch: {result.branch}")
-    if result.claim_scopes:
-        lines.append(f"- claim scopes: {', '.join(result.claim_scopes)}")
-    lines.append(f"- scope source: {result.scope_source}")
-    lines.append(f"- message: {result.message}")
-    if result.blocker_class:
-        lines.append(f"- blocker_class: {result.blocker_class}")
-    if result.commit_sha:
-        lines.append(f"- commit: {result.commit_sha}")
-    if result.selected_paths:
-        lines.append("- selected paths:")
-        for path in result.selected_paths:
-            lines.append(f"  - {path}")
-    if result.gate_name:
-        lines.append(f"- failed gate: {result.gate_name}")
-    if result.gate_output:
-        lines.append("- gate output:")
-        for row in result.gate_output.splitlines()[:20]:
-            lines.append(f"  {row}")
-    if result.next_step:
-        lines.append(f"- next step: {result.next_step}")
-    if result.suggested_command:
-        lines.append(f"- suggested command: {result.suggested_command}")
-    return "\n".join(lines)
+from scripts.crew.brief import scoped_commit_cli
+
+_render_result = scoped_commit_cli.render_result
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Create a scoped local commit for the current agent claim.")
-    parser.add_argument("--message", required=True, help="Commit message subject/body.")
-    parser.add_argument("--agent", default="", help="Agent id override.")
-    parser.add_argument(
-        "--include",
-        action="append",
-        default=[],
-        help="Optional in-claim path(s) to narrow the commit (repeatable or comma-separated).",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Evaluate scoped commit selection and gates without creating a commit.",
-    )
-    parser.add_argument(
-        "--allow-scope-fallback",
-        action="store_true",
-        help="Allow an explicit, audited fallback scope when the agent has no active workboard claim.",
-    )
-    parser.add_argument(
-        "--fallback-reason",
-        default="",
-        help="Short approval/audit reason required with --allow-scope-fallback.",
-    )
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
-    args = parser.parse_args(argv)
-
-    include_paths: list[str] = []
-    for raw in args.include:
-        include_paths.extend(token.strip() for token in str(raw or "").split(",") if token.strip())
-
-    result = commit_scoped_changes(
-        message=args.message,
-        agent=str(args.agent or "").strip() or None,
-        include_paths=include_paths,
-        dry_run=bool(args.dry_run),
-        allow_scope_fallback=bool(args.allow_scope_fallback),
-        fallback_reason=str(args.fallback_reason or ""),
-    )
-    if args.json:
-        print(json.dumps(_result_payload(result), sort_keys=True))
-    else:
-        print(_render_result(result))
-    return 0 if result.ok else 1
+    return scoped_commit_cli.run(argv, core=sys.modules[__name__])
 
 
 if __name__ == "__main__":

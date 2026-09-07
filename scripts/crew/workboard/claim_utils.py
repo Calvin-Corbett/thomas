@@ -667,6 +667,7 @@ def _format_claim(
     ]
     fields.append(_format_field("scope", scope))
     fields.append(_format_field("task", task))
+    fields.append(_format_field("claimed_at", datetime.now(timezone.utc).replace(microsecond=0).isoformat()))
     return "- " + "; ".join(fields)
 
 
@@ -993,10 +994,9 @@ def _file_lock(lock_file: Path, timeout: float = LOCK_TIMEOUT_SECONDS):
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
+    # board_publish: replace-with-retry, then in-place when the rename is denied (2026-09-05)
+    module = "board_publish" if not __package__ else f"{__package__}.board_publish"
+    __import__(module, fromlist=["publish_text"]).publish_text(path, text)
 
 
 def _validate_and_write(

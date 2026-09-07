@@ -233,7 +233,7 @@ class ThomasREPL(ThomasREPLActivityMixin, ThomasREPLPanelsMixin, ThomasREPLRunti
         resolved_profile = str(config.default_model)
         resolved_model_id = ""
         try:
-            from thomas.core.model_resolution import resolve_effective_model
+            from thomas.preferences.model_resolution import resolve_effective_model
 
             resolved_profile, resolved_model_id = resolve_effective_model(
                 config,

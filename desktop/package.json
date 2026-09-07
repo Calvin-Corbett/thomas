@@ -1,0 +1,23 @@
+﻿{
+    "name":  "thomas-desktop",
+    "version":  "1.0.0",
+    "description":  "Thomas desktop shell - a real browser around the Thomas chrome",
+    "main":  "main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "spike":  "electron spike.js --gates",
+                    "spike:persist":  "electron spike.js --verify-persist",
+                    "spike:bridge":  "electron spike.js --bridge"
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "MIT",
+    "type":  "commonjs",
+    "dependencies":  {
+                         "electron":  "43.4.1",
+                         "electron-updater":  "6.8.9",
+                         "ws":  "8.21.3"
+                     }
+}

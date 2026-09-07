@@ -16,6 +16,13 @@ Wire-in (once, at server startup):
     engine = get_initiative_engine()
     engine.start(executor_fn=my_async_executor, notify_fn=my_notify)
 
+Dry run:
+    ``start(..., dry_run=True)`` (the default) runs the executor for its
+    record-keeping only: the goal is not closed and nothing is announced. This
+    is the mute mode the aliveness design asks for -- observe and record for a
+    couple of weeks before anything is allowed to act or speak. Pass
+    ``dry_run=False`` to let the engine actually complete and report goals.
+
 AGENTS.md note:
     Initiative Engine: thomas/core/initiative.py — fires only when idle >30min
     + open goals exist. Notifies on completion/blocker/daily summary only.
@@ -110,6 +117,7 @@ class InitiativeEngine:
         self._notify_fn: Callable | None = None
         self._last_summary_date: str | None = None
         self._active_goal_ids: set = set()
+        self._dry_run: bool = True
 
     # ------------------------------------------------------------------
     # Public API
@@ -119,10 +127,20 @@ class InitiativeEngine:
         self,
         executor_fn: Callable | None,
         notify_fn: Callable | None = None,
+        dry_run: bool = True,
     ) -> None:
-        """Start the background polling daemon thread."""
+        """Start the background polling daemon thread.
+
+        Args:
+            executor_fn: Runs the actual work for a goal.
+            notify_fn: Sends an unsolicited message to the user.
+            dry_run: When True (the default), the executor is called but the
+                goal is neither closed nor announced -- the engine observes and
+                records without acting or speaking.
+        """
         self._executor_fn = executor_fn
         self._notify_fn = notify_fn or _log_notify
+        self._dry_run = bool(dry_run)
         if self._running:
             return
         self._running = True
@@ -132,7 +150,11 @@ class InitiativeEngine:
             name="thomas-initiative",
         )
         self._thread.start()
-        log.info("InitiativeEngine started (idle threshold: %.0fs).", IDLE_THRESHOLD_S)
+        log.info(
+            "InitiativeEngine started (idle threshold: %.0fs, dry_run=%s).",
+            IDLE_THRESHOLD_S,
+            self._dry_run,
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -201,6 +223,17 @@ class InitiativeEngine:
                     loop.close()
             else:
                 result = fn(goal_text)
+
+            if self._dry_run:
+                # Mute mode: the executor recorded what it would have done. The
+                # goal was not worked, so it must not be closed, and there is
+                # nothing to announce.
+                log.info(
+                    "InitiativeEngine[dry-run]: goal %r recorded, not executed: %s",
+                    goal_id,
+                    str(result)[:200],
+                )
+                return
 
             # Mark done
             try:

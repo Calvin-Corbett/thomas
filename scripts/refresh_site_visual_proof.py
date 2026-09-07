@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageChops
+import numpy as np
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "output" / "site-visual-proof"
@@ -24,6 +25,81 @@ PROOF_DIFFS_DIR = PROOF_DIR / "diffs"
 PROOF_FILE = PROOF_DIR / "ui-proof.json"
 PROOF_RUNTIME_REPORT = PROOF_DIR / "runtime-report.json"
 DEFAULT_PIXEL_DIFF_THRESHOLD_RATIO = 0.02
+
+# Pixel comparison: symmetric, anti-aliasing-tolerant, two-tier.
+#
+# site-visual-proof-baseline-drift-2026-08-26, round 1: two independent
+# Playwright captures of the *identical* rendered page disagreed on ~59% of
+# footer-focus pixels under a naive exact-byte comparison. Forensics traced
+# it to two real, fixed capture bugs (see verify_site_visual_runtime.mjs):
+# document.fonts.ready was not awaited before scrollHeight was read, and the
+# scroll-to-bottom call raced globals.css's `scroll-behavior: smooth`
+# against a fixed wait. Both are fixed at the capture layer now. Measured
+# after both fixes: 5 independent same-tree captures are BYTE-IDENTICAL
+# (0 pixels differ, any channel, at any threshold) -- footer-focus capture
+# is provably deterministic today, not merely "usually low-diff".
+#
+# Round 1 (radius=2, tolerance=32, single-direction) shipped anyway with a
+# real defect an adversarial review caught: current-pixel-vs-baseline-
+# neighbourhood matching is directionless, so REMOVED content always finds
+# background to match against -- blanking a third of the footer scored
+# 0.073% (measured), an unbounded blind spot regardless of tolerance. T=32
+# was also convenience-sized, not measured: 16-32x the actual 1-2/255 noise
+# this was meant to absorb, so a uniform recolor up to 32/255 (an obviously
+# wrong color) was invisible too, and radius=2 masked shifts up to 6px --
+# the incident's own visual signature.
+#
+# Round 2 fixes both, keeping the gate strict rather than widening it:
+#
+# 1. SYMMETRIC (Chamfer-style) matching. For each direction (current vs
+#    baseline, baseline vs current) a pixel passes if it is within
+#    _PIXEL_STRICT_TOLERANCE of the same coordinate in the other image, OR
+#    -- only where a real anti-aliased edge is plausible -- within
+#    _PIXEL_EDGE_TOLERANCE of its best match in a
+#    _PIXEL_AA_NEIGHBORHOOD_RADIUS neighbourhood. A pixel is "changed" if
+#    EITHER direction fails. This closes the deletion blind spot: a deleted
+#    glyph's baseline pixel has no matching current pixel in its
+#    neighbourhood (there is nothing there to match, at any radius that
+#    does not also swallow real regressions), so the baseline-vs-current
+#    direction fails even though the current-vs-baseline direction (a
+#    background pixel finding background nearby) would not have.
+# 2. TWO-TIER tolerance, not one loose global number. The neighbourhood
+#    escape only applies where local contrast (max-min over the same
+#    neighbourhood, in EITHER image -- an edge can be flat-turned-edge or
+#    edge-turned-flat under a 1px shift) reaches _PIXEL_EDGE_CONTRAST,
+#    i.e. only pixels plausibly ON an anti-aliased boundary. Flat pixels
+#    (backgrounds, solid fills, gradients) must match within
+#    _PIXEL_STRICT_TOLERANCE at their exact coordinate -- no neighbourhood
+#    rescue -- so a uniform recolor or opacity/contrast regression across a
+#    flat region is caught immediately, not absorbed by an edge-only escape.
+#
+# Values (measured, not chosen for convenience):
+#   _PIXEL_STRICT_TOLERANCE = 8: with capture now byte-identical run to run,
+#     the honest measured noise floor is 0. 8 is kept as headroom for
+#     cross-session drift this run could not observe (a different day, a
+#     Chromium/OS update) -- a small multiple of the historically observed
+#     1-2/255 flat-region noise, not 16-32x it.
+#   _PIXEL_AA_NEIGHBORHOOD_RADIUS = 1: with the scroll-behavior race fixed,
+#     the residual glyph-edge anti-aliasing jitter measured on 10 pairwise
+#     real captures was absorbed at radius=1; radius=2 was sized to the
+#     *pre-fix* scroll bug and is no longer needed, so it is removed --
+#     radius=1 also means a 2px+ real shift cannot be neighbourhood-matched
+#     away, unlike round 1's radius=2 (which masked shifts up to 6px).
+#   _PIXEL_EDGE_TOLERANCE = 24, _PIXEL_EDGE_CONTRAST = 24: sized so a
+#     uniform recolor as small as +16/255 is still caught (measured: CAUGHT
+#     at 92.9%) while genuine 1px AA jitter at real glyph edges still
+#     passes (measured: 0% on 5 real same-tree captures).
+# Verified on the real reproduction pair plus synthetic attacks (see
+# tests/test_site_visual_proof_pixel_diff_teeth.py, which pins these
+# numbers): bottom-third-of-footer deletion CAUGHT (3.7%, was 0.073%
+# SILENT under round 1), uniform recolor +16 CAUGHT (92.9%, was 0.000%
+# SILENT up to +32 under round 1), a 2px vertical shift CAUGHT (3.0%, was
+# SILENT up to 6px under round 1), a 1px shift (true AA-scale jitter) still
+# PASSES (0.07%).
+_PIXEL_STRICT_TOLERANCE = 8
+_PIXEL_AA_NEIGHBORHOOD_RADIUS = 1
+_PIXEL_EDGE_TOLERANCE = 24
+_PIXEL_EDGE_CONTRAST = 24
 
 
 def _normalize(path: str) -> str:
@@ -152,11 +228,58 @@ def _copy_required_screenshots(runtime_report: dict[str, Any]) -> dict[str, dict
     return out
 
 
+def _local_contrast(arr: np.ndarray, radius: int) -> np.ndarray:
+    """Max-min spread over a (2*radius+1)-square window, per pixel, maxed
+    across channels: a proxy for "this pixel sits on or next to a real
+    edge" (glyph stroke, border, high-contrast boundary) versus "this pixel
+    is inside a flat fill/gradient"."""
+    lo = arr.copy()
+    hi = arr.copy()
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            if dy == 0 and dx == 0:
+                continue
+            shifted = np.roll(np.roll(arr, dy, axis=0), dx, axis=1)
+            lo = np.minimum(lo, shifted)
+            hi = np.maximum(hi, shifted)
+    return np.max(hi - lo, axis=2)
+
+
+def _directional_mismatch(src: np.ndarray, dst: np.ndarray, *, radius: int) -> np.ndarray:
+    """For every src pixel: does it have an acceptable match in dst? A pixel
+    passes if it is within _PIXEL_STRICT_TOLERANCE of the SAME coordinate in
+    dst, or -- only if src or dst shows real local contrast there (a
+    plausible anti-aliased edge) -- within _PIXEL_EDGE_TOLERANCE of its best
+    match anywhere in the `radius` neighbourhood. Returns a boolean mismatch
+    mask indexed like src (True = no acceptable match found).
+
+    Deliberately one-directional: content REMOVED from dst relative to src
+    only shows up by calling this twice with src/dst swapped and taking the
+    union (see _pixel_diff_stats) -- a src pixel with real content always
+    has *something* nearby in a same-content dst, but calling this the other
+    way round asks the opposite direction's own question ("does removed
+    content have a match in the pixel-poorer image?") and fails it there
+    instead.
+    """
+    exact_diff = np.max(np.abs(src - dst), axis=2)
+    near_edge = (_local_contrast(src, radius) >= _PIXEL_EDGE_CONTRAST) | (
+        _local_contrast(dst, radius) >= _PIXEL_EDGE_CONTRAST
+    )
+    best_diff = None
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            shifted = np.roll(np.roll(dst, dy, axis=0), dx, axis=1)
+            channel_diff = np.max(np.abs(src - shifted), axis=2)
+            best_diff = channel_diff if best_diff is None else np.minimum(best_diff, channel_diff)
+    passed = (exact_diff <= _PIXEL_STRICT_TOLERANCE) | (near_edge & (best_diff <= _PIXEL_EDGE_TOLERANCE))
+    return ~passed
+
+
 def _pixel_diff_stats(*, baseline_path: Path, current_path: Path, diff_out_path: Path) -> dict[str, Any]:
     with Image.open(baseline_path) as baseline_raw:
-        baseline_image = baseline_raw.convert("RGBA")
+        baseline_image = baseline_raw.convert("RGB")
     with Image.open(current_path) as current_raw:
-        current_image = current_raw.convert("RGBA")
+        current_image = current_raw.convert("RGB")
 
     size_mismatch = baseline_image.size != current_image.size
     if size_mismatch:
@@ -164,35 +287,42 @@ def _pixel_diff_stats(*, baseline_path: Path, current_path: Path, diff_out_path:
             max(baseline_image.width, current_image.width),
             max(baseline_image.height, current_image.height),
         )
-        padded_baseline = Image.new("RGBA", target_size, (0, 0, 0, 0))
-        padded_current = Image.new("RGBA", target_size, (0, 0, 0, 0))
+        padded_baseline = Image.new("RGB", target_size, (0, 0, 0))
+        padded_current = Image.new("RGB", target_size, (0, 0, 0))
         padded_baseline.paste(baseline_image, (0, 0))
         padded_current.paste(current_image, (0, 0))
         baseline_image = padded_baseline
         current_image = padded_current
 
-    diff_image = ImageChops.difference(current_image, baseline_image)
-    total_pixels = diff_image.width * diff_image.height
-    changed_pixels = 0
-    if total_pixels > 0:
-        raw = memoryview(diff_image.tobytes())
-        for idx in range(0, len(raw), 4):
-            if raw[idx] or raw[idx + 1] or raw[idx + 2] or raw[idx + 3]:
-                changed_pixels += 1
+    baseline_arr = np.asarray(baseline_image, dtype=np.int16)
+    current_arr = np.asarray(current_image, dtype=np.int16)
+    radius = _PIXEL_AA_NEIGHBORHOOD_RADIUS
 
+    # Symmetric (Chamfer-style) comparison: a pixel counts as changed if
+    # EITHER direction fails to find an acceptable match. current-vs-baseline
+    # alone catches ADDITIONS but is structurally blind to DELETIONS (a
+    # background pixel where content used to be always finds background
+    # nearby); baseline-vs-current alone would be blind the other way. The
+    # union closes both.
+    forward_mismatch = _directional_mismatch(current_arr, baseline_arr, radius=radius)
+    backward_mismatch = _directional_mismatch(baseline_arr, current_arr, radius=radius)
+    changed_mask = forward_mismatch | backward_mismatch
+
+    total_pixels = int(changed_mask.size)
+    changed_pixels = int(np.count_nonzero(changed_mask))
     diff_ratio = (changed_pixels / total_pixels) if total_pixels else 0.0
 
     # Persist an overlay-style diff that highlights changed pixels in red.
-    mask = diff_image.convert("L").point(lambda value: 255 if value else 0)
+    mask = Image.fromarray((changed_mask.astype(np.uint8) * 255), mode="L")
     overlay = Image.new("RGBA", current_image.size, (255, 48, 48, 188))
-    preview = baseline_image.copy()
+    preview = baseline_image.convert("RGBA")
     preview.paste(overlay, (0, 0), mask)
     diff_out_path.parent.mkdir(parents=True, exist_ok=True)
     preview.save(diff_out_path)
 
     return {
-        "changed_pixels": int(changed_pixels),
-        "total_pixels": int(total_pixels),
+        "changed_pixels": changed_pixels,
+        "total_pixels": total_pixels,
         "diff_ratio": float(diff_ratio),
         "size_mismatch": bool(size_mismatch),
         "width": int(current_image.width),

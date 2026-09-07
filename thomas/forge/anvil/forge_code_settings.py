@@ -41,9 +41,19 @@ class ForgeCodeSettingsError(ValueError):
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$")
 # Models the Claude CLI can actually serve. Anything else routed to the "claude"
 # family is a substitution, not the model the caller asked for -- see
-# `runs_requested_model`. Anchored rather than a substring test so that, say,
-# "octopus-7b" is not mistaken for "opus".
-_CLAUDE_MODEL = re.compile(r"^(?:claude[\w.:-]*|sonnet|opus|haiku)(?:[-.][\w.-]*)?$", re.I)
+# `runs_requested_model`. Keep the boundary structural: a value merely starting
+# with "claude" (``claudeevil``/``claudette-local``) is not a Claude model, nor
+# does the wire prefix make a foreign variant (``claude:qwen``) one.
+_CLAUDE_MODEL = re.compile(
+    r"^(?:"
+    r"claude|"
+    r"(?:sonnet|opus|haiku)(?:[-.]\d+(?:[-.]\d+)*)?|"
+    r"claude-(?:instant-)?\d+(?:[-.]\d+)*|"
+    r"claude-(?:\d+(?:[-.]\d+)*-)?(?:sonnet|opus|haiku)(?:[-.]\d+(?:[-.]\d+)*)?"
+    r")$",
+    re.I,
+)
+_CLAUDE_SUBSTITUTE_MODEL = "sonnet"
 _REASONING = {"none", "low", "medium", "high", "xhigh", "max"}
 _FILE_ACCESS = {"read_only", "workspace", "project", "pc", "full"}
 _GUARDRAILS = {"open", "guarded", "fortress"}
@@ -51,6 +61,17 @@ _TOKEN_ECONOMY = {"cheap", "balanced", "max"}
 _ENGINES = {"agent", "funnel"}
 _GPT_CODE_CONTEXT_WINDOW = 200_000
 _GPT_CODE_MAX_TOKENS = 16_384
+
+
+def direct_shell_allowed(*, autonomy_level: int, file_access: str, guardrails: str) -> bool:
+    """Whether Forge may expose a direct host shell for this exact policy.
+
+    This is the single gate shared by the persisted capability report and both
+    executors. ``guarded`` cannot mean one thing in the conversation record and
+    a broader thing in the child process.
+    """
+
+    return int(autonomy_level) >= 3 and str(file_access) != "read_only" and str(guardrails) == "open"
 
 
 def _choice(value: Any, *, default: str, allowed: set[str], name: str) -> str:
@@ -122,7 +143,7 @@ def _configured_default_model() -> str:
     )
     try:
         from thomas.core.config import load_config
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
 
         cfg = load_config()
         profile, model_id = resolve_effective_model(
@@ -282,7 +303,29 @@ class ForgeCodeSettings:
         # handed `claude:claude:sonnet`.
         if variant.lower().startswith("claude:"):
             variant = variant.split(":", 1)[1]
-        variant = variant or "sonnet"
+        variant = variant or _CLAUDE_SUBSTITUTE_MODEL
+        # The model you picked is the model that runs. Calvin, 2026-08-14:
+        # "models that cant code shouldnt be offered but the mode[l] selcted
+        # should be the run doing the work".
+        #
+        # This used to rewrite any foreign id to the CLI's Sonnet alias and
+        # report it as "substituted" — honest about the swap, but still a swap
+        # nobody asked for: you chose a local qwen and Claude wrote your code.
+        # Refuse instead, here, before dispatch, naming what Build can actually
+        # run. A refusal you can act on beats a run you did not order.
+        #
+        # Build's picker filters to these same two families, so reaching this
+        # message means something bypassed it (an API caller, a stale client, or
+        # a configured default Build cannot execute) — all cases where guessing
+        # is worse than stopping.
+        if not _CLAUDE_MODEL.fullmatch(variant):
+            picked = model_id or model
+            source = "your configured default model" if model_defaulted else "the selected model"
+            raise ForgeCodeSettingsError(
+                f"Build cannot run '{picked}' — {source} is neither a GPT model nor a Claude model. "
+                "Code has two engines: your ChatGPT account runs GPT models, and the Claude CLI runs "
+                "Claude models. Pick one of those for Build, or ask in Chat, which can use this model."
+            )
         return cls(
             engine,
             model,
@@ -394,7 +437,11 @@ class ForgeCodeSettings:
         return {
             "live_edit": live_edit,
             "history_enabled": self.memory,
-            "allow_shell": bool(live_edit and self.guardrails == "open"),
+            "allow_shell": direct_shell_allowed(
+                autonomy_level=self.autonomy_level,
+                file_access=self.file_access,
+                guardrails=self.guardrails,
+            ),
             "timeout": timeout,
             "max_fix_iters": max_fix_iters,
             "sandbox_root": "selected_project",
@@ -475,7 +522,7 @@ class ForgeCodeSettings:
                                 )
                                 + "Code runs either GPT through your ChatGPT account or the Claude CLI. "
                                 f"{self.model_id or self.model!r} is neither, so the Claude CLI handled "
-                                "this request."
+                                f"this request as {effective_model!r}."
                             )
                         }
                         if not runs_requested
@@ -510,6 +557,11 @@ class ForgeCodeSettings:
                     "effective": self.guardrails,
                     "mode": policy["guardrail_mode"],
                     "terminal": "enabled_in_selected_project" if policy["allow_shell"] else "engine_verification_only",
+                    "terminal_boundary": (
+                        "unsandboxed host shell starting in the selected project; enabled only because Open was selected"
+                        if policy["allow_shell"]
+                        else "no direct shell; the engine runs bounded verification after the edit pass"
+                    ),
                 },
                 "token_economy": {
                     "status": "applied",

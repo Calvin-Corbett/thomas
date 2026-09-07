@@ -8,7 +8,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import secrets
 import sqlite3
 import subprocess
@@ -18,7 +17,6 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.agent.loop_tool_protocol import is_inspection_tool
 from thomas.forge.anvil import (
     forge_code_deliverables,
     forge_code_git,
@@ -27,7 +25,13 @@ from thomas.forge.anvil import (
     run_report,
 )
 from thomas.server.app_keys import APP_ENGINE_MANAGER, APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE
+from thomas.server.routes.evolve_verdict import (
+    _terminal_engine_verdict,
+    _unstructured_engine_error,
+)
 
+from . import evolve_agent_revert as _evolve_agent_revert
+from . import evolve_agent_run_status as _evolve_agent_run_status
 from .evolve_agent_activity import (
     acquire_code_activity_lease as _acquire_code_activity_lease,
 )
@@ -50,73 +54,21 @@ from .evolve_agent_receipts import (
 
 log = logging.getLogger(__name__)
 
-
-def _confirmed_conversation_reply(transcript: str, *, require_final: bool = False) -> bool:
-    """Return true for a structured turn that answered without changing files.
-
-    Reading is not a failed edit. A request to inspect and explain something
-    must read files to answer it, and disqualifying any tool use meant those
-    runs were recorded as "no change made" with the answer buried underneath.
-
-    This mirrors the rule in dispatch_agent_loop and dispatch_claude_cli on
-    purpose: three separate places decide this same question, and if they
-    disagree the failure does not go away, it just moves to whichever one the
-    request happened to take. Relaxed only on positive evidence -- tool names
-    were present and every one of them was read-only.
-
-    ``require_final`` narrows the evidence to ``final`` frames alone. The
-    stream translator emits ``final`` only for a non-error CLI ``result``
-    message, so it is protocol-level proof the answer arrived -- which is what
-    lets a reply outvote a nonzero exit code. Streamed ``say`` text is not
-    that proof: a run that crashed mid-narration has ``say`` frames too.
-    """
-
-    saw_reply = False
-    saw_tool = False
-    saw_named_tool = False
-    saw_mutating_tool = False
-    saw_failed_result = False
-    for raw in str(transcript or "").splitlines():
-        try:
-            event = json.loads(raw)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            continue
-        if not isinstance(event, dict):
-            continue
-        kind = str(event.get("fc") or "")
-        if kind in {"tool", "tool_result"}:
-            saw_tool = True
-            if kind == "tool_result" and bool(event.get("is_error")):
-                saw_failed_result = True
-            # Only the tool event carries a name; tool_result does not.
-            name = str(event.get("name") or "").strip()
-            if name and name != "tool":
-                saw_named_tool = True
-                # The agent-loop translator stamps `access` ("read"/"write")
-                # onto tool events, classifying shell.exec by its COMMAND
-                # rather than its name. Trust the stamp when it is present:
-                # without it, an explain-only run whose shell ran `dir` was
-                # disqualified here and filed as a fabricated exit-1 failure
-                # even after dispatch_agent_loop learned better. Name-based
-                # classification stays as the fallback for older transcripts
-                # and the claude-CLI path, which does not stamp.
-                access = str(event.get("access") or "").strip()
-                if access == "write" or (access != "read" and not is_inspection_tool(name)):
-                    saw_mutating_tool = True
-        elif kind in {"final", "say"} and str(event.get("text") or "").strip():
-            if kind == "final" or not require_final:
-                saw_reply = True
-    # Unnamed tool activity stays disqualifying -- nothing is known about what
-    # it did. A write-capable tool disqualifies only when a tool FAILURE was
-    # also seen: the caller has already established from git truth that nothing
-    # changed, so a clean write-capable run that answered is an answer, not a
-    # failed edit. Same contract as dispatch_agent_loop and dispatch_claude_cli
-    # (settled 2026-08-05 after an explain run was demoted for a dir listing).
-    if saw_tool and not saw_named_tool:
-        return False
-    if saw_mutating_tool and saw_failed_result:
-        return False
-    return saw_reply
+# Split out (evolve_agent_revert.py, evolve_agent_run_status.py; landing this
+# session, worker.py precedent) past the monolith guard's 800-line soft limit --
+# see their docstrings. Re-exported under original names so no caller changed.
+_normalize_repo_file = _evolve_agent_revert._normalize_repo_file
+_conversation_changed_files = _evolve_agent_revert._conversation_changed_files
+_conversation_is_read_only = _evolve_agent_revert._conversation_is_read_only
+_revert_action_hash = _evolve_agent_revert._revert_action_hash
+_authorize_conversation_revert = _evolve_agent_revert._authorize_conversation_revert
+_finish_approval_execution = _evolve_agent_revert._finish_approval_execution
+_confirmed_conversation_reply = _evolve_agent_run_status._confirmed_conversation_reply
+_recording_task = _evolve_agent_run_status._recording_task
+_recording_active = _evolve_agent_run_status._recording_active
+_run_replay_available = _evolve_agent_run_status._run_replay_available
+_recording_status = _evolve_agent_run_status._recording_status
+_await_recording = _evolve_agent_run_status._await_recording
 
 
 async def _release_code_start_gate(
@@ -183,164 +135,6 @@ def _code_action_hash(message: str, payload: dict[str, Any] | None) -> str:
     }
     encoded = json.dumps(action, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def _normalize_repo_file(file: str) -> str:
-    """Return one safe repository-relative POSIX path, or an empty string."""
-
-    value = str(file or "").strip().replace("\\", "/")
-    if not value or value.startswith("/") or re.match(r"^[A-Za-z]:", value):
-        return ""
-    parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        return ""
-    return "/".join(parts)
-
-
-def _conversation_changed_files(conversation: dict[str, Any] | None) -> set[str] | None:
-    """Return only files attributed to agent turns in one conversation."""
-
-    if conversation is None:
-        return None
-    files: set[str] = set()
-    for turn in conversation.get("turns") or []:
-        if turn.get("role") != "agent":
-            continue
-        for file in turn.get("changed_files") or []:
-            normalized = _normalize_repo_file(str(file or ""))
-            if normalized:
-                files.add(normalized)
-    return files
-
-
-def _conversation_is_read_only(metadata: dict[str, Any] | None) -> bool:
-    settings = (metadata or {}).get("settings") or {}
-    effective = settings.get("effective") or {}
-    requested = settings.get("requested") or {}
-    return "read_only" in {
-        str(effective.get("file_access") or "").strip().lower(),
-        str(requested.get("file_access") or "").strip().lower(),
-    }
-
-
-def _revert_action_hash(root: Path, conversation_id: str, file: str) -> str:
-    """Bind approval to the exact repo, conversation, path, and current diff."""
-
-    target = root.resolve() / file
-    if target.is_file():
-        content_hash = hashlib.sha256()
-        try:
-            with target.open("rb") as stream:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    content_hash.update(chunk)
-            content_state = content_hash.hexdigest()
-        except OSError:
-            content_state = "unreadable"
-    else:
-        content_state = "missing"
-    payload = {
-        "action": "revert_file",
-        "conversation_id": conversation_id,
-        "project_root": str(root.resolve()),
-        "file": file,
-        "untracked": forge_code_git.is_untracked(root, file),
-        "diff": forge_code_git.unified_diff(root, file),
-        "content": content_state,
-    }
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _authorize_conversation_revert(
-    *,
-    root: Path,
-    conversation_id: str,
-    file: str,
-    conversation: dict[str, Any],
-    metadata: dict[str, Any] | None,
-    approvals: dict[str, dict[str, Any]],
-    approval_id: str,
-) -> tuple[str, dict[str, Any] | None, int]:
-    """Validate policy and atomically claim an exact one-time approval."""
-
-    normalized = _normalize_repo_file(file)
-    if not normalized:
-        return "", {"ok": False, "error": "unsafe file path", "code": "invalid_file_path"}, 400
-    if _conversation_is_read_only(metadata):
-        return (
-            normalized,
-            {
-                "ok": False,
-                "error": "read-only Code conversations cannot revert files",
-                "code": "read_only_mode",
-            },
-            403,
-        )
-    owned = _conversation_changed_files(conversation) or set()
-    if normalized not in owned:
-        return (
-            normalized,
-            {
-                "ok": False,
-                "error": "file was not changed by this Code conversation",
-                "code": "file_not_owned_by_conversation",
-            },
-            403,
-        )
-    if not forge_code_git.file_is_dirty(root, normalized):
-        return (
-            normalized,
-            {
-                "ok": False,
-                "error": "file is no longer changed",
-                "code": "file_not_dirty",
-            },
-            409,
-        )
-
-    action_hash = _revert_action_hash(root, conversation_id, normalized)
-    approval = approvals.get(approval_id) if approval_id else None
-    valid = bool(
-        isinstance(approval, dict)
-        and approval.get("state") == "approved"
-        and approval.get("action_hash") == action_hash
-        and float(approval.get("expires_at") or 0) >= time.time()
-    )
-    if valid:
-        approval["state"] = "executing"
-        approval["executing_at"] = time.time()
-        return normalized, None, 0
-
-    new_id = f"approval-{secrets.token_urlsafe(10)}"
-    approvals[new_id] = {
-        "id": new_id,
-        "state": "pending",
-        "action_hash": action_hash,
-        "risk": "discard conversation-owned file changes",
-        "summary": f"Revert {normalized}? This permanently discards its current changes.",
-        "expires_at": time.time() + 600,
-    }
-    public = {key: value for key, value in approvals[new_id].items() if key != "action_hash"}
-    return (
-        normalized,
-        {
-            "ok": False,
-            "error": "explicit approval is required to discard file changes",
-            "code": "approval_required",
-            "approval": public,
-        },
-        409,
-    )
-
-
-def _finish_approval_execution(approval: dict[str, Any] | None, *, succeeded: bool) -> None:
-    """Consume a claimed approval only after its protected action starts or succeeds."""
-    if not isinstance(approval, dict) or approval.get("state") != "executing":
-        return
-    approval.pop("executing_at", None)
-    approval["state"] = "consumed" if succeeded else "approved"
-    if succeeded:
-        approval["consumed_at"] = time.time()
 
 
 def _request_id(payload: dict[str, Any] | None, *, fallback: str = "") -> str:
@@ -422,71 +216,6 @@ def _sse_frame(payload: dict[str, Any], run_id: str, sequence: int) -> bytes:
     event_id = f"{run_id}:{sequence}"
     data = {**payload, "run_id": run_id, "event_id": event_id, "event_seq": sequence}
     return f"id: {event_id}\ndata: {json.dumps(data)}\n\n".encode()
-
-
-def _recording_task(recording: Any) -> Any:
-    return recording.get("task") if isinstance(recording, dict) else recording
-
-
-def _recording_active(recording: Any) -> bool:
-    task = _recording_task(recording)
-    return bool(task is not None and not task.done())
-
-
-def _run_replay_available(receipt: dict[str, Any], session: Any, running: bool, recording: Any) -> bool:
-    state = receipt.get("state")
-    if state in {"completed", "persistence_failed"}:
-        return True
-    if state not in {"launching", "running"}:
-        return False
-    response = receipt.get("response") if isinstance(receipt.get("response"), dict) else {}
-    active_run = str((session or {}).get("run_id") or "")
-    return active_run == str(response.get("run_id") or "") and (running or _recording_active(recording))
-
-
-def _recording_status(recording: Any) -> dict[str, Any]:
-    task = _recording_task(recording)
-    if task is None:
-        return {"recording": False, "persistence_confirmed": False, "persistence_state": "missing"}
-    if not task.done():
-        return {"recording": True, "persistence_confirmed": False, "persistence_state": "recording"}
-    if task.cancelled():
-        return {"recording": False, "persistence_confirmed": False, "persistence_state": "cancelled"}
-    try:
-        result = task.result()
-    except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
-        return {
-            "recording": False,
-            "persistence_confirmed": False,
-            "persistence_state": "failed",
-            "persistence_error": str(exc) or type(exc).__name__,
-        }
-    if not isinstance(result, dict) or result.get("persistence_confirmed") is not True:
-        error = result.get("persistence_error") if isinstance(result, dict) else "invalid recorder result"
-        return {
-            **(result if isinstance(result, dict) else {}),
-            "recording": False,
-            "persistence_confirmed": False,
-            "persistence_state": "failed",
-            "persistence_error": error or "agent turn was not persisted",
-        }
-    return {**result, "recording": False, "persistence_state": "persisted"}
-
-
-async def _await_recording(recording: Any) -> dict[str, Any]:
-    task = _recording_task(recording)
-    if task is None:
-        return _recording_status(None)
-    try:
-        await asyncio.shield(task)
-    except asyncio.CancelledError:
-        return {
-            "recording": False,
-            "persistence_confirmed": False,
-            "persistence_state": "cancelled",
-            "persistence_error": "recorder wait was cancelled",
-        }
-    return _recording_status(recording)
 
 
 def _default_repo_root() -> Path:
@@ -588,45 +317,6 @@ def _finalize_code_run(app: web.Application, run_id: str, *, ok: bool, reason: s
         log.warning("Code run not finalized (run store write failed): %s", exc)
 
 
-def _terminal_engine_error(transcript_text: str) -> str:
-    """The engine's own final verdict, read from the transcript's tail.
-
-    Every engine run ends with one forge event whose ``is_error`` reflects the
-    engine's judgment (forge_code_runner emits it from the dispatch result):
-    a Claude CLI run whose files landed ends ``is_error: false`` even at exit
-    1, while a crashed agent loop (dead LLM route, protocol error) ends
-    ``is_error: true``. When the final event is an error, return the most
-    specific cause among the terminal error events; otherwise return "".
-    Changed files must not outrank THIS signal — a crash that wrote some
-    files first is still a crash, and filing it "completed" is how a design
-    doc got presented as a finished game (2026-08-10, twice in one task).
-    """
-    causes: list[str] = []
-    for line in reversed(transcript_text.strip().splitlines()[-12:]):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue
-        if "fc" not in event:
-            continue
-        if not causes and not (event.get("fc") == "error" or event.get("is_error") is True):
-            return ""  # final engine event is not an error: engine says ok
-        if event.get("fc") == "error" or event.get("is_error") is True:
-            text = str(event.get("text") or "").strip()
-            if text:
-                causes.append(text)
-            continue
-        break  # ran past the terminal error cluster
-    if not causes:
-        return ""
-    # The cluster reads newest-first; the oldest error in it names the root
-    # cause (e.g. the dead LLM route), the newest is the generic loop exit.
-    return causes[-1][:220]
-
-
 async def _drain_and_record(
     proc: Any,
     transcript: Path,
@@ -642,12 +332,11 @@ async def _drain_and_record(
 ) -> dict[str, Any]:
     """Drain the live transcript, then record the run outcome onto the conversation.
 
-    The outcome is computed from *evidence* at the moment the build finishes,
-    and the exit code is the weakest evidence there is: the Claude CLI exits 1
-    even when the files landed and work, which is how successful runs were
-    being filed as failures. Git truth outranks it -- changed files mean the
-    run did something, whatever the code says (the code stays visible in the
-    reason). A confirmed ``final`` reply outranks it too. A clean exit that
+    The outcome is computed from *evidence* at the moment the build finishes.
+    A marked successful engine verdict can outrank the Claude CLI's unreliable
+    exit 1 when files landed or a confirmed final reply arrived. A nonzero exit
+    without that verdict fails closed, even when partial files exist. A clean
+    exit that
     touched nothing is a no-op; a dirty exit with nothing to show for it is a
     failure; an interruption the person asked for is ``stopped``, in those
     words. Recording is wrapped so a bad store/git call can never crash the
@@ -676,13 +365,22 @@ async def _drain_and_record(
             and not interrupted
             and _confirmed_conversation_reply(text, require_final=rc != 0)
         )
-        crash_cause = _terminal_engine_error(text)
+        terminal_ok, terminal_cause = _terminal_engine_verdict(text)
+        unstructured_cause = _unstructured_engine_error(text)
+        # A nonzero process exit needs positive terminal success evidence.
+        # Partial files are useful recovery material, not proof that the run
+        # reached a successful verdict.
+        missing_terminal_failure = rc not in (None, 0) and terminal_ok is not True
+        engine_failed = terminal_ok is False or missing_terminal_failure
+        crash_cause = terminal_cause or unstructured_cause
+        if missing_terminal_failure and not crash_cause:
+            crash_cause = f"build process exited {rc} without a terminal engine verdict"
         noop = run_capture_confirmed and rc == 0 and not changed and not conversation_reply and not interrupted
         ok = (
             run_capture_confirmed
             and rc is not None
             and not interrupted
-            and not crash_cause
+            and not engine_failed
             and (bool(changed) or conversation_reply)
         )
         if not run_capture_confirmed or rc is None:
@@ -695,7 +393,7 @@ async def _drain_and_record(
                 # The interrupted work is still named, so Keep/Revert has a
                 # subject rather than a mystery.
                 reason += f" — {len(changed)} file(s) had already changed"
-        elif crash_cause:
+        elif engine_failed:
             # The engine itself declared the run dead. Files that landed first
             # are named (they are real work worth keeping), but a crash is
             # never "completed" — that filing is how a crashed one-pass build

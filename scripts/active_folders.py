@@ -316,6 +316,30 @@ def _paths_overlap(a: str, b: str) -> bool:
     return a.startswith(f"{b}/") or b.startswith(f"{a}/")
 
 
+def _is_addressable_agent(identity: str) -> bool:
+    """True only for an identity that can actually reply on a coordination thread.
+
+    Presence detection reports two different kinds of thing under one field. A
+    named agent (``claude``, ``codex-auto``) has a workboard identity and can run
+    ``message.py --ack``. A raw OS process (``process:41196``) or an
+    ``unregistered-*`` marker is a *signal that something is running*, not a
+    correspondent -- nothing behind it can ever ack.
+
+    Opening a thread with one of those produced a p1 message that stayed open
+    forever, and because the dedup below keys on the PAIR, every new PID minted a
+    fresh permanent thread. That is how 254 of 303 open messages ended up
+    un-ackable, burying the real ones. Presence warnings still reach the caller
+    through ``presence_warnings``; they simply stop being mailed to something that
+    cannot read them.
+    """
+    text = str(identity or "").strip().lower()
+    if not text:
+        return False
+    if text.startswith("process:") or text.startswith("pid:"):
+        return False
+    return not text.startswith("unregistered")
+
+
 def _notify_overlap_coordination(
     agent: str,
     paths: Sequence[str],
@@ -341,14 +365,14 @@ def _notify_overlap_coordination(
     try:
         for conflict in _find_conflicts(list(paths), ignore_agent=agent):
             other = str(conflict.get("agent_id") or "").strip()
-            if other and other != agent:
+            if other and other != agent and _is_addressable_agent(other):
                 sample = ", ".join(sorted({str(o.get("active", "")) for o in conflict.get("overlaps", [])}))[:160]
                 others.setdefault(other, f"overlapping claim ({sample})" if sample else "overlapping claim")
     except (OSError, ValueError, KeyError, AttributeError, TypeError):
         pass
     for warn in presence_warnings or []:
         other = str(warn.get("agent_id") or "").strip()
-        if other and other != agent:
+        if other and other != agent and _is_addressable_agent(other):
             others.setdefault(other, str(warn.get("message") or "active in this repo"))
 
     if not others:

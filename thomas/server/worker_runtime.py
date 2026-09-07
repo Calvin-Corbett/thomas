@@ -145,7 +145,7 @@ def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = Non
     try:
         from os import environ
 
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
 
         resolved_profile, _model_id = resolve_effective_model(
             cfg,

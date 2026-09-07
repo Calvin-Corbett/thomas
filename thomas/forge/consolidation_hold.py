@@ -8,16 +8,41 @@ is tracking.
 A *hold* is a durable, machine-readable "this repository is under consolidation"
 marker. While one is active:
 
-* new branch creation is refused, with a reason that names the remedy;
+* :func:`guard_new_branch` refuses new branch creation and names the remedy --
+  *if something calls it*.
 * the trunk and an explicit allowlist stay usable, so consolidation work itself
   is never blocked by the hold it is trying to clear.
 
 Holds are placed and lifted automatically by :func:`audit`, which is the piece
-meant to run in the background on a schedule. Nobody has to remember to look.
+meant to run in the background on a schedule (wired into the live server via
+``thomas/server/consolidation_maintenance.py``, every
+``THOMAS_CONSOLIDATION_AUDIT_INTERVAL_S`` seconds). Nobody has to remember to
+run the audit itself.
+
+**THE GAP AN ADVERSARIAL REVIEW FOUND (branch-equilibrium plan, phase 2 Task 3
+fix round 1, 2026-08-27):** the audit runs, and this repository's own
+``runtime/logs/server_stderr.log`` proves it correctly detected 63 branches
+over a ceiling of 10 and held for two straight days. But :func:`guard_new_branch`
+-- the only function in this module that can actually refuse a branch -- has
+**zero callers anywhere in this codebase, and never had one in this
+repository's history** (``git log --all -S guard_new_branch``). The hold gets
+placed, gets logged, gets released -- and never once stands between anyone and
+a new branch, because nothing at the point a branch is actually created ever
+asks it. This is this program's own documented "finished code with no caller"
+shape, discovered in its own detection-and-consolidation mechanism.
+
+The real, currently-enforcing mechanism is
+``scripts/forge/gates/branch_claim_gate.py`` (branch-equilibrium plan, Task 2):
+it sits in the pre-push hook path, which git itself invokes on every push --
+no voluntary caller is needed the way this module's circuit breaker needs one.
+That structural difference -- a hook git calls unconditionally, versus a
+function that a human has to remember to wire into an enforcement point -- is
+why Task 2's gate is built to stop sprawl and this module's hold, as shipped, did not.
 
 Design rule: a hold must never be able to wedge the repository. It is advisory
-state in one JSON file, it always names how to clear it, and
-:func:`release_hold` is unconditional.
+state in one JSON file, it always names how to clear it (see
+:meth:`Hold.message`, which now says plainly that this hold is not currently
+consulted at branch creation), and :func:`release_hold` is unconditional.
 """
 
 from __future__ import annotations
@@ -80,10 +105,26 @@ class Hold:
         )
 
     def message(self) -> str:
+        """The hold's human-readable status line.
+
+        FIX ROUND 1 (2026-08-27, adversarial review IMP-2): this used to say
+        "To proceed, {remedy}" -- worded as if a new branch push was actually
+        blocked pending that remedy. It never was: ``guard_new_branch`` (the
+        only function that reads this hold to refuse a branch) has zero
+        callers in this codebase. The message now states what is true --
+        this hold is recorded and visible, not enforced at branch creation --
+        and names the mechanism that actually is: ``branch_claim_gate.py``.
+        """
         return (
             f"Repository is under consolidation: {self.reason} "
             f"({self.branch_count} branches, ceiling {self.ceiling}; "
-            f"{self.needs_decision} need a decision). To proceed, {_REMEDY}."
+            f"{self.needs_decision} need a decision). This hold is recorded, "
+            f"but nothing in this codebase currently consults it at branch "
+            f"creation -- it does not, by itself, block a new branch. "
+            f"Push-time enforcement is scripts/forge/gates/branch_claim_gate.py "
+            f"(CI today; local pre-push wiring rides the prepared tap, "
+            f"PRAXIS-PHASE14-BREAKGLASS batch.md section (k)). "
+            f"To retire what is already safe, {_REMEDY}."
         )
 
 

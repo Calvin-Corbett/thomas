@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from thomas.core import task_checklist, task_checklist_runtime
+
 # The vocabulary of an execution -- its states, and the shape of a stored record --
 # lives beside this module. Re-exported here because this module is the front door:
 # every caller in the repo says `from thomas.core import task_bot_runtime`.
@@ -28,6 +30,7 @@ from thomas.core.task_bot_states import (  # noqa: F401
     _normalize_state,
     _validate_transition,
 )
+from thomas.core.task_checklist_runtime import record_checklist_evidence, set_task_type  # re-exported API
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE_DIRNAME = "task_bots"
@@ -36,8 +39,9 @@ DEFAULT_STALE_MINUTES = 5.0
 
 
 def coordination_dir(repo_root: str | Path | None = None) -> Path:
-    root = (Path(repo_root).expanduser() if repo_root is not None else ROOT).resolve()
-    return root / "runtime" / "coordination"
+    from thomas.core.project_root import resolve_project_root
+
+    return resolve_project_root(explicit=repo_root) / "runtime" / "coordination"
 
 
 def runtime_dir(repo_root: str | Path | None = None) -> Path:
@@ -221,6 +225,7 @@ def create_execution(
     runtime_profile: dict[str, Any] | None = None,
     actor: str = "task-manager",
     repo_root: str | Path | None = None,
+    task_type: str = "",
 ) -> dict[str, Any]:
     execution_id = f"exec-{secrets.token_hex(6)}"
     created_at = _to_iso(_now())
@@ -239,6 +244,7 @@ def create_execution(
         created_at=created_at,
         runtime_profile=runtime_profile,
     )
+    task_checklist_runtime.attach_checklist_at_creation(payload, task_type)
     _write_json(execution_path(execution_id, repo_root), payload)
     _write_summary(repo_root)
     return payload
@@ -518,6 +524,8 @@ def complete_execution(
     summary: str = "",
     repo_root: str | Path | None = None,
     verified_success: bool = False,
+    read_paths: list[str] | None = None,
+    output_text: str = "",
 ) -> dict[str, Any]:
     """Mark an execution completed — but ONLY when there is evidence.
 
@@ -540,6 +548,13 @@ def complete_execution(
     # this only refuses to relabel the ending.
     if _normalize_state(str(payload.get("state") or "")) in {"cancelled", "abandoned"}:
         return payload
+    held = task_checklist_runtime.hold_if_unmet(
+        execution_id, payload, read_paths=read_paths, output_text=output_text, summary=summary, actor=actor, repo_root=repo_root
+    )
+    if held is not None:
+        return held
+    if task_checklist_runtime.has_satisfied_checklist(payload):
+        verified_success = True  # a met, evidence-backed checklist is confirmed success
     proof = payload.get("proof") or {}
     has_artifacts = bool(proof.get("artifacts"))
     if not (has_artifacts or verified_success):

@@ -100,6 +100,15 @@ class _TransientErrorSpecialist:
         yield {"type": "done", "iterations": 1}
 
 
+class _PartialTimeoutSpecialist:
+    capabilities = {"read"}
+
+    async def execute(self, **kwargs: object):
+        _ = kwargs
+        yield {"type": "text", "text": "The first confirmed fact [proof](sandbox:/tmp/proof.txt)."}
+        yield {"type": "error", "error": "Specialist 'reasoning' timed out after 120s"}
+
+
 class _BoundSpecialist:
     specialist_id = "reasoning"
     description = "bound specialist"
@@ -140,15 +149,20 @@ def test_registry_binds_request_scoped_specialist_copies() -> None:
     assert registry.get_stats()["reasoning"]["executions"] == 1
 
 
+def test_retired_forced_route_handlers_are_absent() -> None:
+    assert not hasattr(OrchestratorBrain, "_handle_background_status")
+    assert not hasattr(OrchestratorBrain, "_handle_actionable")
+
+
 def test_chat_failure_message_explains_auth_and_transient_failures() -> None:
     auth = brain_mod._chat_failure_message("ChatGPT OAuth is not connected. Sign in first.")
-    transient = brain_mod._chat_failure_message("connection reset")
+    transient = brain_mod._chat_failure_message("connection reset", attempts=2)
     unknown = brain_mod._chat_failure_message("broken")
 
     assert "ChatGPT model isn't connected" in auth
     assert "Local model" in auth
     assert "retried once" in transient
-    assert "retried once" in unknown
+    assert "retried once" not in unknown
 
 
 @pytest.mark.asyncio
@@ -249,6 +263,7 @@ async def test_dispatch_single_retries_one_zero_output_transient_failure() -> No
     )
 
     assert specialist.attempts == 2
+    assert result.attempts == 2
     assert result.status == SpecialistStatus.COMPLETED
     assert result.content == "recovered answer"
     assert result.error is None
@@ -355,9 +370,7 @@ async def test_model_owned_handler_emits_done_and_streams_failure(monkeypatch: p
         active_task_digest="digest text",
         images=[{"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}],
     )
-    expected_failure = (
-        "I couldn't get an answer from the selected model. I retried once; please try again or choose another model."
-    )
+    expected_failure = "I couldn't get an answer from the selected model. Please try again or choose another model."
     assert expected_failure in "".join(dispatcher.text_parts)
     assert updated.last_assistant_message() == expected_failure
     assert created_coordinators[-1].captured
@@ -367,6 +380,49 @@ async def test_model_owned_handler_emits_done_and_streams_failure(monkeypatch: p
     # path receives tools and decides whether to call them.
     # No canned "Working on that —" prefix: the only visible text is the model's
     # actual answer. The reply must not start with a templated acknowledgment.
+
+
+@pytest.mark.asyncio
+async def test_partial_timeout_keeps_streamed_text_history_status_and_attempt_truth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _MemoryCoordinator)
+    registry = _Registry(["reasoning"], {"reasoning": _PartialTimeoutSpecialist()})
+    brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=registry)
+    dispatcher = _Dispatcher()
+    captured: list[DelegationResult] = []
+    dispatch_single = brain._dispatch_single
+
+    async def _capture_result(**kwargs: object) -> DelegationResult:
+        result = await dispatch_single(**kwargs)
+        captured.append(result)
+        return result
+
+    monkeypatch.setattr(brain, "_dispatch_single", _capture_result)
+    updated = await brain._handle_casual(
+        session_id="sess-partial",
+        conversation=ConversationManager(),
+        prompt="Give me the facts.",
+        dispatcher=dispatcher,
+        mode="auto",
+        autonomy_level=3,
+        token_economy="optimal",
+        turn_start=0.0,
+    )
+
+    assert len(captured) == 1
+    result = captured[0]
+    assert result.status == SpecialistStatus.TIMEOUT
+    assert result.attempts == 1
+    partial = "The first confirmed fact [proof](sandbox:/tmp/proof.txt)."
+    assert result.content == partial
+    visible = "".join(dispatcher.text_parts)
+    assert visible.startswith(partial)
+    assert "timed out before it could finish" in visible
+    assert "retried once" not in visible
+    assert "The text above was preserved" in visible
+    assert updated.last_assistant_message() == visible
+    assert dispatcher.done_payloads[-1]["attempts"] == 1
 
 
 def test_background_status_formatter_covers_active_failed_and_mixed_states() -> None:
@@ -403,32 +459,8 @@ def test_background_status_formatter_covers_active_failed_and_mixed_states() -> 
 
 
 @pytest.mark.asyncio
-async def test_handle_background_status_without_tasks_and_call_llm_error_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    class _BrokenMemoryCoordinator:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            _ = args
-            _ = kwargs
-
-        async def capture_episode(self, **kwargs: object) -> None:
-            _ = kwargs
-            raise RuntimeError("memory unavailable")
-
-    monkeypatch.setattr("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _BrokenMemoryCoordinator)
+async def test_call_llm_error_paths() -> None:
     brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=_Registry(["reasoning"]))
-    dispatcher = _Dispatcher()
-
-    updated = await brain._handle_background_status(
-        session_id="sess-bg",
-        conversation=ConversationManager(),
-        prompt="what's the status?",
-        dispatcher=dispatcher,
-        turn_start=0.0,
-        active_tasks=[],
-    )
-    assert "No background work is running" in "".join(dispatcher.text_parts)
-    assert updated.last_assistant_message() == "No background work is running in this thread."
-    assert dispatcher.done_payloads[-1]["thinking_summary"] == "background_status"
-
     assert await brain._call_llm([{"role": "user", "content": "hello"}]) == ""
 
     class _FailChatLLM:

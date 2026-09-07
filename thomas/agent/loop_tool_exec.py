@@ -18,7 +18,9 @@ from thomas.agent.loop_tool_paths import (
     _WRITE_TOOL_PATH_KEYS,
     _declares_a_path_parameter,
     _sanitize_write_tool_path,
+    fenced_patch_target,
 )
+from thomas.agent.tool_failure_guard import ToolFailureGuard
 from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
 from thomas.core.file_access import is_file_access_refusal
@@ -61,6 +63,28 @@ _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
     "git.status",
     "shell.exec",
 )
+
+
+# Tools that wait for the person (ask_user) are exempt from the per-tool
+# timeout: a 20-minute question must not be cut off by a 120-second budget
+# meant for shell commands.
+_WAITS_ON_THE_PERSON = frozenset({"ask_user"})
+
+
+def _waits_on_the_person(name: str) -> bool:
+    return str(name or "").strip().lower() in _WAITS_ON_THE_PERSON
+
+
+def _failure_guard(loop: Any) -> ToolFailureGuard:
+    """One guard per loop, created on first use so every caller shares the counts."""
+    guard = getattr(loop, "_tool_failure_guard", None)
+    if not isinstance(guard, ToolFailureGuard):
+        guard = ToolFailureGuard()
+        try:
+            loop._tool_failure_guard = guard
+        except AttributeError:
+            pass
+    return guard
 
 
 def _is_write_tool(name: str, file_audit_module: Any) -> bool:
@@ -219,6 +243,33 @@ async def execute_tools(
                 iteration=iteration,
             )
 
+        # A call that already failed identically ``limit`` times is refused here,
+        # before it runs, with the reason; the run continues (see tool_failure_guard).
+        guard = _failure_guard(loop)
+        disabled_refusal = guard.check_before_call(name, args)
+        if disabled_refusal is not None:
+            await loop._audit_action(
+                kind="tool_action_rejected",
+                tool_call_id=tc_id,
+                tool_name=name,
+                decision="FAILED",
+                reason="repeated_identical_failure_disabled",
+                payload={"arguments": args},
+            )
+            return AgentEvent(
+                type=EventType.TOOL_RESULT,
+                data={
+                    "tool_id": tc_id,
+                    "tool_name": name,
+                    "result": disabled_refusal,
+                    "result_text": disabled_refusal,
+                    "ok": False,
+                    "duration_ms": 0,
+                    "disabled_call": True,
+                },
+                iteration=iteration,
+            )
+
         validated_path: str | None = None
         is_write_tool_call = _is_write_tool(name, file_audit_module)
         guard_event = _self_development_write_guard_event(loop, name=name, tc_id=tc_id, iteration=iteration)
@@ -272,12 +323,28 @@ async def execute_tools(
                     if is_write_tool_call and benchmark_root is None
                     else None
                 ),
+                # The run's file fence (paths another agent or the brief holds)
+                # is enforced on write tools here, never left to the prose.
+                protected_paths=(getattr(loop, "protected_paths", None) or None) if is_write_tool_call else None,
             )
+            if path_error is None and is_write_tool_call:
+                # A patch names its files inside its text; the path sanitizer never
+                # sees them. Read the patch's own headers against the same fence.
+                fence = fenced_patch_target(args, sandbox_root, getattr(loop, "protected_paths", None))
+                if fence is not None:
+                    path_error = (
+                        f"BLOCKED: {fence} is fenced off for this run (another agent or the run's brief holds it); "
+                        "write elsewhere or report the change as not yours to make."
+                    )
             if path_error is not None:
+                # A read tool refused here used to be reported as a "write tool"
+                # (TB-4.0 run 3: fs.read_file, fs.list_dir, eng.lint all labelled
+                # write tools). Name what it is.
+                tool_kind = "write tool" if is_write_tool_call else "tool"
                 msg = (
                     path_error
                     if is_file_access_refusal(path_error)
-                    else f"Invalid file path argument for write tool {name}: {path_error}"
+                    else f"Invalid file path argument for {tool_kind} {name}: {path_error}"
                 )
                 if is_write_tool_call:
                     audit_benchmark_event(
@@ -393,7 +460,7 @@ async def execute_tools(
 
             try:
                 guarded: Any
-                if loop._tool_timeout_s is not None:
+                if loop._tool_timeout_s is not None and not _waits_on_the_person(name):
                     guarded = await asyncio.wait_for(
                         _execute_guarded_tool(),
                         timeout=float(loop._tool_timeout_s),
@@ -447,7 +514,7 @@ async def execute_tools(
                 result_text = str(guarded)
         else:
             try:
-                if loop._tool_timeout_s is not None:
+                if loop._tool_timeout_s is not None and not _waits_on_the_person(name):
                     result = await asyncio.wait_for(
                         loop.tools.execute(name, args),
                         timeout=float(loop._tool_timeout_s),
@@ -588,6 +655,12 @@ async def execute_tools(
             event_data["verification"] = verification_feedback
             # Append verification feedback to result so the LLM sees it
             event_data["result_text"] = result_text + "\n\n" + verification_feedback
+        if not ok:
+            disable_note = guard.record_failure(name, args, result_text)
+            if disable_note:
+                event_data["result_text"] = str(event_data["result_text"]) + "\n\n" + disable_note
+                event_data["result"] = str(event_data["result_text"])[:4000]
+                event_data["disabled_call"] = True
 
         # Hook surface (tool category): fires after the tool completes, once
         # duration/ok/result_text are known. Read-only this release.

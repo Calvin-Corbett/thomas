@@ -69,6 +69,16 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if os.name == "nt":
+        # Windows has no exec. os.execv is emulated by spawning a new process
+        # and terminating this one immediately, so pre-commit collected THIS
+        # process's status (0) instead of the gate's, and the gate's output went
+        # to a process nobody was reading. Measured before this branch existed:
+        # monolith_guard.py exited 1 with 23 violations directly, and 0 with no
+        # output through the shim. All 28 gate entries were advisory.
+        # Run the gate as a child and hand its verdict back unchanged.
+        return int(subprocess.run([str(venv), *target], check=False).returncode)
+
     os.execv(str(venv), [str(venv), *target])
     return 0  # unreachable (execv replaces the process)
 

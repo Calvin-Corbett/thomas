@@ -19,6 +19,7 @@
         '005_easy_setup_onboarding_03.js',
         '006_easy_setup_onboarding_04.js',
         '007_easy_setup_onboarding_05.js',
+        'easy_setup_connection_flow.js',
         '008_easy_setup_onboarding_06.js',
         '009_initialization_composer.js',
         '010_chat_games_01.js',

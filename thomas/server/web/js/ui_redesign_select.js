@@ -143,9 +143,17 @@
       ? `<p class="tr-thread"><i class="ph ph-code" aria-hidden="true"></i> Code thread ready: <b>${esc(result.thread.title || 'this change')}</b></p>`
       : '';
     const open = result.thread
-      ? '<button type="button" data-tr="code">Open in Code</button>'
+      ? `<button type="button" data-tr="code">${result.overlay && result.overlay.saved ? 'Change stock Thomas too' : 'Open in Code'}</button>`
       : '';
-    return `<div class="tr-result">${headline}${why}${note}${thread}</div>`
+    // Where the change lives now: the overlay (every tab, every reload) or
+    // this browser only, and every record the overlay refused, with its reason.
+    const overlay = result.overlay && result.overlay.line
+      ? `<p class="tr-note ${result.overlay.saved ? 'tr-good' : 'tr-bad'}">${esc(result.overlay.line)}</p>`
+      : '';
+    const refused = result.overlay && Array.isArray(result.overlay.rejected) && result.overlay.rejected.length
+      ? `<ul class="tr-blocked">${result.overlay.rejected.map(row => `<li><b>${esc(row.address || 'overlay')}</b> - ${esc(row.reason || 'no reason given')}</li>`).join('')}</ul>`
+      : '';
+    return `<div class="tr-result">${headline}${why}${note}${overlay}${refused}${thread}</div>`
       + `<div class="tr-actions"><button type="button" class="tr-primary" data-tr="again">Change something else</button>${open}<button type="button" data-tr="close">Done</button></div>`;
   }
 
@@ -249,6 +257,11 @@
     if (existing >= 0) { state.picks.splice(existing, 1); paint(); return; }
     const descriptor = T().describe(element);
     if (!descriptor) return;
+    if (/\b(protected|no-edit)\b/.test(String(descriptor.policy || ''))) {
+      // Edit Mode's own rule and wording: a protected region is never restyled,
+      // and it is refused here, before any model call, not after.
+      state.notice = `${descriptor.label} is protected`; paint(); return;
+    }
     state.picks.push({ descriptor, element });
     paint();
   }
@@ -374,7 +387,7 @@
   // Apply the layout half locally and count what genuinely moved. A style
   // the page already had is not a change, and saying it was is the exact
   // lie this feature exists to stop telling.
-  function applyLayout(entries, rejected) {
+  function applyLayout(entries, rejected, applied) {
     const layout = L();
     if (!layout || !Array.isArray(entries)) return 0;
     const iconChecks = [];
@@ -399,6 +412,7 @@
       // back later even after other things have been changed around it.
       if (layout.pushVersion) layout.pushVersion(uiId);
       layout.set(uiId, merged);
+      if (applied) applied.push({ uiId, merged: Object.assign({}, merged), targetIndex: Number(entry.target_index) });
       changed += 1;
     });
     if (changed) layout.applyAll();
@@ -419,6 +433,10 @@
       if (Object.keys(item).filter(key => key !== 'x' && key !== 'y').length) layout.set(check.uiId, item);
       else layout.remove(check.uiId);
       layout.applyAll();
+      if (applied) {
+        const row = applied.findIndex(entry => entry.uiId === check.uiId);
+        if (row >= 0) applied.splice(row, 1);   // what was rolled back is not recorded
+      }
       changed = Math.max(0, changed - 1);
       rejected.push({
         target_index: check.entry.target_index,
@@ -427,6 +445,54 @@
       });
     });
     return changed;
+  }
+
+  // Record what Apply changed in the user's overlay (thomas/server/overlay), so
+  // it applies on every tab and every reload, not only in this browser. Token
+  // and identity changes exist ONLY through the overlay: without a write they
+  // are not applied at all, and the result line says exactly that.
+  async function recordOverlay(instruction, applied, theme, layout) {
+    const overlay = window.ThomasOverlay;
+    const workspace = layout ? layout.workspace() : 'chat';
+    const point = layout ? layout.currentPoint() : 'desktop';
+    const themeName = String(theme.theme || 'nebula');
+    const records = [];
+    applied.forEach(row => {
+      const pick = state.picks[row.targetIndex];
+      const d = pick ? pick.descriptor : {};
+      records.push({
+        op: 'set', kind: 'element', address: `element:${workspace}:${point}:${row.uiId}`, value: row.merged,
+        anchor: { exact: Boolean(d.exact), fragile: Boolean(d.synthetic), component: String(d.component || ''), label: String(d.label || ''), policy: String(d.policy || ''), path: String(d.path || '') },
+      });
+    });
+    Object.entries(theme.tokens || {}).forEach(([key, value]) => records.push({ op: 'set', kind: 'token', address: `token:${themeName}:${key}`, value }));
+    Object.entries(theme.identity || {}).forEach(([field, value]) => records.push({ op: 'set', kind: 'identity', address: `identity:${field}`, value }));
+    const themeCount = Object.keys(theme.tokens || {}).length + Object.keys(theme.identity || {}).length;
+    const themeRejected = Array.isArray(theme.rejected) ? theme.rejected.slice() : [];
+    if (!records.length) return { saved: false, themeCount: 0, rejected: themeRejected, line: '' };
+    // Element rows are already live in this browser; token and identity
+    // changes are not, so a refused write says which is which.
+    const themeNote = themeCount ? ' The theme changes were not applied.' : '';
+    const notApplied = reason => applied.length ? `Kept in this browser only - ${reason}.${themeNote}` : `Not applied - ${reason}.`;
+    if (!overlay || typeof overlay.record !== 'function') {
+      return { saved: false, themeCount: 0, rejected: themeRejected, line: notApplied('this page predates the overlay runtime; reload and Apply again') };
+    }
+    const reply = await overlay.record({ actor: 'redesign', instruction, targets: state.picks.map(pick => pick.descriptor.uiId) }, records);
+    if (reply && reply.ok) {
+      // The overlay now carries these entries, so the browser's own book drops
+      // its copies (the per-element versions stay, so Revert still works).
+      const prefix = `element:${workspace}:${point}:`;
+      (reply.accepted || []).forEach(address => { if (layout && layout.forgetLocal && address.indexOf(prefix) === 0) layout.forgetLocal(address.slice(prefix.length)); });
+      const accepted = new Set(reply.accepted || []);
+      const landed = records.filter(row => row.kind !== 'element' && accepted.has(row.address)).length;
+      const where = reply.view && reply.view.path ? ` (${reply.view.path})` : '';
+      return { saved: true, themeCount: landed, rejected: themeRejected.concat(reply.rejected || []),
+        line: `Saved to your overlay (rev ${reply.rev}) - applies on every tab and every reload${where}.` };
+    }
+    const line = reply && reply.unavailable
+      ? notApplied('this server predates the overlay endpoint; restart it and Apply again')
+      : notApplied(`the overlay refused the write: ${(reply && reply.error) || 'unknown error'}`);
+    return { saved: false, themeCount: 0, rejected: themeRejected, line };
   }
 
   async function apply() {
@@ -442,6 +508,7 @@
       instruction,
       workspace: layout ? layout.workspace() : 'chat',
       breakpoint: layout ? layout.currentPoint() : 'desktop',
+      theme: (((document.getElementById('tc-shell') || {}).dataset) || {}).theme || 'nebula',
       targets: state.picks.map(pick => pick.descriptor),
       context: callContext(),
     };
@@ -467,7 +534,8 @@
       }
       if (!response.ok || data.ok === false) throw new Error(data.error || `Redesign failed (${response.status})`);
       const iconRejected = [];
-      const layoutChanged = applyLayout(data.layout, iconRejected);
+      const applied = [];
+      const layoutChanged = applyLayout(data.layout, iconRejected, applied);
       const specChanged = Number((data.dashboard || {}).changed || 0);
       if (specChanged) {
         window.dispatchEvent(new CustomEvent('thomas:work-dashboard-updated', { detail: data.dashboard || {} }));
@@ -490,10 +558,12 @@
         const pick = state.picks[Number(row.target_index)];
         row.label = pick ? pick.descriptor.label : 'That element';
       });
-      const changedTotal = layoutChanged + specChanged;
+      const overlay = await recordOverlay(instruction, applied, data.theme || {}, layout);
+      const changedTotal = layoutChanged + specChanged + overlay.themeCount;
       state.result = {
         changed: changedTotal,
         unsupported: blocked,
+        overlay,
         thread: changedTotal ? await openCodeThread(data.code_thread) : null,
       };
       state.phase = 'result';

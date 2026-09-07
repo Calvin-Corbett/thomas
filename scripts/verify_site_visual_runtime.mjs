@@ -397,6 +397,17 @@ async function main() {
       await page.goto(routeUrl, { waitUntil: "load", timeout: opts.timeoutMs });
       await page.waitForSelector(".nav-shell", { timeout: opts.timeoutMs });
       await page.waitForSelector(".footer-shell", { timeout: opts.timeoutMs });
+      // site-visual-proof-baseline-drift-2026-08-26: the footer-focus screenshot
+      // is a viewport capture taken after scrolling to document.body.scrollHeight.
+      // Forensics showed the drift was not rendering noise but a real few-pixel
+      // vertical offset between captures -- the whole footer viewport shifted up
+      // or down a few px, doubling every text line in the diff. Root cause: web
+      // fonts (next/font) can still be swapping in/finishing layout at the fixed
+      // 280ms mark, so scrollHeight (and therefore the scroll-to-bottom position)
+      // read slightly differently run to run. Waiting for document.fonts.ready
+      // before any measurement or scroll makes scrollHeight -- and hence the
+      // captured viewport -- deterministic.
+      await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(280);
 
       const routeKey = route === "/" ? "home" : route.replace(/^\//, "").replace(/[^a-z0-9-]/gi, "-");
@@ -454,7 +465,18 @@ async function main() {
         };
       }, route);
 
-      await page.evaluate(() => window.scrollTo(0, Math.max(window.innerHeight + 420, 920)));
+      // globals.css sets `scroll-behavior: smooth` on the root, so a plain
+      // scrollTo(x, y) animates instead of jumping -- a fixed wait afterward
+      // races that animation. Measured (site-visual-proof-baseline-drift-
+      // 2026-08-26, comparator-review follow-up): even after document.fonts.ready
+      // settled layout, footer-focus captures still showed an intermittent
+      // 2-4px whole-content vertical offset run to run -- the smooth-scroll
+      // race, not font loading, explains the residual (fonts.ready fixed the
+      // *layout* non-determinism; this fixes the *scroll* non-determinism).
+      // `behavior: "instant"` overrides the CSS smooth-scroll for this call.
+      await page.evaluate(() =>
+        window.scrollTo({ top: Math.max(window.innerHeight + 420, 920), left: 0, behavior: "instant" }),
+      );
       await page.waitForTimeout(220);
       const navTopAfterScroll = await page.evaluate(() => {
         const nav = document.querySelector(".nav-shell");
@@ -462,7 +484,9 @@ async function main() {
         return navRect ? Math.round(navRect.top) : null;
       });
 
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.evaluate(() =>
+        window.scrollTo({ top: document.body.scrollHeight, left: 0, behavior: "instant" }),
+      );
       await page.waitForTimeout(300);
 
       await page.screenshot({

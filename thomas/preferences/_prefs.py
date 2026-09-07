@@ -191,11 +191,23 @@ class AdvancedToolsPrefs(BaseModel):
     max_parallel_tools: int = Field(default=6, ge=1, le=32)
     allowed_paths: str = ""
     blocked_commands: str = ""
+    # Sensitive sites (frontier parity with Claude in Chrome / ChatGPT agent
+    # mode): hosts where Thomas will not click or type on its own. The
+    # built-in bank/payment/government/health list always applies; these are
+    # the user's additions, comma or newline separated. Mode: pause | allow.
+    browser_sensitive_hosts: str = ""
+    browser_sensitive_mode: str = "pause"
 
-    @field_validator("allowed_paths", "blocked_commands")
+    @field_validator("allowed_paths", "blocked_commands", "browser_sensitive_hosts")
     @classmethod
     def _trim_fields(cls, v: str) -> str:
         return str(v or "").strip()
+
+    @field_validator("browser_sensitive_mode", mode="before")
+    @classmethod
+    def _sensitive_mode(cls, v: object) -> str:
+        mode = str(v or "").strip().lower()
+        return mode if mode in {"pause", "allow"} else "pause"
 
 
 class AdvancedMemoryPrefs(BaseModel):

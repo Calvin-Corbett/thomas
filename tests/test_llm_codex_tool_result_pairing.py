@@ -124,3 +124,34 @@ def test_responses_native_image_blocks_remain_native() -> None:
     _instructions, items = _responses_input_from_messages(owner, messages)
 
     assert items[0]["content"] == messages[0]["content"]
+
+
+def test_orphaned_tool_call_gets_a_placeholder_output() -> None:
+    """A function_call whose result was trimmed (or never produced) must not be sent alone.
+
+    The Responses API answers HTTP 400 "No tool output found for function call" and the
+    whole pass dies - it did, twice, at the start of the remediation pass on Terminal-Bench.
+    """
+    owner = _Owner()
+    messages = [
+        {"role": "user", "content": "go"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_kept", "function": {"name": "fs.read_file", "arguments": "{}"}},
+                {"id": "call_lost", "function": {"name": "git.status", "arguments": "{}"}},
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_kept", "content": "contents"},
+        {"role": "user", "content": "continue"},
+    ]
+    _instructions, items = _responses_input_from_messages(owner, messages)
+    calls = [i["call_id"] for i in items if i.get("type") == "function_call"]
+    outputs = {i["call_id"]: i["output"] for i in items if i.get("type") == "function_call_output"}
+    assert calls == ["call_kept", "call_lost"]
+    assert outputs["call_kept"] == "contents"
+    assert "not retained" in outputs["call_lost"]
+    # The placeholder sits right after its call, before the next user turn.
+    types = [(i.get("type") or i.get("role"), i.get("call_id")) for i in items]
+    assert types.index(("function_call_output", "call_lost")) == types.index(("function_call", "call_lost")) + 1

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.diff_codex_format import convert_codex_patch
 from thomas.tools.diff_transaction import (
     PatchFormatError,
     apply_patch_transactional,
@@ -25,6 +26,21 @@ from thomas.tools.filesystem import _is_protected_runtime_path, _safe_path
 
 
 _READ_FILE_LINE_PREFIX_RE = re.compile(r"^[ \t]*\d{1,7}\t")
+
+
+def _match_ignoring_trailing_whitespace(content: str, old_str: str) -> str | None:
+    """The span of ``content`` that equals ``old_str`` once trailing spaces and
+    tabs on each line are ignored, or None when there is no such span or more
+    than one. Returned as the file's own text so the exact replace below works."""
+    lines = old_str.split("\n")
+    if not any(line.strip() for line in lines):
+        return None
+    parts = [re.escape(line.rstrip()) + r"[ \t]*" for line in lines]
+    pattern = re.compile("\n".join(parts))
+    matches = list(pattern.finditer(content))
+    if len(matches) != 1:
+        return None
+    return matches[0].group(0)
 
 
 def _strip_read_file_line_numbers(text: str) -> str:
@@ -83,16 +99,37 @@ class CreateDiffTool(Tool):
         if blocked:
             return ToolResult(ok=False, error=blocked)
 
+        # Raw bytes in, raw bytes out: read with universal newlines and write
+        # with the platform default turned every CRLF file into LF on Linux and
+        # every LF file into CRLF on Windows, one whole-file line-ending flip
+        # per edit. The file keeps whatever it had; matching is done on LF.
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+                raw = handle.read()
         except OSError as e:
             return ToolResult(ok=False, error=f"Cannot read file: {e}")
+        crlf = raw.count("\r\n")
+        eol = "\r\n" if crlf and crlf >= raw.count("\n") - crlf else "\n"
+        content = raw.replace("\r\n", "\n")
+        old_str = old_str.replace("\r\n", "\n")
+        new_str = new_str.replace("\r\n", "\n")
+        notes: list[str] = []
+        if eol == "\r\n":
+            notes.append("line endings: the file keeps CRLF")
 
         if old_str not in content:
             normalized_old = _strip_read_file_line_numbers(old_str)
             if normalized_old != old_str and normalized_old in content:
                 old_str = normalized_old
                 new_str = _strip_read_file_line_numbers(new_str)
+
+        if old_str not in content:
+            # Fifteen misses in one day were trailing whitespace: the text the
+            # model meant, with spaces the file happened to carry at line ends.
+            loose = _match_ignoring_trailing_whitespace(content, old_str)
+            if loose is not None:
+                old_str = loose
+                notes.append("trailing whitespace ignored when matching")
 
         if old_str not in content:
             return ToolResult(
@@ -108,11 +145,14 @@ class CreateDiffTool(Tool):
             )
 
         new_content = content.replace(old_str, new_str, 1)
-        path.write_text(new_content, encoding="utf-8")
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(new_content.replace("\n", eol) if eol != "\n" else new_content)
 
         old_lines = old_str.splitlines()
         new_lines = new_str.splitlines()
         summary = f"Replaced {len(old_lines)} line(s) with {len(new_lines)} line(s) in {rel}"
+        if notes:
+            summary += " (" + "; ".join(notes) + ")"
         return ToolResult(ok=True, data=summary)
 
 
@@ -154,15 +194,24 @@ class ApplyPatchTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         patch_text = args["patch"]
         selection = args.get("hunks")
+        if isinstance(selection, (list, tuple)) and not selection:
+            selection = None  # `hunks: []` means no restriction, not nothing (8 refusals in one day)
 
+        # The model writes the Codex apply-patch envelope more often than a
+        # numbered unified diff (35 of 88 calls rejected in one day); read both.
         try:
-            report = apply_patch_transactional(patch_text, self._root, selection=selection)
+            conversion = convert_codex_patch(patch_text, self._root, create_files=True)
+            report = apply_patch_transactional(conversion.unified, self._root, selection=selection)
         except PatchFormatError as e:
             return ToolResult(ok=False, error=f"Patch failed: {e}")
 
         if not report.ok:
+            for made in conversion.created:  # an Add that never applied leaves no empty file behind
+                made.unlink(missing_ok=True)
             lines = [f"  conflict: {c.hunk_id or c.file} — {c.reason}" for c in report.conflicts]
             return ToolResult(ok=False, data="\n".join(lines) or None, error=report.error)
+        for gone in conversion.to_delete:  # the transaction emptied it; a Delete means gone
+            gone.unlink(missing_ok=True)
 
         lines = [f"  patched: {filepath}" for filepath in report.files_written]
         lines.append(f"  applied hunks: {', '.join(report.applied_hunks)}")
@@ -199,7 +248,8 @@ class PreviewPatchTool(Tool):
         patch_text = args["patch"]
 
         try:
-            report = preflight_patch(patch_text, self._root)
+            unified = convert_codex_patch(patch_text, self._root, create_files=False).unified
+            report = preflight_patch(unified, self._root)
         except PatchFormatError as e:
             return ToolResult(ok=False, error=f"Patch failed: {e}")
 
@@ -265,6 +315,19 @@ class PreviewDiffTool(Tool):
         except OSError as e:
             return ToolResult(ok=False, error=f"Cannot read file: {e}")
 
+        # The same forgiveness as diff.create, or a preview says "not found"
+        # for an edit that create would apply and sends the model off to
+        # rewrite a search string that was already right.
+        old_str = old_str.replace("\r\n", "\n")
+        new_str = new_str.replace("\r\n", "\n")
+        if old_str not in content:
+            normalized_old = _strip_read_file_line_numbers(old_str)
+            if normalized_old != old_str and normalized_old in content:
+                old_str, new_str = normalized_old, _strip_read_file_line_numbers(new_str)
+        if old_str not in content:
+            loose = _match_ignoring_trailing_whitespace(content, old_str)
+            if loose is not None:
+                old_str = loose
         if old_str not in content:
             return ToolResult(ok=False, error=f"old_str not found in {rel}")
 

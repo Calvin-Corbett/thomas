@@ -21,9 +21,11 @@ try:
     from breakglass_auth import authorize_breakglass
 
     from scripts.crew.brief.safety_config import load_config
+    from scripts.forge.gates.breakglass_landed import breakglass_row_landed
 except ImportError:  # pragma: no cover
     from scripts.breakglass_auth import authorize_breakglass  # type: ignore
     from scripts.crew.brief.safety_config import load_config  # type: ignore
+    from scripts.forge.gates.breakglass_landed import breakglass_row_landed  # type: ignore
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -195,8 +197,30 @@ def _find_protected_skip_hooks(tokens: Sequence[str], *, protected_hooks: Sequen
 
 
 def _protected_skip_hooks() -> tuple[str, ...]:
-    """Compatibility helper for tests and other gate auditors."""
-    return tuple(PROTECTED_SKIP_HOOKS)
+    """Every hook the gate actually protects: the built-in list AND the config.
+
+    This returned only the built-in tuple until 2026-09-03, while `run()` has
+    always protected the union of that tuple and
+    `agent_safety.toml [skip_policy].protected_hooks`. The auditors that call
+    this - including the coverage test whose failure message says to add the
+    hook to agent_safety.toml - therefore could not see a hook added there, so
+    following the instruction in that message changed nothing and the test went
+    on failing. It had been failing since 2026-08-25 for exactly that reason.
+
+    The union is the honest answer: it is what a SKIP is checked against.
+    """
+    hooks = list(PROTECTED_SKIP_HOOKS)
+    try:
+        hooks.extend(str(item or "").strip() for item in _config().skip_policy_protected_hooks())
+    except Exception:
+        # A missing or unreadable config must not make the gate report LESS
+        # protection than the built-in list already guarantees.
+        pass
+    seen: dict[str, None] = {}
+    for hook in hooks:
+        if hook:
+            seen.setdefault(hook, None)
+    return tuple(seen)
 
 
 def _resolve_agent() -> str | None:
@@ -264,10 +288,13 @@ def _parse_iso_utc(raw: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _load_breakglass_history(*, audit_log: Path, agent: str, now: datetime) -> list[datetime]:
+def _load_breakglass_history(
+    *, audit_log: Path, agent: str, now: datetime, pending_minutes: int = 15
+) -> list[datetime]:
     if not audit_log.exists():
         return []
     out: list[datetime] = []
+    seen_heads: set[str] = set()
     agent_key = str(agent or "").strip().lower()
     try:
         lines = audit_log.read_text(encoding="utf-8").splitlines()
@@ -295,6 +322,15 @@ def _load_breakglass_history(*, audit_log: Path, agent: str, now: datetime) -> l
             continue
         if stamp > now + timedelta(minutes=1):
             continue
+        if not breakglass_row_landed(
+            payload, now=now, pending_minutes=pending_minutes, run_git=_run_git, parse_iso_utc=_parse_iso_utc
+        ):
+            continue  # an attempt that landed nothing is not a use
+        head = str(payload.get("head") or "").strip()
+        if head:  # retries on one head are one ceremony: four rows, one authorised change
+            if head in seen_heads:
+                continue
+            seen_heads.add(head)
         out.append(stamp)
     return sorted(out)
 

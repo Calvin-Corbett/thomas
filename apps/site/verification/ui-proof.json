@@ -1,41 +1,32 @@
 {
   "rule_version": 2,
-  "captured_at_utc": "2026-06-03T00:36:00.159Z",
+  "captured_at_utc": "2026-09-01T14:11:56.024Z",
   "target_url": "http://127.0.0.1:3108",
   "generator": {
     "script": "scripts/refresh_site_visual_proof.py",
     "runtime_verifier": "scripts/verify_site_visual_runtime.mjs",
-    "generated_at_utc": "2026-06-03T00:36:01.941628+00:00"
+    "generated_at_utc": "2026-09-01T14:12:01.136729+00:00"
   },
   "git": {
-    "head_sha": "83b472bde30b3af90b500b8d261b0483424dbf26",
+    "head_sha": "ca02b78690d6807dff239c9c257004ef0957e244",
     "ui_changed_paths": [
-      "apps/site/src/app/api/download/route.ts",
-      "apps/site/src/app/api/marketplace/catalog/route.ts",
-      "apps/site/src/app/api/metrics/overview/route.ts",
-      "apps/site/src/app/api/releases/route.ts",
-      "apps/site/src/app/api/v1/plugins/[pluginId]/manual-download/route.ts",
-      "apps/site/src/app/api/v1/plugins/[pluginId]/route.ts",
-      "apps/site/src/app/api/v1/plugins/catalog/route.ts",
-      "apps/site/src/app/api/v1/plugins/download-token/route.ts",
-      "apps/site/src/app/api/v1/plugins/download/[token]/route.ts",
-      "apps/site/src/app/api/v1/plugins/verify/route.ts",
-      "apps/site/src/components/site-home-page.tsx",
-      "apps/site/src/components/spline-viewer-loader.tsx"
+      "apps/site/src/app/globals_part01.css",
+      "apps/site/src/app/globals_part02.css",
+      "apps/site/src/app/globals_part03.css"
     ]
   },
   "runtime_report": {
     "path": "apps/site/verification/runtime-report.json",
-    "sha256": "ccf26cc2e62c9e0d13b905a78a9a37c2b8ae3f7ca858ab5245a11fa83b96a2c1"
+    "sha256": "b55b0748e87a882c227f2bf9e3807e4609650ec15d1543cd2807d50299191312"
   },
   "screenshots": {
     "full_page": {
       "path": "apps/site/verification/screenshots/full-page.png",
-      "sha256": "73918ce93d9bc12845593268a990f237f9754b085e756021295bf132210d1424"
+      "sha256": "a504fbf96540c59ba2109ced7adb000f19351fd84d6d70b700c339c3ed9b28bb"
     },
     "footer_focus": {
       "path": "apps/site/verification/screenshots/footer-focus.png",
-      "sha256": "4ac5e75f2a57acf28f28e2c4b928ee8bf142506b87e9f8667744dfb44ebfce3f"
+      "sha256": "7de8546307ef354c6a6b647217dc367656ec4a814f5a061e15764d93e6e4fbe2"
     }
   },
   "metrics": {
@@ -360,9 +351,9 @@
     "console_error_count": 0,
     "console_error_samples": [],
     "pixel_diff_threshold_ratio": 0.02,
-    "pixel_diff_full_page_ratio": 0.0,
+    "pixel_diff_full_page_ratio": 0.0028651408099204722,
     "pixel_diff_footer_focus_ratio": 0.0,
-    "pixel_diff_max_ratio": 0.0,
+    "pixel_diff_max_ratio": 0.0028651408099204722,
     "pixel_diff_size_mismatch_count": 0
   },
   "assertions": {

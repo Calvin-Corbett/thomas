@@ -21,7 +21,8 @@ def test_shared_shell_uses_the_exact_five_chat_theme_names_and_core_tokens() -> 
     assert "css/tokens.css" in css
     for value in ("#070912", "#16181c", "#fafbfc", "#08151a", "#f4ede1"):
         assert value in tokens
-    for value in ("#8b8cff", "#6e9bff", "#2f6bff", "#34e0b0", "#c0603c"):
+    # These are the canonical accessible accents from tokens.css.
+    for value in ("#8b8cff", "#6e9bff", "#2b62f3", "#34e0b0", "#a84e30"):
         assert value in tokens
     for value in ('"Manrope", system-ui, sans-serif', '"JetBrains Mono", ui-monospace, monospace', '"Newsreader", Georgia, serif'):
         assert value in tokens

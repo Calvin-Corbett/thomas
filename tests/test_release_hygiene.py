@@ -198,3 +198,106 @@ def test_release_hygiene_strict_warnings_fails_on_security_warning(monkeypatch, 
     assert rc == 1
     assert "release hygiene: FAIL" in out
     assert "WARN: security audit warnings present: 2" in out
+
+
+# --- release bundle boundary ---------------------------------------------------
+#
+# scripts/package_release.py selects by ALLOW-LIST. It used to be a deny-list,
+# which shipped anything new by default: scripts/crew (41 files of workboard and
+# claim tooling), all 59 gates, AGENTS.md, PROJECT_MANAGEMENT_RULES.md and
+# plans/ all reached user bundles without anyone deciding they should. A user's
+# Thomas has no workboard, files no claims, and has no peer agents.
+#
+# These two tests pin both directions. Dropping either one lets the boundary rot
+# back: the first to shipping internal state, the second to a bundle that is
+# clean and cannot start.
+
+
+def _bundle_paths() -> set[str]:
+    import importlib.util
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("_pkg_release", root / "scripts" / "package_release.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=root, capture_output=True, text=True, check=False
+    ).stdout.splitlines()
+    return {p.strip() for p in tracked if p.strip() and module._is_excluded(p.strip()) is None}
+
+
+def test_release_bundle_excludes_build_system_and_process() -> None:
+    """No maintainer-only tooling may reach a user bundle."""
+    shipped = _bundle_paths()
+    assert shipped, "bundle selection returned nothing -- packaging is broken"
+
+    forbidden_prefixes = (
+        "scripts/crew/",
+        "scripts/forge/gates/",
+        "plans/",
+        "tests/",
+        ".github/",
+        "prompt_pack/",
+        ".codex/",
+        "docs/ai/",
+        "evolve_corpus/",
+        "code_intake/",
+    )
+    for prefix in forbidden_prefixes:
+        leaked = sorted(p for p in shipped if p.startswith(prefix))
+        assert not leaked, f"{prefix} must not ship: {leaked[:5]}"
+
+    forbidden_files = (
+        "AGENTS.md",
+        "CLAUDE.md",
+        "CONTRIBUTING_AI.md",
+        "PROJECT_MANAGEMENT_RULES.md",
+        "GUARDRAILS.md",
+        "agent_safety.toml",
+    )
+    for name in forbidden_files:
+        assert name not in shipped, f"{name} must not ship"
+
+
+def test_release_bundle_still_contains_a_cold_install() -> None:
+    """Clean is not enough -- a bundle that cannot start is a worse regression.
+
+    The root .cmd launchers immediately delegate into scripts/*.ps1, which the
+    allow-list excludes wholesale. Those specific launcher files are named back in
+    individually; if that ever gets dropped the bundle stays 'clean' and nothing
+    runs.
+    """
+    shipped = _bundle_paths()
+
+    required = (
+        "README.md",
+        "LICENSE",
+        "SECURITY.md",
+        "pyproject.toml",
+        "requirements-lock.txt",
+        "thomas.toml",
+        # spend caps read by evolve_supervisor/spend_governor.py, which ships
+        "evolve_governor.toml",
+        # runtime guidance sources read by thomas/agent/guidance.py
+        "SOUL.md",
+        "IDENTITY.md",
+        # entry points and the launchers they call
+        "install.cmd",
+        "run-ui.cmd",
+        "scripts/run-ui.ps1",
+        "scripts/setup.ps1",
+        "scripts/repair.ps1",
+        "scripts/bootdoctor.ps1",
+        "scripts/run-repl.ps1",
+        "scripts/create_shortcut.py",
+        "installer/ThomasSetup.iss",
+        # the product itself
+        "thomas/server/web/chat.html",
+    )
+    missing = [p for p in required if p not in shipped]
+    assert not missing, f"cold install would break, missing: {missing}"
+
+    assert any(p.startswith("thomas/") for p in shipped), "the product package must ship"

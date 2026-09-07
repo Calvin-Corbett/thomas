@@ -89,7 +89,7 @@ def _resolve_default_profile(root: Path) -> str:
     """
     try:
         from thomas.core.config import load_config
-        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.model_resolution import resolve_effective_model
 
         cfg = load_config(Path(root) / "thomas.toml")
         profile, _ = resolve_effective_model(cfg, user_id="default")

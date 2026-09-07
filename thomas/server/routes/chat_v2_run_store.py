@@ -109,8 +109,16 @@ def start_chat_v2_run(
     model_id: str,
     mode: str,
     autonomy_level: int,
+    task_id: str | None = None,
 ) -> ChatV2RunRecorder:
-    """Start a run when the optional run store is available; otherwise no-op."""
+    """Start a run when the optional run store is available; otherwise no-op.
+
+    `task_id` (phase 2 batch 1, recon #7a): optional workboard task_id this
+    run is claiming, stamped into run metadata so claim_evidence's run-kind
+    binding can verify by exact token instead of only `not_before`. None
+    (the default) is honest absence, not a defect -- no caller today has a
+    task_id genuinely in scope; see claim_evidence.py's module docstring.
+    """
     run_id = secrets.token_urlsafe(10)
     module = app.get(APP_RUN_STORE_MODULE)
     if not bool(app.get(APP_RUN_STORE_ENABLED, False)) or module is None:
@@ -127,6 +135,7 @@ def start_chat_v2_run(
                 "mode": mode,
                 "autonomy_level": autonomy_level,
                 "thomas_version": THOMAS_VERSION,
+                "task_id": task_id,
             }
         )
         created = True

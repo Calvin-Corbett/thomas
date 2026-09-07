@@ -114,6 +114,68 @@ function Ensure-NodeAndNpmInstalled {
   return ($node -and $npm)
 }
 
+function Ensure-DesktopShellInstalled {
+  # The desktop shell is what makes a web tab load a real site. Without it
+  # Thomas still runs, but web tabs fall back to iframes and any site that
+  # refuses framing -- Gmail, a bank -- renders blank. So a fresh checkout
+  # installs it here rather than leaving you to find that out by clicking.
+  $desktopDir = Join-Path $Root "desktop"
+  $electronExe = Join-Path $desktopDir "node_modules\electron\dist\electron.exe"
+  if (Test-Path $electronExe) {
+    return $true
+  }
+  if (-not (Test-Path (Join-Path $desktopDir "package.json"))) {
+    Write-Host "[thomas] desktop/ is missing from this checkout; skipping the desktop shell."
+    return $false
+  }
+  if (-not (Ensure-NodeAndNpmInstalled)) {
+    Write-Host "[thomas] Node/npm not available, so the desktop shell was not installed."
+    Write-Host "[thomas] Thomas still runs in a browser; web tabs will stay blank on sites that refuse framing."
+    return $false
+  }
+  $npm = Get-CommandPathAny @("npm", "npm.cmd", "npm.exe")
+  if (-not $npm) {
+    Write-Host "[thomas] npm not found after Node install; skipping the desktop shell."
+    return $false
+  }
+
+  Write-Host "[thomas] Installing the desktop shell (first run only, this takes a minute)..."
+  Push-Location $desktopDir
+  try {
+    $code = Invoke-Native $npm @("install", "--no-audit", "--no-fund")
+  } finally {
+    Pop-Location
+  }
+  if ($code -ne 0) {
+    Write-Host ("[thomas] WARNING: desktop shell install failed (exit {0})." -f $code)
+    return $false
+  }
+  if (-not (Test-Path $electronExe)) {
+    # npm can report success and still leave the package without its binary.
+    # Say exactly that rather than failing later with a confusing error.
+    Write-Host "[thomas] WARNING: Electron installed but its binary is missing."
+    Write-Host "[thomas] Fix: delete desktop\node_modules and desktop\package-lock.json, then re-run setup."
+    return $false
+  }
+  Write-Host "[thomas] Desktop shell installed."
+  return $true
+}
+
+function Install-ThomasShortcut {
+  # Puts Thomas on the Desktop and in the Start Menu, pointing at the desktop
+  # shell and wearing the brand mark.
+  $installer = Join-Path $Root "scripts\thomas_app.py"
+  if (-not (Test-Path $installer)) {
+    return $false
+  }
+  $code = Invoke-Native $VenvPy @($installer)
+  if ($code -ne 0) {
+    Write-Host ("[thomas] WARNING: could not create the Thomas shortcut (exit {0})." -f $code)
+    return $false
+  }
+  return $true
+}
+
 function Ensure-CodexInstalled {
   if (Test-CodexInstalled) {
     return $true
@@ -627,6 +689,9 @@ Set-Content -Path $statusPath -Encoding UTF8 -Value @(
   "auto_install_tools=$($AutoInstallTools.IsPresent)"
 )
 
+$DesktopReady = Ensure-DesktopShellInstalled
+$ShortcutReady = Install-ThomasShortcut
+
 if (-not $SkipDoctor) {
   Write-Host "[thomas] Running doctor..."
   $code = Invoke-Native $VenvPy @("-m", "thomas", "doctor")
@@ -641,7 +706,17 @@ Write-Host "[thomas] Setup complete."
 Write-Host "[thomas] Selected profile: $SelectedProfile"
 Write-Host "[thomas] Status file: $statusPath"
 Write-Host "[thomas] Next:"
-Write-Host "  1) Run run-ui.cmd"
-Write-Host "  2) Open http://127.0.0.1:8899 and complete the Onboarding Wizard"
+if ($ShortcutReady) {
+  Write-Host "  1) Open Thomas from the Desktop or Start Menu"
+} else {
+  Write-Host "  1) Run desktop.cmd (or run-ui.cmd for the browser)"
+}
+Write-Host "  2) Complete the Onboarding Wizard"
 Write-Host "  3) If needed: .\\.venv\\Scripts\\python.exe -m thomas doctor --full"
+if (-not $DesktopReady) {
+  Write-Host ""
+  Write-Host "[thomas] NOTE: the desktop shell is not installed, so Thomas opens in a browser"
+  Write-Host "[thomas] and web tabs will stay blank on sites that refuse to be framed."
+  Write-Host "[thomas] Install it with: cd desktop; npm install"
+}
 Write-Host ""

@@ -48,9 +48,11 @@ class _RunStore:
         self.order: list[str] = []
         self.events: list[dict[str, Any]] = []
         self.finalized: list[dict[str, Any]] = []
+        self.created: list[dict[str, Any]] = []
 
     def create_run(self, metadata: dict[str, Any]) -> str:
         self.order.append("create")
+        self.created.append(dict(metadata))
         return str(metadata["run_id"])
 
     def ThreadedRunWriter(self, run_id: str) -> _Writer:  # noqa: N802 - production module contract
@@ -64,7 +66,7 @@ class _RunStore:
         self.finalized.append({"run_id": run_id, **payload})
 
 
-def _start(module: Any):
+def _start(module: Any, *, task_id: str | None = None):
     app = {APP_RUN_STORE_ENABLED: True, APP_RUN_STORE_MODULE: module}
     return start_chat_v2_run(
         app,
@@ -73,7 +75,32 @@ def _start(module: Any):
         model_id="gpt-5.6",
         mode="thinking",
         autonomy_level=3,
+        task_id=task_id,
     )
+
+
+def test_start_chat_v2_run_stamps_task_id_into_create_run_metadata() -> None:
+    """Phase 2 batch 1, recon #7a: an optional task_id, when the caller has
+    one, must reach create_run's metadata so run_store can persist it and
+    claim_evidence's run-kind binding can find it.
+    """
+    module = _RunStore()
+
+    _start(module, task_id="demo-task-123")
+
+    assert module.created[0]["task_id"] == "demo-task-123"
+
+
+def test_start_chat_v2_run_defaults_task_id_to_none_when_the_caller_has_none() -> None:
+    """Honest absence: today's real callers (chat_v2.py,
+    workspace_specialist_runtime.py) have no task_id in scope and must not
+    fabricate one -- the default stays None, not an empty string or a guess.
+    """
+    module = _RunStore()
+
+    _start(module)
+
+    assert module.created[0]["task_id"] is None
 
 
 def test_writer_start_failure_finalizes_created_run_as_failed() -> None:

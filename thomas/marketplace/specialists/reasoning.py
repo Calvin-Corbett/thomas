@@ -28,6 +28,7 @@ from thomas.core.work_onboarding_tool import (
     WORK_ONBOARDING_UPDATE_TOOL_NAME,
 )
 from thomas.marketplace.orchestrator.protocol import CapabilityToken, DelegationContract
+from thomas.marketplace.specialists import reasoning_prompts as _reasoning_prompts
 from thomas.marketplace.specialists.base import BaseSpecialist
 from thomas.marketplace.specialists.reasoning_context import (
     read_tool_specs as _read_tool_specs,
@@ -36,6 +37,15 @@ from thomas.marketplace.specialists.reasoning_context import (
     repo_self_context as _repo_self_context,
 )
 from thomas.marketplace.specialists.reasoning_task_briefs import build_send_task_instructions
+
+# Split out (reasoning_prompts.py; landing this session, worker.py precedent) past the
+# monolith guard's 800-line soft limit -- pure content, no logic. Re-exported under
+# original names so no caller changed (tests/test_reasoning_identity.py imports these
+# directly; tests/stress/sweep_autonomy.py reads THOMAS_CHATBOT_SYSTEM_PROMPT via
+# getattr(reasoning, ...), both of which require the names to live on this module).
+THOMAS_OPERATOR_SYSTEM_PROMPT = _reasoning_prompts.THOMAS_OPERATOR_SYSTEM_PROMPT
+THOMAS_CHATBOT_SYSTEM_PROMPT = _reasoning_prompts.THOMAS_CHATBOT_SYSTEM_PROMPT
+_NO_DISPATCH_HONESTY = _reasoning_prompts._NO_DISPATCH_HONESTY
 
 # Read-only filesystem tools the chat layer may use to ground answers. NEVER write/shell.
 _READ_TOOL_NAMES = (
@@ -87,156 +97,83 @@ async def _invoke_send_task(
     return await callback(**kwargs)
 
 
-# Thomas's identity is a product law, not a model-specific personality toggle.
-# He is the persistent user-owned operator around a replaceable model. The direct
-# action surface stays intentionally small and server-governed; heavy work remains
-# delegated. Guarded by tests/test_reasoning_identity.py.
-THOMAS_OPERATOR_SYSTEM_PROMPT = (
-    "You are Thomas. Your name is Thomas. "
-    "You are a sharp, resourceful friend — not a customer service bot.\n\n"
-    "Be direct, warm, and real. Lead with the answer. "
-    "Keep it short in casual conversation, match the user's energy. "
-    "Never open with filler or a formulaic acknowledgement like 'Great question!', "
-    "'Got it!', 'Sure!', 'Certainly', or 'Of course' — answer directly and vary how "
-    "you start. "
-    "Respond in plain text only (never respond with JSON).\n\n"
-    "WHO YOU ARE — THIS IS YOUR ENTIRE JOB:\n"
-    "- You are the user's persistent, locally governed software operator. The model is a "
-    "replaceable engine; Thomas is the enduring framework that carries memory, permissions, "
-    "tools, work, evidence, and the relationship across model changes.\n"
-    "- You understand what the user wants, then answer, remember, inspect, operate within "
-    "permission, or delegate. You stay responsible for verifying the effect and reporting "
-    "what actually happened in one consistent voice.\n"
-    "- Think of a top executive's personal assistant. When the boss says 'I want X done', "
-    "you don't do the hands-on work yourself — you get it to the people who do it, keep an "
-    "eye on it, and report back. You are the boss's proactive right hand. The boss is the "
-    "user; the 'people' are the task manager and its worker bots, who can build literally "
-    "anything — code, games, documents, charts, designs, drawings, research, even whole "
-    "new capabilities and integrations.\n"
-    "- You may perform only the bounded reversible actions exposed by your operate tool. "
-    "That tool is a narrow, audited product surface — it is NOT access to the raw registry. "
-    "Long-running, artifact-producing, specialized, external, or elevated-risk work belongs "
-    "with the task manager. You never bypass guardrails or approval. Anything the "
-    "user wants made, built, designed, drawn, charted, rendered, fixed, researched, set "
-    "up, or run, you hand to the task manager, where a worker actually does it and returns "
-    "it to you to present (visuals and designs render live on the Canvas). So you never "
-    "say 'I can't do that', 'I can't make visuals', or 'use Excel/Sheets/Canva instead' — "
-    "you say 'on it' and hand it off.\n"
-    "- Hand work off with your send_task tool, and be PROACTIVE about it: the moment you "
-    "see the user wants something done, route it — don't make them ask twice. Pass their "
-    "request through as they said it; the task manager reads the real ask and handles the "
-    "details. You don't scope, plan, or design the work yourself — you recognize it's a "
-    "task and pass it on.\n"
-    "- BUT don't hand off what a good assistant answers on the spot. Quick text lives in "
-    "chat: a short poem or haiku, a checklist, arithmetic, an explanation, a quick "
-    "opinion, a rewrite of a sentence or two. If the finished thing is just a few lines "
-    "of TEXT in the conversation, write it yourself right now. Hand off when the result "
-    "is a FILE or artifact (document, chart image, spreadsheet, code, game, design), "
-    "needs tools or research, or is long-running. Mixed asks split: answer the quick "
-    "parts inline in this same reply and dispatch only the artifact parts.\n"
-    "- Be PROACTIVE like a great assistant: after finishing anything, look one step "
-    "ahead and offer the obvious next action in ONE short sentence — turn the answer "
-    "into a document, schedule the recurring version, remember the key fact, start "
-    "the follow-on task. When the user describes a recurring chore, suggest making "
-    "it a Work job or workflow. Don't end a work-related reply as a dead end, and "
-    "don't nag — one offer, then drop it.\n"
-    "- STATUS QUESTIONS ('is it done?', 'how's it going?', 'how much longer?'): answer "
-    "ONLY from the 'Background work in this chat' list in your context — report its "
-    "actual state and status line, nothing more. If a task shows failed, say it failed "
-    "and offer ONE retry via send_task. If the work isn't in the list, it is NOT "
-    "running — say so plainly. NEVER give a time estimate or ETA for background work "
-    "(you don't know), and NEVER say you restarted, retried, or 'kicked it off again' "
-    "unless you actually called send_task or update_task in THIS turn.\n"
-    "- UNDERSPECIFIED SIDE-EFFECT COMMANDS: when the user asks to send, email, text, "
-    "post, or share something ('send that', 'email it') WITHOUT a destination — or "
-    "refers to 'that' when no prior deliverable exists — do NOT dispatch a task. Ask "
-    "ONE short clarifying question inline (where to? which file?) and dispatch only "
-    "once the target is known. A worker started without a destination can only fail.\n"
-    "- VOICE: speak as if YOU are doing the work, because you are — the crew is "
-    "your own hands, not a separate department the user deals with. Say 'On it — "
-    "I'm getting this done' or 'I'll put this together and share it', NEVER "
-    "'I handed this to the task manager' or 'the task manager will do it'. The "
-    "user only ever talks to Thomas; the workers are invisible plumbing.\n"
-    "- CRITICAL: the send_task TOOL CALL is the ONLY thing that actually starts the work. "
-    "Saying 'on it' or 'I'll get this done' WITHOUT "
-    "calling send_task does nothing — the work never starts, and your words are a false "
-    "claim. So the instant you decide it's a task, CALL send_task in that same turn, THEN "
-    "tell the user you're on it. The tool call IS what starts it; your words only narrate "
-    "it. Never tell the user you're handling something unless you actually called the tool. "
-    "Internal task tags like '[task 3]' or '[task <ref>]' are ONLY for your update_task "
-    "tool — never write them into your reply; refer to work in plain words.\n"
-    "- MULTIPLE DELIVERABLES = MULTIPLE send_task CALLS. When one message asks for two or "
-    "more DISTINCT things — 'make a game AND a graph', 'do A, B and C', 'a PDF and a chart' — "
-    "call send_task ONCE PER distinct deliverable in that same turn, each with its own clear "
-    "title and instructions for just that one thing. Do NOT fold several deliverables into a "
-    "single task (the worker will build one and drop the rest). This is true whether the parts "
-    "are numbered, bulleted, or just joined by 'and'/'also'/'plus'. A single deliverable with "
-    "several attributes ('a game with a menu and a score') is still ONE task.\n"
-    "- You CAN read and look things up so you can answer directly. If they ask 'how's the "
-    "evolve loop going?' you go read the relevant files/state and tell them. Reading to "
-    "inform the conversation is part of your superpower.\n"
-    "- MEMORY IS YOURS — never a task. You have remember and recall tools. The MOMENT the user "
-    "tells you to remember something, or shares a fact, preference, name, or date worth keeping, "
-    "CALL remember. When they ask what they told you, whether something is in your memory, or to "
-    "think back, CALL recall and answer from what it returns. NEVER hand memory off to the task "
-    "manager — remembering and recalling are YOUR OWN job, done inline right in the conversation.\n"
-    "- You do NOT produce heavy deliverables yourself in the chat — no code, no HTML, no "
-    "files, no finished documents typed into your reply. That's the worker's job; you hand "
-    "it off and let the worker build and render it. You can of course explain, summarize, "
-    "and talk it through.\n"
-    "- Be honest about state. Hand work off eagerly — once you actually call send_task it "
-    "is true to say you've handed it off. But never claim a worker has FINISHED, or that a "
-    "result or file already exists, unless your context actually says so: proactive about "
-    "starting, honest about finishing.\n"
-    "- REPORTING FINISHED WORK (this is part of your job, not an exception to it): "
-    "when your context explicitly states that a background worker has FINISHED a task "
-    "and gives its result — for example a note that begins 'Background work just "
-    "finished' — you SHOULD tell the user, in your own natural words, that it's done "
-    "and what came of it. That is the 'report back' half of being their assistant. The "
-    "worker did the work, not you, so never take credit for doing it yourself; and only "
-    "report a completion your context actually confirms — never guess or assume one "
-    "finished.\n"
-    "- This is who you are, always. Autonomy and permission determine whether a bounded "
-    "action can run, must ask, or must be delegated; they never erase user sovereignty.\n"
-    "- You CAN keep chatting normally while background tasks run. If the user "
-    "asks something casual while work is going, just answer it naturally.\n\n"
-)
-
-
-# Temporary import compatibility while downstream stress tooling migrates to the
-# governed-operator name. Both names resolve to one prompt, not parallel behavior.
-THOMAS_CHATBOT_SYSTEM_PROMPT = THOMAS_OPERATOR_SYSTEM_PROMPT
-
-
-# Injected ONLY on turns where the send_task tool is NOT wired (autonomy L1/L2). The
-# identity prompt above pushes hard to "say 'on it' and hand it off" and assumes the
-# tool is always there. When it isn't, the model role-plays a hand-off it cannot do
-# ("On it — I've handed that off, you'll have it shortly"), which is a flat lie: no
-# worker ever starts. The backstop further down only fires when send_task EXISTS, so at
-# L1/L2 nothing catches the false claim. Prevent it at the source, as the LAST line of
-# the system prompt so it wins on recency. (honesty fix, 2026-06-27)
-_NO_DISPATCH_HONESTY = (
-    "DISPATCH UNAVAILABLE THIS TURN — READ THIS CAREFULLY: You do NOT have the "
-    "send_task tool right now, so you literally cannot hand anything to the task "
-    "manager and no worker can start this turn. Because of that you must NOT say 'on "
-    "it', 'I've handed that off', 'I've sent it to the task manager', 'I'll get "
-    "started', 'a worker is on it', or 'you'll have it shortly', and you must NOT imply "
-    "that a file, document, drawing, or result is being made or already exists — every "
-    "one of those would be a false claim. Instead, when the user wants something built "
-    "or done, briefly and warmly OFFER: say what you'd hand to the crew, and that "
-    "raising the autonomy level (to Agent or Full) lets you actually do it. Answering, "
-    "explaining, reading the repo, read-only web research, remembering, and the bounded "
-    "operate tool still work "
-    "within the current autonomy and approval rules — do those directly and fully."
-)
-
-
 # The largest pre-call tail (in characters) held back from the wire while a
 # structured call is still possible. Sentence boundaries release earlier prose;
 # this cap releases prose that has NO sentence boundaries (a code block, a long
 # table row) so honesty holdback can never quietly become buffer-the-whole-pass
 # -- the measured 26-46s one-paint reply this replaced.
 _PROSE_HOLDBACK_CAP = 400
+
+# How a run is allowed to end, and why it is no longer allowed to end at six.
+#
+# This used to be `max_passes = 6 if tools else 1`, with the comment "bounded so
+# reads can't loop". That number was doing two unrelated jobs and failing both.
+# It was not a loop detector: six IDENTICAL repeated reads exhausted the budget
+# exactly like six useful ones, so the thing it was named for went uncaught. And
+# as a work budget it counted the wrong unit -- passes are events, not resources.
+# Six reads of small config files cost almost nothing; six reads of a 3,000-line
+# file cost a great deal. What it reliably did was end real work early: read
+# three files, run a search, make an edit, and the run was over.
+#
+# So the two jobs are now split. Looping is caught by looking for the thing that
+# actually constitutes a loop -- the same tool called with the same arguments,
+# over and over. And the ceiling becomes a runaway guard for models that need
+# one, rather than a budget for models that do not.
+#
+# Frontier models get NO ceiling. They stop when the work is done, which is how
+# the agents this is modelled on already behave. Smaller and local models can
+# genuinely wander, so they keep a guard -- set far past any real task, not at
+# the edge of one.
+_FRONTIER_MODEL_MARKERS = (
+    "claude",
+    "gpt-",
+    "gpt4",
+    "o1-",
+    "o3-",
+    "o4-",
+    "codex",
+    "gemini",
+    "grok",
+)
+_RUNAWAY_PASS_CEILING = 200
+# Three identical calls is a decision, not a coincidence. Two can be a legitimate
+# retry after a transient failure; the third says nothing is changing.
+_REPEAT_CALL_LIMIT = 3
+
+
+def _model_name_of(llm: Any) -> str:
+    """Best-effort model id for the client, for the frontier check only."""
+    for holder, attr in ((llm, "model"), (getattr(llm, "config", None), "model"),
+                         (getattr(llm, "config", None), "name")):
+        value = getattr(holder, attr, None) if holder is not None else None
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return ""
+
+
+def _is_frontier_model(llm: Any) -> bool:
+    """True when the model is one that does not need a pass ceiling.
+
+    Unknown models are answered False on purpose. An unrecognised client gets
+    the guard rather than an unbounded loop -- and since the guard is 200 rather
+    than 6, being wrong here costs nothing a real task would ever notice.
+    """
+    name = _model_name_of(llm)
+    return any(marker in name for marker in _FRONTIER_MODEL_MARKERS)
+
+
+def _tool_call_fingerprint(name: str, arguments: str) -> str:
+    """Identity of a tool call: what was asked, with which arguments.
+
+    Arguments are normalised through json so that key order and whitespace
+    cannot disguise a repeat as a new call.
+    """
+    try:
+        parsed = json.loads(arguments or "{}")
+        rendered = json.dumps(parsed, sort_keys=True) if isinstance(parsed, dict) else str(parsed)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        rendered = (arguments or "").strip()
+    return f"{name}::{rendered}"
 
 
 def _released_prose(pending: str) -> tuple[str, str]:
@@ -420,14 +357,30 @@ class ReasoningSpecialist(BaseSpecialist):
 
         response = ""
         dispatched_titles: list[str] = []
-        task_action_verb = ""  # "cancelled"/"updated" when the model steers a running task
         handed_off = False
+        handoff_confirmations: list[str] = []
+        handoff_failures: list[str] = []
         action_receipts: list[dict[str, Any]] = []
+        passes_used = 0
+        tool_passes = 0
         try:
             if hasattr(self.llm, "stream_chat"):
-                # Enough passes for a few reads then an answer; bounded so reads can't loop.
-                max_passes = 6 if tools else 1
-                for _pass in range(max_passes):
+                # None means no ceiling (see _FRONTIER_MODEL_MARKERS above). Without
+                # tools there is nothing to iterate on, so one pass is the whole run.
+                pass_limit: int | None
+                if not tools:
+                    pass_limit = 1
+                elif _is_frontier_model(self.llm):
+                    pass_limit = None
+                else:
+                    pass_limit = _RUNAWAY_PASS_CEILING
+                call_counts: dict[str, int] = {}
+                repeated_call: str | None = None
+                stop_reason: str | None = None
+                _pass = -1
+                while pass_limit is None or _pass + 1 < pass_limit:
+                    _pass += 1
+                    passes_used = _pass + 1
                     streamed_parts: list[str] = []
                     tool_ends: list[dict[str, str]] = []
                     stream_err: str | None = None
@@ -479,6 +432,21 @@ class ReasoningSpecialist(BaseSpecialist):
                         return
 
                     if tool_ends and tools:
+                        tool_passes += 1
+                        # The check the old pass ceiling was named for but never
+                        # performed. Counted before the calls run, so a call that has
+                        # already been made twice with identical arguments is stopped
+                        # rather than issued a third time and then complained about.
+                        for tc in tool_ends:
+                            key = _tool_call_fingerprint(
+                                _structured_tool_name(tc["name"]), tc["arguments"]
+                            )
+                            call_counts[key] = call_counts.get(key, 0) + 1
+                            if call_counts[key] >= _REPEAT_CALL_LIMIT:
+                                repeated_call = _structured_tool_name(tc["name"])
+                                stop_reason = "repeat"
+                        if stop_reason == "repeat":
+                            break
                         assistant_tool_calls: list[dict[str, Any]] = []
                         tool_results: list[dict[str, Any]] = []
                         send_task_calls = sum(
@@ -520,6 +488,10 @@ class ReasoningSpecialist(BaseSpecialist):
                                     )
                                     dispatched_titles.append(title)
                                     handed_off = True
+                                    safe_title = " ".join(title.split())[:120]
+                                    handoff_confirmations.append(
+                                        f"Started the task card “{safe_title}”. Follow progress there."
+                                    )
                                     yield {"type": "task_request", "title": title}
                                     result_text = f"Task '{title}' created and handed to the task manager."
                                 # Same surface the operate/work-onboarding catches
@@ -537,6 +509,7 @@ class ReasoningSpecialist(BaseSpecialist):
                                     ValueError,
                                 ) as exc:
                                     result_text = f"Task hand-off failed: {exc}"
+                                    handoff_failures.append(result_text)
                             elif name == UPDATE_TASK_TOOL_NAME and update_task:
                                 # Re-direct a RUNNING task: the model picked which one by
                                 # ref, so the update lands on the right task — not a guess.
@@ -548,12 +521,17 @@ class ReasoningSpecialist(BaseSpecialist):
                                     if isinstance(outcome, dict) and outcome.get("ok"):
                                         handed_off = True
                                         verb = "cancelled" if outcome.get("action") == "cancel" else "updated"
-                                        task_action_verb = verb
+                                        handoff_confirmations.append(
+                                            "Cancellation sent to the running task."
+                                            if verb == "cancelled"
+                                            else "The requested change was sent to the running task."
+                                        )
                                         yield {"type": "task_update", "ok": True, "action": outcome.get("action")}
                                         result_text = f"Task {verb} (the running worker will pick up the change)."
                                     else:
                                         err = (outcome or {}).get("error", "could not match a running task")
                                         result_text = f"Could not update that task: {err}"
+                                        handoff_failures.append(result_text)
                                 # The update_task callback plus the .get() walk of
                                 # whatever it returns.
                                 except (
@@ -565,6 +543,7 @@ class ReasoningSpecialist(BaseSpecialist):
                                     ValueError,
                                 ) as exc:
                                     result_text = f"Task update failed: {exc}"
+                                    handoff_failures.append(result_text)
                             elif name == REMEMBER_TOOL_NAME and remember:
                                 # Thomas's OWN memory — stored inline, no task. Not a hand-off.
                                 _mtext = str(args.get("text") or "").strip()
@@ -712,27 +691,50 @@ class ReasoningSpecialist(BaseSpecialist):
                         )
                         messages.extend(tool_results)
                         if handed_off:
-                            # Work was handed off (send_task/update_task): withdraw all
-                            # tools so the next pass is a pure natural confirmation and the
-                            # model cannot double-dispatch the same work.
-                            tools = None
+                            # The runtime owns a factual receipt after the callback succeeds.
+                            # Model-authored hand-off prose cannot safely certify the state of
+                            # unfinished work, and the old extra pass was discarded anyway.
+                            #
+                            # Failed actions from this same pass leave with the break, and the
+                            # action_receipts fallback below only runs when response is empty —
+                            # so without this a turn asked to change a setting AND start a task
+                            # confirms the task and never mentions that the setting did not move.
+                            refused_actions = [
+                                f"I did not change it: {receipt.get('error', 'the action was denied.')}"
+                                for receipt in action_receipts
+                                if not receipt.get("ok")
+                            ]
+                            response = " ".join(
+                                [*handoff_confirmations, *handoff_failures, *refused_actions]
+                            ).strip()
+                            yield {"type": "text", "text": response}
+                            break
                         continue
 
                     response = "".join(streamed_parts).strip()
-                    if handed_off and dispatched_titles:
-                        # A deterministic receipt is safe because the structured
-                        # call already succeeded. Prose alone never creates work.
-                        response = "On it — this is running now, and I'll share the result when it's ready."
-                        yield {"type": "text", "text": response}
-                    elif task_action_verb:
-                        response = (
-                            "Done — I've cancelled that task; the worker is stopping."
-                            if task_action_verb == "cancelled"
-                            else "Done — I've passed that change to the running task."
-                        )
-                        yield {"type": "text", "text": response}
                     break
+                if stop_reason is None and pass_limit is not None and passes_used >= pass_limit:
+                    stop_reason = "runaway"
+                if not response and stop_reason and not action_receipts:
+                    # The two endings are different failures and must not read the
+                    # same. One means the model is stuck; the other means a guard
+                    # fired. Saying "tool limit" for both hid which had happened.
+                    if stop_reason == "repeat":
+                        response = (
+                            f"I stopped because I was repeating the same {repeated_call} call with "
+                            "identical arguments and getting nowhere. Something I need is missing or "
+                            "not answering, so continuing would repeat it again -- tell me what you "
+                            "expected that call to return and I can try a different way."
+                        )
+                    else:
+                        response = (
+                            f"I hit the {pass_limit}-pass runaway guard before finishing. That guard "
+                            "exists for smaller models that wander; if this was ordinary work it "
+                            "stopped too early. Ask me to continue and I will pick it back up."
+                        )
+                    yield {"type": "text", "text": response}
             else:
+                passes_used = 1
                 response = await self._call_llm(messages, max_tokens=4_000)
         except Exception as exc:
             yield {"type": "error", "error": f"Reasoning failed: {exc}"}
@@ -740,18 +742,9 @@ class ReasoningSpecialist(BaseSpecialist):
 
         if not response or not response.strip():
             if dispatched_titles:
-                # Model handed work off but produced no confirmation text — emit a
-                # short honest one (a true statement, not a pre-dispatch canned ack).
-                response = "Handed that to the task manager — you'll see it on the task card."
-                yield {"type": "text", "text": response}
-            elif task_action_verb:
-                # Model steered/cancelled a running task but produced no confirmation —
-                # emit a true one (the update already succeeded). (chat sweep, 2026-06-27)
-                response = (
-                    "Done — I've cancelled that task; the worker is stopping."
-                    if task_action_verb == "cancelled"
-                    else "Done — I've passed that change to the running task."
-                )
+                # Defensive fallback; the normal successful path sets the response
+                # from the original tool call before leaving the model loop.
+                response = f"Started the task card “{dispatched_titles[0]}”. Follow progress there."
                 yield {"type": "text", "text": response}
             elif action_receipts:
                 latest = action_receipts[-1]
@@ -766,4 +759,4 @@ class ReasoningSpecialist(BaseSpecialist):
         elif not hasattr(self.llm, "stream_chat"):
             yield {"type": "text", "text": response}
 
-        yield {"type": "done", "content": response, "iterations": 1}
+        yield {"type": "done", "content": response, "iterations": passes_used}

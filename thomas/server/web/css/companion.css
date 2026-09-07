@@ -87,7 +87,6 @@ body.companion-phone-host {
 }
 
 .infinite-top-nav,
-.infinite-mode-tabs,
 .infinite-panels {
     position: relative;
     z-index: 1;
@@ -107,29 +106,6 @@ body.companion-phone-host {
 
 .infinite-top-nav .model-setup-btn {
     font-size: 14px;
-}
-
-.infinite-mode-tabs {
-    display: flex;
-    gap: 8px;
-    padding: 8px 12px 10px;
-}
-
-.infinite-mode-tab {
-    border: 1px solid var(--c-border);
-    background: var(--c-surface);
-    color: var(--text-secondary);
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 8px 14px;
-    cursor: pointer;
-}
-
-.infinite-mode-tab.active {
-    color: var(--c-text);
-    border-color: var(--c-accent-line);
-    background: var(--c-accent-soft);
 }
 
 .infinite-panels {
@@ -354,6 +330,71 @@ body.companion-phone-host {
     max-width: 92%;
 }
 
+/* ── Surface host ─────────────────────────────────────────────────────────
+   A surface module renders in a sandboxed frame that covers the panel area.
+   The mount sits above the panels rather than replacing them, so the shell's
+   own chrome (and the way back out) is never inside the app's control. */
+
+/* Sits inside .companion-content, which already starts past the rail — so
+   inset:0 here fills exactly the content area and leaves the rail reachable. */
+.companion-surface-mount {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: var(--c-bg);
+}
+
+.companion-surface-mount[hidden] {
+    display: none;
+}
+
+.companion-surface-shell {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
+}
+
+.companion-surface-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-sidebar);
+}
+
+.companion-surface-title {
+    font-family: var(--font-label);
+    font-size: 0.95rem;
+    color: var(--c-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.companion-surface-back {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-family: var(--font-label);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.companion-surface-back:hover {
+    background: var(--c-hover);
+}
+
+.companion-surface-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--c-bg);
+}
+
 @media (max-width: 760px) {
     .companion-device-stage {
         padding: 0;
@@ -372,10 +413,6 @@ body.companion-phone-host {
     }
 
     .infinite-chat-screen {
-        padding: 6px 8px 8px;
-    }
-
-    .infinite-mode-tabs {
         padding: 6px 8px 8px;
     }
 
