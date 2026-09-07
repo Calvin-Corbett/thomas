@@ -1,22 +1,26 @@
 # Thomas
 
-**Thomas is a local AI workspace you own.** One server on your machine, one browser-shaped app, one CLI. You give it a model (a cloud key or a local model) and from then on it chats, remembers, builds and verifies software, runs scheduled work, drives a browser, and edits its own interface when you ask it to. Everything runs and is stored on your computer.
+**Thomas is a local AI workspace you own, built on the engineering standards private teams keep to themselves, applied to AI, for everyone.** One server on your machine, one browser-shaped app, one CLI. You give it a model (a cloud key or a local model) and from then on it chats, remembers, builds and verifies software, runs work you define, drives a browser, and edits its own interface when you ask it to. Everything runs and is stored on your computer.
 
 Fresh install: run `run-ui.cmd`, open `http://127.0.0.1:8899`, finish Easy Setup. The desktop app (`desktop.cmd`) wraps the same server in a window whose tabs Thomas can see and act on.
 
-> **Status (2026-09-07):** version 0.19.x, in active development on a private `dev` branch that lands here as squashed releases. The lanes below are wired end to end and are exercised daily by the people building it; the "Known rough edges" section says exactly what is not yet right.
+> **Status (2026-09-07):** version 0.19.36, in active development on a private `dev` branch that lands here as squashed releases. The lanes below are wired end to end and are exercised daily by the people building it; the "Known rough edges" section says exactly what is not yet right.
 
 ---
 
 ## What Thomas is
 
-Thomas is not a chat window in front of an API. It is a workspace with three lanes in one shell:
+Thomas is not a chat window in front of an API. It is a workspace with three lanes in one shell, and a standards layer underneath that treats an AI agent the way a serious engineering team treats an engineer.
 
-- **Chat** is the home tab. It answers, remembers, calls tools, and hands real work off to the other lanes with a task card you can follow.
+- **Chat** is not the usual assistant. It is a dispatcher, always ready for the next task: it answers what it can answer, remembers what you told it, calls tools, and hands real work to Build or Work with a task card you can follow while you carry on talking. The home tab is always Chat.
 - **Build** takes a request for software, writes it in a workspace, runs it, plays it in a browser, and holds itself to an acceptance contract drawn from your own words before it says "done".
-- **Work** turns a job into a scheduled automation with its own inputs, runs, and outcomes, watched from Mission Control.
+- **Work** is where you give Thomas a job and he keeps doing it. An onboarding conversation maps the job into workflows, automations and connectors; then Thomas designs a dashboard for that job alone, with its own metrics, sections, inboxes and action buttons bound to that job's workflows. That dashboard is where you see the work. It is not Mission Control; Mission Control is the operator's view of runs and agents across the whole system.
 
-Around the lanes sits a browser: Chrome-style tabs, an omnibox, back and forward, a refresh button with a right-click "Restart server". Every Chat, Build or Work tab is its own page; the pinned home tab is Chat.
+Around the lanes sits a browser: Chrome-style tabs, an omnibox, back and forward, a refresh button with a right-click "Restart server". Every Chat, Build or Work tab is its own page.
+
+**Redesign** is how Thomas changes himself. Point at anything on the screen, from a button to a whole panel, and tell Thomas what you want. A visual change (colour, size, wording, position) applies at once as an overlay your browser keeps, with undo. A change that needs code becomes a Build run on Thomas's own source, fenced off from files other agents hold, verified like any other build. Press Ctrl+Shift and release it and the page enters **UI Edit Mode**: every region gets a handle, so you can move it, resize it eight ways, edit it from the keyboard with snapping and guides, lock it, undo and redo, and save or cancel; the layout is kept per device.
+
+**Praxis** is the standards layer. Every agent that works on Thomas, human or model, claims the files it will touch on a shared board, binds a session before it can change anything, commits through a tool that runs the whole gate stack, and is held to the same honesty rules as the product: a claim is evidence or it is not a claim, a closed problem has a practice or an owned expiring risk, a dead branch has a grave, an owner-only action arrives as a Windows Hello tap. Thirty-four pre-commit hooks stand behind it, including one that refuses a commit importing a module git does not track. This is what private engineering teams do for themselves; Thomas ships it for everyone and uses it on its own AI.
 
 Thomas is honest by construction. A reply with no evidence is never "done". A receipt says what a turn cost, or that the model server reported nothing. A run that fails says so, and the record keeps what it did produce. When the harness cannot verify something, it says it could not, rather than presenting a guess as a result.
 
@@ -28,11 +32,11 @@ Grouped by lane. Every item names something that exists in this tree and is reac
 
 ### Chat
 
-- Streams replies from any configured model: OpenAI-compatible endpoints (including a local Ollama or LM Studio), Anthropic, and an OpenAI Codex account, with a per-turn model switch in the top bar.
+- Dispatches: a casual message gets a fast reply, an actionable one becomes a task card in Build or Work, and Chat stays free for the next thing you say. Any configured model: OpenAI-compatible endpoints (including a local Ollama or LM Studio), Anthropic, and an OpenAI Codex account, with a per-turn model switch in the top bar.
 - Hears a tool call even when a smaller model writes it into its text instead of calling it natively, and executes it through the same fence and policy as a native call.
 - Remembers across sessions with `remember` and `recall` tools and a memory fabric (scored retrieval, contradiction tracking, token-aware packing); temporary chats keep nothing.
 - Creates images, music and video from the plus menu, with a local model or an API key per medium, and shows the result in the chat's Activity panel.
-- Points at any part of its own interface and takes an instruction (**Redesign**): visual changes apply as a per-browser overlay you can undo; anything deeper becomes a Build run on Thomas's own source, fenced off from files other agents hold.
+- Changes itself on request (**Redesign**): point at anything, say what you want; visual changes apply as a per-browser overlay with undo, deeper ones become a fenced Build on Thomas's own source. **UI Edit Mode** (Ctrl+Shift, press and release) turns every region into a handle: move, eight-way resize, keyboard editing, snapping, lock, undo and redo, save or cancel, per device.
 - Keeps a visible checklist, asks one clear question with options when a decision is yours, records standing goals every later turn is held to, and shows what it made recently.
 - Prices every reply on the receipt line; a locally served model reads "local, no charge".
 - Exports a chat, branches a conversation from any message, rates a reply, and speaks or listens through a realtime voice surface.
@@ -48,8 +52,9 @@ Grouped by lane. Every item names something that exists in this tree and is reac
 
 ### Work
 
-- Defines jobs with inputs, connectors and schedules; a job can link a one-time automation and a recurring one.
-- Runs them through Mission Control, with run history, outcomes, cancellation that waits for owned cleanup, and time-zone-consistent scheduling.
+- Onboards a job in conversation: the model owns the goal, the phase, the workflow map and the selection, and records them as structured state rather than guessing from prose.
+- Designs a dashboard for each job: up to eight metrics, six sections, inboxes, and action buttons that can only bind to that job's own workflows and automations, never to an invented one. The dashboard is the job's home; you watch and steer the work there.
+- Links a one-time automation to a recurring one, keeps run history and outcomes per job, and cancels in a way that waits for the run's own cleanup.
 - Suggests only connectors that are installed, and refuses to promise a hand-off it cannot perform.
 
 ### Tools the model can call (170 registered)
@@ -195,9 +200,13 @@ Lexical search uses SQLite FTS5. Query operators inside the search string: `path
 
 ---
 
-## How Thomas is documented
+## How Thomas is documented: the Bible
 
-Every Thomas instance has its own **bible** (`docs/THOMAS_BIBLE.md`): an accurate record of what is true about that workspace's code, traced one user step at a time. `docs/FEATURE_CATALOG.md` is the map of major capabilities; `docs/FRONTIER_PARITY.md` is the running ledger of what was checked against frontier tools and what was found. `CHANGELOG.md` says what changed and why, in plain sentences.
+Thomas is too large for any one person or model to hold in their head, so it keeps an encyclopedia of itself: `docs/THOMAS_BIBLE.md`. It traces the whole system one user step at a time, from download to install to the first message, through chat, dispatch, tools, memory, Mission Control, the browser, the companion, updates, publishing and swarms, and then covers the rest of the tree package by package. Each section names the files that actually fire.
+
+Its design rule is that it never says "verified working". Every section carries a verification level (deep, sampled, scanned, mapped) and a date, so a reader knows how far to trust it and what has not been looked at since. Agents that change the code are required to bring the relevant section with them, so it moves with the project instead of lagging it; when the bible and the code disagree, the bible records that too. It is the ledger of truth for the codebase, the first thing an agent reads before touching an area, and the place a wrong claim is caught.
+
+Beside it: `docs/FEATURE_CATALOG.md` is the map of major capabilities, `docs/FRONTIER_PARITY.md` is the running ledger of what was checked against frontier tools and what was found, and `CHANGELOG.md` says what changed and why in plain sentences.
 
 This README is the public-facing summary. If something here disagrees with reality, file an issue; the bible was almost certainly right.
 
