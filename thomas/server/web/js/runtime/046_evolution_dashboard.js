@@ -1,22 +1,4 @@
-/**
- * Evolution dashboard -- the self-improvement panel, in plain English.
- *
- * Design intent (Calvin): a regular, non-technical person opens this and
- * instantly gets WHAT Thomas is doing and WHAT it needs from them -- no jargon,
- * no wall of knobs. One "Improve yourself" button; everything technical lives in
- * a collapsed Advanced drawer most people never open.
- *
- * The "evolve manager" is the grounded narrator below: it translates the REAL
- * loop state (counters, current task, history, pending approvals -- straight off
- * /api/evolve/loop/status) into plain sentences. It NEVER invents success: a run
- * is only ever called "shipped/done" when the loop's own `promoted === true`. It
- * shapes how things are shown; it never changes what happened.
- *
- * Self-contained: defines the global evolutionEnterMode/evolutionLeaveMode that
- * the sidebar dispatcher (039) calls, and talks to /api/evolve/loop/* via the
- * shared fetchJsonSafe helper. All rendering is defensive so a transient API
- * hiccup never white-screens the panel.
- */
+
 
 var evolutionState = evolutionState || { built: false, pollTimer: 0, busy: false, previewLoaded: false };
 

@@ -271,7 +271,7 @@ async def execute_agent_loop(
         "review_depth": str(resolved_review_depth),
     }
 
-    # CHATBOT-ONLY GUARDRAIL (Calvin 2026-06-15): the chat agent must NOT run
+
     # agentic build tools or operate in the source repo. Running the office chat as
     # a full tool-enabled AgentLoop turned "build me a game" into a coding session
     # that wrote files into Thomas's own tree (web/snake/) and streamed its repo

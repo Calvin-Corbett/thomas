@@ -71,7 +71,7 @@ _JUNK_DIRS = {
 # assets, not the owner's secrets. The preview allowlist never names them (the
 # artifact listing treats node_modules as noise), so a game importing three.js
 # got a 404 for the module, its script never ran, and ENTER WORLD could do
-# nothing while the same files served plainly played (Calvin's Minecraft,
+
 # 2026-09-05). Serve them by extension; dotfiles, source and manifests of
 # other languages stay refused, and .git and the rest of the root stay behind
 # the allowlist.

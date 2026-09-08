@@ -464,7 +464,7 @@
     // AI settings ("Tools"), attachments ("+"), and voice ("mic") state
     // Autonomy defaults to Agent (3): a fresh chat must be able to EXECUTE an
     // ask, not tell the owner to raise a dial and resend. Guardrails stay
-    // 'guarded' — dangerous actions still gate on approval. (Calvin, 2026-07-18.)
+
     const DIAL_DEFAULTS = { autonomy: 3, effort: 'medium', fileAccess: 'workspace', guardrails: 'guarded', memory: true };
     state.dials = (function () {
       try {
@@ -1849,7 +1849,7 @@
       } else if (a.wantsCanvas && s.status === 'running') { /* review stays in the activity card */ }
       else if (a.wantsCanvas && s.status === 'failed') canvasStop((s.worker || 'The worker') + ' couldn’t finish this.');
       // A non-visual deliverable (document/file) is presented as a click-to-preview
-      // chip in the chat — it does NOT auto-open the Canvas. (Calvin, 2026-06-28)
+
       if (_completionVerified(evt)) _mergeArtifacts(a, evt);
       renderActivity(idx);
     }
@@ -1892,7 +1892,7 @@
       } else if (a.wantsCanvas && s.status === 'running') { /* do not auto-open an unreviewed Canvas */ }
       else if (a.wantsCanvas && s.status === 'failed') canvasStop((s.worker || 'The worker') + ' couldn’t finish this.');
       // A non-visual deliverable (document/file) is presented as a click-to-preview
-      // chip in the chat — it does NOT auto-open the Canvas. (Calvin, 2026-06-28)
+
       if (_completionVerified(row)) _mergeArtifacts(a, row);
       // Proactively ANNOUNCE completion once: Thomas posts a model-authored "it's done"
       // bubble the moment the worker finishes, instead of going silent until the user's next
@@ -2017,7 +2017,7 @@
       // The Canvas is for VISUAL/design deliverables only (charts, diagrams, mockups,
       // drawings). It must NOT open for documents, lists, code, or — worst of all —
       // Thomas's own planning/thinking text. So canvas-intent keys off genuine VISUAL
-      // intent only, not the broad "make/write any document" heuristic. (Calvin, 2026-06-28)
+
       _pendingCanvasIntent = !!detectVisualIntent(text);
       streamReal(text);
     }
@@ -2096,7 +2096,7 @@
                 // NOTE: Thomas's streamed text — including his planning/thinking on a
                 // complex task — stays in the chat bubble (and the collapsible thinking
                 // card). It is NEVER rendered into the Canvas. The Canvas is reserved for
-                // real VISUAL deliverables produced by the canvas worker. (Calvin, 2026-06-28)
+
             } else if (type === 'thinking') {
               const c = String(evt.text || ''); if (c) { const a = state.messages[idx].activity; a.thinking += c; if (!sawText) a.expanded = true; renderActivity(idx); scrollEnd(); }
             } else if (type === 'tool_start') {

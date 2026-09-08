@@ -69,11 +69,6 @@ class ThesisOutcome(str, Enum):
 
 @dataclass
 class RiskRules:
-    """Hard limits every proposal is checked against before a human ever sees it.
-
-    Defaults are Calvin's approved Phase-1 numbers. They can be overridden via
-    ``THOMAS_PAPER_*`` env vars (see config.py).
-    """
 
     max_order_usd: float = 1000.0
     max_position_pct: float = 20.0  # max % of account equity in any one symbol

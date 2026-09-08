@@ -1,19 +1,3 @@
-"""Thomas reviews his own recent sessions and writes the friction report.
-
-The "automated Calvin": instead of the owner reading chats and telling us
-what hurt, Thomas reads his OWN recent conversations, the issue ledger, and
-task outcomes, then writes the prioritized report a product owner would —
-where users repeated themselves, where tasks failed or stalled, what to fix
-first. The report itself (`generate_self_review`) is a 15-30s synchronous LLM
-generation, so GET /api/self-review never runs it inline: it serves the last
-cached, stamped report (or an honest "generating"/"error" status) from an
-app-scoped TTL cache and kicks the real generation off in the background,
-single-flighted so concurrent callers never start a second one. A caller with
-an ordinary timeout used to see this as down (HTTP_000) instead of slow — see
-`.superpowers/sdd/2026-08-25-phase2-recon/recon.md` Section 4 #5. A successful
-generation still saves a copy to runtime/logs/self_review.md so improvement
-passes start from evidence.
-"""
 
 from __future__ import annotations
 

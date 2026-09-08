@@ -209,7 +209,7 @@ function _ensureArtifactStyles() {
 
 // Right-side LIVE PREVIEW pane for web deliverables (apps/games): an iframe onto the
 // loopback /deliverable URL so the user can actually watch the site/game the worker
-// built — in-app, not a new tab. (Calvin: "a web browser thing that pops up on the
+
 // right side so you can pull up the URL and show them their website/game.")
 function openWebPreviewPane(url, title) {
     _ensureArtifactStyles();
@@ -283,7 +283,7 @@ function toggleInlineArtifact(view, url, kind, name) {
 // reload or chat-switch wiped every chip ("the badges disappear, I don't see a PDF").
 // The completed deliverables ARE durable in the task ledger, so on load we rebuild a
 // "Results in this chat" block from /delegations — the chips survive reloads and the
-// user can always find what was built. (Calvin's "My Stuff" direction.)
+
 async function reconcileSessionDeliverables(sid) {
     const sessionId = safeString(sid);
     // Idempotent: drop any prior block so switching chats never stacks duplicates.

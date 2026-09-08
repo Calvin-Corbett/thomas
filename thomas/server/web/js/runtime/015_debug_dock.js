@@ -1132,7 +1132,7 @@ function deriveChatPreviewFromMessages(messagesRaw) {
 
 // Strip conversational filler so the chat title names the task, not the chatter.
 // Mirrors the backend titler (thomas/core/task_titling.py): "Help me make a card"
-// -> "Make a card". Calvin: the card/chat name must identify the actual task.
+
 const _CHAT_TITLE_FILLER = [
     'i would like you to', "i'd like you to", 'i want you to', 'i need you to',
     'i would love to', "i'd love to", 'i would like to', "i'd like to",

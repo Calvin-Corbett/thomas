@@ -41,7 +41,7 @@ def _norm_provider(provider: Any) -> str:
 # Keyed by (normalized_provider, model_or_None). A (provider, None) entry is the
 # provider-wide default; a (provider, model) entry wins over it.
 WORKER_OVERRIDES: dict[tuple[str, str | None], ModelOverride] = {
-    # gpt-5.5 over the ChatGPT OAuth path -- Calvin's first tuning target.
+
     ("openai_codex", "gpt-5.5"): ModelOverride(reasoning_effort="high", max_iterations=40),
     ("openai_codex", None): ModelOverride(reasoning_effort="medium", max_iterations=30),
     # Small local models: smaller context, prune heavy tools, firmer nudge.

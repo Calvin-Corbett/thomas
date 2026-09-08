@@ -1,14 +1,3 @@
-"""Structured failure ledger — every snag becomes a reviewable report line.
-
-"Is there a system tracking every time it says issues so you can watch it
-like a report?" (Calvin, 2026-07-20). This is that system. Anything that
-fails user-visibly — a worker tool snag, a failed delegation, a UI action
-error — appends one JSON line here, so "what broke today" is one API call
-(or one file read), not chat archaeology.
-
-Design constraints: appending must NEVER raise into the caller's path, the
-file must not grow without bound, and entries must be greppable plain JSONL.
-"""
 
 from __future__ import annotations
 
@@ -34,19 +23,6 @@ def _issues_path(repo_root: str | Path | None = None) -> Path:
 
 
 def _is_test_run_writing_to_the_real_ledger(path: Path) -> bool:
-    """A test appending to the ledger the running app reads back.
-
-    This file is the evidence Thomas self-reviews from, and the answer to
-    Calvin's "is there a system tracking every time it says issues". The suite
-    drives the same worker code paths with fixture prompts, so every run
-    appended entries like `do the thing`, `x` and
-    `Answer with verified model attribution.` to the production ledger. About
-    two thirds of a week's entries were fixtures, which means the report meant
-    to say "what broke today" was mostly reporting that the tests ran.
-
-    Only the real repo's file is protected: a test that deliberately points at
-    a tmp root is exercising the ledger on purpose and must still work.
-    """
     if not os.environ.get("PYTEST_CURRENT_TEST"):
         return False
     try:

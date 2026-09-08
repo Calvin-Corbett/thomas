@@ -232,7 +232,7 @@ class ReasoningSpecialist(BaseSpecialist):
     ) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "thinking", "text": "Reasoning through the request...", "phase": "reasoning"}
 
-        # Thomas's identity is the single canonical constant (Calvin law).
+
         system = THOMAS_OPERATOR_SYSTEM_PROMPT
         # Autonomy-aware delegation posture. The identity above never changes (he
         # still never does the work himself); this only sets whether he ASKS before
@@ -249,7 +249,7 @@ class ReasoningSpecialist(BaseSpecialist):
         # autonomy just means the default posture, so it is not worth a raise.
         except (AttributeError, LookupError, TypeError, ValueError):
             pass
-        # Repo & self awareness + read-only capability (Calvin: "he has no idea who he
+
         # is" / "should be able to read the repo, not write"). Injected every turn.
         system += "\n" + _repo_self_context()
         if memory_context:

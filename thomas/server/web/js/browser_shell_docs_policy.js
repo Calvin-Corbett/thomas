@@ -1,12 +1,4 @@
-/* browser_shell_docs_policy.js — what a click on the left means, decided once.
- *
- * Calvin's rules (2026-08-25): a sidebar click opens a tab up top like Chrome,
- * and a conversation exists once. Chrome's own rule fills the gap: a row
- * clicked on a blank new-tab page navigates that page in place, and a
- * modifier click always opens a new tab. These decisions take plain values
- * and touch no DOM, so the node harness drives them without a browser and
- * every tab, home included, asks the same question the same way.
- */
+
 "use strict";
 
 (function () {

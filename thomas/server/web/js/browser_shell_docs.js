@@ -1,22 +1,4 @@
-/* browser_shell_docs.js — a tab is a document that is only ever hidden.
- *
- * Calvin's invariant (2026-09-01): one live DOM per tab. Switching shows and
- * hides persistent containers; drafts, scroll and in-flight streams survive;
- * nothing re-mounts on a switch. chat.html cannot give a second conversation
- * its own thread (selectChat wipes #tc-thread and aborts the stream, and the
- * file is beyond the monolith limit so it cannot change), so every extra
- * Chat, Build or Work tab is a second chat.html document in an iframe. The
- * top-level page stays the home tab and is never driven by the strip again.
- *
- * Hidden means visibility:hidden + inert on the frame and a paused living
- * world inside it — never display:none (which drops the child's layout and
- * scroll) and never a DOM move (which reloads an iframe).
- *
- * Three facts about chat.html this module reads, all verified on dev at
- * 9933a233: the selected sidebar row carries background var(--c-surface-2)
- * inline (renderChats); a Code row carries class is-active; the mode button
- * for a running mode carries data-running (unified_mode_shell.updateChrome).
- */
+
 "use strict";
 
 (function () {

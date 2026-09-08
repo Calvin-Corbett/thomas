@@ -98,14 +98,6 @@ def _embed_secrets(model_cfg: Any, profile: str, secret_store: Any) -> Any:
 
 
 def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = None) -> str:
-    """Pick the model profile the worker should run, provider-blind.
-
-    Precedence (Calvin's design: chat is separate from the pipeline):
-      1. Per-specialist (role) override — the top model selector's per-agent
-         choice (e.g. "researcher -> Grok") wins over everything.
-      2. The chat's selected model — the pipeline default when no role override.
-      3. Global user preference / project default / any configured model.
-    """
     db_path = None
     try:
         from thomas.preferences.store import get_db_path

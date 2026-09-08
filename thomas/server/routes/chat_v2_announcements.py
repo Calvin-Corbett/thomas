@@ -399,7 +399,7 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
         # result — the user sees Thomas present it in the same reply, once, and
         # a playable/renderable one pops open. Reuse the delegation normalizer
         # so each artifact has a real preview URL + kind (raw proof.artifacts
-        # carries neither). (Calvin, 2026-07-20.)
+
         art_payload = []
         if not failed:
             try:
