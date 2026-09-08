@@ -55,7 +55,20 @@
     ".inbox_extract_"
   ],
   "publish_strip_prefixes": [
+    "demo/agentic-runs/",
+    "demo/runs/",
+    "demo/circuit-courier/progress.md",
+    "apps/site/verification/",
+    "docs/HANDOFF_",
+    "docs/evals/",
+    "docs/launch/",
+    "docs/ops/NEXT_AGENT_HANDOFF.md",
+    "docs/ops/agent_handoff_log.md",
+    "docs/ops/module_audit_log.json",
+    "docs/ops/remediation/",
+    "docs/superpowers/",
     "library/entries/research-notes/",
+    "plans/",
     "plans/thomas/problems/",
     "plans/thomas/tasks/"
   ],
