@@ -62,12 +62,6 @@ def _resolve_agent(explicit_agent: str | None) -> str | None:
 
 
 def _orphan_adoption_hints(workboard_path: Path, agent: str, paths: Sequence[str]) -> list[dict]:
-    """Orphan claims (>48h stale) owned by others that cover ``paths``.
-
-    Purely informational — NEVER changes this gate's pass/fail. When another
-    agent stranded a claim on files you need, this surfaces the adoption path
-    so work doesn't stall (Calvin 2026-06-01). Any error -> [] (silent).
-    """
     try:
         from scripts.crew.workboard.claim_adopt import orphans_covering_paths
     except ImportError:  # pragma: no cover - import path varies by run context

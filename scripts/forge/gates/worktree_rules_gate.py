@@ -17,7 +17,7 @@ DEFAULT_AGENTS = ROOT / "AGENTS.md"
 DEFAULT_RULES = ROOT / "WORKTREE_RULES.md"
 
 # Gate revised 2026-05-22 (0.16.4): the gate previously required exact
-# snippets including a hardcoded `C:\Users\corbe\Thomas` user path and a
+
 # `master` branch reference. Those were leaks (the public repo published
 # the maintainer's local filesystem layout). The required snippets now
 # describe the *policy* the doc must convey, not the maintainer's specific
@@ -87,7 +87,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         violations.append(f"AGENTS.md missing required snippet: {item}")
 
     # WORKTREE_RULES.md was deleted in the 2026-05-21 pre-public cleanup
-    # (it contained personal directory paths like C:\Users\corbe\... that
+
     # exposed the developer's local filesystem layout). When the file is
     # present, we still check its content; when absent, we skip silently
     # so the gate doesn't block public-repo cleanups.

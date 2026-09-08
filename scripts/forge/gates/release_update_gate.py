@@ -253,18 +253,6 @@ def _rev_parse(rev: str) -> str:
 
 
 def _branch_release_proof(current_py: str, current_init: str) -> str | None:
-    """Return a PASS note when the BRANCH already carries the release update.
-
-    The per-commit helper lane (--changed-file) used to demand pyproject.toml,
-    thomas/__init__.py, and CHANGELOG.md be dirty in EVERY product-surface
-    commit. Once a version bump landed, those files were clean, so every later
-    product commit through the sanctioned helper was structurally blocked (the
-    stranded-work catch-22, recurring on the workboard since 2026-06-26).
-    A branch that has ALREADY bumped the version and updated the changelog
-    relative to its merge-base with the canonical branch satisfies the gate's
-    actual contract; direct commits on the canonical branch still require the
-    release files in the change set. (Calvin approval, 2026-07-18.)
-    """
 
     base = _merge_base_with_canonical()
     if not base:
