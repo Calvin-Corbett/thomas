@@ -55,6 +55,7 @@ def _parent_alive(pid: int) -> bool:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             ).stdout
             return str(int(pid)) in (out or "")
         os.kill(int(pid), 0)

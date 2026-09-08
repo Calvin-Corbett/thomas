@@ -474,7 +474,8 @@ def _porcelain_path(line: str) -> str:
 def _git_dirty_paths(repo_root: Path) -> list[str]:
     try:
         proc = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True, check=False
+            ["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True, check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
     except Exception:
         return []
@@ -524,6 +525,7 @@ def _query_process_records(repo_root: Path) -> list[dict[str, Any]]:
                 capture_output=True,
                 text=True,
                 check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             raw = json.loads(proc.stdout or "[]") if proc.returncode == 0 else []
             rows = raw if isinstance(raw, list) else ([raw] if isinstance(raw, dict) else [])
