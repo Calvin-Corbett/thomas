@@ -139,7 +139,7 @@ git config --global --get-regexp '^(commit|tag|gpg|user)\.' | Sort-Object
 #   commit.gpgsign true
 #   gpg.format ssh
 #   tag.gpgsign true
-#   user.signingkey C:\Users\corbe\.ssh\id_ed25519_signing.pub
+#   user.signingkey C:\Users\example\.ssh\id_ed25519_signing.pub
 ```
 
 ### Step 6. Configure the allowed-signers file (for local verification)
@@ -170,7 +170,7 @@ enforce the "Require signed commits" branch protection rule.
 ### Step 8. Verify with a test commit
 
 ```powershell
-cd C:\Users\corbe\Thomas
+cd C:\Users\example\Thomas
 
 # Make an empty test commit
 git commit --allow-empty -m "test: signing setup verification"

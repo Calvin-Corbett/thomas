@@ -144,4 +144,4 @@ watch; the inventory tool gives one report to read.
 - [`tests/test_xfail_growth_gate.py`](../tests/test_xfail_growth_gate.py) — tests for both
 - [`.github/workflows/gates.yml`](../.github/workflows/gates.yml) — server-side mirror (job: `xfail-growth-gate`)
 - [`docs/SAFETY_ARCHITECTURE.md`](SAFETY_ARCHITECTURE.md) — the safety architecture this gate plugs into
-- [`docs/ops/remediation/DOMAIN_STUB_TRACKING.md`](ops/remediation/DOMAIN_STUB_TRACKING.md) — existing tracking doc for the domain-stub xfail category
+- `docs/ops/remediation/DOMAIN_STUB_TRACKING.md` — existing tracking doc for the domain-stub xfail category

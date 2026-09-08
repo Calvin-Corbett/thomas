@@ -1,20 +1,15 @@
 # Thomas Verification Standard
 
-How to PROVE a Thomas change works. Set by Calvin, 2026-06-28: "A screenshot of a
-game does not prove it works — it could be a PDF photo of a game screen. You have to
-ask: did it actually hit the criteria?"
-
-This is the bar for any agent (Claude, Codex) claiming a chat/UI/deliverable change is
-done. A claim without proof at this bar does not count.
+Verify behavior against explicit acceptance criteria. Record reproducible observations and distinguish functional evidence from presentation screenshots.
 
 ## The non-negotiables
 
 1. **Real browser, real input.** Verify in an actual browser driven by Playwright
-   against Thomas's real instance (`python run_thomas_main_8906.py`, port 8906).
+   against an isolated Thomas test instance.
    Restart the server and hard-reload after every edit. Type and click as a user would
    — never fabricate the trigger with synthetic `dispatchEvent`/`element.value=`. (You
    may inspect internal state with `evaluate`, but the *action under test* must be real
-   input.) Never test in Calvin's own Chrome.
+   input.) Use an isolated test browser profile.
 
 2. **A screenshot is not proof.** A screenshot shows a frame; it cannot show behavior.
    It is allowed only as a *supplement* to functional evidence, never as the evidence.

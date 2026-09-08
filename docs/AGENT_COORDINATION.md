@@ -14,9 +14,9 @@ model-specific agent env vars. Use `--all` only for board-wide audits.
 
 ## Roles
 
-Claude is the coordinator and leader of repo-quality work for Thomas. Codex and any spawned workers report to Claude. Calvin overrides anyone.
+Follow the coordinator assigned to the current task. Explicit user instructions take precedence.
 
-## Supervisor Protocol (V2 — async, Calvin-directed 2026-07-15)
+## Supervisor Protocol (V2 — async, maintainer-directed 2026-07-15)
 
 Workers message-and-PROCEED. Post a status message after each unit, then continue immediately
 with the next queued unit — do not stop to wait for an ack.

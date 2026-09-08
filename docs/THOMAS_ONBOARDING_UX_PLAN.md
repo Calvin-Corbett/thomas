@@ -1,6 +1,6 @@
-﻿# Thomas Onboarding UX Plan Pointer
+# Onboarding documentation
+
+For the supported setup flow, see `docs/ONBOARDING_DIALOGUE_MASTER.md`. Development records are maintained privately.
 
 Canonical location:
-- `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
-
-This file is a compatibility pointer to the canonical plan location.
+- `plans/README.md`

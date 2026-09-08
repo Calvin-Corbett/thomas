@@ -93,7 +93,7 @@ Click **Create** (or **Save changes**).
 Try to push directly to `dev`:
 
 ```powershell
-cd C:\Users\corbe\Thomas
+cd C:\Users\example\Thomas
 git checkout dev
 git commit --allow-empty -m "test direct push"
 git push dev-origin dev

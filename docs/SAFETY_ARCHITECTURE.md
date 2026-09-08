@@ -2,7 +2,7 @@
 
 The mental model for how safety is enforced in this repo, after the
 2026-05-26 architecture overhaul (PROBLEM.md
-[gate-architecture-2026-05-26](../plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md)).
+gate-architecture-2026-05-26).
 
 ## TL;DR
 
@@ -267,8 +267,8 @@ correct work the first time, not creative work that almost-passes.
 
 ## References
 
-- [PROBLEM.md (full spec)](../plans/thomas/problems/gate-architecture-2026-05-26/PROBLEM.md)
-- [PLAN.md (this PR's plan)](../plans/thomas/tasks/gate-architecture-2026-05-26/PLAN.md)
+- PROBLEM.md (full spec)
+- PLAN.md (this PR's plan)
 - [SIGNING_KEY_SETUP.md (the product owner's runbook)](SIGNING_KEY_SETUP.md)
 - [BRANCH_PROTECTION_SETUP.md (the product owner's UI clickpath)](BRANCH_PROTECTION_SETUP.md)
 - [`.github/workflows/gates.yml` (server-side mirror)](../.github/workflows/gates.yml)

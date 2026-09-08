@@ -47,7 +47,7 @@ the patch.
 From an **Administrator** PowerShell:
 
 ```powershell
-cd C:\Users\corbe\Thomas
+cd C:\Users\example\Thomas
 .\scripts\cage\provision_cage.ps1 -AgentUser thomas-agent
 ```
 
@@ -151,7 +151,7 @@ profile, or a system tree (which would re-expose the host).
 tripwire (NOT the wall): it flags clone/remote/submodule/`.git`/out-of-allowlist
 signals in a submitted change so they are caught when the sandbox is not active.
 
-> **CALVIN, ELEVATED, ONE-TIME (then reboot):** enable the feature
+> **maintainer, ELEVATED, ONE-TIME (then reboot):** enable the feature
 > `Enable-WindowsOptionalFeature -Online -FeatureName 'Containers-DisposableClientVM' -All`
 > (needs Win 11 Pro/Enterprise + virtualization in BIOS). Verified currently
 > OFF on this machine (`WindowsSandbox.exe` absent). After the reboot, launch
@@ -171,7 +171,7 @@ unread and get missed. Delivery is now enforced at two layers:
   one definition of "unread for me" (`message.unread_messages`):
   - repo-wide **block-on-any**: `scripts/forge/gates/workboard_inbox.py` — any
     unread message blocks the next action until acked (wired into pre-commit).
-  - cage submit **scope-aware** (Calvin-chosen 2026-06-02): the commit-master
+  - cage submit **scope-aware** (maintainer-chosen 2026-06-02): the commit-master
     `submit` (`scripts/forge/commit_master.py`) refuses only on *relevant*
     unread — a must-read kind (blocker/scope_change) or a message whose subject
     paths overlap the files being submitted — so a caged worker can't drop a
@@ -184,7 +184,7 @@ the directive; once acked it no longer blocks. Verified live with the codex
 session: a `scripts/cage` submission by codex was blocked while a
 `scope_change` was unread, and proceeded after the ack.
 
-> **DESIGN DECISION (Calvin, 2026-06-02): scope-aware for the cage submit.**
+> **DESIGN DECISION (maintainer, 2026-06-02): scope-aware for the cage submit.**
 > The repo-wide pre-commit gate (`workboard_inbox.py`) stays **block-on-any**
 > (simple, strict); the cage submit is **scope-aware** (block only on a
 > must-read kind or a message about the files being submitted) — the literal
@@ -195,7 +195,7 @@ session: a `scripts/cage` submission by codex was blocked while a
 >
 > **Wiring note (protected files):** any change to the repo-wide gate touches
 > `.pre-commit-config.yaml`, `agent_safety.toml [protected] enforcement_scripts`,
-> and `scripts/active_folders.py` — all protected, so they need Calvin's
+> and `scripts/active_folders.py` — all protected, so they need maintainer's
 > approval. The cage submit + startup surfacing enforce delivery without editing
 > them.
 

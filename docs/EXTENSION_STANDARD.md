@@ -56,7 +56,7 @@ accepted everywhere and normalizes to `app` on read:
    API powers Thomas powers the module.
 6. **No magic words.** Module chat/intent surfaces are organic — the
    model interprets, controls are tools. Keyword/command-trigger UX is
-   banned (Calvin design law, 2026-06-07).
+   banned (maintainer design law, 2026-06-07).
 7. **Tests ship with the module.** Minimum: manifest/catalog consistency,
    route CRUD round-trip, disabled-plugin 404, and parsing/normalization
    fuzz for anything that reads model output.
