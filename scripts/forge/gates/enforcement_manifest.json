@@ -46,7 +46,7 @@
   "scripts/forge/gates/type_safety_gate.py": "2c36861f83ff7ed6ad52c7dcffffbb55dcf69e7eaed5395c22025502e8c1c4ff",
   "scripts/forge/gates/untracked_import_gate.py": "39c995efab7d1ccab7f2512f67f000ce7f24c67ebb500b617e1fcf000d43e0f2",
   "scripts/forge/gates/verification_record_gate.py": "d070838b68bd408ed46ccc4d509fac96be171d64d4e20eeddb17c736380398fd",
-  "scripts/forge/gates/workboard_agent_claim.py": "bd108cd15c97453895ea6a364d99aadc1d47887c6e29cf589b0369b084bf1052",
+  "scripts/forge/gates/workboard_agent_claim.py": "54ba8d99776cea126d323567afdf1e557e06173f85e8fce3efae3bc30f5b2e69",
   "scripts/forge/gates/workboard_changed_files.py": "0b6c8d62df6982c261a093132a56599ef8b3e0181bd97a432d0c00a321cf18d1",
   "scripts/forge/gates/workboard_claims.py": "c5760bced6f9ff0c8008c2d990c14dea4683493dae6bbd76543dff535fd6853d",
   "scripts/forge/gates/workboard_evidence_gate.py": "6834ead961eb5ba83fbff7be0e269deb509b3761c94a25b36fc9e1c450d3a004",

@@ -62,6 +62,7 @@ def _resolve_agent(explicit_agent: str | None) -> str | None:
 
 
 def _orphan_adoption_hints(workboard_path: Path, agent: str, paths: Sequence[str]) -> list[dict]:
+    """Return adoption hints for stale claims covering the requested paths."""
     try:
         from scripts.crew.workboard.claim_adopt import orphans_covering_paths
     except ImportError:  # pragma: no cover - import path varies by run context

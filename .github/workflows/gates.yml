@@ -629,10 +629,15 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Verify all PR commits are signed
-        shell: bash
-        run: |
-          BASE="${{ github.event.pull_request.base.sha }}"
+        - name: Verify all PR commits are signed
+          shell: bash
+          run: |
+            # GitHub signs web/API commits with its published GPG key.
+            # Import it so local verification can authenticate those signatures.
+            curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+              https://github.com/web-flow.gpg --output "$RUNNER_TEMP/github-web-flow.gpg"
+            gpg --batch --import "$RUNNER_TEMP/github-web-flow.gpg"
+            BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
           # SSH-signed commits (gpg.format=ssh, this repo's standard per
           # docs/SIGNING_KEY_SETUP.md) can only be verified when git knows the

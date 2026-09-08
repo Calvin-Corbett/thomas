@@ -1,4 +1,13 @@
 {
   "version": 1,
-  "records": []
+  "records": [
+    {
+      "branch": "release/public-content-cleanup-20260908",
+      "owner": "codex",
+      "purpose": "Prepare the reviewed public product distribution",
+      "created_on": "2026-09-08",
+      "expires_on": "2026-09-15",
+      "refs": "https://github.com/Calvin-Corbett/thomas/pull/72"
+    }
+  ]
 }
