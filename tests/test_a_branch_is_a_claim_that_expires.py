@@ -139,19 +139,19 @@ def test_a_missing_registry_is_empty_and_get_returns_none(tmp_path: Path) -> Non
 
 
 def test_record_then_get_round_trips(tmp_path: Path) -> None:
-    branch_claims.record_claim(tmp_path, "feature-x", "calvin", "trying a new thing", "2026-09-10")
+    branch_claims.record_claim(tmp_path, "feature-x", "test-user", "trying a new thing", "2026-09-10")
     claims = branch_claims.load(tmp_path)
     record = claims.get("feature-x")
     assert record is not None
     assert record["branch"] == "feature-x"
-    assert record["owner"] == "calvin"
+    assert record["owner"] == "test-user"
     assert record["purpose"] == "trying a new thing"
     assert record["expires_on"] == "2026-09-10"
     assert "created_on" in record
 
 
 def test_is_expired_true_false_none_boundary(tmp_path: Path) -> None:
-    branch_claims.record_claim(tmp_path, "feature-x", "calvin", "why", "2026-09-10")
+    branch_claims.record_claim(tmp_path, "feature-x", "test-user", "why", "2026-09-10")
     claims = branch_claims.load(tmp_path)
     assert claims.is_expired("feature-x", "2026-09-09") is False
     assert claims.is_expired("feature-x", "2026-09-10") is False  # expiry day itself still live
@@ -160,7 +160,7 @@ def test_is_expired_true_false_none_boundary(tmp_path: Path) -> None:
 
 
 def test_newest_record_wins_on_reclaim(tmp_path: Path) -> None:
-    branch_claims.record_claim(tmp_path, "feature-x", "calvin", "first purpose", "2026-09-01")
+    branch_claims.record_claim(tmp_path, "feature-x", "test-user", "first purpose", "2026-09-01")
     branch_claims.record_claim(tmp_path, "feature-x", "someone-else", "second purpose", "2026-09-20")
     claims = branch_claims.load(tmp_path)
     record = claims.get("feature-x")
@@ -171,7 +171,7 @@ def test_newest_record_wins_on_reclaim(tmp_path: Path) -> None:
 
 def test_expires_on_must_not_already_be_past(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="already in the past"):
-        branch_claims.record_claim(tmp_path, "feature-x", "calvin", "why", "2020-01-01")
+        branch_claims.record_claim(tmp_path, "feature-x", "test-user", "why", "2020-01-01")
 
 
 def test_expires_on_capped_at_60_days_out(tmp_path: Path) -> None:
@@ -180,17 +180,17 @@ def test_expires_on_capped_at_60_days_out(tmp_path: Path) -> None:
     today = dt.date.today()
     too_far = (today + dt.timedelta(days=61)).isoformat()
     with pytest.raises(ValueError, match="60 days"):
-        branch_claims.record_claim(tmp_path, "feature-x", "calvin", "why", too_far)
+        branch_claims.record_claim(tmp_path, "feature-x", "test-user", "why", too_far)
 
     ok_far = (today + dt.timedelta(days=60)).isoformat()
-    branch_claims.record_claim(tmp_path, "feature-y", "calvin", "why", ok_far)  # must not raise
+    branch_claims.record_claim(tmp_path, "feature-y", "test-user", "why", ok_far)  # must not raise
 
 
 def test_trunk_branches_cannot_be_claimed(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="trunk"):
-        branch_claims.record_claim(tmp_path, "dev", "calvin", "why", "2026-09-10")
+        branch_claims.record_claim(tmp_path, "dev", "test-user", "why", "2026-09-10")
     with pytest.raises(ValueError, match="trunk"):
-        branch_claims.record_claim(tmp_path, "main", "calvin", "why", "2026-09-10")
+        branch_claims.record_claim(tmp_path, "main", "test-user", "why", "2026-09-10")
 
 
 def test_malformed_registry_raises_systemexit_not_silent_empty(tmp_path: Path) -> None:
@@ -212,7 +212,7 @@ def test_cli_record_and_list_round_trip(tmp_path: Path) -> None:
             "--branch",
             "cli-branch",
             "--owner",
-            "calvin",
+            "test-user",
             "--purpose",
             "cli test",
             "--expires-on",
@@ -262,7 +262,7 @@ def test_push_creating_an_unclaimed_branch_fails_naming_it_and_the_remedy(tmp_pa
 
 def test_push_creating_a_claimed_branch_passes(tmp_path: Path) -> None:
     repo, _remote = _init_repo_with_bare_remote(tmp_path)
-    branch_claims.record_claim(repo, "claimed-branch", "calvin", "a real reason", "2026-10-01")
+    branch_claims.record_claim(repo, "claimed-branch", "test-user", "a real reason", "2026-10-01")
     _git(repo, "checkout", "-b", "claimed-branch")
     (repo / "f.txt").write_text("change\n", encoding="utf-8")
     _git(repo, "commit", "-am", "change")
@@ -286,7 +286,7 @@ def test_push_creating_a_branch_with_an_expired_claim_fails(tmp_path: Path) -> N
             "records": [
                 {
                     "branch": "expired-branch",
-                    "owner": "calvin",
+                    "owner": "test-user",
                     "purpose": "old work",
                     "created_on": "2020-01-01",
                     "expires_on": "2020-02-01",
@@ -325,7 +325,7 @@ def test_dev_needs_no_claim(tmp_path: Path) -> None:
 
 def test_updating_an_existing_remote_branch_is_never_gated(tmp_path: Path) -> None:
     repo, _remote = _init_repo_with_bare_remote(tmp_path)
-    branch_claims.record_claim(repo, "shared-branch", "calvin", "why", "2026-10-01")
+    branch_claims.record_claim(repo, "shared-branch", "test-user", "why", "2026-10-01")
     _git(repo, "checkout", "-b", "shared-branch")
     (repo / "f.txt").write_text("v1\n", encoding="utf-8")
     _git(repo, "commit", "-am", "v1")
@@ -342,7 +342,7 @@ def test_updating_an_existing_remote_branch_is_never_gated(tmp_path: Path) -> No
             "records": [
                 {
                     "branch": "shared-branch",
-                    "owner": "calvin",
+                    "owner": "test-user",
                     "purpose": "why",
                     "created_on": "2020-01-01",
                     "expires_on": "2020-02-01",
@@ -460,7 +460,7 @@ def test_sweep_dry_run_touches_nothing(tmp_path: Path) -> None:
             "records": [
                 {
                     "branch": "expired-branch",
-                    "owner": "calvin",
+                    "owner": "test-user",
                     "purpose": "old",
                     "created_on": "2020-01-01",
                     "expires_on": "2020-02-01",
@@ -490,7 +490,7 @@ def test_sweep_archives_records_and_deletes_an_expired_claim(tmp_path: Path) -> 
             "records": [
                 {
                     "branch": "expired-branch",
-                    "owner": "calvin",
+                    "owner": "test-user",
                     "purpose": "old",
                     "created_on": "2020-01-01",
                     "expires_on": "2020-02-01",
@@ -624,7 +624,7 @@ def test_sweep_never_overwrites_a_pre_existing_archive_ref_on_collision(tmp_path
             "records": [
                 {
                     "branch": "doomed",
-                    "owner": "calvin",
+                    "owner": "test-user",
                     "purpose": "second life",
                     "created_on": "2020-01-01",
                     "expires_on": "2020-02-01",
@@ -716,11 +716,11 @@ def test_grace_window_still_sweeps_a_genuinely_aged_branch(tmp_path: Path) -> No
 
 def test_record_claim_rejects_a_git_invalid_branch_name(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="not a valid git branch name"):
-        branch_claims.record_claim(tmp_path, "has space", "calvin", "why", "2026-09-10")
+        branch_claims.record_claim(tmp_path, "has space", "test-user", "why", "2026-09-10")
 
 
 def test_ref_argv_fallback_strips_a_refs_heads_prefix_instead_of_doubling_it(tmp_path: Path) -> None:
-    branch_claims.record_claim(tmp_path, "feat/x", "calvin", "why", "2026-09-10")
+    branch_claims.record_claim(tmp_path, "feat/x", "test-user", "why", "2026-09-10")
 
     proc = subprocess.run(
         [sys.executable, str(GATE), "--repo-root", str(tmp_path), "--ref", "refs/heads/feat/x"],

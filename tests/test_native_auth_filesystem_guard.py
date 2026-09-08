@@ -189,7 +189,7 @@ def test_runtime_protection_disabled_flag_still_works(sandbox: Path, monkeypatch
     (sandbox / "runtime" / ".runtime_protection_key").write_text(key.hex() + "\n")
 
     issued_at = "2026-05-27T12:00:00Z"
-    issued_by = "calvin"
+    issued_by = "test-user"
     repo = str(sandbox.resolve())
     sig = _hmac.new(
         key,

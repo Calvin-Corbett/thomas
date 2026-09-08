@@ -13,7 +13,7 @@ def test_worktree_rules_gate_passes_with_dirty_worktree_policy(tmp_path: Path, c
                 "## Worktree discipline (required)",
                 "Read `WORKTREE_RULES.md` before making edits.",
                 "Use only the explicitly assigned worktree path for the task.",
-                "If no worktree is specified, use `C:\\Users\\corbe\\Thomas` (`master`).",
+                "If no worktree is specified, use `C:\\Users\\example\\Thomas` (`master`).",
                 "Do not edit multiple worktrees in one task unless explicitly requested.",
                 "Do not create, remove, move, or rebind worktrees without explicit user approval.",
                 "If branch/worktree intent is unclear, stop and ask before editing.",
@@ -28,7 +28,7 @@ def test_worktree_rules_gate_passes_with_dirty_worktree_policy(tmp_path: Path, c
             [
                 "# Worktree Rules (Required)",
                 "Current worktrees:",
-                "- `C:\\Users\\corbe\\Thomas` -> `master`",
+                "- `C:\\Users\\example\\Thomas` -> `master`",
                 "If `git status --porcelain` is not clean, do not start normal implementation work in that repo until it is cleaned or an explicit audited dirty-worktree override is being used for cleanup/remediation.",
             ]
         ),
@@ -50,7 +50,7 @@ def test_worktree_rules_gate_fails_when_dirty_worktree_policy_missing(tmp_path: 
                 "## Worktree discipline (required)",
                 "Read `WORKTREE_RULES.md` before making edits.",
                 "Use only the explicitly assigned worktree path for the task.",
-                "If no worktree is specified, use `C:\\Users\\corbe\\Thomas` (`master`).",
+                "If no worktree is specified, use `C:\\Users\\example\\Thomas` (`master`).",
                 "Do not edit multiple worktrees in one task unless explicitly requested.",
                 "Do not create, remove, move, or rebind worktrees without explicit user approval.",
                 "If branch/worktree intent is unclear, stop and ask before editing.",
@@ -64,7 +64,7 @@ def test_worktree_rules_gate_fails_when_dirty_worktree_policy_missing(tmp_path: 
             [
                 "# Worktree Rules (Required)",
                 "Current worktrees:",
-                "- `C:\\Users\\corbe\\Thomas` -> `master`",
+                "- `C:\\Users\\example\\Thomas` -> `master`",
             ]
         ),
         encoding="utf-8",

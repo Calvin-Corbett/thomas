@@ -60,12 +60,6 @@ class TestOrchestratorBrainStatus(unittest.IsolatedAsyncioTestCase):
     # no assertion about that helper.
 
     async def test_background_actionable_reply_is_model_generated_not_canned(self):
-        """An auto-background task does not get a canned 'task started' ack.
-
-        Calvin: an instantaneous templated reply isn't the AI replying. The
-        brain must call the model and surface its real words — not a
-        hash-selected canned line.
-        """
         brain = OrchestratorBrain(
             config=None,
             llm=None,

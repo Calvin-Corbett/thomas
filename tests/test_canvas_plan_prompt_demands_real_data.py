@@ -6,10 +6,6 @@ from thomas.server.chat_delegation_canvas import _PLAN_SYSTEM
 
 
 def test_the_planner_is_told_to_chart_actual_figures() -> None:
-    """Calvin asked how people commute to work and got ONE bar reading 100%,
-    captioned "Illustrative distribution" -- the shape of a chart with none of
-    the information. The existing rule only forbade placeholders "in geometry",
-    which says nothing about the data itself."""
     text = _PLAN_SYSTEM.lower()
 
     assert "chart the actual figures" in text

@@ -32,7 +32,7 @@ def test_fs_write_file_refused_for_key_even_with_active_signed_flag(sandbox: Pat
 
 def test_fs_write_file_refused_for_flag_even_with_active_signed_flag(sandbox: Path) -> None:
     key = _plant_key(sandbox)
-    _write_signed_flag(sandbox, key=key, issued_by="calvin")
+    _write_signed_flag(sandbox, key=key, issued_by="test-user")
     original = _flag(sandbox).read_text()
 
     tool = WriteFileTool(sandbox, project_root=sandbox)

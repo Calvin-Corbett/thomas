@@ -48,14 +48,14 @@ def test_a_recorded_risk_round_trips_through_load(tmp_path: Path) -> None:
     tomorrow = (dt.date.today() + dt.timedelta(days=30)).isoformat()
 
     record_id = accepted_risks.record_risk(
-        tmp_path, "calvin", "no time to fix the flaky mock this sprint", tomorrow
+        tmp_path, "test-user", "no time to fix the flaky mock this sprint", tomorrow
     )
 
     risks = accepted_risks.load(tmp_path)
     record = risks.get(record_id)
 
     assert record is not None
-    assert record["owner"] == "calvin"
+    assert record["owner"] == "test-user"
     assert record["reason"] == "no time to fix the flaky mock this sprint"
     assert record["expires_on"] == tomorrow
     assert record["reviewed_on"] == accepted_risks._today()
@@ -65,10 +65,10 @@ def test_a_recorded_risk_round_trips_through_load(tmp_path: Path) -> None:
 
 def test_recording_a_second_risk_does_not_mutate_the_first(tmp_path: Path) -> None:
     expires = (dt.date.today() + dt.timedelta(days=10)).isoformat()
-    first_id = accepted_risks.record_risk(tmp_path, "calvin", "risk one", expires)
+    first_id = accepted_risks.record_risk(tmp_path, "test-user", "risk one", expires)
     first_before = dict(accepted_risks.load(tmp_path).get(first_id))
 
-    second_id = accepted_risks.record_risk(tmp_path, "calvin", "risk two", expires, refs="issue-42")
+    second_id = accepted_risks.record_risk(tmp_path, "test-user", "risk two", expires, refs="issue-42")
 
     risks = accepted_risks.load(tmp_path)
     assert risks.get(first_id) == first_before
@@ -79,8 +79,8 @@ def test_recording_a_second_risk_does_not_mutate_the_first(tmp_path: Path) -> No
 
 def test_two_risks_recorded_from_the_same_reason_text_get_different_stable_ids(tmp_path: Path) -> None:
     expires = (dt.date.today() + dt.timedelta(days=10)).isoformat()
-    id1 = accepted_risks.record_risk(tmp_path, "calvin", "same reason", expires)
-    id2 = accepted_risks.record_risk(tmp_path, "calvin", "same reason", expires)
+    id1 = accepted_risks.record_risk(tmp_path, "test-user", "same reason", expires)
+    id2 = accepted_risks.record_risk(tmp_path, "test-user", "same reason", expires)
 
     assert id1 != id2
     risks = accepted_risks.load(tmp_path)
@@ -133,7 +133,7 @@ def test_a_record_missing_a_required_key_is_also_a_loud_systemexit(tmp_path: Pat
     bad_record = {
         # "expires_on" deliberately omitted
         "id": "2026-01-01-x-1",
-        "owner": "calvin",
+        "owner": "test-user",
         "reason": "r",
         "reviewed_on": "2026-01-01",
         "refs": None,
@@ -164,7 +164,7 @@ def test_the_seeded_registry_file_parses_as_an_empty_registry() -> None:
 
 def test_recording_with_an_unparseable_expires_on_is_a_loud_failure(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="expires_on"):
-        accepted_risks.record_risk(tmp_path, "calvin", "reason", "not-a-date")
+        accepted_risks.record_risk(tmp_path, "test-user", "reason", "not-a-date")
 
     # nothing was written.
     assert accepted_risks.load(tmp_path).records == ()
@@ -174,7 +174,7 @@ def test_recording_with_an_already_past_expires_on_is_a_loud_failure(tmp_path: P
     yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
 
     with pytest.raises(ValueError, match="expires_on"):
-        accepted_risks.record_risk(tmp_path, "calvin", "reason", yesterday)
+        accepted_risks.record_risk(tmp_path, "test-user", "reason", yesterday)
 
     assert accepted_risks.load(tmp_path).records == ()
 
@@ -182,7 +182,7 @@ def test_recording_with_an_already_past_expires_on_is_a_loud_failure(tmp_path: P
 def test_recording_with_expires_on_of_today_is_accepted(tmp_path: Path) -> None:
     today = dt.date.today().isoformat()
 
-    record_id = accepted_risks.record_risk(tmp_path, "calvin", "reason", today)
+    record_id = accepted_risks.record_risk(tmp_path, "test-user", "reason", today)
 
     assert accepted_risks.load(tmp_path).get(record_id)["expires_on"] == today
 
@@ -194,7 +194,7 @@ def test_recording_with_expires_on_of_today_is_accepted(tmp_path: Path) -> None:
 
 def test_is_expired_is_false_on_the_exact_expiry_day_and_true_the_day_after(tmp_path: Path) -> None:
     expiry_date = dt.date.today() + dt.timedelta(days=60)
-    record_id = accepted_risks.record_risk(tmp_path, "calvin", "boundary case", expiry_date.isoformat())
+    record_id = accepted_risks.record_risk(tmp_path, "test-user", "boundary case", expiry_date.isoformat())
     risks = accepted_risks.load(tmp_path)
 
     assert risks.is_expired(record_id, expiry_date - dt.timedelta(days=1)) is False
@@ -203,7 +203,7 @@ def test_is_expired_is_false_on_the_exact_expiry_day_and_true_the_day_after(tmp_
 
 
 def test_is_expired_on_a_missing_risk_id_is_none_never_a_silent_false(tmp_path: Path) -> None:
-    accepted_risks.record_risk(tmp_path, "calvin", "reason", (dt.date.today() + dt.timedelta(days=1)).isoformat())
+    accepted_risks.record_risk(tmp_path, "test-user", "reason", (dt.date.today() + dt.timedelta(days=1)).isoformat())
     risks = accepted_risks.load(tmp_path)
 
     assert risks.get("does-not-exist") is None
@@ -219,7 +219,7 @@ def test_a_crash_between_the_temp_write_and_the_replace_leaves_the_original_inta
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     expires = (dt.date.today() + dt.timedelta(days=5)).isoformat()
-    accepted_risks.record_risk(tmp_path, "calvin", "first risk", expires)
+    accepted_risks.record_risk(tmp_path, "test-user", "first risk", expires)
     path = tmp_path / "docs" / "ops" / "accepted_risks.json"
     original_bytes = path.read_bytes()
 
@@ -229,7 +229,7 @@ def test_a_crash_between_the_temp_write_and_the_replace_leaves_the_original_inta
     monkeypatch.setattr(accepted_risks.os, "replace", _boom)
 
     with pytest.raises(OSError):
-        accepted_risks.record_risk(tmp_path, "calvin", "second risk", expires)
+        accepted_risks.record_risk(tmp_path, "test-user", "second risk", expires)
 
     assert path.read_bytes() == original_bytes, "original file must survive a failed replace untouched"
     leftover_tmp = list(path.parent.glob(f".{path.name}.*.tmp"))
@@ -249,7 +249,7 @@ def test_lock_contention_is_a_bounded_wait_then_a_loud_systemexit(
     expires = (dt.date.today() + dt.timedelta(days=5)).isoformat()
     try:
         with pytest.raises(SystemExit) as exc_info:
-            accepted_risks.record_risk(tmp_path, "calvin", "contended", expires)
+            accepted_risks.record_risk(tmp_path, "test-user", "contended", expires)
         assert str(lock_path) in str(exc_info.value)
     finally:
         os.close(held_fd)
@@ -257,7 +257,7 @@ def test_lock_contention_is_a_bounded_wait_then_a_loud_systemexit(
 
     if lock_path.exists():
         lock_path.unlink()
-    record_id = accepted_risks.record_risk(tmp_path, "calvin", "uncontended", expires)
+    record_id = accepted_risks.record_risk(tmp_path, "test-user", "uncontended", expires)
     assert record_id
 
 
@@ -274,7 +274,7 @@ def test_the_cli_records_a_risk_and_lists_it_as_json(tmp_path: Path, capsys) -> 
             str(tmp_path),
             "record",
             "--owner",
-            "calvin",
+            "test-user",
             "--reason",
             "cli recorded risk",
             "--expires-on",
@@ -289,7 +289,7 @@ def test_the_cli_records_a_risk_and_lists_it_as_json(tmp_path: Path, capsys) -> 
     out = capsys.readouterr().out
     payload = json.loads(out)
 
-    assert payload["records"][0]["owner"] == "calvin"
+    assert payload["records"][0]["owner"] == "test-user"
     assert payload["records"][0]["reason"] == "cli recorded risk"
 
 

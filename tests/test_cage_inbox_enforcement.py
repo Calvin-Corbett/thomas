@@ -1,11 +1,3 @@
-"""Tests for the cage's scope-aware coordination enforcement (PROBLEM 2).
-
-Calvin chose scope-aware (2026-06-02): the cage blocks a worker's submission
-only on *relevant* unread messages (`commit_master._inbox_blocking`) -- must-read
-kinds (blocker/scope_change) or messages whose subject paths overlap the files
-being submitted. It reuses `message.unread_messages` and composes with (does not
-duplicate) the repo-wide block-on-any pre-commit gate `workboard_inbox.py`.
-"""
 
 from __future__ import annotations
 

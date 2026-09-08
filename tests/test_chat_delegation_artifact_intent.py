@@ -1,10 +1,3 @@
-"""The artifact-intent floor: does the deliverable relate to the request at all?
-
-These cases are drawn from real incidents on this machine. The graph/arcade-game
-pair is the one Calvin reported twice; the Teal Tapper pair is the false
-rejection the first version of this gate produced, kept here because a verifier
-that rejects good work is not an improvement on one that accepts bad work.
-"""
 
 from __future__ import annotations
 

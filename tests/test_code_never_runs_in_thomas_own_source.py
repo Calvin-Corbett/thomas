@@ -1,24 +1,3 @@
-"""Code must never run against Thomas's own source checkout.
-
-``send`` already calls this a HARD SAFETY NET and applies it twice: once for a
-conversation id with nothing behind it, once for a brand-new conversation. The
-third branch -- an id that DOES resolve, i.e. every "continue this task" -- takes
-its project root straight from the stored conversation and never checks it.
-
-That branch is reachable today, not hypothetically. Measured against the running
-server on this workspace: 20 Code conversations resolve to ``C:\\Users\\corbe\\Thomas``,
-three of them with real turns, and the changes endpoint offers one of them
-``notes.txt`` -- a file sitting in the repository root because a Code task wrote
-it there. Revert is ``git checkout -- <file>``, and for an untracked file it is a
-delete, so continuing one of those tasks edits the product source and the Revert
-button removes files from it.
-
-Refusing is the right answer rather than silently substituting a different
-folder: the handler immediately above already returns 409
-``project_change_requires_new_conversation`` because a conversation's project is
-not allowed to move underneath it. Quietly moving it here would contradict that
-rule while claiming to enforce a safety one.
-"""
 
 from __future__ import annotations
 

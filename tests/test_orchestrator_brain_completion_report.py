@@ -1,16 +1,3 @@
-"""Regression tests for reporting finished background work back into chat.
-
-The live bug (Calvin, 2026-06-16): a worker created `livecheck.txt`, the task
-card flipped to completed, but the chat agent kept saying "I don't have the
-result back." Root cause: the completion note was shown to the USER as a prefix
-but never injected into the MODEL's context, and it was only wired into the
-casual branch — so the model contradicted the delivered line, and any non-casual
-follow-up dropped the result entirely.
-
-These tests lock the fix: the completion is (a) injected into the model's
-context so it reports in its own voice, (b) delivered on every routing branch,
-and (c) reported exactly once.
-"""
 
 import types
 import unittest

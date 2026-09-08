@@ -96,7 +96,7 @@ def test_flag_with_mismatched_repo_does_not_bypass(sandbox: Path) -> None:
 
 def test_flag_with_modified_field_after_signing_does_not_bypass(sandbox: Path) -> None:
     key = _plant_key(sandbox)
-    _write_signed_flag(sandbox, key=key, issued_by="calvin")
+    _write_signed_flag(sandbox, key=key, issued_by="test-user")
     doc = json.loads(_flag(sandbox).read_text())
     doc["issued_by"] = "attacker"
     _flag(sandbox).write_text(json.dumps(doc))

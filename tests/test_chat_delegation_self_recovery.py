@@ -1,9 +1,3 @@
-"""Tests for max-autonomy worker self-recovery.
-
-Calvin's requirement: "if given a task he can't do he should be able to figure
-it out when on max autonomy." At L4 a failed worker attempt feeds its failure
-into a fresh attempt (bounded); below L4 it does a single pass and reports.
-"""
 
 import tempfile
 import types

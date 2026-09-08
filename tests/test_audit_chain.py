@@ -54,10 +54,10 @@ def clock():
 def test_entry_records_full_actor_attribution(log_path, clock):
     log = AuditChainLog(log_path, clock=clock)
 
-    human = Principal.human("calvin")
+    human = Principal.human("test-user")
     root = log.record(actor=human, action="request", resource="report/q3")
 
-    agent = Principal.agent("planner-1", on_behalf_of="calvin")
+    agent = Principal.agent("planner-1", on_behalf_of="test-user")
     delegated = log.record(
         actor=agent,
         action="generate",
@@ -67,20 +67,20 @@ def test_entry_records_full_actor_attribution(log_path, clock):
 
     # The human action names its actor unambiguously and acts on its own behalf.
     assert root.actor.kind == HUMAN
-    assert root.actor.id == "calvin"
+    assert root.actor.id == "test-user"
     assert root.actor.on_behalf_of == ""
-    assert root.actor.initiating_human == "calvin"
+    assert root.actor.initiating_human == "test-user"
 
     # The delegated agent action carries on_behalf_of the initiating human.
     assert delegated.actor.kind == AGENT
     assert delegated.actor.id == "planner-1"
-    assert delegated.actor.on_behalf_of == "calvin"
-    assert delegated.actor.initiating_human == "calvin"
+    assert delegated.actor.on_behalf_of == "test-user"
+    assert delegated.actor.initiating_human == "test-user"
 
 
 def test_human_principal_cannot_act_on_behalf_of_another():
     with pytest.raises(AuditChainError):
-        Principal(id="calvin", kind=HUMAN, on_behalf_of="someone-else")
+        Principal(id="test-user", kind=HUMAN, on_behalf_of="someone-else")
 
 
 def test_principal_rejects_bad_kind_and_empty_id():
@@ -98,15 +98,15 @@ def test_principal_rejects_bad_kind_and_empty_id():
 def test_trace_reconstructs_human_agent_agent_chain_in_order(log_path, clock):
     log = AuditChainLog(log_path, clock=clock)
 
-    human = log.record(actor=Principal.human("calvin"), action="ask", resource="task/42")
+    human = log.record(actor=Principal.human("test-user"), action="ask", resource="task/42")
     agent_a = log.record(
-        actor=Principal.agent("orchestrator", on_behalf_of="calvin"),
+        actor=Principal.agent("orchestrator", on_behalf_of="test-user"),
         action="plan",
         resource="task/42",
         caused_by=human.entry_id,
     )
     agent_b = log.record(
-        actor=Principal.agent("worker", on_behalf_of="calvin"),
+        actor=Principal.agent("worker", on_behalf_of="test-user"),
         action="execute",
         resource="task/42",
         caused_by=agent_a.entry_id,
@@ -118,12 +118,12 @@ def test_trace_reconstructs_human_agent_agent_chain_in_order(log_path, clock):
     assert [e.entry_id for e in chain] == [human.entry_id, agent_a.entry_id, agent_b.entry_id]
     assert [e.actor.kind for e in chain] == [HUMAN, AGENT, AGENT]
     assert [e.action for e in chain] == ["ask", "plan", "execute"]
-    assert chain[0].actor.id == "calvin"
+    assert chain[0].actor.id == "test-user"
 
 
 def test_trace_from_root_returns_single_entry(log_path, clock):
     log = AuditChainLog(log_path, clock=clock)
-    human = log.record(actor=Principal.human("calvin"), action="ask", resource="task/1")
+    human = log.record(actor=Principal.human("test-user"), action="ask", resource="task/1")
     assert [e.entry_id for e in log.trace_causal_chain(human.entry_id)] == [human.entry_id]
 
 
@@ -131,7 +131,7 @@ def test_record_rejects_dangling_causal_parent(log_path, clock):
     log = AuditChainLog(log_path, clock=clock)
     with pytest.raises(AuditChainError):
         log.record(
-            actor=Principal.agent("worker", on_behalf_of="calvin"),
+            actor=Principal.agent("worker", on_behalf_of="test-user"),
             action="execute",
             resource="task/42",
             caused_by="ae-00000000-deadbeefcafe",
@@ -141,9 +141,9 @@ def test_record_rejects_dangling_causal_parent(log_path, clock):
 def test_trace_guards_missing_parent_after_corruption(log_path, clock):
     """A dangling parent reaching the trace layer is handled, not crashed on."""
     log = AuditChainLog(log_path, clock=clock)
-    human = log.record(actor=Principal.human("calvin"), action="ask", resource="task/1")
+    human = log.record(actor=Principal.human("test-user"), action="ask", resource="task/1")
     child = log.record(
-        actor=Principal.agent("worker", on_behalf_of="calvin"),
+        actor=Principal.agent("worker", on_behalf_of="test-user"),
         action="do",
         resource="task/1",
         caused_by=human.entry_id,
@@ -167,16 +167,16 @@ def test_trace_unknown_entry_raises(log_path, clock):
 
 def _build_sample_log(path, clock) -> AuditChainLog:
     log = AuditChainLog(path, clock=clock)
-    human = log.record(actor=Principal.human("calvin"), action="ask", resource="task/42")
+    human = log.record(actor=Principal.human("test-user"), action="ask", resource="task/42")
     agent_a = log.record(
-        actor=Principal.agent("orchestrator", on_behalf_of="calvin"),
+        actor=Principal.agent("orchestrator", on_behalf_of="test-user"),
         action="plan",
         resource="task/42",
         caused_by=human.entry_id,
         details={"priority": "high"},
     )
     log.record(
-        actor=Principal.agent("worker", on_behalf_of="calvin"),
+        actor=Principal.agent("worker", on_behalf_of="test-user"),
         action="execute",
         resource="task/42",
         caused_by=agent_a.entry_id,
@@ -246,10 +246,10 @@ def test_filter_by_actor_and_by_time(log_path, clock):
     agents_only = log.filter(kind=AGENT)
     assert [e.actor.id for e in agents_only] == ["orchestrator", "worker"]
     humans_only = log.filter(kind=HUMAN)
-    assert [e.actor.id for e in humans_only] == ["calvin"]
+    assert [e.actor.id for e in humans_only] == ["test-user"]
 
     # by on_behalf_of
-    delegated = log.filter(on_behalf_of="calvin")
+    delegated = log.filter(on_behalf_of="test-user")
     assert [e.actor.id for e in delegated] == ["orchestrator", "worker"]
 
     # by inclusive time window (clock stamped 09:00:00, :01, :02)
@@ -263,7 +263,7 @@ def test_export_filtered_slice(log_path, clock):
     assert text.count("\n") == 1
     # The slice re-imports to exactly the filtered entries.
     reimport = AuditChainLog.from_jsonl(text, log_path.parent / "slice.jsonl", clock=clock)
-    assert [e.actor.id for e in reimport.all_entries()] == ["calvin"]
+    assert [e.actor.id for e in reimport.all_entries()] == ["test-user"]
 
 
 def test_import_rejects_duplicate_ids(log_path, clock):

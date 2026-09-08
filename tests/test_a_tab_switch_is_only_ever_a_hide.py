@@ -1,17 +1,3 @@
-"""A tab switch is only ever a hide, proven in a browser.
-
-Calvin's invariant (2026-09-01): one live DOM per tab. Switching shows and hides
-persistent containers; drafts, scroll and in-flight streams survive; nothing
-re-mounts on a switch. The chat page cannot give a second conversation its own
-thread, so a second conversation is a second chat page in its own frame, hidden
-with visibility and inert. Every assertion here is a computed style, an object
-identity or a request count, never text presence: a whole surface can render
-into an invisible element and pass a text check.
-
-Driven against ``tests/web_fixtures/thomas_chat_fixture.py``: the real chat page
-and the real shell scripts, every API stubbed, and a reply that drips for three
-seconds so a bubble can be watched growing inside a HIDDEN tab.
-"""
 
 from __future__ import annotations
 

@@ -42,7 +42,7 @@ def _registry(tmp_path, *, session_id="sess-canonical-1"):
 
 def test_three_surfaces_resolve_to_one_identity_and_state(tmp_path):
     reg = _registry(tmp_path)
-    created = reg.create_session("calvin")
+    created = reg.create_session("test-user")
     assert created.session_id == "sess-canonical-1"
 
     cli = reg.attach(created.session_id, "cli")
@@ -59,7 +59,7 @@ def test_three_surfaces_resolve_to_one_identity_and_state(tmp_path):
 
 def test_web_update_hands_off_to_cli_and_companion_on_refresh(tmp_path):
     reg = _registry(tmp_path)
-    session = reg.create_session("calvin")
+    session = reg.create_session("test-user")
     reg.attach(session.session_id, "cli")
     reg.attach(session.session_id, "web")
     reg.attach(session.session_id, "companion")
@@ -82,7 +82,7 @@ def test_web_update_hands_off_to_cli_and_companion_on_refresh(tmp_path):
 
 def test_handoff_is_bidirectional_and_merges(tmp_path):
     reg = _registry(tmp_path)
-    session = reg.create_session("calvin")
+    session = reg.create_session("test-user")
 
     reg.update_state(session.session_id, "web", {"turn": 1})
     reg.update_state(session.session_id, "cli", {"turn": 2, "note": "cli-added"})
@@ -95,7 +95,7 @@ def test_handoff_is_bidirectional_and_merges(tmp_path):
 def test_identity_and_state_survive_process_restart(tmp_path):
     store = tmp_path / "sessions.json"
     reg1 = CrossSurfaceSessionRegistry(store, clock=_Clock(), id_factory=lambda: "sess-durable")
-    session = reg1.create_session("calvin")
+    session = reg1.create_session("test-user")
     reg1.attach(session.session_id, "web")
     reg1.update_state(session.session_id, "web", {"draft": "hello"})
 
@@ -116,14 +116,14 @@ def test_attach_unknown_session_signals_cleanly(tmp_path):
 
 def test_unknown_surface_rejected(tmp_path):
     reg = _registry(tmp_path)
-    session = reg.create_session("calvin")
+    session = reg.create_session("test-user")
     with pytest.raises(UnknownSurfaceError):
         reg.attach(session.session_id, "watch")
 
 
 def test_returned_state_is_a_defensive_copy(tmp_path):
     reg = _registry(tmp_path)
-    session = reg.create_session("calvin")
+    session = reg.create_session("test-user")
     reg.update_state(session.session_id, "web", {"count": 1})
 
     view = reg.attach(session.session_id, "cli")
@@ -136,15 +136,15 @@ def test_env_var_overrides_store_path(tmp_path, monkeypatch):
     target = tmp_path / "nested" / "custom_store.json"
     monkeypatch.setenv("THOMAS_CROSS_SURFACE_SESSION_STORE", str(target))
     reg = CrossSurfaceSessionRegistry(clock=_Clock(), id_factory=lambda: "sess-env")
-    reg.create_session("calvin")
+    reg.create_session("test-user")
     assert reg.store_path == target
     assert target.exists()
 
 
 def test_create_returns_session_view(tmp_path):
     reg = _registry(tmp_path)
-    view = reg.create_session("calvin")
+    view = reg.create_session("test-user")
     assert isinstance(view, SessionView)
-    assert view.user == "calvin"
+    assert view.user == "test-user"
     assert view.state == {}
     assert view.last_surface == ""

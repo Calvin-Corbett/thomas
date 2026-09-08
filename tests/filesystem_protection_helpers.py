@@ -37,7 +37,7 @@ def _write_signed_flag(
     *,
     key: bytes,
     issued_at: str = "2026-05-27T12:00:00Z",
-    issued_by: str = "calvin",
+    issued_by: str = "test-user",
     repo: str | None = None,
     version: int = 1,
     extra: dict[str, Any] | None = None,

@@ -47,7 +47,7 @@ class _PinsMemory:
         self.policy = {"thread_id": thread_id, **policy}
 
     def retrieve(self, **_kwargs: object) -> str:
-        return "PIN(note:favorite): burnt orange"
+        return "PIN(note:favorite): slate blue"
 
 
 class _RowsCursor:
@@ -132,7 +132,7 @@ class TestMemoryCoordinator(unittest.IsolatedAsyncioTestCase):
 
         ctx = await coordinator.refresh("What should I use?", conversation, iteration=0)
 
-        self.assertIn("burnt orange", ctx.episodic)
+        self.assertIn("slate blue", ctx.episodic)
         self.assertEqual(memory.policy["thread_id"], "session-pins")
         self.assertTrue(memory.policy["pins_only"])
         self.assertFalse(ctx.semantic)
@@ -163,7 +163,7 @@ class TestMemoryCoordinator(unittest.IsolatedAsyncioTestCase):
         memory = AutonomyMemoryEngine(config, enable_legacy=False, enable_v2=True)
         memory.start()
         try:
-            memory.pin("favorite.color", "burnt orange")
+            memory.pin("favorite.color", "slate blue")
             memory._fabric_v2.upsert_profile_hints(
                 thread_id=None,
                 hints=[{"key": "unapproved.private", "value": "SHOULD_NOT_APPEAR", "confidence": 1.0}],
@@ -181,7 +181,7 @@ class TestMemoryCoordinator(unittest.IsolatedAsyncioTestCase):
 
             ctx = await coordinator.refresh("What should I use?", conversation, iteration=0)
 
-            self.assertIn("burnt orange", ctx.episodic)
+            self.assertIn("slate blue", ctx.episodic)
             self.assertNotIn("SHOULD_NOT_APPEAR", ctx.episodic)
             self.assertFalse(ctx.semantic)
         finally:

@@ -161,7 +161,7 @@ def test_protected_files_gate_diff_range_allows_approval_trailer(monkeypatch, ca
         messages={
             SHA_A: (
                 "fix: protected gate recovery\n\n"
-                "Thomas-Protected-Files-Approved: Calvin-approved hardening gate recovery 2026-05-28\n"
+                "Thomas-Protected-Files-Approved: test-user-approved hardening gate recovery 2026-05-28\n"
             )
         },
     )
@@ -173,7 +173,7 @@ def test_protected_files_gate_diff_range_allows_approval_trailer(monkeypatch, ca
     assert payload["ok"] is True
     assert payload["violations"] == ["agent_safety.toml"]
     assert payload["approved_protected_files"] is True
-    assert "Calvin-approved" in payload["approval_reason"]
+    assert "test-user-approved" in payload["approval_reason"]
 
 
 def _waiver(sha: str, *, expires: date, guard: str = "protected_files_gate", **overrides) -> dict:
@@ -230,7 +230,7 @@ def test_protected_files_gate_trailer_does_not_approve_other_commits(monkeypatch
             SHA_C: ["thomas/core/config.py"],
         },
         messages={
-            SHA_A: ("fix: approved edit\n\nThomas-Protected-Files-Approved: Calvin approved TH-1 on 2026-08-12\n"),
+            SHA_A: ("fix: approved edit\n\nThomas-Protected-Files-Approved: test-user approved TH-1 on 2026-08-12\n"),
             SHA_B: "chore: sneak a rule change in behind the approved commit\n",
             SHA_C: "chore: unrelated work\n",
         },
@@ -257,11 +257,11 @@ def test_protected_files_approval_rejects_a_sequence_of_messages() -> None:
         )
 
     ok, trailer, reason = protected_files_gate._protected_files_approval(
-        "fix: x\n\nThomas-Protected-Files-Approved: approved by Calvin\n"
+        "fix: x\n\nThomas-Protected-Files-Approved: approved by test-user\n"
     )
     assert ok is True
     assert trailer == "thomas-protected-files-approved"
-    assert reason == "approved by Calvin"
+    assert reason == "approved by test-user"
 
 
 # (c) A valid waiver passes AND is reported as waived.
@@ -512,7 +512,7 @@ def test_bulk_commit_guard_diff_range_allows_approval_trailer(monkeypatch, capsy
         {
             _BULK_SHA_A: (
                 ["a.py", "b.py"],
-                "fix: takeover\n\nThomas-Bulk-Change-Approved: Calvin-approved dirty-tree publish\n",
+                "fix: takeover\n\nThomas-Bulk-Change-Approved: test-user-approved dirty-tree publish\n",
             )
         },
     )
@@ -523,7 +523,7 @@ def test_bulk_commit_guard_diff_range_allows_approval_trailer(monkeypatch, capsy
     assert rc == 0
     assert payload["ok"] is True
     assert payload["approved_bulk_change"] is True
-    assert "Calvin-approved" in payload["approval_reason"]
+    assert "test-user-approved" in payload["approval_reason"]
 
 
 def test_bulk_commit_guard_trailer_does_not_approve_another_commit(monkeypatch, capsys) -> None:
@@ -601,7 +601,7 @@ def test_commit_growth_guard_diff_range_allows_approval_trailer(monkeypatch, cap
         commit_growth_guard,
         "_commit_message",
         lambda repo_root, s: (
-            "fix: takeover\n\nThomas-Commit-Growth-Approved: Calvin-approved public safety-arc replay\n"
+            "fix: takeover\n\nThomas-Commit-Growth-Approved: test-user-approved public safety-arc replay\n"
         ),
     )
     monkeypatch.setattr(commit_growth_guard, "_load_waivers", lambda repo_root: [])
@@ -612,7 +612,7 @@ def test_commit_growth_guard_diff_range_allows_approval_trailer(monkeypatch, cap
     assert rc == 0
     assert payload["ok"] is True
     assert payload["approved_growth"] is True
-    assert "Calvin-approved" in payload["approval_reason"]
+    assert "test-user-approved" in payload["approval_reason"]
 
 
 def test_exception_handler_gate_supports_diff_range(monkeypatch, capsys) -> None:

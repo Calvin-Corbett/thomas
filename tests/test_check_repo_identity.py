@@ -33,7 +33,7 @@ def test_evaluate_identity_fails_for_remote_and_root_drift(tmp_path: Path) -> No
         repo_root=repo_root,
         remote_urls={"origin": "https://github.com/example/not-thomas.git"},
         canonical_slug="corbe/thomas",
-        canonical_roots=["C:/Users/corbe/Thomas"],
+        canonical_roots=["C:/Users/example/Thomas"],
         enforce_local_root=True,
     )
 

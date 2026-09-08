@@ -221,12 +221,7 @@ def test_run_console_reports_removed_private_marker_count(monkeypatch, capsys, t
         encoding="utf-8",
     )
 
-    def _fake_copy_directory_if_present(repo_root: Path, snapshot_root: Path, rel_path: str) -> None:
-        if rel_path == "thomas":
-            mod.shutil.copytree(repo_root / rel_path, snapshot_root / rel_path, dirs_exist_ok=True)
-
-    monkeypatch.setattr(mod, "_list_git_paths", lambda repo_root, *, include_untracked: ["public.py"])
-    monkeypatch.setattr(mod, "_copy_directory_if_present", _fake_copy_directory_if_present)
+    monkeypatch.setattr(mod, "_list_git_paths", lambda repo_root, *, include_untracked: ["public.py", "thomas/private.py"])
     monkeypatch.setattr(mod, "_init_snapshot_repo", lambda snapshot_root, *, origin_url: None)
     monkeypatch.setattr(mod, "_current_origin", lambda repo_root: "")
     monkeypatch.setattr(mod, "_run_preflight", lambda snapshot_root, *, deep: {"ok": True})
@@ -239,3 +234,25 @@ def test_run_console_reports_removed_private_marker_count(monkeypatch, capsys, t
     assert (snapshot / "public.py").exists()
     assert not (snapshot / "thomas" / "private.py").exists()
     assert "removed private marker files: 1" in output
+
+
+def test_snapshot_does_not_reintroduce_stripped_directory_files(monkeypatch, tmp_path, capsys):
+    repo = tmp_path / "source"
+    repo.mkdir()
+    (repo / "docs").mkdir()
+    (repo / "docs" / "internal").mkdir()
+    (repo / "docs" / "public.md").write_text("Public guide", encoding="utf8")
+    (repo / "docs" / "internal" / "notes.md").write_text("Private notes", encoding="utf8")
+    (repo / "docs" / "repo_hygiene_baseline.json").write_text(
+        json.dumps({"publish_strip_prefixes": ["docs/internal/"]}), encoding="utf8"
+    )
+    monkeypatch.setattr(mod, "_list_git_paths", lambda *a, **k: [
+        "docs/public.md", "docs/internal/notes.md", "docs/repo_hygiene_baseline.json"
+    ])
+    monkeypatch.setattr(mod, "_current_origin", lambda *a: "")
+    monkeypatch.setattr(mod, "_init_snapshot_repo", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "_run_preflight", lambda *a, **k: {"ok": True})
+    output = tmp_path / "snapshot"
+    assert mod.run(["--repo-root", str(repo), "--output-root", str(output), "--json"]) == 0
+    assert (output / "docs/public.md").read_text(encoding="utf8") == "Public guide"
+    assert not (output / "docs/internal/notes.md").exists()

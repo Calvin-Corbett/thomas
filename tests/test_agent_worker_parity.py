@@ -578,7 +578,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(_FakeLLM.instances[-1].closed)
 
     def test_resolve_profile_precedence_role_over_chat_over_default(self):
-        # Calvin's design: a per-specialist (role) override wins; otherwise the
+
         # chat's model is the pipeline default.
         cfg = AppConfig()
         cfg.models = {

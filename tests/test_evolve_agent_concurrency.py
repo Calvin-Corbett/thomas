@@ -1,10 +1,3 @@
-"""Concurrent Code-run cap is configurable, not a hard 3 (Calvin: run many projects at once).
-
-Regression for the "another Code run is still active / all N slots are busy" 409
-block: the ceiling is now live-configurable via THOMAS_MAX_CONCURRENT_CODE_RUNS
-with a generous default, so different Code projects (distinct conversations) run
-concurrently instead of being serialized behind a single slot.
-"""
 
 from __future__ import annotations
 

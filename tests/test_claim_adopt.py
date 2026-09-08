@@ -1,17 +1,3 @@
-"""Tests for orphaned-claim adoption (Calvin 2026-06-01).
-
-Pins the spec:
-  * a claim untouched > 48h is an ORPHAN
-  * a blocked agent may ADOPT an orphan (claim + active task transfer) but only
-    with a verified breakglass actor
-  * an ACTIVE (non-orphan) claim can NEVER be adopted
-  * adopting your own claim is a no-op
-  * every adoption is audited
-
-Staleness is driven by git-blame on the claim line; here we monkeypatch
-`_line_commit_unix` to a fixed timestamp (same pattern as the cleanup tests) so
-age is deterministic.
-"""
 
 from __future__ import annotations
 
@@ -112,7 +98,7 @@ def test_adopt_transfers_orphan_claim_and_task(tmp_path: Path, monkeypatch) -> N
         adopter="bob",
         scope="thomas/core/foo.py",
         reason="alice stranded this; taking over to finish",
-        authorized_by="WORKSTATION\\corbe",
+        authorized_by="WORKSTATION\\example",
         name="Bob",
         now=_NOW,
     )
@@ -126,7 +112,7 @@ def test_adopt_transfers_orphan_claim_and_task(tmp_path: Path, monkeypatch) -> N
     # audit row written
     rows = [json.loads(line) for line in audit.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert rows and rows[0]["event"] == "claim_adopted"
-    assert rows[0]["from_agent"] == "alice" and rows[0]["authorized_by"] == "WORKSTATION\\corbe"
+    assert rows[0]["from_agent"] == "alice" and rows[0]["authorized_by"] == "WORKSTATION\\example"
 
 
 def test_cannot_adopt_active_claim(tmp_path: Path, monkeypatch) -> None:
@@ -140,7 +126,7 @@ def test_cannot_adopt_active_claim(tmp_path: Path, monkeypatch) -> None:
         adopter="bob",
         owner="alice",
         reason="trying to seize active work",
-        authorized_by="WORKSTATION\\corbe",
+        authorized_by="WORKSTATION\\example",
         now=_NOW,
     )
     assert ok is False

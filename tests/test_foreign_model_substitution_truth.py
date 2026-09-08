@@ -18,17 +18,6 @@ from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeS
     ["qwen2.5-coder:7b", "gemini-2.0-flash", "mistral-large", "llama3.1:70b"],
 )
 def test_a_model_build_cannot_run_is_refused_instead_of_swapped(foreign: str) -> None:
-    """The selected model does the work, or nothing does.
-
-    This previously asserted the opposite: a foreign id became ``claude:sonnet``
-    and the capability report explained the swap. That was the honest version of
-    a swap nobody ordered — you picked a local qwen and Claude wrote the code.
-
-    Calvin's call, 2026-08-14: "models that cant code shouldnt be offered but
-    the mode[l] selcted should be the run doing the work". Build's picker now
-    lists only what Build can execute, and this layer refuses anything that gets
-    past it rather than choosing a model on your behalf.
-    """
     with pytest.raises(ForgeCodeSettingsError) as excinfo:
         ForgeCodeSettings.from_payload({"model": foreign, "model_id": foreign})
 

@@ -98,13 +98,6 @@ SAY = json.dumps({"fc": "say", "text": "Checking the tests folder."})
 
 
 def test_a_missing_file_is_not_a_dead_engine() -> None:
-    """The symptom Calvin hit: "continue" ending the turn on every missing path.
-
-    A build that looked for a tests/ directory that does not exist got the whole
-    turn filed as "the run crashed before finishing — {"ok": false, "error":
-    "Directory not found: tests"}". A tool reporting a missing path is an
-    ordinary result the agent reads and works around, not the engine dying.
-    """
     ok, cause = _terminal_engine_verdict("\n".join([SAY, TOOL_FAILURE, SAY]))
 
     assert ok is not False, f"a failed tool call was read as a crashed engine: {cause}"

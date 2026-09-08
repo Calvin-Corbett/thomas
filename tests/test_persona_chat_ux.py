@@ -1,16 +1,3 @@
-"""Persona-driven chat-UX acceptance checks.
-
-Operationalizes Calvin's "act as several different people" directive at the unit
-level: run realistic task asks from each persona through task-card titling and
-assert the UX invariants from CHAT_UX_RUBRIC_2026-06-14.md:
-
-  * the task card gets a REAL name, never a raw-prompt truncation;
-  * the title is not conversational filler ("hey can you...");
-  * the title is concise and sentence-cased.
-
-Whether to create a task is intentionally absent from this deterministic test;
-that decision belongs to Thomas through the structured `send_task` tool.
-"""
 
 import unittest
 

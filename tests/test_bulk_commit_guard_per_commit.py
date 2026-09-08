@@ -188,7 +188,7 @@ def test_every_oversized_commit_is_reported(monkeypatch, capsys) -> None:
 
 def test_trailer_in_commit_a_does_not_approve_commit_b(monkeypatch, capsys) -> None:
     commits = {
-        SHA_A: (_files(60, "a"), "chore: approved migration\n\nThomas-Bulk-Change-Approved: reviewed by Calvin\n"),
+        SHA_A: (_files(60, "a"), "chore: approved migration\n\nThomas-Bulk-Change-Approved: reviewed by test-user\n"),
         SHA_B: (_files(60, "b"), "chore: unrelated dump\n"),
     }
     _fake_range(monkeypatch, commits)
@@ -544,7 +544,7 @@ def test_real_repo_trailer_only_covers_its_own_commit(tiny_repo: Path, capsys) -
     _commit_files(
         tiny_repo,
         [f"a{i}.txt" for i in range(4)],
-        "feat: approved\n\nThomas-Bulk-Change-Approved: reviewed by Calvin",
+        "feat: approved\n\nThomas-Bulk-Change-Approved: reviewed by test-user",
     )
     head = _commit_files(tiny_repo, [f"b{i}.txt" for i in range(4)], "feat: not approved")
 

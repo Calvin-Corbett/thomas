@@ -67,12 +67,6 @@ _LIVE_SUMMARY = (
 
 
 def _live_desktop_args(tmp: Path) -> dict[str, Any]:
-    """The live tool call, shape-for-shape: an ABSOLUTE path outside the workspace.
-
-    The live path was ``C:\\Users\\corbe\\Desktop\\thomas-works.txt``; a tmp-rooted
-    Desktop keeps the exact shape portable (absolute on every OS, outside the
-    sandbox root on every machine).
-    """
     return {"path": str(tmp / "Desktop" / "thomas-works.txt"), "content": "it works now"}
 
 

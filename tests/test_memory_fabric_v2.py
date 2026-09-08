@@ -17,12 +17,12 @@ class TestMemoryFabricV2(unittest.TestCase):
     def test_ingest_and_retrieve_includes_profile(self):
         thread_id = "t1"
         self.fabric.ingest_episode(thread_id, "user", "My name is the product owner", ts_ms=1700000000000)
-        self.fabric.ingest_episode(thread_id, "user", "My son's name is Hudson", ts_ms=1700000001000)
-        self.fabric.ingest_episode(thread_id, "user", "I run Freedom Transit trucking company", ts_ms=1700000002000)
+        self.fabric.ingest_episode(thread_id, "user", "My son's name is Jordan", ts_ms=1700000001000)
+        self.fabric.ingest_episode(thread_id, "user", "I run Example Logistics trucking company", ts_ms=1700000002000)
 
         res = self.fabric.retrieve(thread_id, "what is my son's name", budget_tokens=800)
         self.assertTrue(res.pack_text)
-        self.assertIn("Hudson", res.pack_text)
+        self.assertIn("Jordan", res.pack_text)
 
     def test_memory_persists_after_reopening_fabric(self):
         thread_id = "t1_restart"
@@ -172,8 +172,8 @@ class TestMemoryFabricV2(unittest.TestCase):
 
     def test_fact_contradiction_detection(self):
         thread_id = "t3"
-        self.fabric.upsert_fact(thread_id=thread_id, subject="Hudson", predicate="age_years", obj="2", confidence=0.8)
-        self.fabric.upsert_fact(thread_id=thread_id, subject="Hudson", predicate="age_years", obj="7", confidence=0.8)
+        self.fabric.upsert_fact(thread_id=thread_id, subject="Jordan", predicate="age_years", obj="2", confidence=0.8)
+        self.fabric.upsert_fact(thread_id=thread_id, subject="Jordan", predicate="age_years", obj="7", confidence=0.8)
         contras = self.fabric.list_contradictions(only_open=True, limit=10)
         self.assertTrue(any("numeric_mismatch" in c["reason"] or "polarity_conflict" in c["reason"] for c in contras))
 

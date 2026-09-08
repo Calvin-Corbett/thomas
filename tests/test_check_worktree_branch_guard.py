@@ -169,7 +169,7 @@ def test_side_clone_root_fails_topology_guard(monkeypatch, capsys, tmp_path: Pat
     monkeypatch.setattr(mod, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setattr(mod, "_branch_name", lambda: "codex/side-proof")
     monkeypatch.setattr(mod, "_git_common_dir", lambda: str(clone_root / ".git"))
-    monkeypatch.setattr(mod, "_overlay", lambda: {"primary_root": r"C:\Users\corbe\Thomas"})
+    monkeypatch.setattr(mod, "_overlay", lambda: {"primary_root": r"C:\Users\example\Thomas"})
 
     rc = mod.run([])
     out = capsys.readouterr().out
@@ -187,8 +187,8 @@ def test_unapproved_linked_worktree_root_fails_topology_guard(monkeypatch, capsy
     monkeypatch.setattr(mod, "ROOT", linked_root)
     monkeypatch.setattr(mod, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setattr(mod, "_branch_name", lambda: "codex/unapproved")
-    monkeypatch.setattr(mod, "_git_common_dir", lambda: r"C:\Users\corbe\Thomas\.git")
-    monkeypatch.setattr(mod, "_overlay", lambda: {"primary_root": r"C:\Users\corbe\Thomas"})
+    monkeypatch.setattr(mod, "_git_common_dir", lambda: r"C:\Users\example\Thomas\.git")
+    monkeypatch.setattr(mod, "_overlay", lambda: {"primary_root": r"C:\Users\example\Thomas"})
 
     rc = mod.run([])
     out = capsys.readouterr().out
@@ -200,14 +200,14 @@ def test_unapproved_linked_worktree_root_fails_topology_guard(monkeypatch, capsy
 def test_approved_root_with_canonical_git_database_passes_topology_guard(monkeypatch, capsys) -> None:
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv(mod.DISABLE_ENV, raising=False)
-    monkeypatch.setattr(mod, "ROOT", Path(r"C:\Users\corbe\Thomas"))
+    monkeypatch.setattr(mod, "ROOT", Path(r"C:\Users\example\Thomas"))
     monkeypatch.setattr(mod, "_runtime_protection_disabled", lambda: False)
     monkeypatch.setattr(mod, "_branch_name", lambda: "master")
-    monkeypatch.setattr(mod, "_git_common_dir", lambda: r"C:\Users\corbe\Thomas\.git")
+    monkeypatch.setattr(mod, "_git_common_dir", lambda: r"C:\Users\example\Thomas\.git")
     monkeypatch.setattr(
         mod,
         "_overlay",
-        lambda: {"primary_root": r"C:\Users\corbe\Thomas", "expected_by_branch": {"master": r"C:\Users\corbe\Thomas"}},
+        lambda: {"primary_root": r"C:\Users\example\Thomas", "expected_by_branch": {"master": r"C:\Users\example\Thomas"}},
     )
     monkeypatch.setattr(mod, "_branch_freshness_failure", lambda *a, **k: None)
     # This test uses the real repo root where QuickBuilder may be ON (which would SKIP the

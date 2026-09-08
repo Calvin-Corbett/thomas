@@ -285,10 +285,6 @@ def test_git_diff_failure_is_never_reported_as_empty_evidence(tmp_path, monkeypa
 
 
 def test_thomas_own_index_inside_the_project_is_never_a_changed_file(tmp_path):
-    """Turn 5 of Calvin's Minecraft conversation (2026-09-05) crashed with
-    "could not fingerprint changed file thomas_rag_index/rag_fts.sqlite3-shm:
-    Permission denied": Thomas's own RAG index, written into the project folder,
-    counted as the person's changed files."""
     from thomas.forge.anvil.forge_code_git import changed_files
 
     repo = _new_repo(tmp_path)

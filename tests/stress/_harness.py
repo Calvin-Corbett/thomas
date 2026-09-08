@@ -1,16 +1,3 @@
-"""Shared instrument for the Thomas chat-pipeline stress harness.
-
-Calvin-directed, 2026-06-17. READ-ONLY AUDIT TOOL — it imports and drives the
-REAL pipeline functions (no fork of Thomas), with deterministic stubs so there
-is no network, no LLM cost, and no writes outside an isolated temp dir.
-
-Each sweep records `Probe` rows (expected vs. actual + pass/fail + the rubric
-dimension it grades + a severity) and dumps them to JSONL. `run_all.py`
-aggregates the rows into a frontier-rubric scorecard.
-
-The point is reproducibility: a defect is not an opinion here, it is a row you
-can re-run in <2s that makes Thomas misbehave on demand.
-"""
 
 from __future__ import annotations
 

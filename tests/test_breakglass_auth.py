@@ -39,7 +39,7 @@ def test_authorize_breakglass_requires_opt_in(monkeypatch) -> None:
 def test_authorize_breakglass_uses_windows_prompt(monkeypatch) -> None:
     monkeypatch.setattr(mod.os, "name", "nt")
     monkeypatch.setattr(mod, "_human_breakglass_enabled", lambda: True)
-    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\corbe")
+    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\example")
     monkeypatch.setattr(mod, "_show_breakglass_confirmation_dialog", lambda **_: "approve")
     monkeypatch.setattr(
         mod,
@@ -47,7 +47,7 @@ def test_authorize_breakglass_uses_windows_prompt(monkeypatch) -> None:
         lambda **_: mod.BreakglassAuthorization(
             ok=True,
             message="approved",
-            actor="WORKSTATION\\corbe",
+            actor="WORKSTATION\\example",
             method=mod.WINDOWS_CREDENTIAL_METHOD,
             cancelled=False,
         ),
@@ -62,7 +62,7 @@ def test_authorize_breakglass_uses_windows_prompt(monkeypatch) -> None:
     )
 
     assert result.ok is True
-    assert result.actor == "WORKSTATION\\corbe"
+    assert result.actor == "WORKSTATION\\example"
     assert result.method == mod.WINDOWS_CREDENTIAL_METHOD
 
 
@@ -80,7 +80,7 @@ def test_breakglass_decision_copy_uses_commit_blocker_context() -> None:
             ticket="OPS-100",
             reason="User requested checkpoint.",
             skip_hooks=["all local pre-commit hooks"],
-            current_user="WORKSTATION\\corbe",
+            current_user="WORKSTATION\\example",
             context=context,
         )
     )
@@ -101,7 +101,7 @@ def test_breakglass_decision_copy_uses_commit_blocker_context() -> None:
 def test_authorize_breakglass_can_request_recommended_action(monkeypatch) -> None:
     monkeypatch.setattr(mod.os, "name", "nt")
     monkeypatch.setattr(mod, "_human_breakglass_enabled", lambda: True)
-    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\corbe")
+    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\example")
     monkeypatch.setattr(mod, "_show_breakglass_confirmation_dialog", lambda **_: "action")
 
     context = build_commit_blocker_context(
@@ -150,16 +150,16 @@ def test_build_windows_prompt_copy_explains_current_user_sign_in() -> None:
         ticket="OPS-42",
         reason="Need a human-authenticated protected-file override for the governance patch.",
         skip_hooks=["thomas-protected-files-gate", "thomas-active-folder-guard"],
-        current_user="WORKSTATION\\corbe",
+        current_user="WORKSTATION\\example",
     )
-    caption, message = mod._build_windows_prompt_copy(current_user="WORKSTATION\\corbe")
+    caption, message = mod._build_windows_prompt_copy(current_user="WORKSTATION\\example")
 
     assert title == mod.WINDOWS_CONFIRMATION_CAPTION
     assert instruction == "Approve protected Thomas change?"
-    assert "Account: WORKSTATION\\corbe" in content
+    assert "Account: WORKSTATION\\example" in content
     assert "Requested by: Codex" in content
     assert "Continue to open the Windows sign-in prompt." in content
     assert caption == mod.WINDOWS_CREDENTIAL_CAPTION
-    assert "Account: WORKSTATION\\corbe" in message
+    assert "Account: WORKSTATION\\example" in message
     assert "PIN, password, or Windows Hello" in message
     assert "thomas-protected-files-gate" in content

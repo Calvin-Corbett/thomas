@@ -199,7 +199,7 @@ def test_own_trailer_approves_its_own_commit(monkeypatch, capsys) -> None:
                 "sha": SHA_A,
                 "parent": PARENT_A,
                 "files": {"thomas/large.py": (10, 400)},
-                "message": "fix: takeover\n\nThomas-Commit-Growth-Approved: Calvin-approved safety-arc replay\n",
+                "message": "fix: takeover\n\nThomas-Commit-Growth-Approved: test-user-approved safety-arc replay\n",
             }
         ],
     )
@@ -210,7 +210,7 @@ def test_own_trailer_approves_its_own_commit(monkeypatch, capsys) -> None:
     assert rc == 0
     assert payload["ok"] is True
     assert payload["approved_growth"] is True
-    assert "Calvin-approved" in payload["approval_reason"]
+    assert "test-user-approved" in payload["approval_reason"]
 
 
 def test_trailer_in_commit_a_does_not_approve_commit_b(monkeypatch, capsys) -> None:
@@ -221,7 +221,7 @@ def test_trailer_in_commit_a_does_not_approve_commit_b(monkeypatch, capsys) -> N
                 "sha": SHA_A,
                 "parent": PARENT_A,
                 "files": {"thomas/a.py": (10, 400)},
-                "message": "feat: slice A\n\nThomas-Commit-Growth-Approved: Calvin-approved slice A only\n",
+                "message": "feat: slice A\n\nThomas-Commit-Growth-Approved: test-user-approved slice A only\n",
             },
             {
                 "sha": SHA_B,
@@ -638,7 +638,7 @@ def test_real_git_catches_the_unapproved_commit_and_scopes_the_trailer(real_repo
     _write(real_repo, "thomas/b.py", 500)
     c2 = _commit(
         real_repo,
-        "feat: big but approved\n\nThomas-Commit-Growth-Approved: Calvin approved slice B\n",
+        "feat: big but approved\n\nThomas-Commit-Growth-Approved: test-user approved slice B\n",
     )
 
     rc = commit_growth_guard.run(real_repo, max_growth=300, json_output=True, base=c0, head=c2)

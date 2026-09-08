@@ -1,13 +1,3 @@
-"""A sidebar row opens a tab the way Chrome opens one, and a conversation exists once.
-
-Calvin's direction (2026-08-25): when I click on the left it actually opens up a
-tab up top like Chrome, and a conversation exists once. So a row whose
-conversation is already held by a tab focuses that tab; a row clicked on a
-blank, idle surface navigates that surface in place, the way Chrome's new-tab
-page does; anything else opens a new tab. Ctrl-click and middle-click always
-open one. These are pure decisions, so they are driven through the real module
-in a vm context by ``tests/web_node/browser_shell_docs_policy.mjs``.
-"""
 
 from __future__ import annotations
 

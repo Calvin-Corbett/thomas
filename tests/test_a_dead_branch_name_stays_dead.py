@@ -144,7 +144,7 @@ def test_an_approved_resurrection_of_a_dead_name_passes(tmp_path: Path) -> None:
     death_id = graveyard.record_death(
         tmp_path, "branch", "old-experiment", "deadsha", reason="superseded by dev", by="test-suite"
     )
-    graveyard.record_resurrection_approval(tmp_path, death_id, "bringing it back for a real reason", "calvin")
+    graveyard.record_resurrection_approval(tmp_path, death_id, "bringing it back for a real reason", "test-user")
 
     proc = _run_gate(tmp_path, [], stdin_text=_creating_push_line("old-experiment") + "\n")
     combined = proc.stdout + proc.stderr
@@ -158,7 +158,7 @@ def test_a_redeath_after_approval_is_refused_again(tmp_path: Path) -> None:
     death id it names. A branch that dies AGAIN after being approved once
     is dead again -- the newest branch record is what this gate consults."""
     death_id = graveyard.record_death(tmp_path, "branch", "old-experiment", "sha1", reason="first death", by="t")
-    graveyard.record_resurrection_approval(tmp_path, death_id, "brought back", "calvin")
+    graveyard.record_resurrection_approval(tmp_path, death_id, "brought back", "test-user")
     second_death_id = graveyard.record_death(
         tmp_path, "branch", "old-experiment", "sha2", reason="deleted again", by="t"
     )

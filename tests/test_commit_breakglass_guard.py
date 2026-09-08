@@ -109,7 +109,7 @@ def test_prepare_breakglass_requires_native_auth_and_writes_marker(tmp_path: Pat
         captured_auth.update(kwargs)
         return SimpleNamespace(
             ok=True,
-            actor="WORKSTATION\\corbe",
+            actor="WORKSTATION\\example",
             method="windows-credential-dialog",
             message="approved",
             cancelled=False,
@@ -134,7 +134,7 @@ def test_prepare_breakglass_requires_native_auth_and_writes_marker(tmp_path: Pat
     assert rc == 0
     assert captured_auth["context"].summary.startswith("Thomas found")
     message = commit_msg.read_text(encoding="utf-8")
-    assert "Thomas-Breakglass: OPS-1 authorized local commit gate bypass by WORKSTATION\\corbe" in message
+    assert "Thomas-Breakglass: OPS-1 authorized local commit gate bypass by WORKSTATION\\example" in message
     payload = json.loads(breakglass_marker.read_text(encoding="utf-8"))
     assert payload["event"] == "breakglass_authorized"
     assert payload["version"] == guard.MARKER_VERSION
@@ -164,7 +164,7 @@ def test_prepare_denies_when_native_auth_denies(tmp_path: Path, monkeypatch) -> 
         lambda: (
             lambda **_: SimpleNamespace(
                 ok=False,
-                actor="WORKSTATION\\corbe",
+                actor="WORKSTATION\\example",
                 method="windows-credential-dialog",
                 message="cancelled",
                 cancelled=True,

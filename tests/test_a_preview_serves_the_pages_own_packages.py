@@ -1,13 +1,3 @@
-"""A code preview serves the packages the page imports, and still nothing else (2026-09-05).
-
-Calvin's Minecraft game (a Vite project) imports three.js from ``node_modules``.
-The preview origin refused that path with a 404 because ``node_modules`` is a
-"junk dir" for the artifact listing and the allowlist never named it, so the
-page's script never ran and ENTER WORLD could do nothing, while the same
-files served plainly play. The smoke check passed because it served the page
-another way. Third-party packages a page links are web assets, not secrets;
-the boundary on source, credentials and git config beside the page stays.
-"""
 
 from __future__ import annotations
 

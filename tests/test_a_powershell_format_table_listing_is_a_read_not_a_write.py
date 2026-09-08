@@ -44,9 +44,9 @@ def test_the_measured_run_listing_command_is_a_read() -> None:
         "Get-ChildItem -Force",
         "type file.txt",
         # paths whose characters contain mutation-verb substrings
-        "dir C:\\Users\\corbe",
+        "dir C:\\Users\\example",
         "type model.delta.json",
-        "type C:\\Users\\corbe\\model.delta.json",
+        "type C:\\Users\\example\\model.delta.json",
         # more of the Format-* cmdlet family, piped with and without spaces
         "Get-ChildItem | Sort-Object Name | Format-List",
         "Get-ChildItem|Format-Wide",

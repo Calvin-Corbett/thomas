@@ -10,7 +10,7 @@ import scripts.forge.gates.precommit_skip_policy as mod
 from scripts.forge.gates import breakglass_landed
 
 
-def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\corbe") -> None:
+def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\example") -> None:
     monkeypatch.setattr(
         mod,
         "authorize_breakglass",
@@ -113,7 +113,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     assert payload["skip_hook_count"] == 2
     assert payload["breakglass_human_verified"] is True
     assert payload["breakglass_auth_method"] == "windows-credential-dialog"
-    assert payload["breakglass_authorized_by"] == "WORKSTATION\\corbe"
+    assert payload["breakglass_authorized_by"] == "WORKSTATION\\example"
     assert audit_log.exists()
     rows = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
@@ -127,7 +127,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     assert logged["staged_files"] == ["AGENTS.md", "scripts/crew/workboard/issue.py"]
     assert logged["breakglass_human_verified"] is True
     assert logged["breakglass_auth_method"] == "windows-credential-dialog"
-    assert logged["breakglass_authorized_by"] == "WORKSTATION\\corbe"
+    assert logged["breakglass_authorized_by"] == "WORKSTATION\\example"
 
 
 def test_fails_when_protected_hook_skipped_without_breakglass(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -245,7 +245,7 @@ def test_fails_when_breakglass_cooldown_active(tmp_path: Path, capsys, monkeypat
                 "gate": "precommit_skip_policy",
                 "timestamp_utc": "2026-02-27T11:55:00+00:00",
                 "agent": "Codex 3",
-                "breakglass_authorized_by": "WORKSTATION\\corbe",
+                "breakglass_authorized_by": "WORKSTATION\\example",
                 "breakglass_used": True,
             }
         )
@@ -265,7 +265,7 @@ def test_fails_when_breakglass_cooldown_active(tmp_path: Path, capsys, monkeypat
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "breakglass cooldown active for `WORKSTATION\\corbe`" in out
+    assert "breakglass cooldown active for `WORKSTATION\\example`" in out
 
 
 def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -276,14 +276,14 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
             "gate": "precommit_skip_policy",
             "timestamp_utc": "2026-02-27T09:00:00+00:00",
             "agent": "Codex 3",
-            "breakglass_authorized_by": "WORKSTATION\\corbe",
+            "breakglass_authorized_by": "WORKSTATION\\example",
             "breakglass_used": True,
         },
         {
             "gate": "precommit_skip_policy",
             "timestamp_utc": "2026-02-27T10:00:00+00:00",
             "agent": "Codex 3",
-            "breakglass_authorized_by": "WORKSTATION\\corbe",
+            "breakglass_authorized_by": "WORKSTATION\\example",
             "breakglass_used": True,
         },
     ]
@@ -303,13 +303,13 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "breakglass quota exceeded for `WORKSTATION\\corbe`" in out
+    assert "breakglass quota exceeded for `WORKSTATION\\example`" in out
 
 
 def test_breakglass_quota_binds_to_verified_actor_not_agent_id_B5(tmp_path: Path, capsys, monkeypatch) -> None:
     # B5: rotating AGENT_ID must NOT reset the quota — history binds to the
     # verified OS actor returned by native-auth. Two prior breakglass rows for
-    # actor WORKSTATION\corbe (written under a DIFFERENT agent id) must still
+    # actor WORKSTATION\example (written under a DIFFERENT agent id) must still
     # count against a fresh agent id when the same actor authenticates.
     audit_log = tmp_path / "skip_audit.jsonl"
     now = datetime(2026, 2, 27, 12, 0, tzinfo=timezone.utc)
@@ -318,14 +318,14 @@ def test_breakglass_quota_binds_to_verified_actor_not_agent_id_B5(tmp_path: Path
             "gate": "precommit_skip_policy",
             "timestamp_utc": "2026-02-27T09:00:00+00:00",
             "agent": "Codex Red A",
-            "breakglass_authorized_by": "WORKSTATION\\corbe",
+            "breakglass_authorized_by": "WORKSTATION\\example",
             "breakglass_used": True,
         },
         {
             "gate": "precommit_skip_policy",
             "timestamp_utc": "2026-02-27T10:00:00+00:00",
             "agent": "Codex Red A",
-            "breakglass_authorized_by": "WORKSTATION\\corbe",
+            "breakglass_authorized_by": "WORKSTATION\\example",
             "breakglass_used": True,
         },
     ]
@@ -337,7 +337,7 @@ def test_breakglass_quota_binds_to_verified_actor_not_agent_id_B5(tmp_path: Path
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2007")
     monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_now_utc", lambda: now)
-    _approve_breakglass(monkeypatch)  # actor = WORKSTATION\corbe regardless of AGENT_ID
+    _approve_breakglass(monkeypatch)  # actor = WORKSTATION\example regardless of AGENT_ID
 
     rc = mod.run(
         ["--audit-log", str(audit_log), "--breakglass-cooldown-minutes", "0", "--breakglass-max-per-agent-24h", "2"]
@@ -345,7 +345,7 @@ def test_breakglass_quota_binds_to_verified_actor_not_agent_id_B5(tmp_path: Path
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "breakglass quota exceeded for `WORKSTATION\\corbe`" in out
+    assert "breakglass quota exceeded for `WORKSTATION\\example`" in out
 
 
 @pytest.mark.xfail(

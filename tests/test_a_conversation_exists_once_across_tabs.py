@@ -1,11 +1,3 @@
-"""A conversation exists once across tabs, and so does each mode.
-
-Calvin's rule (2026-08-25): a conversation exists once. A row already held by
-a tab focuses that tab from anywhere, the Build button focuses the Build tab
-rather than opening a second one, Settings opens one workspace tab from
-anywhere, and a theme change reaches every document. Driven against
-``tests/web_fixtures/thomas_chat_fixture.py`` in headless Chromium.
-"""
 
 from __future__ import annotations
 

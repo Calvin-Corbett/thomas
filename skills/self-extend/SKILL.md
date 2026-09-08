@@ -39,7 +39,7 @@ Activate this skill the moment you notice any of:
 
 ## Email example
 
-If the user says "email Calvin and tell him the build is done" and you cannot
+If the user says "email Alex and tell them the build is done" and you cannot
 send email right now:
 
 1. First check whether an `email.send` tool is already available to you — if it
