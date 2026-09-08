@@ -1,15 +1,3 @@
-"""End-to-end persona sweep — drive the REAL chat backend for all 120 persona tasks.
-
-For each (persona, task) this POSTs to /api/v2/chat (the real pipeline), streams the
-NDJSON response, and records per-task: first-text latency (instant check), full reply,
-total elapsed, dispatch/card events, and the card title (via the real titlers). Then it
-checks the rubric invariants Calvin named:
-  * no canned reply  * no instantaneous reply  * card title names the task
-This is the scaled, end-to-end version of "run 20 complex tasks per persona and look at
-the card + elapsed + end result" — at the API level (reliable) for throughput.
-
-Usage: python scripts/persona_e2e_sweep.py [port] [limit_per_persona]
-"""
 
 from __future__ import annotations
 

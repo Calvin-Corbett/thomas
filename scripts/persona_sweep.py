@@ -1,16 +1,3 @@
-"""Systematic persona sweep against a LIVE Thomas server.
-
-Drives many persona tasks through /api/v2/chat, parses each ndjson stream, and
-scores every reply on the exact things Calvin called out:
-  - canned/instant auto-replies (templated phrases; sub-300ms = impossible for AI)
-  - dishonest "I started/created/finished it" when nothing was dispatched
-  - task-card title quality (real name vs raw-prompt echo)
-  - dispatch behavior vs autonomy level
-  - latency (elapsed_ms)
-
-Local model path (profile=local) so it runs without the flaky codex bridge.
-Usage: python persona_sweep.py [base_url]
-"""
 
 import http.client
 import json

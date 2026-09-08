@@ -1,12 +1,3 @@
-"""Persona validation sweep — 6 personas x 20 complex tasks each (120 total).
-
-Runs every task prompt through the REAL backend card-titler (derive_active_goal,
-the single source of the task-card title on every chat path incl. gpt-5.5) and
-records the title. Emits JSON for a critical-analysis pass. This is the feasible,
-backend-true version of Calvin's "run several personas through real tasks and
-cynically analyze the card name / replies" — at the function that actually names
-the card, across all 120 tasks, deterministically.
-"""
 
 from __future__ import annotations
 

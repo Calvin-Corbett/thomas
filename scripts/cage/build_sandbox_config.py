@@ -1,36 +1,4 @@
 #!/usr/bin/env python3
-"""Generate a Windows Sandbox (.wsb) config that physically contains a worker.
-
-Cage PROBLEM 1 (containment). The OS-user + ACL layer
-(``provision_cage.ps1``) stops the agent from touching *your* files, but a
-non-admin same-host shell still has the network and can read other repos. As
-the Praxis exercise concluded, no local gate stops a same-user shell — only OS
-isolation does. On Windows 11 Pro the built-in **Windows Sandbox** is exactly
-that: a disposable, kernel-isolated VM where *nothing exists but what you
-explicitly map in*.
-
-This module emits a ``.wsb`` whose properties give the three guarantees the
-goal asks for:
-
-* **cannot clone outside its box / reach the network** — ``<Networking>`` is
-  ``Disable`` by default, so ``git clone https://…``, ``git push``, and any
-  exfil simply have no network to use. (The host-side commit-master does the
-  push; the worker never needs the network.)
-* **cannot reach other repos** — only the Thomas repo is mapped; every other
-  path on the host is invisible inside the sandbox.
-* **cannot escape its allowed paths** — the sandbox filesystem contains only
-  the mapped folders plus a throwaway OS; changes outside the mapped
-  read-write folders evaporate when the box closes.
-
-The cage's one-way channels double as the air-gapped bridge: the worker drops
-submissions into the mapped ``inbox`` (read-write) and reads verdicts from the
-mapped ``outbox`` (read-only); the commit-master, running on the *host* outside
-the sandbox, watches those same host folders. No network required.
-
-stdlib-only; produces well-formed XML via ElementTree so it is unit-testable
-without Windows present. Launching the box (``WindowsSandbox.exe``) and enabling
-the optional feature are Calvin's elevated steps — see ``docs/CAGE_SETUP.md``.
-"""
 
 from __future__ import annotations
 

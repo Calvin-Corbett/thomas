@@ -435,7 +435,7 @@ class CommitMaster:
         self.repo = repo
         self.layout = layout
         # Trusted root for the integrity manifest. In the cage this points at the
-        # Calvin-owned, read-only-to-agent copy. Default to the repo's gate dir.
+
         self.gates_root = gates_root or (repo / "scripts" / "forge" / "gates")
         # The integrity anchor: a manifest of {repo-relative path -> sha256 of
         # CRLF-normalized content} that the worker cannot write. When present,

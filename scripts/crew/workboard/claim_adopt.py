@@ -1,28 +1,4 @@
 #!/usr/bin/env python3
-"""Adopt orphaned WORKBOARD claims (Calvin 2026-06-01).
-
-The problem this solves: a user (or an agent) finishes work but leaves it
-uncommitted, holding a claim on those files. Later, a *different* agent is
-blocked from committing because the files are still claimed by the one who
-walked away. Today that work just strands.
-
-An **orphan** is a claim whose line in ``WORKBOARD.md`` has not been touched in
-more than ``ORPHAN_THRESHOLD_HOURS`` (48h) — measured by git-blame on the claim
-line, the same signal ``claim_cleanup`` already uses. Only orphaned claims can
-be **adopted**: a blocked agent takes ownership so it can finish the work.
-
-The safety rules (per Calvin):
-  * You can always work your OWN claim — no ceremony.
-  * You may ADOPT another agent's claim ONLY if it is an orphan (>48h stale)
-    AND a human authorizes it via breakglass (Windows Hello). The agent cannot
-    forge this.
-  * You may NEVER take an ACTIVE (non-orphan) claim — that would let an agent
-    seize someone's in-flight work and edit it. Adoption of a fresh claim is
-    refused outright, even with breakglass.
-
-Adoption transfers the claim line AND the matching active-task line from the
-orphan owner to the adopter, and writes a tamper-evident adoption audit row.
-"""
 
 from __future__ import annotations
 

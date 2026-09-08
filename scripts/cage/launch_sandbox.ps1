@@ -15,7 +15,7 @@
   the box) does the signing + push. No network is needed for that handoff.
 
   This launcher is non-destructive and needs no admin. Two things DO need
-  Calvin's one-time elevated action (flagged below and in docs/CAGE_SETUP.md):
+  maintainer's one-time elevated action (flagged below and in docs/CAGE_SETUP.md):
     1. Enable the Windows Sandbox optional feature (+ reboot).
     2. Provision the host ACLs (scripts/cage/provision_cage.ps1).
 
@@ -50,13 +50,13 @@ Write-Host "== Thomas cage: Windows Sandbox launcher ==" -ForegroundColor Cyan
 Write-Host "  Repo: $RepoRoot"
 Write-Host "  Cage: $CageRoot"
 
-# --- feature check (Calvin elevated step #1 if missing) --------------------- #
+# --- feature check (maintainer elevated step #1 if missing) --------------------- #
 $wsb = Join-Path $env:WINDIR "System32\WindowsSandbox.exe"
 if (-not (Test-Path $wsb)) {
     Write-Warning "Windows Sandbox is not installed (WindowsSandbox.exe not found)."
     Write-Host @"
 
->> CALVIN, ELEVATED, ONE-TIME (then reboot):
+>> maintainer, ELEVATED, ONE-TIME (then reboot):
      Enable-WindowsOptionalFeature -Online -FeatureName 'Containers-DisposableClientVM' -All
 
    Requires Windows 11 Pro/Enterprise + virtualization enabled in BIOS.

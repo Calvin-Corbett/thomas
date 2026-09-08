@@ -27,7 +27,7 @@ from scripts.forge.publish.private_markers import (  # noqa: E402
     path_has_private_marker,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = _SNAPSHOT_REPO_ROOT
 DEFAULT_REPO_HYGIENE_BASELINE = ROOT / "docs" / "repo_hygiene_baseline.json"
 
 
@@ -264,15 +264,14 @@ def run(argv: Sequence[str] | None = None) -> int:
     snapshot_root.mkdir(parents=True, exist_ok=True)
 
     rel_paths = _list_git_paths(repo_root, include_untracked=bool(args.include_untracked))
+    excluded_marker_files = [rel for rel in rel_paths if _has_private_marker(repo_root, rel)]
     rel_paths = _filter_publish_paths(
         repo_root,
         rel_paths,
         respect_repo_hygiene=bool(args.respect_repo_hygiene),
     )
     copied = _copy_snapshot_paths(repo_root, snapshot_root, rel_paths)
-    for rel in (".github", "docs", "scripts", "tests", "thomas", "cli", "extensions", "apps"):
-        _copy_directory_if_present(repo_root, snapshot_root, rel)
-    removed_private_marker_files = _remove_private_marker_files(snapshot_root)
+    removed_private_marker_files = sorted(set(excluded_marker_files + _remove_private_marker_files(snapshot_root)))
 
     _init_snapshot_repo(snapshot_root, origin_url=_current_origin(repo_root))
     preflight = _run_preflight(snapshot_root, deep=bool(args.deep_preflight))
