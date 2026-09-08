@@ -56,6 +56,8 @@ node_modules/
 output/
 artifacts/
 dist/
+demo/agentic-runs/
+demo/runs/
 tmp/
 .tmp*/
 .tmp_*
@@ -227,3 +229,7 @@ indices/**/*.db-shm
 indices/**/*.db-wal
 thomas_test_report_*.md
 _*.log
+
+# Local package build output
+build/
+dist/

@@ -19,7 +19,7 @@
 
 Thomas is multi-agent. Any agent in this repo MUST run `python scripts/crew/workboard/message.py --list` at session start.
 
-Claude is the coordinator and leader of repo-quality work for Thomas. Codex and any spawned workers report to Claude. Calvin overrides anyone.
+Follow the coordinator assigned to the current task. Explicit user instructions take precedence over repository guidance.
 
 Use `scripts/crew/workboard/message.py` for the coordination lane:
 
@@ -48,28 +48,9 @@ Workbench behavior is documented in `docs/WORKBENCH_OPERATOR_PROTOCOL.md`.
 
 Contract phrase: tabs are AI-first operator control surfaces.
 
-## Rule: UI Code — Delete Old Before Adding New (CRITICAL)
+## UI changes
 
-**When you create new UI rendering code, you MUST remove or disable the old version it replaces.**
-
-This is the #1 recurring agent mistake. Agents create new UI code on top of old code, both versions stay live, and the user sees wrong or broken displays. This has happened with:
-- Token Economy widget (truncated old version vs. new version)
-- Settings panel (old HTML alongside new HTML)
-- Module rendering paths (conflicting mount/unmount exports)
-
-**Before writing any new UI code:**
-1. `grep -rn "<feature_name>" thomas/server/web/js/` to find all existing versions
-2. If an old version exists: FIX IT IN-PLACE or REPLACE IT. Do not create a parallel copy.
-3. If you create a new file: DELETE or DISABLE the old rendering path in the SAME commit.
-4. After your change: `grep` again to confirm no duplicate exports, mount functions, or template fragments remain.
-
-**You may NOT:**
-- Create `feature_v2.js` alongside `feature.js`
-- Leave old `window.__moduleName` exports live after moving logic to a new file
-- Add new HTML template blocks without removing the old ones they replace
-- Assume the old code is dead — verify it's not loaded before ignoring it
-
-**If you're unsure which version is live:** check `index.html` for direct `<script>` tags, and `app_runtime_loader.js` for the split runtime manifest. Those are the ONLY two JS entry points.
+Trace the active HTML and script loader before editing. Fix or replace the existing implementation; do not leave parallel versions active. Validate the affected behavior in the application.
 
 ## What Thomas Is — Do Not Misjudge This Repo
 
@@ -154,26 +135,9 @@ Before writing ANY code, read:
 
 **The changelog is the project's memory across sessions.** Future agents rely on it to understand what changed and why.
 
-## How To Write About Calvin (Required — applies to every agent)
+## Public writing
 
-Commit messages, changelog entries, PR titles and bodies, and release notes are
-public and effectively permanent: a merged pull request keeps its commit list on
-GitHub forever. Calvin reads these, and has already found himself described in
-them without knowing they existed. This repo runs 58 gates over its code and none
-of them read the prose wrapped around it — so this is the rule instead.
-
-1. **Second person.** Write "you" and "your". Not "the owner", not "the user", not
-   his name in the third person.
-2. **Never characterize his ability, background, or knowledge.** No "is not a
-   programmer", "non-technical", "cannot read code", "did not understand". Name
-   what the software did and what it failed to show him. That is the finding. The
-   person is not the finding.
-3. **Quote the request, never judge the requester.** His own words about what he
-   wanted are the strongest justification a change can carry. Quote those.
-4. **Do not infer pronouns.** They have not been stated. If a third-person
-   reference is genuinely unavoidable, use they/them.
-5. Applies to everything that leaves this machine: issues, published plans, and
-   generated docs — not just commits.
+Describe software behavior and validation. Keep personal descriptions, conversations, local paths, and internal task history private. Use fictional test data.
 
 ## Agent Commit Path (Required for Agents)
 

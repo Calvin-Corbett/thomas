@@ -183,11 +183,6 @@ jobs:
     # STATE AS OF Task 4 (2026-08-27, updated in the fix wave that landed
     # after Task 4's own closure commit -- verify docs/ops/branch_claims.json
     # directly before trusting this comment's count, the same way this
-    # comment was corrected once already): the registry is seeded, not
-    # empty -- it holds 8 records (the local integration/unify-2026-08-14
-    # plus 7 codex/* remote-branch clusters), all owned by
-    # `calvin (standing delegation 2026-08-24, claude-recorded)`, expiring
-    # 2026-09-30. `dev`/`main` need no claim (`_EXEMPT_BRANCHES` in
     # branch_claim_gate.py). Any OTHER branch pushed today without a claim
     # still shows a red X here -- non-blocking (not in gates-required),
     # but genuinely enforcing: a present, non-empty-but-incomplete registry

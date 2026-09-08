@@ -13,7 +13,7 @@
 # Task: gate-architecture-2026-05-26
 
 # ── Default fallback: nothing required ─────────────────────────────────────
-# (Listed paths below require Calvin specifically.)
+# (Listed paths below require maintainer specifically.)
 
 # ── Safety configuration files ─────────────────────────────────────────────
 # These define what agents can do; modifications need human review.

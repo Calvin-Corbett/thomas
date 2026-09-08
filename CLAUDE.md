@@ -13,31 +13,13 @@ Read AGENTS.md immediately. Every rule in that file applies to you.
 - You MUST NOT commit with `--no-verify`. Pre-commit hooks exist for a reason.
 - You MUST run `ruff check` on any Python file you modify before committing.
 
-## How to write about Calvin in anything public
+## Public writing
 
-Commit messages, CHANGELOG entries, PR titles and descriptions, and release notes
-are public and effectively permanent — a merged PR keeps its commit list on GitHub
-forever. Calvin reads these long after they are written, and has found himself
-described in them without knowing it. When your text refers to the person who owns
-this project:
-
-- **Write to him in the second person** — "you", "your". Not "the owner", not
-  "the user", not his name in the third person.
-- **Never characterize his ability, background, or knowledge.** No "is not a
-  programmer", "non-technical", "cannot read code", "did not understand". Describe
-  what the software did and what it failed to show. That is the finding; the person
-  is not.
-- **Quote him directly when it is evidence.** His actual words about what he wanted
-  are the clearest justification a change can have. Quote the request, never a
-  judgement about the requester.
-- **Do not infer pronouns.** They have not been stated. If a third-person reference
-  is genuinely unavoidable, use they/them.
-- The same rule applies to anything else that leaves this machine: issue text,
-  plan files that get published, and generated docs.
+Follow the public-content rules in AGENTS.md. Describe product behavior and use fictional examples.
 
 ## What Thomas is
 
-Thomas is an AI-first workspace platform. `thomas/marketplace/` holds domain modules — most were generated in a single burst on 2026-03-23, never had a focused commit afterward, and were never invoked in real usage despite being wired into the tool registry on every boot. Being reachable from that registry was mistaken for being used, and this rule protected that mistake for six months. The marketplace *product feature* is a different thing and is unaffected: the installable-plugin system (`extensions/`, `/api/marketplace/*`). A new domain module needs a caller and a test before it lands. Code with no caller is not a feature, it is debt — flag it, don't protect it.
+Thomas is an AI workspace with Chat, Build, Work, and optional domain integrations. Before extending a module, identify a real caller and relevant tests. Preserve the plugin system and avoid treating an unconfigured integration as a working feature.
 
 ## Architecture in 30 seconds
 

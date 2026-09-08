@@ -369,7 +369,7 @@
     "pixel_diff_within_threshold": true
   },
   "commands": [
-    "node C:\\Users\\corbe\\Thomas\\scripts\\verify_site_visual_runtime.mjs --host 127.0.0.1 --port 3108 --timeout-ms 180000 --output-dir C:\\Users\\corbe\\Thomas\\output\\site-visual-proof --report C:\\Users\\corbe\\Thomas\\output\\site-visual-proof\\runtime-report.json",
+    "node C:\\Users\\example\\Thomas\\scripts\\verify_site_visual_runtime.mjs --host 127.0.0.1 --port 3108 --timeout-ms 180000 --output-dir C:\\Users\\example\\Thomas\\output\\site-visual-proof --report C:\\Users\\example\\Thomas\\output\\site-visual-proof\\runtime-report.json",
     "python scripts/forge/gates/site_visual_proof.py"
   ]
 }

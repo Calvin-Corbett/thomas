@@ -6,11 +6,7 @@
 
 ## What This File Is
 
-This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) MUST follow when working on Thomas. These rules exist because agents have repeatedly broken the codebase by:
-- Making files too large (monoliths)
-- Changing guard tests to pass instead of fixing the code
-- Swallowing errors with bare `except Exception:`
-- Creating duplicate code instead of checking existing code
+These rules apply to contributors and coding agents. They define engineering limits, verification requirements, and the approval process for protected changes.
 
 ## Rule 1: File Size Limits — ABSOLUTE, NO EXCEPTIONS
 

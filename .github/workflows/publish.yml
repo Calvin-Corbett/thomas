@@ -54,6 +54,9 @@ jobs:
           fi
           echo "Package is clean."
 
+      - name: Validate public source and distribution contents
+        run: python scripts/forge/publish/content_check.py --root . --archives dist
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

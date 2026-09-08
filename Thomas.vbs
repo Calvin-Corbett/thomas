@@ -6,9 +6,9 @@ Dim shell, fso, electronExe, desktopDir, runDesktopPs1, appUrl, profileDir, args
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
-desktopDir = "C:\Users\corbe\Thomas\desktop"
-electronExe = "C:\Users\corbe\Thomas\desktop\node_modules\electron\dist\electron.exe"
-runDesktopPs1 = "C:\Users\corbe\Thomas\scripts\run-desktop.ps1"
+desktopDir = "C:\Users\example\Thomas\desktop"
+electronExe = "C:\Users\example\Thomas\desktop\node_modules\electron\dist\electron.exe"
+runDesktopPs1 = "C:\Users\example\Thomas\scripts\run-desktop.ps1"
 appUrl = "http://127.0.0.1:8899/"
 
 If fso.FileExists(electronExe) Then
