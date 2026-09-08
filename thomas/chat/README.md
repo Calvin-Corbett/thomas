@@ -4,7 +4,7 @@ This directory manages conversation state, multi-turn context, memory layers, se
 
 ## ⚖️ LAW: Thomas is one governed operator — do not fork his identity
 
-Owner decision: Calvin, 2026-07-12. Thomas is the persistent user-owned
+Thomas is the persistent user-owned
 framework around replaceable models. There is one visible identity and no
 chat/orchestrator/worker persona split exposed to the user.
 

@@ -1,20 +1,3 @@
-"""Task titling — give a background task card a real, human-readable name.
-
-Why this exists
----------------
-The task card used to be titled with ``prompt[:200]`` — a raw truncation of
-whatever the user typed ("hey thomas can you please build me a little pac man
-game that..."). That is the "generic naming" Calvin called out: the card never
-says *what the task actually is*.
-
-The right answer is a model-written title. ``generate_task_title`` does exactly
-that when given an LLM. But the title is needed the instant a task is dispatched,
-sometimes on a path that has no LLM wired in yet, so ``derive_task_title``
-provides a graceful, deterministic fallback that *cleans up* the prompt into an
-imperative title — it strips conversational filler and keeps the action. This is
-formatting, not intent classification: it never decides whether something is a
-task and never produces a user-facing chat reply.
-"""
 
 from __future__ import annotations
 

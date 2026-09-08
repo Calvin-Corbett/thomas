@@ -199,7 +199,7 @@ _reported_completions: dict[str, set[str]] = {}
 
 _COMPLETED_STATES = {"completed", "verified"}
 # Failures flow through the SAME report-once machinery as completions so Thomas
-# finds out a task FAILED and reacts in his own voice (Calvin: "when Thomas fails it
+
 # just fails" — nothing reached the chat layer). cancelled is user-initiated, so it
 # is intentionally excluded (the user already knows).
 _FAILED_STATES = {"failed", "abandoned"}
@@ -510,7 +510,7 @@ class OrchestratorBrain:
         # the result back" — the exact bug from when the note was shown only to the
         # user, never to the model). The note text itself tells the model to relay the
         # worker's result without taking credit. Every visible reply stays model-authored
-        # (Calvin's no-canned-replies law); the deterministic line is reserved for the
+
         # non-model paths below (memory recall / model failure) where no model runs.
         if completion_note:
             memory_ctx.working = f"{memory_ctx.working}\n\n{completion_note}".strip()
@@ -633,7 +633,7 @@ class OrchestratorBrain:
             )
 
         # Memory is THOMAS'S OWN capability — he stores/recalls inline, never via a task
-        # (Calvin's law). Wire remember/recall callbacks straight to the memory engine.
+
         #
         # Explicit "remember X" facts MUST survive into future conversations, so they go to a
         # STABLE durable thread (not the ephemeral per-conversation session, which a new chat

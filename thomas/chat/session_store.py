@@ -52,7 +52,7 @@ class SessionMeta:
     context_id: str | None = None
     profile: str = ""
     model_id: str | None = None
-    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL  # L2 Assist — ask before acting (Calvin law)
+    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL
     system_prompt: str | None = None
     reasoning_effort: str | None = None
     memory_enabled: bool = True

@@ -81,10 +81,10 @@ test("parseNativeCommand detects playback control requests", () => {
     targetQuery: null,
     capabilities: ["talk", "media"],
   });
-  assert.deepEqual(parseNativeCommand("give Wolves1289 music access"), {
+  assert.deepEqual(parseNativeCommand("give example_member music access"), {
     type: "access_grant",
     targetUserId: null,
-    targetQuery: "Wolves1289",
+    targetQuery: "example_member",
     capabilities: ["media"],
   });
   assert.deepEqual(parseNativeCommand("revoke <@123456789> access"), {

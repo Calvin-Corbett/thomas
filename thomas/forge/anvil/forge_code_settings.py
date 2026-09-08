@@ -304,7 +304,7 @@ class ForgeCodeSettings:
         if variant.lower().startswith("claude:"):
             variant = variant.split(":", 1)[1]
         variant = variant or _CLAUDE_SUBSTITUTE_MODEL
-        # The model you picked is the model that runs. Calvin, 2026-08-14:
+
         # "models that cant code shouldnt be offered but the mode[l] selcted
         # should be the run doing the work".
         #

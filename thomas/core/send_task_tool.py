@@ -1,15 +1,3 @@
-"""The `send_task` tool — how Thomas (the chat agent) hands real work off.
-
-This is the organic, no-regex dispatch mechanism Calvin asked for. Instead of a
-regex classifier deciding "is this a task?" behind the model's back (and the chat
-then faking an "On it!" it didn't earn), the MODEL decides — in the natural flow
-of the conversation — whether to call `send_task`. If it calls the tool, a real
-background task card is created (so any "I'm handing this off" it says is TRUE).
-If it doesn't, it just talks. No keyword trigger, no instant canned ack, no regex.
-
-The tool is offered to the chat model only; the chat agent itself never executes
-the work — calling `send_task` hands it to the task manager / worker bots.
-"""
 
 from __future__ import annotations
 
@@ -97,7 +85,7 @@ SEND_TASK_TOOL_NAME = "send_task"
 # either spawned a wrong NEW task or did nothing. This tool lets the MODEL — which has
 # the full conversation and the background-work list (each item tagged [task <ref>]) —
 # pick the RIGHT running task and route the change to it, instead of a blind heuristic
-# guessing which task the user meant. (Calvin: "a skill where he tells the task manager
+
 # 'that one task — the user wants this actually'.")
 UPDATE_TASK_TOOL: dict = {
     "type": "function",
@@ -142,10 +130,10 @@ UPDATE_TASK_TOOL: dict = {
 UPDATE_TASK_TOOL_NAME = "update_task"
 
 
-# Memory is THOMAS'S OWN capability — not a task. Calvin: "he should be the one able to use
+
 # it, not a task manager; he shouldn't have to rely on a task." So Thomas gets first-class
 # remember/recall tools he uses INLINE in the conversation, and is told never to dispatch
-# memory work. (Calvin, 2026-06-27.)
+
 REMEMBER_TOOL: dict = {
     "type": "function",
     "function": {
@@ -164,7 +152,7 @@ REMEMBER_TOOL: dict = {
                     "type": "string",
                     "description": (
                         "The fact to remember as one clear standalone sentence, e.g. "
-                        "'Calvin's favorite color is blue' (not 'blue')."
+                        "'maintainer's favorite color is blue' (not 'blue')."
                     ),
                 },
             },

@@ -82,7 +82,7 @@ Recommended bot permissions:
 - DMs always work.
 - In servers, Thomas replies when directly addressed by `@Thomas` or text like `Thomas, ...`.
 - If `DISCORD_OWNER_ONLY_MODE=true`, only the configured owner user IDs can trigger Thomas or change settings.
-- In owner-only mode, the owner can grant delegated access in chat with commands like `Thomas, allow @Wolves1289 to use music and chat` or remove it with `Thomas, revoke @Wolves1289 access`.
+- In owner-only mode, the owner can grant delegated access in chat with commands like `Thomas, allow @example_member to use music and chat` or remove it with `Thomas, revoke @example_member access`.
 - `DISCORD_AUTO_CHANNEL_IDS` is used as the linked text fallback for voice/media status posts.
 - `/reset` clears Thomas context for the current DM or channel.
 - In voice, you can say commands like `Thomas, play never gonna give you up`, `Thomas, search YouTube for lofi hip hop`, `Thomas, bang`, or `Thomas, stop music`.

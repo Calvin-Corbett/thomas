@@ -47,7 +47,7 @@ from scripts.forge import graveyard
 
 
 def test_a_recorded_branch_death_round_trips_through_load(tmp_path: Path) -> None:
-    record_id = graveyard.record_death(tmp_path, "branch", "old-experiment", "abc123", "superseded by dev", "calvin")
+    record_id = graveyard.record_death(tmp_path, "branch", "old-experiment", "abc123", "superseded by dev", "test-user")
 
     gy = graveyard.load(tmp_path)
 
@@ -56,7 +56,7 @@ def test_a_recorded_branch_death_round_trips_through_load(tmp_path: Path) -> Non
 
 
 def test_a_recorded_file_death_round_trips_through_load(tmp_path: Path) -> None:
-    record_id = graveyard.record_death(tmp_path, "file", "thomas/dead/module.py", "def456", "dead code", "calvin")
+    record_id = graveyard.record_death(tmp_path, "file", "thomas/dead/module.py", "def456", "dead code", "test-user")
 
     gy = graveyard.load(tmp_path)
     paths = gy.dead_file_paths()
@@ -72,10 +72,10 @@ def test_a_recorded_file_death_round_trips_through_load(tmp_path: Path) -> None:
 
 
 def test_recording_a_second_death_does_not_mutate_the_first(tmp_path: Path) -> None:
-    first_id = graveyard.record_death(tmp_path, "file", "a.py", "sha1", "r1", "calvin")
+    first_id = graveyard.record_death(tmp_path, "file", "a.py", "sha1", "r1", "test-user")
     first_record_before = dict(graveyard.load(tmp_path).dead_file_paths()["a.py"])
 
-    second_id = graveyard.record_death(tmp_path, "file", "b.py", "sha2", "r2", "calvin")
+    second_id = graveyard.record_death(tmp_path, "file", "b.py", "sha2", "r2", "test-user")
 
     gy = graveyard.load(tmp_path)
     assert gy.dead_file_paths()["a.py"] == first_record_before
@@ -84,8 +84,8 @@ def test_recording_a_second_death_does_not_mutate_the_first(tmp_path: Path) -> N
 
 
 def test_two_deaths_of_the_same_path_get_different_stable_ids(tmp_path: Path) -> None:
-    id1 = graveyard.record_death(tmp_path, "file", "a.py", "sha1", "r1", "calvin")
-    id2 = graveyard.record_death(tmp_path, "file", "a.py", "sha2", "r2", "calvin")
+    id1 = graveyard.record_death(tmp_path, "file", "a.py", "sha1", "r1", "test-user")
+    id2 = graveyard.record_death(tmp_path, "file", "a.py", "sha2", "r2", "test-user")
 
     assert id1 != id2
     gy = graveyard.load(tmp_path)
@@ -102,10 +102,10 @@ def test_two_deaths_of_the_same_path_get_different_stable_ids(tmp_path: Path) ->
 
 
 def test_a_resurrection_approval_flips_only_its_own_death_id(tmp_path: Path) -> None:
-    id1 = graveyard.record_death(tmp_path, "branch", "feature-x", "sha1", "r1", "calvin")
-    id2 = graveyard.record_death(tmp_path, "branch", "feature-y", "sha2", "r2", "calvin")
+    id1 = graveyard.record_death(tmp_path, "branch", "feature-x", "sha1", "r1", "test-user")
+    id2 = graveyard.record_death(tmp_path, "branch", "feature-y", "sha2", "r2", "test-user")
 
-    graveyard.record_resurrection_approval(tmp_path, id1, "approved for reuse", "calvin")
+    graveyard.record_resurrection_approval(tmp_path, id1, "approved for reuse", "test-user")
 
     gy = graveyard.load(tmp_path)
     assert gy.is_resurrection_approved(id1) is True
@@ -120,8 +120,8 @@ def test_a_resurrection_approval_flips_only_its_own_death_id(tmp_path: Path) -> 
 def test_dead_file_paths_returns_the_newest_record_and_redeath_after_approval_stays_dead(
     tmp_path: Path,
 ) -> None:
-    death1 = graveyard.record_death(tmp_path, "file", "thomas/old.py", "sha1", "first death", "calvin")
-    graveyard.record_resurrection_approval(tmp_path, death1, "bring it back", "calvin")
+    death1 = graveyard.record_death(tmp_path, "file", "thomas/old.py", "sha1", "first death", "test-user")
+    graveyard.record_resurrection_approval(tmp_path, death1, "bring it back", "test-user")
 
     gy = graveyard.load(tmp_path)
     # the approval is a SEPARATE record; the newest kind="file" record for
@@ -129,7 +129,7 @@ def test_dead_file_paths_returns_the_newest_record_and_redeath_after_approval_st
     assert gy.dead_file_paths()["thomas/old.py"]["id"] == death1
     assert gy.is_resurrection_approved(death1) is True
 
-    death2 = graveyard.record_death(tmp_path, "file", "thomas/old.py", "sha2", "deleted again", "calvin")
+    death2 = graveyard.record_death(tmp_path, "file", "thomas/old.py", "sha2", "deleted again", "test-user")
 
     gy2 = graveyard.load(tmp_path)
     newest = gy2.dead_file_paths()["thomas/old.py"]
@@ -208,7 +208,7 @@ def test_the_cli_records_a_file_death_and_lists_it_as_json(tmp_path: Path, capsy
             "--reason",
             "unused",
             "--by",
-            "calvin",
+            "test-user",
         ]
     )
     assert rc == 0
@@ -259,7 +259,7 @@ def test_a_record_missing_a_required_key_is_also_a_loud_systemexit(tmp_path: Pat
         "dead_sha": "s",
         "deleted_on": "2026-01-01",
         "reason": "r",
-        "by": "calvin",
+        "by": "test-user",
         "refs": None,
     }
     path.write_text(json.dumps({"version": 1, "records": [bad_record]}), encoding="utf-8")
@@ -279,7 +279,7 @@ def test_a_record_missing_a_required_key_is_also_a_loud_systemexit(tmp_path: Pat
 def test_a_crash_between_the_temp_write_and_the_replace_leaves_the_original_intact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    graveyard.record_death(tmp_path, "file", "a.py", "sha1", "first death", "calvin")
+    graveyard.record_death(tmp_path, "file", "a.py", "sha1", "first death", "test-user")
     path = tmp_path / "docs" / "ops" / "graveyard.json"
     original_bytes = path.read_bytes()
 
@@ -289,7 +289,7 @@ def test_a_crash_between_the_temp_write_and_the_replace_leaves_the_original_inta
     monkeypatch.setattr(graveyard.os, "replace", _boom)
 
     with pytest.raises(OSError):
-        graveyard.record_death(tmp_path, "file", "b.py", "sha2", "second death", "calvin")
+        graveyard.record_death(tmp_path, "file", "b.py", "sha2", "second death", "test-user")
 
     assert path.read_bytes() == original_bytes, "original file must survive a failed replace untouched"
     leftover_tmp = list(path.parent.glob(f".{path.name}.*.tmp"))
@@ -316,7 +316,7 @@ def test_lock_contention_is_a_bounded_wait_then_a_loud_systemexit(
     held_fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     try:
         with pytest.raises(SystemExit) as exc_info:
-            graveyard.record_death(tmp_path, "file", "a.py", "sha1", "r1", "calvin")
+            graveyard.record_death(tmp_path, "file", "a.py", "sha1", "r1", "test-user")
         assert str(lock_path) in str(exc_info.value)
     finally:
         os.close(held_fd)
@@ -326,5 +326,5 @@ def test_lock_contention_is_a_bounded_wait_then_a_loud_systemexit(
     # later, uncontended caller shut.
     if lock_path.exists():
         lock_path.unlink()
-    record_id = graveyard.record_death(tmp_path, "file", "c.py", "sha3", "uncontended", "calvin")
+    record_id = graveyard.record_death(tmp_path, "file", "c.py", "sha3", "uncontended", "test-user")
     assert record_id

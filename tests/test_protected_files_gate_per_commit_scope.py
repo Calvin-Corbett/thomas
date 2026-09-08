@@ -163,7 +163,7 @@ def test_trailer_in_one_commit_does_not_approve_another(monkeypatch, capsys) -> 
             SHA_C: ["thomas/core/config.py"],
         },
         messages={
-            SHA_A: "fix: approved edit\n\nThomas-Protected-Files-Approved: Calvin approved TH-1 on 2026-08-12\n",
+            SHA_A: "fix: approved edit\n\nThomas-Protected-Files-Approved: test-user approved TH-1 on 2026-08-12\n",
             SHA_B: "chore: sneak a rule change in behind the approved commit\n",
             SHA_C: "chore: unrelated work\n",
         },
@@ -203,7 +203,7 @@ def test_breakglass_trailer_is_also_scoped_to_its_own_commit(monkeypatch, capsys
         monkeypatch,
         commits={SHA_A: ["agent_safety.toml"], SHA_B: ["GUARDRAILS.md"]},
         messages={
-            SHA_A: "fix: a\n\nThomas-Breakglass: incident TH-99, Calvin at console\n",
+            SHA_A: "fix: a\n\nThomas-Breakglass: incident TH-99, test-user at console\n",
             SHA_B: "chore: b\n",
         },
     )
@@ -222,11 +222,11 @@ def test_approval_helper_rejects_a_sequence_of_messages() -> None:
         )
 
     ok, trailer, reason = protected_files_gate._protected_files_approval(
-        "fix: x\n\nThomas-Protected-Files-Approved: approved by Calvin\n"
+        "fix: x\n\nThomas-Protected-Files-Approved: approved by test-user\n"
     )
     assert ok is True
     assert trailer == "thomas-protected-files-approved"
-    assert reason == "approved by Calvin"
+    assert reason == "approved by test-user"
 
 
 def test_empty_trailer_reason_is_not_an_approval() -> None:

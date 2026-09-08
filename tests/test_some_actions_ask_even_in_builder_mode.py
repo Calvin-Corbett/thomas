@@ -1,21 +1,3 @@
-"""Four kinds of action must ask a human even when nothing else does.
-
-Builder mode exists so a capable model can work without a prompt on every file
-write. It sets ``no_human_mode = "allow"``, and ``PolicyEngine.evaluate``
-collapsed EVERY ``REQUIRE_APPROVAL`` decision to ALLOW under that mode — including
-``git push``. Turning Builder on therefore also turned off the gate on publishing.
-
-Calvin's rule, 2026-08-14: publishing, secrets leaving the machine, messages sent
-as him, and money must ask no matter what mode is on. Everything else is Builder's
-business.
-
-The reason these four and not others: each one leaves this machine or cannot be
-undone. A bad file edit is recoverable from git; a force-push, a sent email, or a
-trade is not. And the threat that matters is not a model that wants to misbehave —
-it is prompt injection. Text in a web page or a README can aim an agent that is
-working exactly as designed, and a fooled agent looks identical to a working one.
-A gate on outbound actions is what stops it.
-"""
 
 from __future__ import annotations
 

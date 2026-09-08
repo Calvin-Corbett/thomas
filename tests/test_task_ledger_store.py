@@ -59,7 +59,7 @@ def test_goal_derivation_does_not_classify_followup_words() -> None:
 
 def test_goal_derivation_produces_clean_title_not_raw_prompt() -> None:
     # The card title must name the task, not echo the raw chat ("hey thomas can
-    # you please ...") — Calvin's generic-card-name complaint. See task_titling.
+
     assert derive_active_goal("hey thomas can you please build me a pac-man game", current_goal="") == (
         "Build a pac-man game"
     )

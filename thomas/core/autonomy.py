@@ -76,11 +76,11 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
     ),
 }
 
-# Default = L2 Assist (asks for approval before acting), NOT L3 Agent. Calvin
+
 # design law (2026-06-14): the system must not act autonomously "by default" — the
 # user opts UP into hands-off autonomy; it is never on out of the box. The autonomy
 # levels themselves are unchanged; only the default is. Do not raise this back
-# to 3 without Calvin.
+
 DEFAULT_AUTONOMY_LEVEL = 2
 
 

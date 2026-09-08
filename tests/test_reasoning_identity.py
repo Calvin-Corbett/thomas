@@ -58,7 +58,7 @@ class TestThomasIdentity(unittest.TestCase):
         # Thomas stops naming a task manager to the user.
         #
         # It stayed red for eleven days, and the obvious "fix" would have been to
-        # paste the old sentence back, reintroducing exactly the phrasing Calvin
+
         # had deliberately removed. So the rule is matched structurally instead:
         # a prohibition on telling the user anything that is conditional on the
         # tool actually having been called. Any voice satisfies that; deleting

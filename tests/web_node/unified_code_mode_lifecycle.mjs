@@ -333,7 +333,7 @@ async function proveEvidenceAndRefresh() {
   ].join('\n') });
   const replay = api.technicalActivityHtml(persisted.filter(event => event.kind === 'tool_result'), true);
   if (!replay.includes('×2') || persisted.filter(event => event.kind === 'say').length !== 1) throw new Error('persisted replay lost counts or duplicated progress');
-  // Owner contract (Calvin, 2026-07-18): the running action feed shows EVERY
+
   // progress note inline, Codex-style. Collapse only engages past the
   // live-event ring bound (MAX_VISIBLE_PROGRESS_EVENTS = 120).
   const fullFeed = api.narrativeActivityHtml(Array.from({ length: 7 }, (_value, index) => ({ kind: 'say', text: `progress-${index}` })), true);

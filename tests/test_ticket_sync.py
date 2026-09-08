@@ -24,7 +24,7 @@ def _assigned_ticket() -> dict:
         "identifier": "ENG-42",
         "title": "Wire up ticket sync",
         "description": "Bidirectional status sync.",
-        "assignee": {"name": "Calvin", "email": "calvin@example.com"},
+        "assignee": {"name": "test-user", "email": "test-user@example.com"},
         "state": {"id": "s-todo", "name": "Todo", "type": "unstarted"},
         "team": {"id": "team-1"},
     }
@@ -36,7 +36,7 @@ def test_assigned_ticket_becomes_work_item() -> None:
 
     assert item.key == "ENG-42"
     assert item.source == "linear"
-    assert item.assignee == "Calvin"
+    assert item.assignee == "test-user"
     assert item.ticket_id == "uuid-eng-42"
     assert item.status == CanonicalStatus.TODO
     # tracked for subsequent sync

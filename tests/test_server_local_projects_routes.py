@@ -298,7 +298,7 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
 
         context_response = await self.client.patch(
             f"/api/local/projects/{project_a_id}/context",
-            json={"objective": "Ship Project A", "instructions": "Prefer burnt orange."},
+            json={"objective": "Ship Project A", "instructions": "Prefer slate blue."},
         )
         self.assertEqual(context_response.status, 200)
         attach = await self.client.post(
