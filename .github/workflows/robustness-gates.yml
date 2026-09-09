@@ -55,6 +55,24 @@ jobs:
           python -m pip install -e ".[server,repl,test]"
           python -m pip install pytest pytest-asyncio pytest-aiohttp ruff
 
+      # scripts/_gate_python.py re-execs every gate under the repo .venv, so a
+      # gate can never run under whatever `python` a pre-commit `language:
+      # system` hook happened to find. With no .venv it fails closed, which is
+      # right on a developer machine and wrong here: a runner has none, so the
+      # shim refused to run and test_every_enforcing_gate_can_fail.py read that
+      # refusal instead of the violation it was checking for -- the watcher of
+      # watchers was reporting on its own environment.
+      #
+      # --system-site-packages so this venv sees the dependencies installed
+      # above instead of reinstalling them. That keeps the CI interpreter
+      # equivalent to a developer's rather than merely satisfying the check:
+      # a bare venv also passes the shim, and would hide the day a gate grows
+      # a dependency.
+      - name: Provide the project venv the gate shim requires
+        run: |
+          python -m venv --system-site-packages .venv
+          .venv/bin/python -c "import thomas, sys; print('gate interpreter:', sys.executable)"
+
       - name: Resolve diff range
         shell: bash
         run: |

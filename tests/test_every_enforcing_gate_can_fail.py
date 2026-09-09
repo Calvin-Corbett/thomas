@@ -233,7 +233,59 @@ def _site_visual_proof_violation(tmp_path: Path) -> tuple[list[str], Path]:
 # that never actually named the violation. The ratchet in
 # test_no_gate_enforces_unwatched.py only reads the dict's keys
 # (set(RED_PATH_CASES)), so this shape change does not affect it.
+def _untracked_import_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """A staged file importing a module git does not track -- the shape that
+    made a clean clone of `dev` fail on 2026-09-07 while every working tree
+    holding the untracked files passed every hook. The importer is staged and
+    the module it needs is not, so the index this commit would create cannot
+    import itself. The module lives under `thomas/` because the gate only
+    follows imports whose root is a real package of this repo (PACKAGE_ROOTS);
+    a bare top-level name is somebody else's dependency, not this gate's
+    business -- a fixture that used one passed and proved nothing."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(tmp_path, "init", "-b", "dev", "repo")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    pkg = repo / "thomas"
+    pkg.mkdir()
+    (pkg / "red_path_untracked.py").write_text("VALUE = 1\n", encoding="utf-8", newline="\n")
+    (pkg / "importer.py").write_text(
+        "from thomas import red_path_untracked\n", encoding="utf-8", newline="\n"
+    )
+    _git(repo, "add", "thomas/importer.py")  # the module it imports stays untracked
+    return (["--repo", str(repo)], repo)
+
+
+def _workboard_task_plans_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """An active task owned by this agent with no `## Task Plans` row -- the
+    exact disagreement the gate exists to refuse. Every other required section
+    is present and the claim matches the task, so this fails on the task/plan
+    disagreement alone rather than on board structure. `--agent` matches the
+    task's agent on purpose: another agent's inconsistent plan is a warning and
+    only the committing agent's own is a violation, so a fixture without it
+    would prove nothing."""
+    repo = tmp_path / "repo"
+    board = repo / "plans" / "thomas" / "WORKBOARD.md"
+    board.parent.mkdir(parents=True, exist_ok=True)
+    board.write_text(
+        "# Test Workboard\n\n"
+        "## Agent Claims\n\n"
+        "- agent=agent1; role=solo; scope=foo; task=task-plans-red-path; status=active\n\n"
+        "## Active Tasks\n\n"
+        "- task_id=task-plans-red-path; agent=agent1; scope=foo; summary=do the thing; status=in_progress\n\n"
+        "## Up For Grabs\n\n- none\n\n"
+        "## Issues / Blockers\n\n- none\n\n"
+        "## Task Plans\n\n- none\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return (["--workboard", str(board), "--agent", "agent1"], repo)
+
+
 RED_PATH_CASES: dict[str, tuple[Callable[[Path], tuple[list[str], Path]], str]] = {
+    "untracked_import_gate.py": (_untracked_import_violation, "red_path_untracked"),
+    "workboard_task_plans.py": (_workboard_task_plans_violation, "task-plans-red-path"),
     "monolith_guard.py": (_monolith_violation, "huge_module.py"),
     "merge_resurrection_gate.py": (_merge_resurrection_violation, "old/retired_module.py"),
     "dead_ref_gate.py": (_dead_ref_violation, "old-experiment"),
