@@ -158,7 +158,14 @@ jobs:
         run: |
           python scripts/forge/gates/workboard_claims.py --require-identity-metadata
 
+      # Scoped off `main` for the same reason the job of the same name is in
+      # gates.yml: this gate asks which active claim owns each changed file, and
+      # the published WORKBOARD.md is an empty template by design, so on `main`
+      # every changed file reads as unclaimed and the gate can never pass. It is
+      # NOT taught to pass on an empty board -- on `dev` an empty board must stay
+      # a failure rather than become the way through.
       - name: Workboard changed-file ownership gate
+        if: github.ref_name != 'main'
         run: |
           python scripts/forge/gates/workboard_changed_files.py --base "${BASE_SHA}" --head "${HEAD_SHA}" --require-identity-metadata
 
