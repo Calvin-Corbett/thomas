@@ -233,7 +233,12 @@ jobs:
         run: |
           python scripts/crew/workboard/issue.py --help
 
+      # Third and last of the board-content gates scoped off `main`: this one
+      # requires a recurring audit task to be queued under `## Up For Grabs`,
+      # and the published board carries `- none` under every heading. A queue
+      # of work only exists where work is coordinated.
       - name: Workboard audit backstop gate
+        if: github.ref_name != 'main'
         run: |
           python scripts/crew/workboard/audit_backstop.py
 
