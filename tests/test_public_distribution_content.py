@@ -104,3 +104,31 @@ def test_a_bare_design_record_filename_is_caught_without_its_directory():
     # A published doc that date-SUFFIXES its name is a different shape.
     assert not inspect("docs/GUIDE.md", b"See AGENT_ADVERSARIAL_AUDIT_2026-03-19.md for the rationale.")
     assert not inspect("docs/GUIDE.md", b"Released 2026-09-07; see CHANGELOG.md.")
+
+
+def test_the_publisher_strips_everything_the_gate_blocks():
+    """The two lists must not drift apart.
+
+    The gate refuses a release that carries an internal path; the publisher's
+    strip list is what stops the path being carried in the first place. When
+    only the gate knows about a path, the next release FAILS instead of simply
+    shipping clean -- and someone under time pressure widens the gate to get a
+    green check. Keeping the publisher ahead of the gate is what prevents that.
+    """
+    import json
+    from pathlib import Path
+
+    from scripts.forge.publish.content_check import BLOCKED_PREFIXES
+
+    baseline = json.loads(
+        Path("docs/repo_hygiene_baseline.json").read_text(encoding="utf-8")
+    )
+    stripped = set(baseline.get("publish_strip_prefixes", []))
+    stripped |= set(baseline.get("forbidden_tracked_prefixes", []))
+
+    missing = sorted(p for p in BLOCKED_PREFIXES if p.endswith("/") and p not in stripped)
+    assert not missing, (
+        "content_check.py blocks these prefixes but the publisher does not strip them, "
+        "so a release carrying them fails the gate instead of shipping clean. "
+        f"Add them to publish_strip_prefixes in docs/repo_hygiene_baseline.json: {missing}"
+    )

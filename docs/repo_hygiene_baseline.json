@@ -55,10 +55,13 @@
     ".inbox_extract_"
   ],
   "publish_strip_prefixes": [
-    "demo/agentic-runs/",
-    "demo/runs/",
-    "demo/circuit-courier/progress.md",
+    ".claude/",
+    ".thomas/",
     "apps/site/verification/",
+    "benchmarks/",
+    "demo/agentic-runs/",
+    "demo/circuit-courier/progress.md",
+    "demo/runs/",
     "docs/HANDOFF_",
     "docs/evals/",
     "docs/launch/",
@@ -70,7 +73,9 @@
     "library/entries/research-notes/",
     "plans/",
     "plans/thomas/problems/",
-    "plans/thomas/tasks/"
+    "plans/thomas/tasks/",
+    "reports/",
+    "tests/browser_workflow_corpus/"
   ],
   "forbidden_untracked_prefixes": [
     "runtime/",
