@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -286,6 +287,32 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     current = master_path.read_text(encoding="utf-8") if master_path.exists() else ""
+
+    if args.check and current:
+        # Compare content, not the calendar.
+        #
+        # build_document() stamps today's date, and this compared the whole text
+        # against it -- so an untouched, perfectly accurate file reported
+        # "stale" every day after the one it was written on. This gate sat red
+        # on nothing but a date, and a gate that can only be green on the day
+        # someone regenerated it is a gate people learn to scroll past.
+        #
+        # Re-stamp the candidate with the date the committed file already
+        # carries, so only a real difference between the list and the code it
+        # describes can fail. The write path still stamps today: a regeneration
+        # should record when it happened.
+        existing_stamp = re.search(r"^\*\*Last Updated:\*\*\s*(\d{4}-\d{2}-\d{2})\s*$", current, re.M)
+        if existing_stamp:
+            try:
+                doc, totals = build_document(repo_root, manifest, date_stamp=existing_stamp.group(1))
+            except Exception as exc:
+                message = f"Feature master sync failed: could not build document: {exc}"
+                if args.json:
+                    print(json.dumps({"ok": False, "gate": gate_name, "error": message}, ensure_ascii=False))
+                else:
+                    print(message)
+                return 1
+
     changed = current != doc
 
     if args.check:

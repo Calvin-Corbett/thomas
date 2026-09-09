@@ -162,3 +162,32 @@ def test_run_json_missing_manifest_reports_error(tmp_path: Path, capsys) -> None
     assert payload["ok"] is False
     assert payload["gate"] == "feature_master_sync"
     assert "missing manifest" in payload["error"]
+
+
+def test_check_measures_content_not_the_calendar(tmp_path: Path, capsys) -> None:
+    """An accurate list must not go stale overnight.
+
+    --check regenerates the document, and the generator stamps today's date.
+    Comparing the whole text meant an untouched, correct file reported "stale"
+    every day after the one it was written on, so the gate could only be green
+    on the day someone regenerated it -- and a gate like that is one people
+    learn to scroll past.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    manifest_path = _write_manifest(repo)
+    master = repo / "docs" / "FEATURE_MASTER_LIST.md"
+
+    # Write the list as it would have been generated long ago.
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    old, _ = mod.build_document(repo, manifest, date_stamp="2020-01-01")
+    master.parent.mkdir(parents=True, exist_ok=True)
+    master.write_text(old, encoding="utf-8")
+    assert "**Last Updated:** 2020-01-01" in master.read_text(encoding="utf-8")
+
+    args = ["--repo-root", str(repo), "--manifest", str(manifest_path), "--master", str(master), "--check"]
+    assert mod.run(args) == 0, "an accurate list was called stale purely because of its date stamp"
+
+    # The stamp is ignored; a real difference is still caught.
+    master.write_text(old.replace("# Thomas Project", "# Drifted Heading"), encoding="utf-8")
+    assert mod.run(args) == 1
