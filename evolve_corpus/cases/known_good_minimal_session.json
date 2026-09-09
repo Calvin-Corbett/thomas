@@ -1,0 +1,22 @@
+{
+  "case_id": "known_good_minimal_session",
+  "description": "A minimal clean session shape with one changed file and a passing non-agent-authored verification.",
+  "expected_supervisor_outcome": "eligible_for_decision_gate",
+  "session": {
+    "status": "ready",
+    "delta": {
+      "changed_count": 1,
+      "changed_files": [
+        "thomas/core/example.py"
+      ]
+    },
+    "verification": [
+      {
+        "source": "generated",
+        "returncode": 0
+      }
+    ],
+    "policy_violations": [],
+    "session_rejections": []
+  }
+}

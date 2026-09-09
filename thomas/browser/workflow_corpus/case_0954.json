@@ -1,0 +1,583 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0954",
+  "title": "Browser workflow case 0954 (password_reset)",
+  "category": "password_reset",
+  "risk_level": "medium",
+  "objective": "Validate password_reset journey under roaming_handoff network conditions.",
+  "dimensions": {
+    "channel": "embedded_webview",
+    "region": "me-central",
+    "network_profile": "roaming_handoff",
+    "build_variant": "canary",
+    "locale": "en-GB"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:password_reset",
+    "region:me-central",
+    "channel:embedded_webview",
+    "network:roaming_handoff"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "close_tab",
+      "target": "[data-test='password_reset-01']",
+      "input": "case-0954-value-01",
+      "expect": "password_reset-expected-01",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "start_trace",
+      "target": "[data-test='password_reset-02']",
+      "input": "case-0954-value-02",
+      "expect": "password_reset-expected-02",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "stop_trace",
+      "target": "[data-test='password_reset-03']",
+      "input": "case-0954-value-03",
+      "expect": "password_reset-expected-03",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "export_pdf",
+      "target": "[data-test='password_reset-04']",
+      "input": "case-0954-value-04",
+      "expect": "password_reset-expected-04",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "check_a11y",
+      "target": "[data-test='password_reset-05']",
+      "input": "case-0954-value-05",
+      "expect": "password_reset-expected-05",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "open_url",
+      "target": "[data-test='password_reset-06']",
+      "input": "case-0954-value-06",
+      "expect": "password_reset-expected-06",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "wait_for_selector",
+      "target": "[data-test='password_reset-07']",
+      "input": "case-0954-value-07",
+      "expect": "password_reset-expected-07",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "click",
+      "target": "[data-test='password_reset-08']",
+      "input": "case-0954-value-08",
+      "expect": "password_reset-expected-08",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "type",
+      "target": "[data-test='password_reset-09']",
+      "input": "case-0954-value-09",
+      "expect": "password_reset-expected-09",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "press",
+      "target": "[data-test='password_reset-10']",
+      "input": "case-0954-value-10",
+      "expect": "password_reset-expected-10",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "scroll_into_view",
+      "target": "[data-test='password_reset-11']",
+      "input": "case-0954-value-11",
+      "expect": "password_reset-expected-11",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "capture_screenshot",
+      "target": "[data-test='password_reset-12']",
+      "input": "case-0954-value-12",
+      "expect": "password_reset-expected-12",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "snapshot_dom",
+      "target": "[data-test='password_reset-13']",
+      "input": "case-0954-value-13",
+      "expect": "password_reset-expected-13",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "collect_console",
+      "target": "[data-test='password_reset-14']",
+      "input": "case-0954-value-14",
+      "expect": "password_reset-expected-14",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "collect_network",
+      "target": "[data-test='password_reset-15']",
+      "input": "case-0954-value-15",
+      "expect": "password_reset-expected-15",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "assert_text",
+      "target": "[data-test='password_reset-16']",
+      "input": "case-0954-value-16",
+      "expect": "password_reset-expected-16",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "assert_visibility",
+      "target": "[data-test='password_reset-17']",
+      "input": "case-0954-value-17",
+      "expect": "password_reset-expected-17",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "download_file",
+      "target": "[data-test='password_reset-18']",
+      "input": "case-0954-value-18",
+      "expect": "password_reset-expected-18",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "upload_file",
+      "target": "[data-test='password_reset-19']",
+      "input": "case-0954-value-19",
+      "expect": "password_reset-expected-19",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "switch_tab",
+      "target": "[data-test='password_reset-20']",
+      "input": "case-0954-value-20",
+      "expect": "password_reset-expected-20",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "close_tab",
+      "target": "[data-test='password_reset-21']",
+      "input": "case-0954-value-21",
+      "expect": "password_reset-expected-21",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "start_trace",
+      "target": "[data-test='password_reset-22']",
+      "input": "case-0954-value-22",
+      "expect": "password_reset-expected-22",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "stop_trace",
+      "target": "[data-test='password_reset-23']",
+      "input": "case-0954-value-23",
+      "expect": "password_reset-expected-23",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "export_pdf",
+      "target": "[data-test='password_reset-24']",
+      "input": "case-0954-value-24",
+      "expect": "password_reset-expected-24",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "check_a11y",
+      "target": "[data-test='password_reset-25']",
+      "input": "case-0954-value-25",
+      "expect": "password_reset-expected-25",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "open_url",
+      "target": "[data-test='password_reset-26']",
+      "input": "case-0954-value-26",
+      "expect": "password_reset-expected-26",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 27,
+      "action": "wait_for_selector",
+      "target": "[data-test='password_reset-27']",
+      "input": "case-0954-value-27",
+      "expect": "password_reset-expected-27",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 28,
+      "action": "click",
+      "target": "[data-test='password_reset-28']",
+      "input": "case-0954-value-28",
+      "expect": "password_reset-expected-28",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "console",
+      "query": "assert-password_reset-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "text",
+      "query": "assert-password_reset-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "visibility",
+      "query": "assert-password_reset-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "network",
+      "query": "assert-password_reset-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "console",
+      "query": "assert-password_reset-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "text",
+      "query": "assert-password_reset-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "visibility",
+      "query": "assert-password_reset-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "network",
+      "query": "assert-password_reset-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "console",
+      "query": "assert-password_reset-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "text",
+      "query": "assert-password_reset-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "visibility",
+      "query": "assert-password_reset-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "network",
+      "query": "assert-password_reset-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 4,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0954/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0954/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0954/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0954/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "password_reset",
+    "embedded_webview",
+    "me-central",
+    "roaming_handoff",
+    "severity:medium"
+  ]
+}

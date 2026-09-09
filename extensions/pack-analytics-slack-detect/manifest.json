@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-slack-detect",
+  "name": "Analytics Slack Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "slack",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.slack",
+    "analytics.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via slack with detect mode policies."
+}

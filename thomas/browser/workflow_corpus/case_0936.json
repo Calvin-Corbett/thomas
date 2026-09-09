@@ -1,0 +1,541 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0936",
+  "title": "Browser workflow case 0936 (multi_org_switch)",
+  "category": "multi_org_switch",
+  "risk_level": "critical",
+  "objective": "Validate multi_org_switch journey under roaming_handoff network conditions.",
+  "dimensions": {
+    "channel": "embedded_webview",
+    "region": "me-central",
+    "network_profile": "roaming_handoff",
+    "build_variant": "canary",
+    "locale": "fr-FR"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:multi_org_switch",
+    "region:me-central",
+    "channel:embedded_webview",
+    "network:roaming_handoff"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "stop_trace",
+      "target": "[data-test='multi_org_switch-01']",
+      "input": "case-0936-value-01",
+      "expect": "multi_org_switch-expected-01",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "export_pdf",
+      "target": "[data-test='multi_org_switch-02']",
+      "input": "case-0936-value-02",
+      "expect": "multi_org_switch-expected-02",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "check_a11y",
+      "target": "[data-test='multi_org_switch-03']",
+      "input": "case-0936-value-03",
+      "expect": "multi_org_switch-expected-03",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "open_url",
+      "target": "[data-test='multi_org_switch-04']",
+      "input": "case-0936-value-04",
+      "expect": "multi_org_switch-expected-04",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "wait_for_selector",
+      "target": "[data-test='multi_org_switch-05']",
+      "input": "case-0936-value-05",
+      "expect": "multi_org_switch-expected-05",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "click",
+      "target": "[data-test='multi_org_switch-06']",
+      "input": "case-0936-value-06",
+      "expect": "multi_org_switch-expected-06",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "type",
+      "target": "[data-test='multi_org_switch-07']",
+      "input": "case-0936-value-07",
+      "expect": "multi_org_switch-expected-07",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "press",
+      "target": "[data-test='multi_org_switch-08']",
+      "input": "case-0936-value-08",
+      "expect": "multi_org_switch-expected-08",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "scroll_into_view",
+      "target": "[data-test='multi_org_switch-09']",
+      "input": "case-0936-value-09",
+      "expect": "multi_org_switch-expected-09",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "capture_screenshot",
+      "target": "[data-test='multi_org_switch-10']",
+      "input": "case-0936-value-10",
+      "expect": "multi_org_switch-expected-10",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "snapshot_dom",
+      "target": "[data-test='multi_org_switch-11']",
+      "input": "case-0936-value-11",
+      "expect": "multi_org_switch-expected-11",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "collect_console",
+      "target": "[data-test='multi_org_switch-12']",
+      "input": "case-0936-value-12",
+      "expect": "multi_org_switch-expected-12",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "collect_network",
+      "target": "[data-test='multi_org_switch-13']",
+      "input": "case-0936-value-13",
+      "expect": "multi_org_switch-expected-13",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "assert_text",
+      "target": "[data-test='multi_org_switch-14']",
+      "input": "case-0936-value-14",
+      "expect": "multi_org_switch-expected-14",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "assert_visibility",
+      "target": "[data-test='multi_org_switch-15']",
+      "input": "case-0936-value-15",
+      "expect": "multi_org_switch-expected-15",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "download_file",
+      "target": "[data-test='multi_org_switch-16']",
+      "input": "case-0936-value-16",
+      "expect": "multi_org_switch-expected-16",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "upload_file",
+      "target": "[data-test='multi_org_switch-17']",
+      "input": "case-0936-value-17",
+      "expect": "multi_org_switch-expected-17",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "switch_tab",
+      "target": "[data-test='multi_org_switch-18']",
+      "input": "case-0936-value-18",
+      "expect": "multi_org_switch-expected-18",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "close_tab",
+      "target": "[data-test='multi_org_switch-19']",
+      "input": "case-0936-value-19",
+      "expect": "multi_org_switch-expected-19",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "start_trace",
+      "target": "[data-test='multi_org_switch-20']",
+      "input": "case-0936-value-20",
+      "expect": "multi_org_switch-expected-20",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "stop_trace",
+      "target": "[data-test='multi_org_switch-21']",
+      "input": "case-0936-value-21",
+      "expect": "multi_org_switch-expected-21",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "export_pdf",
+      "target": "[data-test='multi_org_switch-22']",
+      "input": "case-0936-value-22",
+      "expect": "multi_org_switch-expected-22",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "check_a11y",
+      "target": "[data-test='multi_org_switch-23']",
+      "input": "case-0936-value-23",
+      "expect": "multi_org_switch-expected-23",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "open_url",
+      "target": "[data-test='multi_org_switch-24']",
+      "input": "case-0936-value-24",
+      "expect": "multi_org_switch-expected-24",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "wait_for_selector",
+      "target": "[data-test='multi_org_switch-25']",
+      "input": "case-0936-value-25",
+      "expect": "multi_org_switch-expected-25",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "visibility",
+      "query": "assert-multi_org_switch-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "network",
+      "query": "assert-multi_org_switch-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "console",
+      "query": "assert-multi_org_switch-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "text",
+      "query": "assert-multi_org_switch-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "visibility",
+      "query": "assert-multi_org_switch-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "network",
+      "query": "assert-multi_org_switch-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "console",
+      "query": "assert-multi_org_switch-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "text",
+      "query": "assert-multi_org_switch-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "visibility",
+      "query": "assert-multi_org_switch-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "network",
+      "query": "assert-multi_org_switch-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "console",
+      "query": "assert-multi_org_switch-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "text",
+      "query": "assert-multi_org_switch-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 2,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0936/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0936/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0936/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0936/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "multi_org_switch",
+    "embedded_webview",
+    "me-central",
+    "roaming_handoff",
+    "severity:critical"
+  ]
+}

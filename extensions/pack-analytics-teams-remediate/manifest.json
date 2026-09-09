@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-teams-remediate",
+  "name": "Analytics Teams Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "teams",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.teams",
+    "analytics.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via teams with remediate mode policies."
+}

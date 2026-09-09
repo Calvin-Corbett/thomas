@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-discord-remediate",
+  "name": "Incident Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.discord",
+    "incident.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via discord with remediate mode policies."
+}

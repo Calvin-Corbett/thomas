@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-jira-audit",
+  "name": "Analytics Jira Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "jira",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.jira",
+    "analytics.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via jira with audit mode policies."
+}

@@ -1,0 +1,7 @@
+/* evolution.css -- import hub for the Evolve + Forge Code surfaces.
+   Split by responsibility to satisfy the CSS size cap; contiguous ranges in
+   original order keep the cascade identical. index.html links THIS file. */
+@import url("./evolution_dashboard.css?v=20260807-split");
+@import url("./forge_code_shell.css?v=20260807-split");
+@import url("./forge_code_activity.css?v=20260807-split");
+@import url("./forge_code_review.css?v=20260807-split");

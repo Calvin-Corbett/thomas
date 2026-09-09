@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-sms-remediate",
+  "name": "Qa Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.sms",
+    "qa.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via sms with remediate mode policies."
+}

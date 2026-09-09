@@ -1,0 +1,63 @@
+# Stale issues & PRs — close abandoned threads automatically.
+#
+# Policy:
+#   - Issues: 60 days no activity → mark stale, 14 more days → close
+#   - PRs: 30 days no activity → mark stale, 7 more days → close
+#   - Exemptions: anything labeled "pinned", "security", "in-progress",
+#     or "help-wanted" is never marked stale
+#
+# Runs daily at 02:00 UTC (overnight, won't interfere with active work).
+#
+# Docs: https://github.com/actions/stale
+
+name: Close stale issues and PRs
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # daily 02:00 UTC
+  workflow_dispatch:     # allow manual run for testing
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/stale@v9
+        with:
+          # Days of inactivity before marking
+          days-before-issue-stale: 60
+          days-before-pr-stale: 30
+          # Days after stale-marking before closing
+          days-before-issue-close: 14
+          days-before-pr-close: 7
+          # Labels applied
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          # Labels that exempt from the bot
+          exempt-issue-labels: "pinned,security,in-progress,help-wanted,roadmap"
+          exempt-pr-labels: "pinned,security,in-progress,do-not-close"
+          # Messages
+          stale-issue-message: |
+            This issue has been automatically marked as stale because it has had
+            no activity for 60 days. It will be closed in 14 days if no further
+            activity occurs. If this issue is still relevant, please leave a
+            comment to keep it open.
+          stale-pr-message: |
+            This pull request has been automatically marked as stale because it
+            has had no activity for 30 days. It will be closed in 7 days if no
+            further activity occurs. If you intend to continue this work, please
+            push a new commit or leave a comment.
+          close-issue-message: |
+            Closing this issue due to extended inactivity. Feel free to reopen
+            if the situation changes.
+          close-pr-message: |
+            Closing this pull request due to extended inactivity. Feel free to
+            reopen if you'd like to continue.
+          # Don't run on drafts
+          exempt-draft-pr: true
+          # Limit per run so a sudden cleanup doesn't blast notifications
+          operations-per-run: 30

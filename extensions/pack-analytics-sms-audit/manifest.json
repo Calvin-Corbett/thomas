@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-sms-audit",
+  "name": "Analytics Sms Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "sms",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.sms",
+    "analytics.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via sms with audit mode policies."
+}

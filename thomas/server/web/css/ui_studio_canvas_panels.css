@@ -1,0 +1,294 @@
+/* ui_studio_canvas_panels.css
+ * Canvas workspace — part 2: inspector/properties grid, buttons, modal,
+ * toasts. Split from ui_studio_canvas.css to keep each file small; loaded
+ * immediately after it (same namespaced .ui-studio-* selectors). */
+
+/* Properties / inspector grid */
+.ui-studio-side-tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px; gap: 4px; border-bottom: 1px solid var(--border-light); }
+.ui-studio-side-tab { min-width: 0; padding: 7px 5px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font: 700 11px var(--font-sans); }
+.ui-studio-side-tab:is(:hover, :focus-visible, .is-active) { border-color: var(--c-accent-line); background: var(--c-accent-soft); color: var(--text-primary); outline: 0; }
+.ui-studio-props {
+    padding: 8px 10px 10px;
+    overflow-y: auto;
+}
+.ui-studio-field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 8px;
+}
+.ui-studio-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ui-studio-field.is-wide { grid-column: 1 / -1; }
+.ui-studio-field > span {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted, #929bb0);
+}
+.ui-studio-input,
+.ui-studio-props input[type="number"],
+.ui-studio-props input[type="text"],
+.ui-studio-props input[type="color"],
+.ui-studio-props select,
+.ui-studio-props textarea {
+    width: 100%;
+    background: var(--bg-app, #16181f);
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.14));
+    border-radius: var(--radius-sm, 4px);
+    color: var(--text-primary, #ececf1);
+    font-family: var(--font-sans, "Segoe UI", Roboto, sans-serif);
+    font-size: 12px;
+    padding: 4px 6px;
+}
+.ui-studio-props input[type="color"] {
+    padding: 1px;
+    height: 26px;
+    cursor: pointer;
+}
+.ui-studio-input:focus,
+.ui-studio-props input:focus,
+.ui-studio-props select:focus,
+.ui-studio-props textarea:focus {
+    outline: none;
+    border-color: var(--border-focus, #8a9aad);
+}
+.ui-studio-props textarea { resize: vertical; min-height: 46px; }
+.ui-studio-props input:disabled,
+.ui-studio-props select:disabled,
+.ui-studio-props textarea:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Buttons (mirror tokens.css .t-btn skinny profile, namespaced + self-contained) */
+.ui-studio-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm, 4px);
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+    background: var(--c-surface-2, transparent);
+    color: var(--text-secondary, #adb3c2);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-sans, "Segoe UI", Roboto, sans-serif);
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.ui-studio-btn:hover {
+    background: var(--bg-surface-hover, rgba(162, 191, 233, 0.08));
+    border-color: var(--c-border-2, rgba(255, 255, 255, 0.2));
+    color: var(--text-primary, #ececf1);
+}
+.ui-studio-btn:active { transform: scale(0.97); }
+.ui-studio-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ui-studio-btn.is-accent {
+    border-color: var(--accent, #8a9aad);
+    color: var(--accent, #8a9aad);
+    background: var(--c-accent-soft, rgba(88, 166, 255, 0.06));
+}
+.ui-studio-btn.is-accent:hover { background: var(--c-accent-soft, rgba(88, 166, 255, 0.16)); }
+.ui-studio-btn.is-mint {
+    border-color: var(--accent-mint, #47d7ac);
+    color: var(--accent-mint, #47d7ac);
+    background: var(--c-accent-soft, rgba(71, 215, 172, 0.06));
+}
+.ui-studio-btn.is-mint:hover { background: var(--c-accent-soft, rgba(71, 215, 172, 0.16)); }
+
+/* Tool buttons (icon + glyph, in the left rail) */
+.ui-studio-tool {
+    width: 38px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm, 4px);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, #adb3c2);
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.ui-studio-tool:hover {
+    background: var(--bg-surface-hover, #242936);
+    color: var(--text-primary, #ececf1);
+}
+.ui-studio-tool.is-active {
+    background: var(--c-accent-soft);
+    border-color: var(--c-accent-line);
+    color: var(--text-primary, #ececf1);
+}
+
+/* Toggle pill (grid/snap) */
+.ui-studio-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary, #adb3c2);
+    cursor: pointer;
+    user-select: none;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm, 4px);
+    min-height: 34px;
+    white-space: nowrap;
+}
+.ui-studio-toggle:hover { background: var(--bg-surface-hover, #242936); }
+.ui-studio-toggle input[type="checkbox"] {
+    appearance: none;
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    min-height: 14px !important;
+    flex: 0 0 14px;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--c-border-2);
+    border-radius: 4px;
+    background: var(--c-surface);
+}
+.ui-studio-toggle input[type="checkbox"]::after {
+    width: 6px;
+    height: 3px;
+    content: "";
+    border-left: 2px solid var(--c-accent-ink);
+    border-bottom: 2px solid var(--c-accent-ink);
+    opacity: 0;
+    transform: translateY(-1px) rotate(-45deg);
+}
+.ui-studio-toggle input[type="checkbox"]:checked {
+    border-color: var(--c-accent);
+    background: var(--c-accent);
+}
+.ui-studio-toggle input[type="checkbox"]:checked::after { opacity: 1; }
+.ui-studio-toggle input[type="checkbox"]:focus-visible { outline: 2px solid var(--c-accent-line); outline-offset: 2px; }
+
+/* Status / coordinate readout (bottom-left overlay on stage) */
+.ui-studio-readout {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm, 4px);
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--text-secondary, #adb3c2);
+    font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+    font-size: 11px;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* Drop zone for sketch import */
+.ui-studio-stage-wrap.is-drop-active::after {
+    content: "Drop a sketch (PNG / JPG) to generate a layout";
+    position: absolute;
+    inset: 10px;
+    border: 2px dashed var(--accent-mint, #47d7ac);
+    border-radius: var(--radius-lg, 12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-mint, #47d7ac);
+    font-weight: 700;
+    font-size: 15px;
+    background: rgba(71, 215, 172, 0.08);
+    pointer-events: none;
+    z-index: 20;
+}
+
+/* Code / spec output modal */
+.ui-studio-modal {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    background: color-mix(in srgb, var(--c-bg, #000) 78%, transparent);
+    backdrop-filter: blur(10px);
+}
+.ui-studio-modal[hidden] { display: none; }
+.ui-studio-modal-card {
+    width: min(760px, 92%);
+    max-height: 86%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface, #1f232c);
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.14));
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: var(--shadow-strong, 0 22px 60px rgba(0, 0, 0, 0.45));
+    overflow: hidden;
+}
+.ui-studio-modal-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+}
+.ui-studio-modal-title { font-weight: 700; flex: 1 1 auto; }
+.ui-studio-modal-tabs { display: flex; gap: 4px; }
+.ui-studio-modal-body {
+    overflow: auto;
+    padding: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.ui-studio-code {
+    margin: 0;
+    padding: 12px 14px;
+    font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary, #ececf1);
+    white-space: pre;
+    tab-size: 2;
+}
+.ui-studio-modal-foot {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+}
+
+/* Toast (used by the demo's notifyUser stub; harmless in-app) */
+.ui-studio-toast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 9999;
+    max-width: 320px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md, 8px);
+    background: var(--bg-surface, #1f232c);
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.16));
+    color: var(--text-primary, #ececf1);
+    font-size: 12px;
+    box-shadow: var(--shadow-strong, 0 22px 60px rgba(0, 0, 0, 0.45));
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
+}
+.ui-studio-toast.is-visible { opacity: 1; transform: translateY(0); }
+.ui-studio-toast.tone-warn { border-color: var(--warn-line, rgba(255, 191, 71, 0.45)); }
+.ui-studio-toast.tone-success { border-color: var(--accent-mint, #47d7ac); }
+
+@media (max-width: 620px) {
+    .ui-studio-btn { padding-inline: 9px; }
+    .ui-studio-field-grid { grid-template-columns: 1fr; }
+    .ui-studio-field.is-wide { grid-column: auto; }
+    .ui-studio-modal-card { width: calc(100% - 20px); height: calc(100% - 20px); max-height: none; }
+    .ui-studio-modal-head { align-items: flex-start; flex-direction: column; }
+    .ui-studio-modal-tabs { max-width: 100%; overflow-x: auto; }
+}

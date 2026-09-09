@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-jira-prevent",
+  "name": "Support Jira Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "jira",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.jira",
+    "support.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via jira with prevent mode policies."
+}

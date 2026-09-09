@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-pagerduty-escalate",
+  "name": "Ops Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.pagerduty",
+    "ops.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via pagerduty with escalate mode policies."
+}

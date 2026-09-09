@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-sms-detect",
+  "name": "Compliance Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.sms",
+    "compliance.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via sms with detect mode policies."
+}

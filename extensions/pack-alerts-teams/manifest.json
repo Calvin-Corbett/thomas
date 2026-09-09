@@ -1,0 +1,14 @@
+{
+  "id": "pack-alerts-teams",
+  "name": "Alerts Teams Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "teams",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.teams",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via teams."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-webhook-escalate",
+  "name": "Analytics Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.webhook",
+    "analytics.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via webhook with escalate mode policies."
+}

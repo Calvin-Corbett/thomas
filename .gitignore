@@ -1,0 +1,235 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.claude/
+.coverage
+.coverage.*
+
+# Runtime state (memory index, logs, secrets, etc)
+.thomas/
+runtime/
+thomas_state.json
+thomas_daily_report_*.md
+thomas_tool_registry.json
+thomas_webhooks.json.lock
+thomas_webhooks.json
+thomas_webhook_receipts.json
+thomas_webhook_stats.json
+thomas_webhook_inbox.jsonl
+thomas_db_connections.json
+thomas_test_results.jsonl
+thomas_test_report_*.md
+
+# Incoming drops (zips/bundles) and other large artifacts.
+Inbox/**
+inbox/**
+!Inbox/.gitkeep
+!inbox/.gitkeep
+.inbox_extract*/
+*.zip
+
+# Build output
+.open-next/
+apps/site/.open-next/
+
+# One-off local artifacts
+response.txt
+response2.txt
+thomas_conversation.json
+server_output.txt
+ux_event_probe.txt
+ux_visible_test_*.txt
+vel4_test.txt
+test_autonomous_task*.txt
+tmp_switch_test.py
+tmp_companion_*.png
+thomas/tmp_script.py
+%s
+nul
+=*
+
+# Workspace hygiene (generated/local artifacts)
+node_modules/
+.playwright-cli/
+.feature_backups/
+output/
+artifacts/
+dist/
+demo/agentic-runs/
+demo/runs/
+tmp/
+.tmp*/
+.tmp_*
+logs/
+downloads/
+runs/
+cache/
+caches/
+*.har
+*.tar
+*.tar.gz
+
+# Local archives / handoff bundles
+tasks/
+!plans/
+!plans/thomas/
+!plans/thomas/tasks/
+!plans/thomas/tasks/**/
+!plans/thomas/tasks/**/PLAN.md
+!scripts/
+!scripts/crew/
+!scripts/crew/tasks/
+!scripts/crew/tasks/**
+scripts/crew/tasks/**/__pycache__/
+scripts/crew/tasks/**/*.pyc
+archives/
+_archive/
+
+# Auto-generated chat problem records. Curated records are explicitly re-included.
+# Security: prior incident (2026-05-19) leaked private content via plans/thomas/problems/*.
+# (Use /* not / so git still descends into the directory for re-includes below.)
+plans/thomas/problems/*
+!plans/thomas/problems/audit-24h-backstop/
+!plans/thomas/problems/audit-24h-backstop/**
+!plans/thomas/problems/ci-recovery-2026-05-20/
+!plans/thomas/problems/ci-recovery-2026-05-20/**
+!plans/thomas/problems/THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718/
+!plans/thomas/problems/THOMAS-CODE-CHAT-FIRST-LIFECYCLE-20260718/**
+# Canonical task problem records (reviewed public-safe; no private content).
+!plans/thomas/problems/runtime-protection-fix-2026-05-27/
+!plans/thomas/problems/runtime-protection-fix-2026-05-27/**
+!plans/thomas/problems/agent-coordination-hardening-2026-05-28/
+!plans/thomas/problems/agent-coordination-hardening-2026-05-28/**
+!plans/thomas/problems/bible-public-system-2026-05-22/
+!plans/thomas/problems/bible-public-system-2026-05-22/**
+
+# Auto-indexed research notes from chat transcripts (private user content).
+# Security: prior incident (2026-05-19) leaked a Telegram token via library/entries/research-notes/.
+# Curated library entries under architecture/, competitive-research/, provider-api-research/
+# remain tracked because they are not auto-generated.
+library/entries/research-notes/
+
+# Local DB and debug artifacts
+thomas_search.db
+thomas_chat_debug.png
+thomas.db
+thomas.db-shm
+thomas.db-wal
+thomas.asset_studio.db
+thomas.asset_studio.db-shm
+thomas.asset_studio.db-wal
+thomas.marketplace.asset_studio.db
+thomas.marketplace.asset_studio.db-shm
+thomas.marketplace.asset_studio.db-wal
+*.sqlite3
+
+# Secrets and credentials
+secrets.json
+agent_safety.local.toml
+.env
+.env.local
+.env.*.local
+
+# IDE & local development settings
+.claude/settings.local.json
+.vscode/settings.json
+.idea/
+
+# Misc local noise
+*.log
+Thumbs.db
+.DS_Store
+
+# Runtime safety (AI-driven edits)
+*.sqlite3
+*.sqlite3-journal
+*.db
+*.cache
+runtime/
+!thomas/server/web/js/runtime/
+
+# =====================================================================
+# TIER MODEL  (added 2026-06-02 public-production pass)
+# ---------------------------------------------------------------------
+# Three layers decide where a file is allowed to live:
+#   LOCAL  : this machine only — NEVER committed to dev or public.
+#            secrets, tokens, personal paths, per-install overrides.
+#   DEV    : committed to Calvin-Corbett/thomas-dev (private dev repo).
+#            in-progress / dev-stage work lives here.
+#   PUBLIC : reaches Calvin-Corbett/thomas (public). The dev->public
+#            filter is scripts/forge/publish/preflight.py + the leak
+#            guard, NOT this file.
+#
+# Convention: any file named *.local.* is LOCAL-tier and never tracked.
+# Keep sensitive/per-install DATA in a .local.* file and load it from
+# generic committed CODE (see public_repo_leak_guard.py for the pattern).
+# =====================================================================
+*.local.*
+!*.local.example
+
+# Sensitive leak blocklist (competitor names) — LOCAL only. The leak
+# guard loads it at runtime; it must never reach dev or public.
+scripts/forge/gates/leak_blocklist.local.json
+
+# Internal-only artifacts removed from the public tree (never re-track):
+Thomas-Pitch-Deck.pptx
+docs/deletions/
+plans/thomas/swarm/
+thomas/demo/snake_h2h_benchmark.py
+tests/test_snake_h2h_benchmark.py
+
+# Visual-regression proof bundle: tracked, gate-required evidence
+# (site_visual_proof.py requires these exact paths in the committed
+# changed-set whenever a UI file changes - they are not disposable output;
+# four ignore rules removed by the owner-signed 2026-09-01 tap).
+.runtime/
+.state/
+secrets.env
+reports/
+
+server_startup_log.txt
+indices/ACTIVE.json
+indices/ACTIVE.lock
+thomas/server/plugins_registry/.plugin-signing-secret
+# Pre-public cleanup tripwires (2026-05-21).
+# Internal-only agent docs live here; public_repo_leak_guard blocks them.
+docs/internal/
+.tmp_*
+thomas_vs_*.json
+thomas_vs_*.docx
+
+# Per-user library captures — never tracked (chat/test-derived data, was leaking PII)
+/library/catalog.json
+/library/INDEX.md
+/library/entries/*/
+
+# Worktree ledger snapshot (machine-specific paths; regenerated live by worktree_ledger.py)
+.thomas/WORKTREES.md
+.thomas/worktrees.json
+
+# Local runtime databases (events/meta/notifications). Written by a running
+# Thomas and regenerated on demand -- not source. Left untracked they show up as
+# working-tree dirt every session, which makes "is this repo clean?" ambiguous.
+data/
+
+# Graveyard lock/temp files (scripts/forge/graveyard.py write path) --
+# a crash between _atomic_write os.replace and cleanup can leave one behind (M12).
+docs/ops/graveyard.json.lock
+docs/ops/.graveyard.json.*.tmp
+
+# Generated search index (rebuilt from the repo; ~69 MB of SQLite + manifest).
+# Not ignored until 2026-09-03, when building one for the first time left it
+# staged-able: any `git add -A` would have committed it.
+thomas_rag_index/
+
+# Run artifacts that kept reappearing as untracked clutter (cleanup 2026-09-07)
+demo/agentic-runs/
+indices/**/*.db-shm
+indices/**/*.db-wal
+thomas_test_report_*.md
+_*.log
+
+# Local package build output
+build/
+dist/

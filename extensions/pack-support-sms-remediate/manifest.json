@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-sms-remediate",
+  "name": "Support Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.sms",
+    "support.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via sms with remediate mode policies."
+}

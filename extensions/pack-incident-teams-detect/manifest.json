@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-teams-detect",
+  "name": "Incident Teams Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "teams",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.teams",
+    "incident.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via teams with detect mode policies."
+}

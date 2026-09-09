@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-sms-detect",
+  "name": "Payments Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.sms",
+    "payments.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via sms with detect mode policies."
+}

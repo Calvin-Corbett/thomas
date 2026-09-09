@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-jira-triage",
+  "name": "Incident Jira Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "jira",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.jira",
+    "incident.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via jira with triage mode policies."
+}

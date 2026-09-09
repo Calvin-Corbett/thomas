@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-sms-escalate",
+  "name": "Analytics Sms Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "sms",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.sms",
+    "analytics.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via sms with escalate mode policies."
+}

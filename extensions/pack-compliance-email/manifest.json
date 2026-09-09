@@ -1,0 +1,14 @@
+{
+  "id": "pack-compliance-email",
+  "name": "Compliance Email Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "email",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.email",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via email."
+}

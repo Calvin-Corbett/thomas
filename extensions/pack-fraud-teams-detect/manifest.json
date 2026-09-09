@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-teams-detect",
+  "name": "Fraud Teams Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "teams",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.teams",
+    "fraud.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via teams with detect mode policies."
+}

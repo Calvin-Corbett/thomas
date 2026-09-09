@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-pagerduty-audit",
+  "name": "Support Pagerduty Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "pagerduty",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.pagerduty",
+    "support.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via pagerduty with audit mode policies."
+}

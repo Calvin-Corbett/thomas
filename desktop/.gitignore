@@ -1,0 +1,10 @@
+node_modules/
+
+# Spike + run artifacts: evidence, not source. Regenerate with `npm run spike`.
+bridge.json
+spike-results.json
+spike_run.log
+boot.log
+wellsfargo.png
+out*.txt
+err*.txt

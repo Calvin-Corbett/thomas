@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-email-detect",
+  "name": "Payments Email Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "email",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.email",
+    "payments.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via email with detect mode policies."
+}

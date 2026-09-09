@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-teams-audit",
+  "name": "Compliance Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.teams",
+    "compliance.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via teams with audit mode policies."
+}

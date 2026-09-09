@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-discord-triage",
+  "name": "Payments Discord Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "discord",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.discord",
+    "payments.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via discord with triage mode policies."
+}

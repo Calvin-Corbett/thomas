@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-slack-escalate",
+  "name": "Incident Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.slack",
+    "incident.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via slack with escalate mode policies."
+}

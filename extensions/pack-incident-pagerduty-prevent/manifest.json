@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-pagerduty-prevent",
+  "name": "Incident Pagerduty Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "pagerduty",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.pagerduty",
+    "incident.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via pagerduty with prevent mode policies."
+}

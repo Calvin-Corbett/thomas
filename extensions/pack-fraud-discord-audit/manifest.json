@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-discord-audit",
+  "name": "Fraud Discord Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "discord",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.discord",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via discord with audit mode policies."
+}

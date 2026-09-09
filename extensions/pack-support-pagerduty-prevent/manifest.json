@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-pagerduty-prevent",
+  "name": "Support Pagerduty Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "pagerduty",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.pagerduty",
+    "support.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via pagerduty with prevent mode policies."
+}

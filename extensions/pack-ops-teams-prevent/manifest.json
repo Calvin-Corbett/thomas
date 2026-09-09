@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-teams-prevent",
+  "name": "Ops Teams Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "teams",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.teams",
+    "ops.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via teams with prevent mode policies."
+}

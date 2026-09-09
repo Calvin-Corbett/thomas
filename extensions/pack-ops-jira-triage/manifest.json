@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-jira-triage",
+  "name": "Ops Jira Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "jira",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.jira",
+    "ops.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via jira with triage mode policies."
+}

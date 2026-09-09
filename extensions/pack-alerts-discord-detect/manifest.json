@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-discord-detect",
+  "name": "Alerts Discord Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "discord",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.discord",
+    "alerts.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via discord with detect mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-teams-escalate",
+  "name": "Compliance Teams Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "teams",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.teams",
+    "compliance.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via teams with escalate mode policies."
+}

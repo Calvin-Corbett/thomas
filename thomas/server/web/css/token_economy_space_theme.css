@@ -1,0 +1,18 @@
+/*
+ * Token Economy theme bridge.
+ *
+ * Thomas Chat owns every world token. This file is deliberately scoped to the
+ * mounted Token Economy root and never styles body, Chat, Settings, or another
+ * workspace.
+ */
+[data-te-container] .te-v3 {
+    background: transparent;
+}
+
+[data-te-container] .te-v3.is-active {
+    color: var(--c-text);
+}
+
+[data-te-container] .te-v3 [data-ui-policy~="protected"] {
+    --te-protected-control: 1;
+}

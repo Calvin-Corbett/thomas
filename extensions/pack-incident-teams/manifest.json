@@ -1,0 +1,14 @@
+{
+  "id": "pack-incident-teams",
+  "name": "Incident Teams Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "teams",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.teams",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via teams."
+}

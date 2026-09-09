@@ -1,0 +1,14 @@
+{
+  "id": "pack-compliance-teams",
+  "name": "Compliance Teams Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "teams",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.teams",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via teams."
+}

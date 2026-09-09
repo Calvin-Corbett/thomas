@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-sms-triage",
+  "name": "Incident Sms Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "sms",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.sms",
+    "incident.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via sms with triage mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-slack-escalate",
+  "name": "Support Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.slack",
+    "support.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via slack with escalate mode policies."
+}

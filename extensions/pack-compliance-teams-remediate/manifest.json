@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-teams-remediate",
+  "name": "Compliance Teams Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "teams",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.teams",
+    "compliance.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via teams with remediate mode policies."
+}

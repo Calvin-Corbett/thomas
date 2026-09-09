@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-sms-detect",
+  "name": "Ops Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.sms",
+    "ops.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via sms with detect mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-pagerduty-audit",
+  "name": "Analytics Pagerduty Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "pagerduty",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.pagerduty",
+    "analytics.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via pagerduty with audit mode policies."
+}

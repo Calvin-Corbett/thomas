@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-email-escalate",
+  "name": "Payments Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.email",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via email with escalate mode policies."
+}

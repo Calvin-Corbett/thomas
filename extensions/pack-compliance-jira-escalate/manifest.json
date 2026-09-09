@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-jira-escalate",
+  "name": "Compliance Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.jira",
+    "compliance.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via jira with escalate mode policies."
+}

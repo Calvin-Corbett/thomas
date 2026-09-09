@@ -1,0 +1,21 @@
+# Lane: multi-agent
+
+- Use this lane for delegation, swarms, explicit tracked work, or any task with shared ownership.
+- Full workboard protocol is required.
+- Read:
+  - `docs/ai/AGENT_ROUTER.md`
+  - `AGENTS.md`
+  - `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`
+  - `plans/thomas/WORKBOARD.md`
+- Required actions:
+  - claim scope before implementation
+  - use workboard message traffic for blockers and coordination
+  - mark READY when finished
+  - log ACK before bundling another agent's scope
+- Required proof:
+  - claim state
+  - READY state
+  - ACK or handoff note
+- Escalate to a heavier lane when:
+  - UI-proof or release-critical gates also apply
+  - cross-lane conflicts require orchestrator intervention

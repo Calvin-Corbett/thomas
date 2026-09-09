@@ -1,0 +1,14 @@
+{
+  "id": "pack-security-teams",
+  "name": "Security Teams Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "teams",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.teams",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via teams."
+}

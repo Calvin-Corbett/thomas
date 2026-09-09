@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-sms-escalate",
+  "name": "Fraud Sms Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "sms",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.sms",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via sms with escalate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-discord-escalate",
+  "name": "Incident Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.discord",
+    "incident.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via discord with escalate mode policies."
+}

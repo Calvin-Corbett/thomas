@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-slack-escalate",
+  "name": "Fraud Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.slack",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via slack with escalate mode policies."
+}

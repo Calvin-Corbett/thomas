@@ -1,0 +1,569 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0468",
+  "title": "Browser workflow case 0468 (campaign_launch)",
+  "category": "campaign_launch",
+  "risk_level": "critical",
+  "objective": "Validate campaign_launch journey under roaming_handoff network conditions.",
+  "dimensions": {
+    "channel": "embedded_webview",
+    "region": "me-central",
+    "network_profile": "roaming_handoff",
+    "build_variant": "canary",
+    "locale": "fr-FR"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:campaign_launch",
+    "region:me-central",
+    "channel:embedded_webview",
+    "network:roaming_handoff"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "collect_network",
+      "target": "[data-test='campaign_launch-01']",
+      "input": "case-0468-value-01",
+      "expect": "campaign_launch-expected-01",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "assert_text",
+      "target": "[data-test='campaign_launch-02']",
+      "input": "case-0468-value-02",
+      "expect": "campaign_launch-expected-02",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "assert_visibility",
+      "target": "[data-test='campaign_launch-03']",
+      "input": "case-0468-value-03",
+      "expect": "campaign_launch-expected-03",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "download_file",
+      "target": "[data-test='campaign_launch-04']",
+      "input": "case-0468-value-04",
+      "expect": "campaign_launch-expected-04",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "upload_file",
+      "target": "[data-test='campaign_launch-05']",
+      "input": "case-0468-value-05",
+      "expect": "campaign_launch-expected-05",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "switch_tab",
+      "target": "[data-test='campaign_launch-06']",
+      "input": "case-0468-value-06",
+      "expect": "campaign_launch-expected-06",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "close_tab",
+      "target": "[data-test='campaign_launch-07']",
+      "input": "case-0468-value-07",
+      "expect": "campaign_launch-expected-07",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "start_trace",
+      "target": "[data-test='campaign_launch-08']",
+      "input": "case-0468-value-08",
+      "expect": "campaign_launch-expected-08",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "stop_trace",
+      "target": "[data-test='campaign_launch-09']",
+      "input": "case-0468-value-09",
+      "expect": "campaign_launch-expected-09",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "export_pdf",
+      "target": "[data-test='campaign_launch-10']",
+      "input": "case-0468-value-10",
+      "expect": "campaign_launch-expected-10",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "check_a11y",
+      "target": "[data-test='campaign_launch-11']",
+      "input": "case-0468-value-11",
+      "expect": "campaign_launch-expected-11",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "open_url",
+      "target": "[data-test='campaign_launch-12']",
+      "input": "case-0468-value-12",
+      "expect": "campaign_launch-expected-12",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "wait_for_selector",
+      "target": "[data-test='campaign_launch-13']",
+      "input": "case-0468-value-13",
+      "expect": "campaign_launch-expected-13",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "click",
+      "target": "[data-test='campaign_launch-14']",
+      "input": "case-0468-value-14",
+      "expect": "campaign_launch-expected-14",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "type",
+      "target": "[data-test='campaign_launch-15']",
+      "input": "case-0468-value-15",
+      "expect": "campaign_launch-expected-15",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "press",
+      "target": "[data-test='campaign_launch-16']",
+      "input": "case-0468-value-16",
+      "expect": "campaign_launch-expected-16",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "scroll_into_view",
+      "target": "[data-test='campaign_launch-17']",
+      "input": "case-0468-value-17",
+      "expect": "campaign_launch-expected-17",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "capture_screenshot",
+      "target": "[data-test='campaign_launch-18']",
+      "input": "case-0468-value-18",
+      "expect": "campaign_launch-expected-18",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "snapshot_dom",
+      "target": "[data-test='campaign_launch-19']",
+      "input": "case-0468-value-19",
+      "expect": "campaign_launch-expected-19",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "collect_console",
+      "target": "[data-test='campaign_launch-20']",
+      "input": "case-0468-value-20",
+      "expect": "campaign_launch-expected-20",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "collect_network",
+      "target": "[data-test='campaign_launch-21']",
+      "input": "case-0468-value-21",
+      "expect": "campaign_launch-expected-21",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "assert_text",
+      "target": "[data-test='campaign_launch-22']",
+      "input": "case-0468-value-22",
+      "expect": "campaign_launch-expected-22",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "assert_visibility",
+      "target": "[data-test='campaign_launch-23']",
+      "input": "case-0468-value-23",
+      "expect": "campaign_launch-expected-23",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "download_file",
+      "target": "[data-test='campaign_launch-24']",
+      "input": "case-0468-value-24",
+      "expect": "campaign_launch-expected-24",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "upload_file",
+      "target": "[data-test='campaign_launch-25']",
+      "input": "case-0468-value-25",
+      "expect": "campaign_launch-expected-25",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "switch_tab",
+      "target": "[data-test='campaign_launch-26']",
+      "input": "case-0468-value-26",
+      "expect": "campaign_launch-expected-26",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 27,
+      "action": "close_tab",
+      "target": "[data-test='campaign_launch-27']",
+      "input": "case-0468-value-27",
+      "expect": "campaign_launch-expected-27",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "visibility",
+      "query": "assert-campaign_launch-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "network",
+      "query": "assert-campaign_launch-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "console",
+      "query": "assert-campaign_launch-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "text",
+      "query": "assert-campaign_launch-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "visibility",
+      "query": "assert-campaign_launch-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "network",
+      "query": "assert-campaign_launch-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "console",
+      "query": "assert-campaign_launch-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "text",
+      "query": "assert-campaign_launch-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "visibility",
+      "query": "assert-campaign_launch-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "network",
+      "query": "assert-campaign_launch-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "console",
+      "query": "assert-campaign_launch-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "text",
+      "query": "assert-campaign_launch-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 2,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0468/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0468/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0468/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0468/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "campaign_launch",
+    "embedded_webview",
+    "me-central",
+    "roaming_handoff",
+    "severity:critical"
+  ]
+}

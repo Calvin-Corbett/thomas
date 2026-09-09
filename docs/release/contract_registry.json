@@ -1,0 +1,44 @@
+{
+  "policy": {
+    "min_deprecation_notice_days": 30,
+    "migration_guarantee": "Backward-compatible migrations and rollback proof are required before release."
+  },
+  "contracts": [
+    {
+      "id": "api.http.public",
+      "surface": "http_api",
+      "version": "1.0.0",
+      "status": "active",
+      "owner": "core-platform",
+      "description": "Public /api endpoints consumed by web UI and automation clients."
+    },
+    {
+      "id": "api.gateway.rpc",
+      "surface": "gateway_rpc",
+      "version": "1.0.0",
+      "status": "active",
+      "owner": "core-platform",
+      "description": "Gateway run/health/call command contracts for platform control plane."
+    },
+    {
+      "id": "sdk.extensions",
+      "surface": "extension_sdk",
+      "version": "1.0.0",
+      "status": "active",
+      "owner": "ecosystem",
+      "description": "Extension manifest + runtime hooks contract for certified packs."
+    }
+  ],
+  "migration_guarantees": [
+    {
+      "id": "state.sqlite",
+      "guarantee": "State schema upgrades must be migration-safe with rollback rehearsal.",
+      "verified_by": "scripts/check_release_update_gate.py"
+    },
+    {
+      "id": "api.deprecation_notice",
+      "guarantee": "Deprecations require explicit notice windows before sunset.",
+      "verified_by": "scripts/release_contract_check.py --strict"
+    }
+  ]
+}

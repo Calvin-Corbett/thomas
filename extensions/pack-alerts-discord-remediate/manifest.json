@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-discord-remediate",
+  "name": "Alerts Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.discord",
+    "alerts.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via discord with remediate mode policies."
+}

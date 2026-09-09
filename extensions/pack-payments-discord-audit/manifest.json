@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-discord-audit",
+  "name": "Payments Discord Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "discord",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.discord",
+    "payments.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via discord with audit mode policies."
+}

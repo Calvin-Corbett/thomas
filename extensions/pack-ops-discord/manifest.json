@@ -1,0 +1,14 @@
+{
+  "id": "pack-ops-discord",
+  "name": "Ops Discord Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "discord",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.discord",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via discord."
+}

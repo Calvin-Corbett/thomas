@@ -1,0 +1,527 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0965",
+  "title": "Browser workflow case 0965 (admin_audit)",
+  "category": "admin_audit",
+  "risk_level": "low",
+  "objective": "Validate admin_audit journey under offline_recover network conditions.",
+  "dimensions": {
+    "channel": "kiosk_web",
+    "region": "sa-east",
+    "network_profile": "offline_recover",
+    "build_variant": "candidate",
+    "locale": "en-US"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:admin_audit",
+    "region:sa-east",
+    "channel:kiosk_web",
+    "network:offline_recover"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "capture_screenshot",
+      "target": "[data-test='admin_audit-01']",
+      "input": "case-0965-value-01",
+      "expect": "admin_audit-expected-01",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "snapshot_dom",
+      "target": "[data-test='admin_audit-02']",
+      "input": "case-0965-value-02",
+      "expect": "admin_audit-expected-02",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "collect_console",
+      "target": "[data-test='admin_audit-03']",
+      "input": "case-0965-value-03",
+      "expect": "admin_audit-expected-03",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "collect_network",
+      "target": "[data-test='admin_audit-04']",
+      "input": "case-0965-value-04",
+      "expect": "admin_audit-expected-04",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "assert_text",
+      "target": "[data-test='admin_audit-05']",
+      "input": "case-0965-value-05",
+      "expect": "admin_audit-expected-05",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "assert_visibility",
+      "target": "[data-test='admin_audit-06']",
+      "input": "case-0965-value-06",
+      "expect": "admin_audit-expected-06",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "download_file",
+      "target": "[data-test='admin_audit-07']",
+      "input": "case-0965-value-07",
+      "expect": "admin_audit-expected-07",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "upload_file",
+      "target": "[data-test='admin_audit-08']",
+      "input": "case-0965-value-08",
+      "expect": "admin_audit-expected-08",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "switch_tab",
+      "target": "[data-test='admin_audit-09']",
+      "input": "case-0965-value-09",
+      "expect": "admin_audit-expected-09",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "close_tab",
+      "target": "[data-test='admin_audit-10']",
+      "input": "case-0965-value-10",
+      "expect": "admin_audit-expected-10",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "start_trace",
+      "target": "[data-test='admin_audit-11']",
+      "input": "case-0965-value-11",
+      "expect": "admin_audit-expected-11",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "stop_trace",
+      "target": "[data-test='admin_audit-12']",
+      "input": "case-0965-value-12",
+      "expect": "admin_audit-expected-12",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "export_pdf",
+      "target": "[data-test='admin_audit-13']",
+      "input": "case-0965-value-13",
+      "expect": "admin_audit-expected-13",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "check_a11y",
+      "target": "[data-test='admin_audit-14']",
+      "input": "case-0965-value-14",
+      "expect": "admin_audit-expected-14",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "open_url",
+      "target": "[data-test='admin_audit-15']",
+      "input": "case-0965-value-15",
+      "expect": "admin_audit-expected-15",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "wait_for_selector",
+      "target": "[data-test='admin_audit-16']",
+      "input": "case-0965-value-16",
+      "expect": "admin_audit-expected-16",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "click",
+      "target": "[data-test='admin_audit-17']",
+      "input": "case-0965-value-17",
+      "expect": "admin_audit-expected-17",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "type",
+      "target": "[data-test='admin_audit-18']",
+      "input": "case-0965-value-18",
+      "expect": "admin_audit-expected-18",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "press",
+      "target": "[data-test='admin_audit-19']",
+      "input": "case-0965-value-19",
+      "expect": "admin_audit-expected-19",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "scroll_into_view",
+      "target": "[data-test='admin_audit-20']",
+      "input": "case-0965-value-20",
+      "expect": "admin_audit-expected-20",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "capture_screenshot",
+      "target": "[data-test='admin_audit-21']",
+      "input": "case-0965-value-21",
+      "expect": "admin_audit-expected-21",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "snapshot_dom",
+      "target": "[data-test='admin_audit-22']",
+      "input": "case-0965-value-22",
+      "expect": "admin_audit-expected-22",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "collect_console",
+      "target": "[data-test='admin_audit-23']",
+      "input": "case-0965-value-23",
+      "expect": "admin_audit-expected-23",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "collect_network",
+      "target": "[data-test='admin_audit-24']",
+      "input": "case-0965-value-24",
+      "expect": "admin_audit-expected-24",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "network",
+      "query": "assert-admin_audit-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "console",
+      "query": "assert-admin_audit-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "text",
+      "query": "assert-admin_audit-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "visibility",
+      "query": "assert-admin_audit-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "network",
+      "query": "assert-admin_audit-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "console",
+      "query": "assert-admin_audit-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "text",
+      "query": "assert-admin_audit-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "visibility",
+      "query": "assert-admin_audit-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "network",
+      "query": "assert-admin_audit-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "console",
+      "query": "assert-admin_audit-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "text",
+      "query": "assert-admin_audit-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "visibility",
+      "query": "assert-admin_audit-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 3,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 21000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": true,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": true,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0965/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0965/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0965/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0965/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "admin_audit",
+    "kiosk_web",
+    "sa-east",
+    "offline_recover",
+    "severity:low"
+  ]
+}

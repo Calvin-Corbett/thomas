@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-discord-remediate",
+  "name": "Security Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.discord",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via discord with remediate mode policies."
+}

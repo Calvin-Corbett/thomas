@@ -1,0 +1,191 @@
+:root {
+  --c-positive: #47d7ac;
+  --c-warning: #ffbf47;
+  --c-danger: #ff6b6b;
+  --font-head: Manrope, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-label: Manrope, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-card: var(--r-card, 14px);
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body {
+  overflow-x: hidden;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans, Manrope, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+  transition: background .22s ease, color .22s ease;
+}
+button, input, select, textarea { font: inherit; }
+button, a, select, input, textarea { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--c-accent); outline-offset: 2px;
+}
+[hidden] { display: none !important; }
+
+.mission-world { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.mission-world::before {
+  content: ""; position: absolute; inset: 0; opacity: .48;
+  background-image: linear-gradient(var(--c-border) 1px, transparent 1px), linear-gradient(90deg, var(--c-border) 1px, transparent 1px);
+  background-size: 52px 52px; mask-image: linear-gradient(to bottom, black, transparent 72%);
+}
+.mission-orb { position: absolute; border-radius: 50%; filter: blur(2px); opacity: .6; }
+.mission-orb-a { width: 420px; height: 420px; right: -140px; top: -160px; background: radial-gradient(circle, var(--c-accent-soft), transparent 68%); }
+.mission-orb-b { width: 360px; height: 360px; left: -150px; bottom: -180px; background: radial-gradient(circle, var(--c-accent-soft), transparent 70%); }
+.mission-grid-glow { position: absolute; inset: 0; background: radial-gradient(circle at 50% 12%, var(--c-accent-soft), transparent 42%); opacity: .5; }
+:root[data-theme="light"] .mission-world::before, :root[data-theme="sandstone"] .mission-world::before { opacity: .24; }
+
+.mission-app { position: relative; z-index: 1; min-height: 100vh; }
+.mission-chrome {
+  position: sticky; top: 0; z-index: 20; min-height: 64px; display: flex; align-items: center;
+  justify-content: space-between; gap: 18px; padding: 10px clamp(16px, 3vw, 34px);
+  border-bottom: 1px solid var(--c-border); background: var(--c-sidebar);
+  backdrop-filter: blur(22px); box-shadow: 0 8px 30px rgba(0, 0, 0, .08);
+}
+.mission-brand { display: flex; align-items: center; gap: 11px; color: var(--c-text); text-decoration: none; }
+.mission-brand > span:last-child { display: grid; gap: 1px; }
+.mission-brand strong { font-size: 17px; letter-spacing: -.015em; }
+.mission-brand small { color: var(--c-muted); font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.mission-chrome-actions, .mission-hero-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.theme-control { display: flex; align-items: center; gap: 7px; color: var(--c-muted); font-size: 12px; font-weight: 700; }
+
+.mission-content { width: min(1480px, 100%); margin: 0 auto; padding: clamp(20px, 3vw, 40px); }
+.mission-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 18px; }
+.mission-hero-copy { max-width: 760px; }
+.eyebrow {
+  display: block; margin-bottom: 6px; color: var(--c-accent); font-family: var(--font-label);
+  font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+}
+h1, h2 { margin: 0; font-family: var(--font-head); }
+h1 { font-size: clamp(30px, 4.5vw, 54px); line-height: 1.02; letter-spacing: -.04em; }
+h2 { font-size: 17px; letter-spacing: -.015em; }
+.mission-hero p { max-width: 660px; margin: 10px 0 0; color: var(--c-dim); font-size: 14px; line-height: 1.55; }
+
+.quiet-button, .primary-button, .icon-button, .segmented button, .action-button {
+  border: 1px solid var(--c-border-2); border-radius: 10px; background: var(--c-surface);
+  color: var(--c-text); cursor: pointer; font-weight: 700; transition: transform .14s ease, background .14s ease, border-color .14s ease;
+}
+.quiet-button, .primary-button { min-height: 38px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font-size: 12px; }
+.primary-button { border-color: transparent; background: var(--c-accent); color: var(--c-accent-ink); }
+.quiet-button:hover, .icon-button:hover, .action-button:hover { background: var(--c-hover); border-color: var(--c-accent-line); }
+.primary-button:hover { transform: translateY(-1px); box-shadow: 0 8px 24px var(--c-accent-soft); }
+.quiet-button:disabled, .primary-button:disabled, .action-button:disabled { cursor: wait; opacity: .55; transform: none; }
+.icon-button { width: 34px; height: 34px; font-size: 16px; }
+select, input, textarea {
+  width: 100%; border: 1px solid var(--c-border-2); border-radius: 10px; background: var(--c-surface);
+  color: var(--c-text); padding: 10px 11px; outline: none;
+}
+select { min-width: 130px; }
+input:focus, select:focus, textarea:focus { border-color: var(--c-accent-line); box-shadow: 0 0 0 3px var(--c-accent-soft); }
+textarea { resize: vertical; min-height: 86px; }
+
+.connection-pill, .status-pill, .panel-count, .tag {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--c-border);
+  border-radius: 999px; padding: 5px 9px; color: var(--c-dim); background: var(--c-surface); font-size: 10px; font-weight: 800;
+}
+.connection-pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+.connection-pill.is-live, .status-pill.is-success { color: var(--c-positive); }
+.connection-pill.is-polling, .status-pill.is-warning { color: var(--c-warning); }
+.connection-pill.is-offline, .status-pill.is-danger { color: var(--c-danger); }
+.connection-pill.is-connecting { color: var(--c-accent); }
+
+.mission-pulse, .mission-metrics { display: grid; gap: 10px; margin-bottom: 10px; }
+.mission-pulse { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mission-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pulse-card, .metric-card, .panel, .create-panel {
+  border: 1px solid var(--c-border); border-radius: var(--radius-card); background: var(--c-surface);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025); backdrop-filter: blur(14px);
+}
+.pulse-card, .metric-card { min-width: 0; padding: 14px; }
+.pulse-card span, .metric-card span { display: block; color: var(--c-muted); font-family: var(--font-label); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.pulse-card strong { display: block; margin-top: 6px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pulse-card small, .metric-card small { display: block; margin-top: 4px; color: var(--c-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metric-card strong { display: block; margin-top: 7px; font-size: 25px; line-height: 1; font-variant-numeric: tabular-nums; }
+
+.create-panel { margin: 14px 0; padding: 18px; box-shadow: var(--c-shadow); }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.form-grid > label, .weekday-field { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.form-grid label > span, .weekday-field legend { color: var(--c-dim); font-size: 11px; font-weight: 750; }
+.form-grid em { color: var(--c-muted); font-style: normal; font-weight: 500; }
+.field-wide { grid-column: 1 / -1; }
+.weekday-field { border: 0; padding: 0; margin: 0; }
+#missionWeekdays { display: flex; flex-wrap: wrap; gap: 7px; }
+#missionWeekdays label, .approval-check { display: flex; align-items: center; gap: 7px; color: var(--c-dim); font-size: 11px; }
+#missionWeekdays label { padding: 7px 9px; border: 1px solid var(--c-border); border-radius: 9px; background: var(--c-surface); }
+#missionWeekdays input, .approval-check input { width: auto; margin: 0; box-shadow: none; }
+.approval-check { margin-top: 13px; }
+.form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 14px; }
+.form-actions > span { margin-right: auto; color: var(--c-muted); font-size: 11px; }
+
+.mission-board { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 10px; margin-top: 10px; align-items: start; }
+.panel { min-width: 0; padding: 16px; }
+.live-panel, .jobs-panel { min-height: 300px; }
+.panel-count { flex: 0 0 auto; color: var(--c-muted); }
+.segmented { display: inline-flex; gap: 3px; margin: 13px 0 4px; padding: 3px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-surface-2); }
+.segmented button { min-height: 28px; padding: 0 10px; border: 0; background: transparent; color: var(--c-muted); font-size: 10px; }
+.segmented button.is-active { background: var(--c-surface); color: var(--c-text); box-shadow: 0 2px 8px rgba(0, 0, 0, .10); }
+.card-list, .timeline { display: grid; gap: 8px; margin-top: 13px; }
+.empty-state { padding: 28px 16px; border: 1px dashed var(--c-border-2); border-radius: 12px; color: var(--c-muted); text-align: center; font-size: 12px; }
+.work-card, .job-card, .approval-card, .signal-card {
+  min-width: 0; padding: 12px; border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-surface);
+}
+.work-card:hover, .job-card:hover { border-color: var(--c-accent-line); background: var(--c-hover); }
+.card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card-title { min-width: 0; }
+.card-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.card-title small, .card-summary, .card-meta { color: var(--c-muted); font-size: 10px; }
+.card-summary { margin: 7px 0 0; line-height: 1.45; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.action-button { min-height: 30px; padding: 0 10px; color: var(--c-dim); font-size: 10px; }
+.action-button.is-primary { border-color: var(--c-accent-line); color: var(--c-accent); }
+.action-button.is-danger { color: var(--c-danger); }
+.status-pill { flex: 0 0 auto; padding: 4px 8px; text-transform: capitalize; }
+.status-running, .status-active, .status-succeeded, .status-completed { color: var(--c-positive); }
+.status-queued, .status-pending { color: var(--c-accent); }
+.status-blocked, .status-awaiting_approval { color: var(--c-warning); }
+.status-failed, .status-dead, .status-cancelled { color: var(--c-danger); }
+.signal-card { position: relative; padding-left: 29px; }
+.signal-card::before { content: ""; position: absolute; left: 12px; top: 16px; width: 7px; height: 7px; border-radius: 50%; background: var(--c-accent); box-shadow: 0 0 9px var(--c-accent-soft); }
+.signal-card strong { display: block; font-size: 11px; }
+.signal-card p { margin: 4px 0 0; color: var(--c-muted); font-size: 10px; line-height: 1.4; }
+
+.toast-stack { position: fixed; right: 18px; bottom: 18px; z-index: 50; display: grid; gap: 8px; width: min(340px, calc(100vw - 36px)); }
+.toast { padding: 11px 13px; border: 1px solid var(--c-border-2); border-radius: 11px; background: var(--c-sidebar); color: var(--c-text); box-shadow: var(--c-shadow); font-size: 12px; animation: toast-in .18s ease-out; }
+.toast.is-error { border-color: color-mix(in srgb, var(--c-danger), transparent 55%); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+
+html.is-embedded .mission-chrome { display: none; }
+html.is-embedded .mission-content { max-width: none; padding: clamp(18px, 2.5vw, 32px); }
+/* Embedded Mission Control is a tool layer inside the literal Chat world.
+   It must never repaint or reinterpret the parent theme backdrop. */
+html.is-embedded,
+html.is-embedded body,
+html.is-embedded .mission-app { background: transparent !important; }
+/* No color-scheme override: the embedded doc must keep the active theme's
+   scheme (tokens.css / workspace_shell.js) or Chromium opacifies the canvas. */
+html.is-embedded .mission-world { display: none !important; }
+
+@media (max-width: 960px) {
+  .mission-board { grid-template-columns: 1fr; }
+  .mission-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .mission-chrome, .mission-hero { align-items: flex-start; }
+  .mission-chrome { position: relative; }
+  .mission-hero { flex-direction: column; }
+  .mission-hero-actions { width: 100%; }
+  .mission-hero-actions .primary-button { flex: 1; }
+  .theme-control span { display: none; }
+  .mission-pulse, .mission-metrics { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+  .field-wide { grid-column: auto; }
+  .mission-content { padding: 18px 13px 28px; }
+  .panel, .create-panel { padding: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

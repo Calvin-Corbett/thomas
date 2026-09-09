@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-discord-prevent",
+  "name": "Payments Discord Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "discord",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.discord",
+    "payments.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via discord with prevent mode policies."
+}

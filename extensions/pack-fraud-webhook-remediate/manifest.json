@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-webhook-remediate",
+  "name": "Fraud Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.webhook",
+    "fraud.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via webhook with remediate mode policies."
+}

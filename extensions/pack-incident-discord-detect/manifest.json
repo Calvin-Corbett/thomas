@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-discord-detect",
+  "name": "Incident Discord Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "discord",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.discord",
+    "incident.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via discord with detect mode policies."
+}

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Thomas Autonomy</title>
+  <link rel="stylesheet" href="/autonomy.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🧠</div>
+      <div>
+        <div class="title">Thomas Autonomy Engine</div>
+        <div class="subtitle">Jobs, approvals, scheduling, audit trails</div>
+      </div>
+    </div>
+    <div class="controls">
+      <label class="token">
+        API token
+        <input id="token" type="password" placeholder="optional" />
+      </label>
+      <button id="refresh">Refresh</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Create job</h2>
+
+      <div class="form">
+        <label>
+          Name
+          <input id="jobName" type="text" placeholder="optional" />
+        </label>
+
+        <label>
+          Session id (optional)
+          <input id="sessionId" type="text" placeholder="ties job output to a chat session" />
+        </label>
+
+        <label>
+          Kind
+          <select id="kind">
+            <option value="reminder">reminder</option>
+            <option value="daily_briefing">daily_briefing</option>
+            <option value="autonomy_task">autonomy_task</option>
+          </select>
+        </label>
+
+        <label id="reminderTextWrap">
+          Reminder text
+          <input id="reminderText" type="text" placeholder="pay insurance, call doctor, etc" />
+        </label>
+
+        <label id="briefPromptWrap" style="display:none">
+          Briefing prompt (optional)
+          <input id="briefPrompt" type="text" placeholder="what do you want in the briefing" />
+        </label>
+
+        <label id="goalWrap" style="display:none">
+          Autonomy goal
+          <textarea id="goal" rows="3" placeholder="Plan and schedule what I need to do for ..."></textarea>
+        </label>
+
+        <label id="contextWrap" style="display:none">
+          Context (optional)
+          <textarea id="context" rows="3" placeholder="Any constraints or details the planner should know"></textarea>
+        </label>
+
+        <label id="payloadWrap" style="display:none">
+          Payload JSON (optional)
+          <textarea id="payloadJson" rows="4" placeholder='{"key":"value"}'></textarea>
+        </label>
+
+        <label>
+          Risk class
+          <select id="riskClass">
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="critical">critical</option>
+          </select>
+        </label>
+
+        <label>
+          Run at (ISO, optional)
+          <input id="runAt" type="text" placeholder="2026-02-10T14:00:00-06:00" />
+        </label>
+
+        <label>
+          Schedule JSON (optional)
+          <textarea id="schedule" rows="4" placeholder='{"type":"daily","at":"08:00","tz":"America/Chicago"}'></textarea>
+        </label>
+
+        <label class="row" style="align-items:center">
+          <input id="requiresApproval" type="checkbox" />
+          Require human approval
+        </label>
+
+        <button id="create">Create</button>
+        <div class="hint">
+          Notes: medium+ jobs require approval by default policy. Open policy file to customize.
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Pending approvals</h2>
+      <div id="approvals" class="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Jobs</h2>
+      <div class="row">
+        <select id="statusFilter">
+          <option value="">all</option>
+          <option value="queued">queued</option>
+          <option value="running">running</option>
+          <option value="awaiting_approval">awaiting_approval</option>
+          <option value="succeeded">succeeded</option>
+          <option value="failed">failed</option>
+          <option value="dead">dead</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+        <button id="wakeup">Wake engine</button>
+      </div>
+      <div id="jobs" class="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Audit</h2>
+      <div class="row">
+        <input id="auditJobId" type="text" placeholder="job id (optional)" />
+        <button id="auditLoad">Load</button>
+      </div>
+      <pre id="audit" class="pre"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Messages</h2>
+      <div id="messages" class="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Briefings</h2>
+      <div id="briefings" class="list"></div>
+    </section>
+  </main>
+
+  <script src="/autonomy.js"></script>
+</body>
+</html>

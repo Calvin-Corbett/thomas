@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512" role="img" aria-label="Thomas">
+  <!-- The Thomas mark: two eyes in a block. Geometry matches the inline favicon
+       in chat.html and scripts/make_thomas_icon.py, so the taskbar, the browser
+       tab and the generated .ico all show the same face. Colours are the brand
+       accent and accent-ink from css/tokens.css. -->
+  <rect width="100" height="100" rx="30" fill="#8b8cff"/>
+  <rect x="34" y="40" width="13" height="20" rx="3.5" fill="#0a0b16"/>
+  <rect x="53" y="40" width="13" height="20" rx="3.5" fill="#0a0b16"/>
+</svg>

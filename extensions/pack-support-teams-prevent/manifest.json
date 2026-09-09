@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-teams-prevent",
+  "name": "Support Teams Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "teams",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.teams",
+    "support.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via teams with prevent mode policies."
+}

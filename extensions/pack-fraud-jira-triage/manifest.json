@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-jira-triage",
+  "name": "Fraud Jira Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "jira",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.jira",
+    "fraud.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via jira with triage mode policies."
+}

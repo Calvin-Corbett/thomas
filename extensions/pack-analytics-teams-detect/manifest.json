@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-teams-detect",
+  "name": "Analytics Teams Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "teams",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.teams",
+    "analytics.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via teams with detect mode policies."
+}

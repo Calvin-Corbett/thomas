@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-sms-prevent",
+  "name": "Ops Sms Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "sms",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.sms",
+    "ops.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via sms with prevent mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-webhook-remediate",
+  "name": "Payments Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.webhook",
+    "payments.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via webhook with remediate mode policies."
+}

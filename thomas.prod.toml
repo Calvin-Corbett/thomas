@@ -1,0 +1,67 @@
+# Thomas Production Configuration
+# Use with: THOMAS_ENV=production THOMAS_CONFIG=thomas.prod.toml python -m thomas.server
+#
+# Production mode enforces:
+#   - access_mode = local (cannot be overridden)
+#   - allow_shell = false (cannot be overridden)
+#   - quality gates always enabled
+#
+# API keys should be set via environment variables, never in this file.
+# See .env.example for available variables.
+
+default_model = "local"
+max_agent_iterations = 10
+
+[server]
+access_mode = "local"
+api_token = ""
+allow_unauthenticated_version = false
+rate_limit_enabled = true
+rate_limit_max_requests = 60
+rate_limit_window_seconds = 60
+
+[quality]
+enabled = true
+enforce = true
+max_auto_retries = 1
+require_verification_for_coding = true
+require_tests_for_code_edits = true
+require_monolith_guard_for_coding = true
+
+[models.local]
+provider = "openai_compat"
+base_url = "http://localhost:11434/v1"
+model = "qwen2.5-coder:7b"
+max_tokens = 4096
+context_window = 8192
+temperature = 0.1
+timeout_s = 120.0
+
+[embed]
+provider = "local"
+model = "all-MiniLM-L6-v2"
+device = "auto"
+load_on_demand = true
+batch_size = 64
+
+[memory]
+root = "./runtime"
+context_budget = 4000
+mode = "auto"
+
+[tools]
+sandbox_root = "."
+allow_shell = false
+shell_timeout = 30
+max_file_size = 5000000
+
+[journal]
+enabled = true
+dir = "./tasks"
+
+[failover]
+enabled = true
+chat_auto_failover = false
+profiles = []
+cooldown_seconds = 300
+fallback_on_auth_error = false

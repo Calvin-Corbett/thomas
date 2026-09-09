@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-slack-remediate",
+  "name": "Analytics Slack Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "slack",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.slack",
+    "analytics.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via slack with remediate mode policies."
+}

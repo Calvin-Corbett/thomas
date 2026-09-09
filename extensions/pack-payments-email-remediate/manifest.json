@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-email-remediate",
+  "name": "Payments Email Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "email",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.email",
+    "payments.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via email with remediate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-discord-remediate",
+  "name": "Analytics Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.discord",
+    "analytics.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via discord with remediate mode policies."
+}

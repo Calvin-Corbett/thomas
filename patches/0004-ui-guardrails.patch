@@ -1,0 +1,18 @@
+diff --git a/thomas/server/static/index.html b/thomas/server/static/index.html
+index 0000000..0000000 100644
+--- a/thomas/server/static/index.html
++++ b/thomas/server/static/index.html
+@@
++<!-- --- GUARDRAILS BEGIN --- -->
++<link rel="stylesheet" href="/static/guardrails.css">
++<script src="/static/guardrails.js"></script>
++<!-- --- GUARDRAILS END --- -->
+diff --git a/thomas/server/static/main.js b/thomas/server/static/main.js
+index 0000000..0000000 100644
+--- a/thomas/server/static/main.js
++++ b/thomas/server/static/main.js
+@@
++// --- GUARDRAILS BEGIN ---
++// In your event handler that receives {type, data}:
++// if (window.guardrailsHandleEvent) window.guardrailsHandleEvent(evt.type, evt.data);
++// --- GUARDRAILS END ---

@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-email-detect",
+  "name": "Analytics Email Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "email",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.email",
+    "analytics.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via email with detect mode policies."
+}

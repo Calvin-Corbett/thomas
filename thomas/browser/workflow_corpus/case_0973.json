@@ -1,0 +1,569 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0973",
+  "title": "Browser workflow case 0973 (fraud_review)",
+  "category": "fraud_review",
+  "risk_level": "low",
+  "objective": "Validate fraud_review journey under stable network conditions.",
+  "dimensions": {
+    "channel": "web",
+    "region": "us-east",
+    "network_profile": "stable",
+    "build_variant": "stable",
+    "locale": "en-US"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:fraud_review",
+    "region:us-east",
+    "channel:web",
+    "network:stable"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "switch_tab",
+      "target": "[data-test='fraud_review-01']",
+      "input": "case-0973-value-01",
+      "expect": "fraud_review-expected-01",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "close_tab",
+      "target": "[data-test='fraud_review-02']",
+      "input": "case-0973-value-02",
+      "expect": "fraud_review-expected-02",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "start_trace",
+      "target": "[data-test='fraud_review-03']",
+      "input": "case-0973-value-03",
+      "expect": "fraud_review-expected-03",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "stop_trace",
+      "target": "[data-test='fraud_review-04']",
+      "input": "case-0973-value-04",
+      "expect": "fraud_review-expected-04",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "export_pdf",
+      "target": "[data-test='fraud_review-05']",
+      "input": "case-0973-value-05",
+      "expect": "fraud_review-expected-05",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "check_a11y",
+      "target": "[data-test='fraud_review-06']",
+      "input": "case-0973-value-06",
+      "expect": "fraud_review-expected-06",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "open_url",
+      "target": "[data-test='fraud_review-07']",
+      "input": "case-0973-value-07",
+      "expect": "fraud_review-expected-07",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "wait_for_selector",
+      "target": "[data-test='fraud_review-08']",
+      "input": "case-0973-value-08",
+      "expect": "fraud_review-expected-08",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "click",
+      "target": "[data-test='fraud_review-09']",
+      "input": "case-0973-value-09",
+      "expect": "fraud_review-expected-09",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "type",
+      "target": "[data-test='fraud_review-10']",
+      "input": "case-0973-value-10",
+      "expect": "fraud_review-expected-10",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "press",
+      "target": "[data-test='fraud_review-11']",
+      "input": "case-0973-value-11",
+      "expect": "fraud_review-expected-11",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "scroll_into_view",
+      "target": "[data-test='fraud_review-12']",
+      "input": "case-0973-value-12",
+      "expect": "fraud_review-expected-12",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "capture_screenshot",
+      "target": "[data-test='fraud_review-13']",
+      "input": "case-0973-value-13",
+      "expect": "fraud_review-expected-13",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "snapshot_dom",
+      "target": "[data-test='fraud_review-14']",
+      "input": "case-0973-value-14",
+      "expect": "fraud_review-expected-14",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "collect_console",
+      "target": "[data-test='fraud_review-15']",
+      "input": "case-0973-value-15",
+      "expect": "fraud_review-expected-15",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "collect_network",
+      "target": "[data-test='fraud_review-16']",
+      "input": "case-0973-value-16",
+      "expect": "fraud_review-expected-16",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "assert_text",
+      "target": "[data-test='fraud_review-17']",
+      "input": "case-0973-value-17",
+      "expect": "fraud_review-expected-17",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "assert_visibility",
+      "target": "[data-test='fraud_review-18']",
+      "input": "case-0973-value-18",
+      "expect": "fraud_review-expected-18",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "download_file",
+      "target": "[data-test='fraud_review-19']",
+      "input": "case-0973-value-19",
+      "expect": "fraud_review-expected-19",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "upload_file",
+      "target": "[data-test='fraud_review-20']",
+      "input": "case-0973-value-20",
+      "expect": "fraud_review-expected-20",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "switch_tab",
+      "target": "[data-test='fraud_review-21']",
+      "input": "case-0973-value-21",
+      "expect": "fraud_review-expected-21",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "close_tab",
+      "target": "[data-test='fraud_review-22']",
+      "input": "case-0973-value-22",
+      "expect": "fraud_review-expected-22",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "start_trace",
+      "target": "[data-test='fraud_review-23']",
+      "input": "case-0973-value-23",
+      "expect": "fraud_review-expected-23",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "stop_trace",
+      "target": "[data-test='fraud_review-24']",
+      "input": "case-0973-value-24",
+      "expect": "fraud_review-expected-24",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "export_pdf",
+      "target": "[data-test='fraud_review-25']",
+      "input": "case-0973-value-25",
+      "expect": "fraud_review-expected-25",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "check_a11y",
+      "target": "[data-test='fraud_review-26']",
+      "input": "case-0973-value-26",
+      "expect": "fraud_review-expected-26",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 27,
+      "action": "open_url",
+      "target": "[data-test='fraud_review-27']",
+      "input": "case-0973-value-27",
+      "expect": "fraud_review-expected-27",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "network",
+      "query": "assert-fraud_review-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "console",
+      "query": "assert-fraud_review-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "text",
+      "query": "assert-fraud_review-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "visibility",
+      "query": "assert-fraud_review-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "network",
+      "query": "assert-fraud_review-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "console",
+      "query": "assert-fraud_review-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "text",
+      "query": "assert-fraud_review-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "visibility",
+      "query": "assert-fraud_review-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "network",
+      "query": "assert-fraud_review-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "console",
+      "query": "assert-fraud_review-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "text",
+      "query": "assert-fraud_review-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "visibility",
+      "query": "assert-fraud_review-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 3,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20500
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": true,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0973/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0973/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0973/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0973/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "fraud_review",
+    "web",
+    "us-east",
+    "stable",
+    "severity:low"
+  ]
+}

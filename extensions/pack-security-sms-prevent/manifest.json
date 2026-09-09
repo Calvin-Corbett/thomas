@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-sms-prevent",
+  "name": "Security Sms Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "sms",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.sms",
+    "security.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via sms with prevent mode policies."
+}

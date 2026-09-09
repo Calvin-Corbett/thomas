@@ -1,0 +1,583 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0999",
+  "title": "Browser workflow case 0999 (invoice_dispute)",
+  "category": "invoice_dispute",
+  "risk_level": "high",
+  "objective": "Validate invoice_dispute journey under packet_loss network conditions.",
+  "dimensions": {
+    "channel": "tablet_web",
+    "region": "eu-central",
+    "network_profile": "packet_loss",
+    "build_variant": "canary",
+    "locale": "es-ES"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:invoice_dispute",
+    "region:eu-central",
+    "channel:tablet_web",
+    "network:packet_loss"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "open_url",
+      "target": "[data-test='invoice_dispute-01']",
+      "input": "case-0999-value-01",
+      "expect": "invoice_dispute-expected-01",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "wait_for_selector",
+      "target": "[data-test='invoice_dispute-02']",
+      "input": "case-0999-value-02",
+      "expect": "invoice_dispute-expected-02",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "click",
+      "target": "[data-test='invoice_dispute-03']",
+      "input": "case-0999-value-03",
+      "expect": "invoice_dispute-expected-03",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "type",
+      "target": "[data-test='invoice_dispute-04']",
+      "input": "case-0999-value-04",
+      "expect": "invoice_dispute-expected-04",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "press",
+      "target": "[data-test='invoice_dispute-05']",
+      "input": "case-0999-value-05",
+      "expect": "invoice_dispute-expected-05",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "scroll_into_view",
+      "target": "[data-test='invoice_dispute-06']",
+      "input": "case-0999-value-06",
+      "expect": "invoice_dispute-expected-06",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "capture_screenshot",
+      "target": "[data-test='invoice_dispute-07']",
+      "input": "case-0999-value-07",
+      "expect": "invoice_dispute-expected-07",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "snapshot_dom",
+      "target": "[data-test='invoice_dispute-08']",
+      "input": "case-0999-value-08",
+      "expect": "invoice_dispute-expected-08",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "collect_console",
+      "target": "[data-test='invoice_dispute-09']",
+      "input": "case-0999-value-09",
+      "expect": "invoice_dispute-expected-09",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "collect_network",
+      "target": "[data-test='invoice_dispute-10']",
+      "input": "case-0999-value-10",
+      "expect": "invoice_dispute-expected-10",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "assert_text",
+      "target": "[data-test='invoice_dispute-11']",
+      "input": "case-0999-value-11",
+      "expect": "invoice_dispute-expected-11",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "assert_visibility",
+      "target": "[data-test='invoice_dispute-12']",
+      "input": "case-0999-value-12",
+      "expect": "invoice_dispute-expected-12",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "download_file",
+      "target": "[data-test='invoice_dispute-13']",
+      "input": "case-0999-value-13",
+      "expect": "invoice_dispute-expected-13",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "upload_file",
+      "target": "[data-test='invoice_dispute-14']",
+      "input": "case-0999-value-14",
+      "expect": "invoice_dispute-expected-14",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "switch_tab",
+      "target": "[data-test='invoice_dispute-15']",
+      "input": "case-0999-value-15",
+      "expect": "invoice_dispute-expected-15",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "close_tab",
+      "target": "[data-test='invoice_dispute-16']",
+      "input": "case-0999-value-16",
+      "expect": "invoice_dispute-expected-16",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "start_trace",
+      "target": "[data-test='invoice_dispute-17']",
+      "input": "case-0999-value-17",
+      "expect": "invoice_dispute-expected-17",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "stop_trace",
+      "target": "[data-test='invoice_dispute-18']",
+      "input": "case-0999-value-18",
+      "expect": "invoice_dispute-expected-18",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "export_pdf",
+      "target": "[data-test='invoice_dispute-19']",
+      "input": "case-0999-value-19",
+      "expect": "invoice_dispute-expected-19",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "check_a11y",
+      "target": "[data-test='invoice_dispute-20']",
+      "input": "case-0999-value-20",
+      "expect": "invoice_dispute-expected-20",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "open_url",
+      "target": "[data-test='invoice_dispute-21']",
+      "input": "case-0999-value-21",
+      "expect": "invoice_dispute-expected-21",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "wait_for_selector",
+      "target": "[data-test='invoice_dispute-22']",
+      "input": "case-0999-value-22",
+      "expect": "invoice_dispute-expected-22",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "click",
+      "target": "[data-test='invoice_dispute-23']",
+      "input": "case-0999-value-23",
+      "expect": "invoice_dispute-expected-23",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "type",
+      "target": "[data-test='invoice_dispute-24']",
+      "input": "case-0999-value-24",
+      "expect": "invoice_dispute-expected-24",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "press",
+      "target": "[data-test='invoice_dispute-25']",
+      "input": "case-0999-value-25",
+      "expect": "invoice_dispute-expected-25",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "scroll_into_view",
+      "target": "[data-test='invoice_dispute-26']",
+      "input": "case-0999-value-26",
+      "expect": "invoice_dispute-expected-26",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 27,
+      "action": "capture_screenshot",
+      "target": "[data-test='invoice_dispute-27']",
+      "input": "case-0999-value-27",
+      "expect": "invoice_dispute-expected-27",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 28,
+      "action": "snapshot_dom",
+      "target": "[data-test='invoice_dispute-28']",
+      "input": "case-0999-value-28",
+      "expect": "invoice_dispute-expected-28",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "text",
+      "query": "assert-invoice_dispute-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "visibility",
+      "query": "assert-invoice_dispute-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "network",
+      "query": "assert-invoice_dispute-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "console",
+      "query": "assert-invoice_dispute-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "text",
+      "query": "assert-invoice_dispute-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "visibility",
+      "query": "assert-invoice_dispute-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "network",
+      "query": "assert-invoice_dispute-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "console",
+      "query": "assert-invoice_dispute-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "text",
+      "query": "assert-invoice_dispute-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "visibility",
+      "query": "assert-invoice_dispute-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "network",
+      "query": "assert-invoice_dispute-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "console",
+      "query": "assert-invoice_dispute-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 5,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0999/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0999/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0999/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0999/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "invoice_dispute",
+    "tablet_web",
+    "eu-central",
+    "packet_loss",
+    "severity:high"
+  ]
+}

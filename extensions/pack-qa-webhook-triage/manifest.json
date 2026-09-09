@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-webhook-triage",
+  "name": "Qa Webhook Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "webhook",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.webhook",
+    "qa.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via webhook with triage mode policies."
+}

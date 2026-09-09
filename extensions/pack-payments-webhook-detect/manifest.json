@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-webhook-detect",
+  "name": "Payments Webhook Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "webhook",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.webhook",
+    "payments.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via webhook with detect mode policies."
+}

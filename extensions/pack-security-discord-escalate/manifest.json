@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-discord-escalate",
+  "name": "Security Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.discord",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via discord with escalate mode policies."
+}

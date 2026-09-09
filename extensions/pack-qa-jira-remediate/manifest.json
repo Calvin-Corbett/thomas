@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-jira-remediate",
+  "name": "Qa Jira Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "jira",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.jira",
+    "qa.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via jira with remediate mode policies."
+}

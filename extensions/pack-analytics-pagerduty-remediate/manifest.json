@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-pagerduty-remediate",
+  "name": "Analytics Pagerduty Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "pagerduty",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.pagerduty",
+    "analytics.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via pagerduty with remediate mode policies."
+}

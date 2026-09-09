@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-webhook-prevent",
+  "name": "Alerts Webhook Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "webhook",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.webhook",
+    "alerts.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via webhook with prevent mode policies."
+}

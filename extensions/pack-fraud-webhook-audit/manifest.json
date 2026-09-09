@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-webhook-audit",
+  "name": "Fraud Webhook Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "webhook",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.webhook",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via webhook with audit mode policies."
+}

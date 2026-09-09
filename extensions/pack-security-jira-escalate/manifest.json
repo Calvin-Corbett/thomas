@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-jira-escalate",
+  "name": "Security Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.jira",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via jira with escalate mode policies."
+}

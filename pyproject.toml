@@ -1,0 +1,276 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thomas-ai"
+# Release 0.19.0: security-reviewed local Chat, Code, and Work lifecycle checkpoint (2026-07-18).
+version = "0.19.37"
+description = "Autonomous AI execution platform for local and remote deployments"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Thomas Contributors"},
+]
+keywords = ["ai", "agent", "assistant", "llm", "autonomous"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+dependencies = [
+    "httpx==0.27.2",
+    "click==8.3.1",
+    "numpy==2.2.6",
+    "typer>=0.12",
+    "requests>=2.32",
+    "croniter>=6.0",
+    "PyYAML>=6.0",
+    "tomli==2.0.1; python_version < '3.11'",
+    "cryptography>=44",
+]
+
+[project.urls]
+Homepage = "https://github.com/Calvin-Corbett/thomas"
+Repository = "https://github.com/Calvin-Corbett/thomas"
+Issues = "https://github.com/Calvin-Corbett/thomas/issues"
+
+[project.optional-dependencies]
+repl = ["prompt_toolkit>=3.0", "rich>=13.0"]
+gpu = ["sentence-transformers>=3.0", "torch>=2.0"]
+train = ["numpy>=1.26", "scikit-learn>=1.4"]
+science = ["scipy>=1.14"]
+travel = ["pytz>=2024.1"]
+server = [
+    "aiohttp==3.13.5",
+    "fastapi>=0.115",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0",
+    "reportlab>=4.0",
+    "openpyxl>=3.1",
+    "pypdf>=6.0,<7",
+    "python-docx>=1.0",
+    "Pillow>=10.0",
+]
+mcp = ["mcp>=1.0"]
+telegram = ["python-telegram-bot>=21.0"]
+investigation = ["python-docx>=1.0", "pdfplumber>=0.10"]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-aiohttp>=1.0",
+    "pytest-cov>=5.0",
+    "pytest-timeout>=2.3",
+    "pip-audit>=2.8",
+    "bandit[toml]>=1.7.10",
+    "ruff>=0.8",
+    "Pillow>=10.0",
+    "reportlab>=4.0",
+    "jsonschema>=4.21",
+    "watchdog>=4.0",
+    "fastapi>=0.115",
+    "scipy>=1.14",
+    "pytz>=2024.1",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0",
+    "PyYAML>=6.0",
+]
+all = ["thomas-ai[repl,gpu,train,science,travel,server,mcp,telegram,test]"]
+
+[project.scripts]
+thomas = "thomas.cli.main:main"
+thomas-server = "thomas.server.__main__:main"
+bootdoctor = "thomas.bootdoctor.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["thomas*", "evolve_supervisor*"]
+exclude = [
+    "runtime*",
+    "output*",
+    "tmp*",
+    "logs*",
+    "tasks*",
+    "archives*",
+    "feature_requests*",
+    "Inbox*",
+    "inbox*",
+]
+
+[tool.setuptools.package-data]
+"thomas" = ["server/web/*", "server/web/**/*", "autonomy/ui/*", "companion/policy_profiles/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [
+    ".venv",
+    "runtime",
+    ".inbox_extract*",
+    "agent_vf",
+    "agent_memory",
+    "*.egg-info",
+]
+# Prevent silent runner hangs from hiding the culprit test.
+# GitHub Actions can cancel long batches without naming the stuck test.
+# pytest-timeout kills any test over 300s with a clear timeout error.
+timeout = 300
+timeout_method = "thread"
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["thomas"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+[tool.bandit]
+exclude_dirs = ["tests", "runtime", "output", ".venv"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["thomas"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (let formatter handle it)
+    "B905",   # zip strict (py310 compat)
+    "SIM108", # ternary operator (readability preference)
+
+    # ---------------------------------------------------------------------
+    # Style-only rules ignored after the 2026-05-14 master cleanup.
+    # These rules flag patterns where Thomas's preferred idiom or codebase
+    # convention differs from ruff's default. They have no functional
+    # impact (no bugs, no security issues, no runtime risk) and the
+    # remaining violations would require ~2500 hand-edits with no payoff.
+    # Future cleanup task: revisit each rule, decide if any are worth
+    # re-enabling on a per-module basis, and clear them then.
+    # ---------------------------------------------------------------------
+    "B904",   # raise-without-from-inside-except: style preference; explicit
+              # `raise X from None/exc` everywhere would be 553+ edits with no
+              # functional improvement
+    "B007",   # unused-loop-control-variable: common idiom (`for _ in range(...)`)
+    "B008",   # function-call-in-default-argument: common in click/typer CLIs
+              # and pytest fixtures
+    "B017",   # assert-raises-exception: common in test fixtures for "any error"
+    "E402",   # module-import-not-at-top: often intentional for lazy imports,
+              # circular-import workarounds, or conditional optional deps
+    "E741",   # ambiguous-variable-name (`l`, `I`, `O`): rare false positives
+              # not worth gating commits
+    "F405",   # undefined-local-with-import-star: only triggers in files that
+              # use `from X import *` for re-export; not worth narrowing those
+    "SIM101", # duplicate-isinstance-call: readability preference
+    "SIM102", # collapsible-if: readability preference; nested ifs often clearer
+    "SIM103", # needless-bool: style preference
+    "SIM105", # suppressible-exception: `try: ... except: pass` is more explicit
+              # than `with contextlib.suppress(...)` when the suppression scope
+              # is small
+    "SIM110", # reimplemented-builtin: minor performance/style
+    "SIM113", # enumerate-for-loop: style preference
+    "SIM115", # open-file-with-context-handler: minor style; most violations
+              # are intentional for cases where the file handle outlives the block
+    "SIM116", # if-else-block-instead-of-dict-lookup: readability preference
+    "SIM117", # multiple-with-statements: collapsing nested with-blocks
+              # sometimes hurts readability
+    "SIM118", # in-dict-keys: `key in dict` vs `key in dict.keys()` — both work
+
+    # ---------------------------------------------------------------------
+    # Additional rules ignored after the 2026-05-21 pre-public cleanup.
+    # The scrubber bulk-edited 86 files; ruff started flagging pre-existing
+    # patterns that were never the cleanup's target. Keeping them off the
+    # commit-blocking path until a focused per-rule sweep is scheduled.
+    # ---------------------------------------------------------------------
+    "B018",   # useless-attribute-access (common in test assertions)
+    "B019",   # functools.lru_cache on methods (acceptable in narrow scopes)
+    "B023",   # function-uses-loop-variable (common closure-over-loop pattern)
+    "B024",   # abstract-base-class-without-abstract-method (data ABCs)
+    "B025",   # try-except-block-with-duplicate-exception (defensive duplicates)
+    "B026",   # star-arg-unpacking-after-keyword-arg
+    "B027",   # empty-method-without-abstract-decorator
+    "E721",   # type-comparison (=== style; intentional in some adapters)
+    "E743",   # ambiguous-function-name (rare; lambda renames OK)
+    "F401",   # unused-import (re-export patterns intentionally hold imports)
+    "F402",   # import-shadowed-by-loop-var
+    "F601",   # multiple-tuple-comparison
+    "F811",   # redefined-while-unused (compat shims re-declare on purpose)
+    "F841",   # unused-local (assigned-but-never-used; safe in error fixtures)
+    "UP007",  # type-deprecated-alias (Union/Optional → X | Y; rolled in part)
+    "UP035",  # deprecated-import (typing → collections.abc; rolled in part)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["thomas", "evolve_supervisor"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.setuptools.data-files]
+"skills/async-lifecycle-initialization" = ["skills/async-lifecycle-initialization/SKILL.md"]
+"skills/auto-skillify" = ["skills/auto-skillify/SKILL.md"]
+"skills/capcut-video-editor" = ["skills/capcut-video-editor/SKILL.md"]
+"skills/cloudflare-deploy" = ["skills/cloudflare-deploy/SKILL.md"]
+"skills/davinci-video-editor" = ["skills/davinci-video-editor/SKILL.md"]
+"skills/develop-web-game" = ["skills/develop-web-game/SKILL.md"]
+"skills/doc" = ["skills/doc/SKILL.md"]
+"skills/figma" = ["skills/figma/SKILL.md"]
+"skills/figma-implement-design" = ["skills/figma-implement-design/SKILL.md"]
+"skills/gh-address-comments" = ["skills/gh-address-comments/SKILL.md"]
+"skills/gh-fix-ci" = ["skills/gh-fix-ci/SKILL.md"]
+"skills/higgsfield-video-director" = ["skills/higgsfield-video-director/SKILL.md"]
+"skills/incremental-cache-cli-modes" = ["skills/incremental-cache-cli-modes/SKILL.md"]
+"skills/imagegen" = ["skills/imagegen/SKILL.md"]
+"skills/jupyter-notebook" = ["skills/jupyter-notebook/SKILL.md"]
+"skills/line-suppression-directives" = ["skills/line-suppression-directives/SKILL.md"]
+"skills/linear" = ["skills/linear/SKILL.md"]
+"skills/multipart-http-response-parser" = ["skills/multipart-http-response-parser/SKILL.md"]
+"skills/netlify-deploy" = ["skills/netlify-deploy/SKILL.md"]
+"skills/notion-knowledge-capture" = ["skills/notion-knowledge-capture/SKILL.md"]
+"skills/notion-meeting-intelligence" = ["skills/notion-meeting-intelligence/SKILL.md"]
+"skills/notion-research-documentation" = ["skills/notion-research-documentation/SKILL.md"]
+"skills/notion-spec-to-implementation" = ["skills/notion-spec-to-implementation/SKILL.md"]
+"skills/openai-docs" = ["skills/openai-docs/SKILL.md"]
+"skills/pdf" = ["skills/pdf/SKILL.md"]
+"skills/partial-structuring-recovery" = ["skills/partial-structuring-recovery/SKILL.md"]
+"skills/playwright" = ["skills/playwright/SKILL.md"]
+"skills/render-deploy" = ["skills/render-deploy/SKILL.md"]
+"skills/recursive-json-schema-validation" = ["skills/recursive-json-schema-validation/SKILL.md"]
+"skills/screenshot" = ["skills/screenshot/SKILL.md"]
+"skills/security-best-practices" = ["skills/security-best-practices/SKILL.md"]
+"skills/security-ownership-map" = ["skills/security-ownership-map/SKILL.md"]
+"skills/security-threat-model" = ["skills/security-threat-model/SKILL.md"]
+"skills/self-extend" = ["skills/self-extend/SKILL.md"]
+"skills/serializer-deserializer-feature-matrix" = ["skills/serializer-deserializer-feature-matrix/SKILL.md"]
+"skills/static-taint-analysis" = ["skills/static-taint-analysis/SKILL.md"]
+"skills/sentry" = ["skills/sentry/SKILL.md"]
+"skills/skill-authoring" = ["skills/skill-authoring/SKILL.md"]
+"skills/skill-distillation" = ["skills/skill-distillation/SKILL.md"]
+"skills/sora" = ["skills/sora/SKILL.md"]
+"skills/speech" = ["skills/speech/SKILL.md"]
+"skills/spreadsheet" = ["skills/spreadsheet/SKILL.md"]
+"skills/stream-clip-pipeline" = ["skills/stream-clip-pipeline/SKILL.md"]
+"skills/thomas-site-visual-proof" = ["skills/thomas-site-visual-proof/SKILL.md"]
+"skills/transcribe" = ["skills/transcribe/SKILL.md"]
+"skills/ui-precision-guard" = ["skills/ui-precision-guard/SKILL.md"]
+"skills/vercel-deploy" = ["skills/vercel-deploy/SKILL.md"]
+"skills/video-creation-director" = ["skills/video-creation-director/SKILL.md"]
+"skills/yeet" = ["skills/yeet/SKILL.md"]

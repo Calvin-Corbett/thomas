@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-slack-escalate",
+  "name": "Compliance Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.slack",
+    "compliance.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via slack with escalate mode policies."
+}

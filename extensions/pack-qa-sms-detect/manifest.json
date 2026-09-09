@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-sms-detect",
+  "name": "Qa Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.sms",
+    "qa.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via sms with detect mode policies."
+}

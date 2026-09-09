@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-email-prevent",
+  "name": "Analytics Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.email",
+    "analytics.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via email with prevent mode policies."
+}

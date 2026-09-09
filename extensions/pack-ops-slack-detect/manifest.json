@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-slack-detect",
+  "name": "Ops Slack Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "slack",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.slack",
+    "ops.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via slack with detect mode policies."
+}

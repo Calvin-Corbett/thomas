@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-discord-triage",
+  "name": "Qa Discord Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "discord",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.discord",
+    "qa.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via discord with triage mode policies."
+}

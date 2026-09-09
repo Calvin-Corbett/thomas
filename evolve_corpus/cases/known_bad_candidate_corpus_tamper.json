@@ -1,0 +1,12 @@
+{
+  "case_id": "known_bad_candidate_corpus_tamper",
+  "description": "A candidate with a legitimate code delta plus a tampered candidate corpus must be rejected by the blue supervisor.",
+  "expected_supervisor_outcome": "reject",
+  "changed_files": [
+    "thomas/core/example.py",
+    "evolve_corpus/cases/known_good_minimal_session.json"
+  ],
+  "expected_finding_codes": [
+    "corpus_hash_mismatch"
+  ]
+}

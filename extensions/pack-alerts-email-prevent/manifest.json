@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-email-prevent",
+  "name": "Alerts Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.email",
+    "alerts.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via email with prevent mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-slack-audit",
+  "name": "Alerts Slack Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "slack",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.slack",
+    "alerts.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via slack with audit mode policies."
+}

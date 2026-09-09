@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-jira-detect",
+  "name": "Qa Jira Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "jira",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.jira",
+    "qa.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via jira with detect mode policies."
+}

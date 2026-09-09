@@ -1,0 +1,14 @@
+{
+  "id": "pack-support-slack",
+  "name": "Support Slack Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "slack",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.slack",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via slack."
+}

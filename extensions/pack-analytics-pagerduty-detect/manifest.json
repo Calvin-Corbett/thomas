@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-pagerduty-detect",
+  "name": "Analytics Pagerduty Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "pagerduty",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.pagerduty",
+    "analytics.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via pagerduty with detect mode policies."
+}

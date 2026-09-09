@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-teams-remediate",
+  "name": "Security Teams Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "teams",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.teams",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via teams with remediate mode policies."
+}

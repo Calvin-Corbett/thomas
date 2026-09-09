@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-teams-escalate",
+  "name": "Incident Teams Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "teams",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.teams",
+    "incident.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via teams with escalate mode policies."
+}

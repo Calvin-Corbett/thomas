@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-slack-detect",
+  "name": "Payments Slack Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "slack",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.slack",
+    "payments.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via slack with detect mode policies."
+}

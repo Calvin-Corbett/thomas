@@ -1,0 +1,27 @@
+# Development override for docker-compose.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# This extends the base docker-compose.yml with:
+#   - THOMAS_ENV=development
+#   - Source code volume mount for hot-reload
+#   - Dev config instead of production config
+#   - Debug-friendly logging
+
+services:
+  thomas:
+    build:
+      context: .
+      args:
+        ENVIRONMENT: development
+    image: thomas:dev
+    environment:
+      THOMAS_ENV: development
+      THOMAS_CONFIG: /app/thomas.toml
+      THOMAS_LOG_LEVEL: DEBUG
+    volumes:
+      - ./thomas:/app/thomas:ro          # Hot-reload source
+      - ./runtime:/app/runtime
+      - ./thomas.toml:/app/thomas.toml:ro
+      - ./tests:/app/tests:ro            # Access tests inside container

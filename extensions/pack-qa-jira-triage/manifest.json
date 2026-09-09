@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-jira-triage",
+  "name": "Qa Jira Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "jira",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.jira",
+    "qa.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via jira with triage mode policies."
+}

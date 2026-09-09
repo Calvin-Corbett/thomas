@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-teams-escalate",
+  "name": "Security Teams Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "teams",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.teams",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via teams with escalate mode policies."
+}

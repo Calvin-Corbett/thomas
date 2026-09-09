@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-webhook-audit",
+  "name": "Payments Webhook Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "webhook",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.webhook",
+    "payments.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via webhook with audit mode policies."
+}

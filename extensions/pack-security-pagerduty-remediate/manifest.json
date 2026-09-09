@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-pagerduty-remediate",
+  "name": "Security Pagerduty Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "pagerduty",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.pagerduty",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via pagerduty with remediate mode policies."
+}

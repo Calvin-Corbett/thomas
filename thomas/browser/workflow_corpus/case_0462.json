@@ -1,0 +1,555 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0462",
+  "title": "Browser workflow case 0462 (signin)",
+  "category": "signin",
+  "risk_level": "medium",
+  "objective": "Validate signin journey under roaming_handoff network conditions.",
+  "dimensions": {
+    "channel": "embedded_webview",
+    "region": "me-central",
+    "network_profile": "roaming_handoff",
+    "build_variant": "canary",
+    "locale": "en-GB"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:signin",
+    "region:me-central",
+    "channel:embedded_webview",
+    "network:roaming_handoff"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "type",
+      "target": "[data-test='signin-01']",
+      "input": "case-0462-value-01",
+      "expect": "signin-expected-01",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "press",
+      "target": "[data-test='signin-02']",
+      "input": "case-0462-value-02",
+      "expect": "signin-expected-02",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "scroll_into_view",
+      "target": "[data-test='signin-03']",
+      "input": "case-0462-value-03",
+      "expect": "signin-expected-03",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "capture_screenshot",
+      "target": "[data-test='signin-04']",
+      "input": "case-0462-value-04",
+      "expect": "signin-expected-04",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "snapshot_dom",
+      "target": "[data-test='signin-05']",
+      "input": "case-0462-value-05",
+      "expect": "signin-expected-05",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "collect_console",
+      "target": "[data-test='signin-06']",
+      "input": "case-0462-value-06",
+      "expect": "signin-expected-06",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "collect_network",
+      "target": "[data-test='signin-07']",
+      "input": "case-0462-value-07",
+      "expect": "signin-expected-07",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "assert_text",
+      "target": "[data-test='signin-08']",
+      "input": "case-0462-value-08",
+      "expect": "signin-expected-08",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "assert_visibility",
+      "target": "[data-test='signin-09']",
+      "input": "case-0462-value-09",
+      "expect": "signin-expected-09",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "download_file",
+      "target": "[data-test='signin-10']",
+      "input": "case-0462-value-10",
+      "expect": "signin-expected-10",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "upload_file",
+      "target": "[data-test='signin-11']",
+      "input": "case-0462-value-11",
+      "expect": "signin-expected-11",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "switch_tab",
+      "target": "[data-test='signin-12']",
+      "input": "case-0462-value-12",
+      "expect": "signin-expected-12",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "close_tab",
+      "target": "[data-test='signin-13']",
+      "input": "case-0462-value-13",
+      "expect": "signin-expected-13",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "start_trace",
+      "target": "[data-test='signin-14']",
+      "input": "case-0462-value-14",
+      "expect": "signin-expected-14",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "stop_trace",
+      "target": "[data-test='signin-15']",
+      "input": "case-0462-value-15",
+      "expect": "signin-expected-15",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "export_pdf",
+      "target": "[data-test='signin-16']",
+      "input": "case-0462-value-16",
+      "expect": "signin-expected-16",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "check_a11y",
+      "target": "[data-test='signin-17']",
+      "input": "case-0462-value-17",
+      "expect": "signin-expected-17",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "open_url",
+      "target": "[data-test='signin-18']",
+      "input": "case-0462-value-18",
+      "expect": "signin-expected-18",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "wait_for_selector",
+      "target": "[data-test='signin-19']",
+      "input": "case-0462-value-19",
+      "expect": "signin-expected-19",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "click",
+      "target": "[data-test='signin-20']",
+      "input": "case-0462-value-20",
+      "expect": "signin-expected-20",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "type",
+      "target": "[data-test='signin-21']",
+      "input": "case-0462-value-21",
+      "expect": "signin-expected-21",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "press",
+      "target": "[data-test='signin-22']",
+      "input": "case-0462-value-22",
+      "expect": "signin-expected-22",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "scroll_into_view",
+      "target": "[data-test='signin-23']",
+      "input": "case-0462-value-23",
+      "expect": "signin-expected-23",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "capture_screenshot",
+      "target": "[data-test='signin-24']",
+      "input": "case-0462-value-24",
+      "expect": "signin-expected-24",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "snapshot_dom",
+      "target": "[data-test='signin-25']",
+      "input": "case-0462-value-25",
+      "expect": "signin-expected-25",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "collect_console",
+      "target": "[data-test='signin-26']",
+      "input": "case-0462-value-26",
+      "expect": "signin-expected-26",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "console",
+      "query": "assert-signin-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "text",
+      "query": "assert-signin-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "visibility",
+      "query": "assert-signin-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "network",
+      "query": "assert-signin-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "console",
+      "query": "assert-signin-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "text",
+      "query": "assert-signin-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "visibility",
+      "query": "assert-signin-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "network",
+      "query": "assert-signin-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "console",
+      "query": "assert-signin-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "text",
+      "query": "assert-signin-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "visibility",
+      "query": "assert-signin-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "network",
+      "query": "assert-signin-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 4,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 21500
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0462/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0462/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0462/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0462/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "signin",
+    "embedded_webview",
+    "me-central",
+    "roaming_handoff",
+    "severity:medium"
+  ]
+}

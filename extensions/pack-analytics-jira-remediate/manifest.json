@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-jira-remediate",
+  "name": "Analytics Jira Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "jira",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.jira",
+    "analytics.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via jira with remediate mode policies."
+}

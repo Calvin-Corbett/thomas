@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-sms-remediate",
+  "name": "Ops Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.sms",
+    "ops.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via sms with remediate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-webhook-escalate",
+  "name": "Qa Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.webhook",
+    "qa.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via webhook with escalate mode policies."
+}

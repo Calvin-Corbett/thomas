@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-pagerduty-escalate",
+  "name": "Analytics Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.pagerduty",
+    "analytics.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via pagerduty with escalate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-email-audit",
+  "name": "Qa Email Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "email",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.email",
+    "qa.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via email with audit mode policies."
+}

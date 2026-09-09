@@ -1,0 +1,5 @@
+# Security Webhook Extension Pack
+
+Purpose: Operational extension pack for security workflows via webhook.
+
+This pack provides pre/post tool hooks and payload shaping helpers for pipeline automation.

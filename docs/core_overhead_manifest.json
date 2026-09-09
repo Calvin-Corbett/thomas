@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "description": "Shared Thomas overhead used by both REPL and Web UI. Edit intentionally only.",
+  "protected_files": [
+    "thomas/agent/prompt_templates.py",
+    "thomas/agent/guidance.py",
+    "thomas/agent/loop.py"
+  ]
+}

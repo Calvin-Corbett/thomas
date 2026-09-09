@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-teams-triage",
+  "name": "Security Teams Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "teams",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.teams",
+    "security.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via teams with triage mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-jira-audit",
+  "name": "Incident Jira Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "jira",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.jira",
+    "incident.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via jira with audit mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-webhook-detect",
+  "name": "Qa Webhook Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "webhook",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.webhook",
+    "qa.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via webhook with detect mode policies."
+}

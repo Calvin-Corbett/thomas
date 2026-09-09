@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-webhook-prevent",
+  "name": "Fraud Webhook Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "webhook",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.webhook",
+    "fraud.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via webhook with prevent mode policies."
+}

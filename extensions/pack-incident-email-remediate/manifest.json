@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-email-remediate",
+  "name": "Incident Email Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "email",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.email",
+    "incident.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via email with remediate mode policies."
+}

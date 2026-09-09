@@ -1,0 +1,46 @@
+{
+  "id": "life-manager-foundation",
+  "plugin_id": "life-manager-foundation",
+  "name": "Life Manager Foundation",
+  "display_name": "Life Manager Foundation",
+  "version": "1.0.0",
+  "category": "productivity",
+  "categories": [
+    "productivity",
+    "automation"
+  ],
+  "target": "desktop",
+  "mode": "life_manager_foundation",
+  "mode_id": "life_manager_foundation",
+  "entrypoint": "hooks.py",
+  "publisher_id": "thomas-official",
+  "publisher_name": "Thomas",
+  "kind": "desktop_plugin",
+  "marketplace_type": "dependency",
+  "description": "Shared support component for Life Manager installs and future life workflow upgrades.",
+  "subtitle": "Support component for Life Manager and related upgrades.",
+  "icon": "ph-stack",
+  "api_namespace": "life-manager-foundation",
+  "capabilities": [
+    "life_manager.foundation",
+    "life_manager.bootstrap"
+  ],
+  "tags": [
+    "productivity",
+    "automation",
+    "dependency",
+    "support",
+    "official"
+  ],
+  "requires": [],
+  "left_nav_behavior": "none",
+  "default_nav_section": "installed",
+  "default_nav_order": 940,
+  "surface": {
+    "entry_html": "web/index.html",
+    "title": "Life Manager Foundation",
+    "surface_mode": "standard"
+  },
+  "sha256": "",
+  "signature": "bundled"
+}

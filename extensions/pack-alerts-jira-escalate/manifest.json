@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-jira-escalate",
+  "name": "Alerts Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.jira",
+    "alerts.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via jira with escalate mode policies."
+}

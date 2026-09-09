@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-discord-prevent",
+  "name": "Alerts Discord Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "discord",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.discord",
+    "alerts.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via discord with prevent mode policies."
+}

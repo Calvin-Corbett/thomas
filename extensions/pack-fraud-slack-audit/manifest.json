@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-slack-audit",
+  "name": "Fraud Slack Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "slack",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.slack",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via slack with audit mode policies."
+}

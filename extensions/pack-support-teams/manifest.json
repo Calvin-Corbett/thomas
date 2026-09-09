@@ -1,0 +1,14 @@
+{
+  "id": "pack-support-teams",
+  "name": "Support Teams Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "teams",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.teams",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via teams."
+}

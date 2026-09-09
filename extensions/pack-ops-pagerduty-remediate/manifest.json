@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-pagerduty-remediate",
+  "name": "Ops Pagerduty Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "pagerduty",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.pagerduty",
+    "ops.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via pagerduty with remediate mode policies."
+}

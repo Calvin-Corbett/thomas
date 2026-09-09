@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-pagerduty-prevent",
+  "name": "Fraud Pagerduty Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "pagerduty",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.pagerduty",
+    "fraud.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via pagerduty with prevent mode policies."
+}

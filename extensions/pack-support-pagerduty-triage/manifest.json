@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-pagerduty-triage",
+  "name": "Support Pagerduty Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "pagerduty",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.pagerduty",
+    "support.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via pagerduty with triage mode policies."
+}

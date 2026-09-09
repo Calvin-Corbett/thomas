@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-pagerduty-audit",
+  "name": "Fraud Pagerduty Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "pagerduty",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.pagerduty",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via pagerduty with audit mode policies."
+}

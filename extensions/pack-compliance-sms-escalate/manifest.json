@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-sms-escalate",
+  "name": "Compliance Sms Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "sms",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.sms",
+    "compliance.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via sms with escalate mode policies."
+}

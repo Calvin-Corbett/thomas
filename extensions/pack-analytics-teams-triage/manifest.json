@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-teams-triage",
+  "name": "Analytics Teams Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "teams",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.teams",
+    "analytics.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via teams with triage mode policies."
+}

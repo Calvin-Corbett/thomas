@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-sms-remediate",
+  "name": "Incident Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.sms",
+    "incident.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via sms with remediate mode policies."
+}

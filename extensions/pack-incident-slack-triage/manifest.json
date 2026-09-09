@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-slack-triage",
+  "name": "Incident Slack Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "slack",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.slack",
+    "incident.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via slack with triage mode policies."
+}

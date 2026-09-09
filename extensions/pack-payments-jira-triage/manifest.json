@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-jira-triage",
+  "name": "Payments Jira Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "jira",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.jira",
+    "payments.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via jira with triage mode policies."
+}

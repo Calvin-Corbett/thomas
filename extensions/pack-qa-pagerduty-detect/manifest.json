@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-pagerduty-detect",
+  "name": "Qa Pagerduty Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "pagerduty",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.pagerduty",
+    "qa.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via pagerduty with detect mode policies."
+}

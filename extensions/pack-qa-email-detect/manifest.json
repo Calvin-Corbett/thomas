@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-email-detect",
+  "name": "Qa Email Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "email",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.email",
+    "qa.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via email with detect mode policies."
+}

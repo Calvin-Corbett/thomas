@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-slack-escalate",
+  "name": "Analytics Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.slack",
+    "analytics.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via slack with escalate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-teams-audit",
+  "name": "Payments Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.teams",
+    "payments.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via teams with audit mode policies."
+}

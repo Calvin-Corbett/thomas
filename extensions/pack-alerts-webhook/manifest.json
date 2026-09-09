@@ -1,0 +1,14 @@
+{
+  "id": "pack-alerts-webhook",
+  "name": "Alerts Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via webhook."
+}

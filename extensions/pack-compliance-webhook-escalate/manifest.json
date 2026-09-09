@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-webhook-escalate",
+  "name": "Compliance Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.webhook",
+    "compliance.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via webhook with escalate mode policies."
+}

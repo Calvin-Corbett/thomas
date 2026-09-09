@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-email-triage",
+  "name": "Analytics Email Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "email",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.email",
+    "analytics.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via email with triage mode policies."
+}

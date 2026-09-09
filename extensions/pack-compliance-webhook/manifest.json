@@ -1,0 +1,14 @@
+{
+  "id": "pack-compliance-webhook",
+  "name": "Compliance Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via webhook."
+}

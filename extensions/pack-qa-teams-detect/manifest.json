@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-teams-detect",
+  "name": "Qa Teams Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "teams",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.teams",
+    "qa.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via teams with detect mode policies."
+}

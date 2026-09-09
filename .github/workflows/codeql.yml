@@ -1,0 +1,59 @@
+# CodeQL — GitHub's static security analysis.
+#
+# Free for public repos. Detects SQL injection, XSS, command injection,
+# path traversal, hardcoded credentials, etc. Results show up in the
+# Security tab → Code scanning alerts.
+#
+# Triggers:
+#   - Every push to dev / main
+#   - Every pull request targeting dev / main
+#   - Weekly scheduled scan (Mondays 06:30 UTC) to catch newly-disclosed
+#     CVE patterns even when no code changed
+#
+# Docs: https://docs.github.com/en/code-security/code-scanning
+
+name: CodeQL
+
+on:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: ["dev", "main"]
+  schedule:
+    - cron: "30 6 * * 1"  # Mondays 06:30 UTC
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript-typescript"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Use the "security-and-quality" suite — broader than default
+          # but catches code-quality smells too.
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

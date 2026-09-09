@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-teams-remediate",
+  "name": "Payments Teams Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "teams",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.teams",
+    "payments.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via teams with remediate mode policies."
+}

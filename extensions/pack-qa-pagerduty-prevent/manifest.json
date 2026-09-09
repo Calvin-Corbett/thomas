@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-pagerduty-prevent",
+  "name": "Qa Pagerduty Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "pagerduty",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.pagerduty",
+    "qa.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via pagerduty with prevent mode policies."
+}

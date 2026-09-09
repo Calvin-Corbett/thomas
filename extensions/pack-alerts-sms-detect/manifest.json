@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-sms-detect",
+  "name": "Alerts Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.sms",
+    "alerts.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via sms with detect mode policies."
+}

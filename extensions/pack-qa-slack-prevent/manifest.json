@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-slack-prevent",
+  "name": "Qa Slack Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "slack",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.slack",
+    "qa.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via slack with prevent mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-slack-detect",
+  "name": "Security Slack Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "slack",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.slack",
+    "security.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via slack with detect mode policies."
+}

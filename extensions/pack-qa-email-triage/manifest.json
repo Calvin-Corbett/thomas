@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-email-triage",
+  "name": "Qa Email Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "email",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.email",
+    "qa.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via email with triage mode policies."
+}

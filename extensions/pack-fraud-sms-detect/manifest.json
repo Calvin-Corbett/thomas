@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-sms-detect",
+  "name": "Fraud Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.sms",
+    "fraud.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via sms with detect mode policies."
+}

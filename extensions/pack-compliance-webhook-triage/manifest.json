@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-webhook-triage",
+  "name": "Compliance Webhook Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "webhook",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.webhook",
+    "compliance.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via webhook with triage mode policies."
+}

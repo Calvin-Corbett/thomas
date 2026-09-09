@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-slack-audit",
+  "name": "Analytics Slack Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "slack",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.slack",
+    "analytics.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via slack with audit mode policies."
+}

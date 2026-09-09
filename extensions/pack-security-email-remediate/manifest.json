@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-email-remediate",
+  "name": "Security Email Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "email",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.email",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via email with remediate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-discord-prevent",
+  "name": "Compliance Discord Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "discord",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.discord",
+    "compliance.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via discord with prevent mode policies."
+}

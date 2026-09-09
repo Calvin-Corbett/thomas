@@ -1,0 +1,14 @@
+{
+  "id": "pack-qa-discord",
+  "name": "Qa Discord Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "discord",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.discord",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via discord."
+}

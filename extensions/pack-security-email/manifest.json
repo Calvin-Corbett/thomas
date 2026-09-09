@@ -1,0 +1,14 @@
+{
+  "id": "pack-security-email",
+  "name": "Security Email Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "email",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.email",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via email."
+}

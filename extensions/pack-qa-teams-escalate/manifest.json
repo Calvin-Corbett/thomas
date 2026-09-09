@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-teams-escalate",
+  "name": "Qa Teams Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "teams",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.teams",
+    "qa.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via teams with escalate mode policies."
+}

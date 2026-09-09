@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-jira-audit",
+  "name": "Security Jira Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "jira",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.jira",
+    "security.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via jira with audit mode policies."
+}

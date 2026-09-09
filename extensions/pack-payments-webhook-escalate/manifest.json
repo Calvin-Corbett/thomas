@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-webhook-escalate",
+  "name": "Payments Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.webhook",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via webhook with escalate mode policies."
+}

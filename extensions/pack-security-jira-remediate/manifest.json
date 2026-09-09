@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-jira-remediate",
+  "name": "Security Jira Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "jira",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.jira",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via jira with remediate mode policies."
+}

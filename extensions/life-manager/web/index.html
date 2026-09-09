@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Life Manager</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Thomas Plugin</p>
+        <h1>Life Manager</h1>
+        <p class="hero-copy">A local-first command deck for what needs your attention today, this week, and this quarter.</p>
+      </div>
+      <div class="hero-stats" id="heroStats"></div>
+    </header>
+
+    <main class="grid-shell">
+      <section class="panel panel-tasks">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Today</p>
+            <h2>Tasks</h2>
+          </div>
+          <span class="panel-meta" id="taskMeta">0 items</span>
+        </div>
+        <form id="taskForm" class="entry-form">
+          <input name="title" type="text" placeholder="Add a task for today" required>
+          <select name="priority">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <input name="target_date" type="date">
+          <button type="submit">Add Task</button>
+        </form>
+        <div class="item-list" id="taskList"></div>
+      </section>
+
+      <section class="panel panel-agenda">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Calendar</p>
+            <h2>Agenda</h2>
+          </div>
+          <span class="panel-meta" id="agendaMeta">0 items</span>
+        </div>
+        <form id="agendaForm" class="entry-form compact-form">
+          <input name="title" type="text" placeholder="Add an agenda block" required>
+          <input name="date" type="date">
+          <input name="start_time" type="time">
+          <input name="end_time" type="time">
+          <button type="submit">Add Event</button>
+        </form>
+        <div class="item-list" id="agendaList"></div>
+      </section>
+
+      <section class="panel panel-habits">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Cadence</p>
+            <h2>Habits</h2>
+          </div>
+          <span class="panel-meta" id="habitMeta">0 items</span>
+        </div>
+        <form id="habitForm" class="entry-form compact-form">
+          <input name="title" type="text" placeholder="Add a habit" required>
+          <select name="cadence">
+            <option value="daily" selected>Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <input name="target_count" type="number" min="1" value="1">
+          <button type="submit">Add Habit</button>
+        </form>
+        <div class="item-list" id="habitList"></div>
+      </section>
+
+      <section class="panel panel-goals">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Trajectory</p>
+            <h2>Goals</h2>
+          </div>
+          <span class="panel-meta" id="goalMeta">0 items</span>
+        </div>
+        <form id="goalForm" class="entry-form compact-form">
+          <input name="title" type="text" placeholder="Add a goal" required>
+          <input name="horizon" type="text" placeholder="Quarter / Year / Month">
+          <input name="progress" type="number" min="0" max="100" value="0">
+          <button type="submit">Add Goal</button>
+        </form>
+        <div class="item-list" id="goalList"></div>
+      </section>
+    </main>
+  </div>
+
+  <template id="emptyStateTemplate">
+    <article class="empty-state">
+      <strong>Nothing here yet.</strong>
+      <p>Add an item to start tracking it inside Thomas.</p>
+    </article>
+  </template>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>

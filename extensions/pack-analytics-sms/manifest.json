@@ -1,0 +1,14 @@
+{
+  "id": "pack-analytics-sms",
+  "name": "Analytics Sms Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "sms",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.sms",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via sms."
+}

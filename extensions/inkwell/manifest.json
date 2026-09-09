@@ -1,0 +1,56 @@
+{
+  "id": "inkwell",
+  "plugin_id": "inkwell",
+  "name": "Inkwell",
+  "display_name": "Inkwell",
+  "version": "1.0.0",
+  "category": "productivity",
+  "categories": [
+    "productivity",
+    "notes",
+    "automation"
+  ],
+  "target": "desktop",
+  "mode": "inkwell",
+  "mode_id": "inkwell",
+  "entrypoint": "hooks.py",
+  "publisher_id": "thomas-official",
+  "publisher_name": "Thomas",
+  "kind": "desktop_plugin",
+  "marketplace_type": "app",
+  "description": "Smart notepad: sketch with your mouse, drop text anywhere, dictate by voice, and let Thomas turn your notes into reminders with alert sounds.",
+  "subtitle": "Sketch it, say it, type it — Thomas turns it into reminders.",
+  "icon": "ph-pen-nib",
+  "api_namespace": "inkwell",
+  "capabilities": [
+    "inkwell.notes",
+    "inkwell.sketch",
+    "inkwell.reminders",
+    "inkwell.smart_analysis"
+  ],
+  "tags": [
+    "productivity",
+    "notes",
+    "sketch",
+    "voice",
+    "reminders",
+    "app",
+    "workspace",
+    "official"
+  ],
+  "requires": [],
+  "left_nav_behavior": "workspace",
+  "default_nav_section": "apps",
+  "default_nav_order": 530,
+  "surface": {
+    "entry_html": "web/index.html",
+    "title": "Inkwell",
+    "surface_mode": "immersive"
+  },
+  "standalone": {
+    "enabled": true,
+    "window_title": "Inkwell"
+  },
+  "sha256": "",
+  "signature": "bundled"
+}

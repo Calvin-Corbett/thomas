@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-pagerduty-triage",
+  "name": "Fraud Pagerduty Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "pagerduty",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.pagerduty",
+    "fraud.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via pagerduty with triage mode policies."
+}

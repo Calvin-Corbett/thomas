@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-pagerduty-escalate",
+  "name": "Compliance Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.pagerduty",
+    "compliance.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via pagerduty with escalate mode policies."
+}

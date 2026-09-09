@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-teams-escalate",
+  "name": "Support Teams Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "teams",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.teams",
+    "support.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via teams with escalate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-jira-triage",
+  "name": "Analytics Jira Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "jira",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.jira",
+    "analytics.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via jira with triage mode policies."
+}

@@ -1,0 +1,572 @@
+/* Evolution dashboard -- the self-improvement panel.
+   Cockpit aesthetic: sharp corners, muted instrument accent, dark translucent
+   panels. Plain-English, low-jargon layout for a non-technical operator. */
+
+/* ----------------------------------------------------------------------------
+   TYPE RAMP (UI-1) -- every font-size in this file snaps to this documented
+   scale; no orphan/half-pixel one-offs (no 10.5 / 11.5 / 12.5 / 13.5 / 16.5 /
+   17px). Steps, in px:
+     10  micro labels / language + kind badges
+     11  small mono labels (status, counter labels, tags, diff stat/hunk)
+     12  secondary body / form controls / tool + result + code text
+     13  body prose / subtitles / list + history rows
+     14  card titles
+     16  section / hero / empty-state titles + hero glyph
+     20  page + brand headings
+     24  focal stat numbers
+   Hierarchy is preserved; sizes were only consolidated onto the nearest step.
+   ---------------------------------------------------------------------------- */
+
+.evolution-workspace {
+    position: absolute;
+    inset: 0;
+    z-index: 16;
+    box-sizing: border-box;
+    padding: 72px 18px 18px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    color: var(--c-text);
+    /* Fully opaque: at 98% alpha the chat view behind ghosted through this
+       overlay (bright bubbles were faintly readable across the Forge header). */
+    background:
+        radial-gradient(circle at 84% 8%, color-mix(in srgb, var(--c-accent) 6%, transparent), transparent 40%),
+        var(--c-bg);
+}
+
+.evolution-shell {
+    min-height: 100%;
+    min-width: 0;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.evolution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.evolution-header h2 {
+    margin: 0 0 5px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: var(--c-text);
+}
+
+.evo-sub {
+    margin: 0;
+    color: var(--c-dim);
+    font-size: 13px;
+    line-height: 1.55;
+    max-width: 660px;
+}
+
+.evo-byline {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 9px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    color: var(--c-muted);
+    letter-spacing: 0.2px;
+}
+
+.evo-byline-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--c-muted);
+    flex: 0 0 auto;
+}
+
+.evo-byline-dot.is-live {
+    background: var(--c-success);
+    animation: evoPulse 1.6s ease-in-out infinite;
+}
+
+.evolution-status-pill {
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface-2);
+    color: var(--c-dim);
+}
+
+.evolution-status-pill.is-running {
+    border-color: color-mix(in srgb, var(--c-success) 50%, transparent);
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
+    color: var(--c-success);
+    animation: evoPulse 1.8s ease-in-out infinite;
+}
+
+.evolution-status-pill.is-attention {
+    border-color: color-mix(in srgb, var(--c-warn) 55%, transparent);
+    background: color-mix(in srgb, var(--c-warn) 13%, transparent);
+    color: var(--c-warn);
+}
+
+.evolution-status-pill.is-error {
+    border-color: color-mix(in srgb, var(--c-danger) 50%, transparent);
+    background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+    color: var(--c-danger);
+}
+
+@keyframes evoPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ---- hero status: the focal point ---- */
+.evo-hero {
+    border: 1px solid var(--c-border);
+    border-left: 3px solid color-mix(in srgb, var(--c-accent) 70%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--c-composer-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 18px 20px;
+}
+
+.evo-hero-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.evo-hero-main { flex: 1; min-width: 0; }
+
+.evo-hero-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--c-text);
+}
+
+.evo-hero-detail {
+    margin-top: 3px;
+    font-size: 13px;
+    color: var(--c-dim);
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-hero-icon {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.evo-hero-icon.is-check { background: color-mix(in srgb, var(--c-success) 16%, transparent); color: var(--c-success); }
+.evo-hero-icon.is-check::before { content: "\2713"; }
+.evo-hero-icon.is-wand { background: var(--c-surface-2); color: var(--c-dim); }
+.evo-hero-icon.is-wand::before { content: "\2726"; }
+.evo-hero-icon.is-warn { background: color-mix(in srgb, var(--c-danger) 16%, transparent); color: var(--c-danger); }
+.evo-hero-icon.is-warn::before { content: "\0021"; }
+
+.evo-hero-spin {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2.5px solid color-mix(in srgb, var(--c-success) 22%, transparent);
+    border-top-color: var(--c-success);
+    animation: evoSpin 0.9s linear infinite;
+}
+
+@keyframes evoSpin { to { transform: rotate(360deg); } }
+
+.evo-progress {
+    margin-top: 11px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--c-surface-2);
+    overflow: hidden;
+}
+
+.evo-progress-fill {
+    height: 100%;
+    background: var(--c-success);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+/* ---- buttons ---- */
+.evo-btn {
+    padding: var(--btn-pad-y, 8px) var(--btn-pad-x, 14px);
+    border-radius: var(--btn-radius, 10px);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: var(--btn-font-size, 12.5px);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.evo-btn:hover { background: var(--c-hover); border-color: var(--c-border-2); }
+.evo-btn:active { transform: translateY(1px); }
+.evo-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.evo-btn-primary {
+    border-color: color-mix(in srgb, var(--c-accent) 55%, transparent);
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
+}
+
+.evo-btn-primary:hover { background: color-mix(in srgb, var(--c-accent) 26%, transparent); border-color: color-mix(in srgb, var(--c-accent) 70%, transparent); }
+
+/* ---- stat tiles ---- */
+.evolution-counters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.evo-counter {
+    padding: 13px 15px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
+}
+
+.evo-counter-value {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--c-text);
+}
+
+.evo-counter-value.is-warn { color: var(--c-warn); }
+
+.evo-counter-label {
+    margin-top: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--c-muted);
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ---- section titles ---- */
+.evo-section-title {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--c-dim);
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-section-warn { color: var(--c-warn); }
+
+.evo-needs-wrap[hidden] { display: none; }
+
+.evolution-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 900px) {
+    .evolution-columns { grid-template-columns: 1fr; }
+}
+
+/* ---- cards ---- */
+.evo-list { display: flex; flex-direction: column; gap: 9px; }
+
+.evo-card {
+    padding: 13px 15px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
+}
+
+.evo-card-warn {
+    border-color: color-mix(in srgb, var(--c-warn) 40%, transparent);
+    border-left: 3px solid color-mix(in srgb, var(--c-warn) 70%, transparent);
+    background: color-mix(in srgb, var(--c-warn) 12%, transparent);
+}
+
+.evo-card-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 6px;
+}
+
+.evo-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+    color: var(--c-text);
+}
+
+.evo-card-why {
+    font-size: 12px;
+    color: var(--c-dim);
+    line-height: 1.55;
+}
+
+.evo-safe-note {
+    margin-top: 6px;
+    color: var(--c-success);
+}
+
+.evo-kind {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: lowercase;
+    letter-spacing: 0.3px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
+    color: var(--c-dim);
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-expand-link {
+    margin-top: 9px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--c-accent);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.evo-expand-link:hover { text-decoration: underline; }
+
+.evo-detail[hidden] { display: none; }
+
+.evo-files {
+    margin: 9px 0 0;
+    padding: 0 0 0 18px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 12px;
+    color: var(--c-dim);
+    line-height: 1.7;
+}
+
+.evo-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.evo-card-actions .evo-btn { padding: 7px 14px; font-size: 12px; }
+
+.evo-empty {
+    padding: 18px;
+    text-align: center;
+    color: var(--c-muted);
+    font-size: 12px;
+    border: 1px dashed var(--c-border);
+    border-radius: var(--radius-sm);
+}
+
+/* ---- recently-done timeline ---- */
+.evo-hist-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--c-surface);
+    font-size: 13px;
+}
+
+.evo-hist-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c-muted);
+}
+
+.evo-hist-dot.is-done { background: var(--c-success); }
+.evo-hist-dot.is-wait { background: var(--c-warn); }
+.evo-hist-dot.is-skip { background: var(--c-muted); }
+
+.evo-hist-title { flex: 1; min-width: 0; color: var(--c-text); }
+
+.evo-hist-tag {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--c-muted);
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* ---- advanced drawer ---- */
+.evo-advanced {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-sm);
+    background: var(--c-surface);
+    padding: 12px 15px;
+}
+
+.evo-advanced > summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--c-dim);
+    list-style: none;
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.evo-advanced > summary::before {
+    content: "\002B  ";
+    color: var(--c-muted);
+}
+
+.evo-advanced[open] > summary::before { content: "\2212  "; }
+
+.evo-advanced-body {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+
+.evo-advanced-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--c-dim);
+}
+
+.evo-advanced-body select,
+.evo-advanced-body input {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--c-border-2);
+    background: var(--c-composer-bg);
+    color: var(--c-text);
+    font-size: 13px;
+}
+
+/* ---- Forge shell: the Evolve | Code container ---- */
+.forge-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.forge-topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.forge-brand {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--c-text);
+    letter-spacing: 0.3px;
+}
+
+.forge-toggle {
+    display: inline-flex;
+    border: 1px solid var(--c-border-2);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.forge-tab {
+    padding: 7px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    color: var(--c-dim);
+    border: none;
+    border-left: 1px solid var(--c-border);
+    cursor: pointer;
+}
+
+.forge-tab:first-child { border-left: none; }
+.forge-tab.is-active { background: var(--c-accent-soft); color: var(--c-accent); }
+.forge-tab:hover:not(.is-active) { background: var(--c-hover); }
+
+.forge-hint {
+    margin-left: auto;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    color: var(--c-muted);
+}
+
+.forge-view.is-hidden { display: none; }
+.forge-view .evolution-shell { max-width: none; margin: 0; }
+
+/* Bound the Code surface height so the transcript scrolls INTERNALLY (the chat
+   log can be scrolled up to read history) instead of growing the whole page.
+   min-height:0 down the flex chain lets the inner overflow:auto engage. */
+/* Own a clean stacking context so the translucent transcript/changes never let
+   stale rows from layers behind ghost through, and so the surface composites as
+   one unit. */
+#forgeCode {
+    display: flex;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    min-height: 440px;
+    height: min(78vh, 940px);
+}
+#forgeCode .evo-eng {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid color-mix(in srgb, var(--c-accent) 22%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--c-composer-bg);
+}
+#forgeCode .evo-eng-transcript { flex: 1; min-height: 0; max-height: none; }
+/* The wrap clips its own children so the transcript and the changes panel stay
+   inside its rounded bounds -- no row spills past the edges as a ghost. */
+#forgeCode .forge-code-wrap { flex: 1; min-height: 0; overflow: hidden; }
+
+/* ---- clickable stat tiles + expandable detail ---- */
+.evo-counter-click {
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.evo-counter-click:hover { border-color: var(--c-accent-line); }
+.evo-counter-click.is-active { border-color: color-mix(in srgb, var(--c-accent) 60%, transparent); background: var(--c-accent-soft); }
+
+.evo-tile-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border: 0.5px solid var(--c-border);
+    border-radius: var(--radius-sm);
+    background: var(--c-surface);
+    padding: 12px 14px;
+}
+.evo-tile-detail.is-hidden { display: none; }

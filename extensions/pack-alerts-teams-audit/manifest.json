@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-teams-audit",
+  "name": "Alerts Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.teams",
+    "alerts.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via teams with audit mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-email-prevent",
+  "name": "Incident Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.email",
+    "incident.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via email with prevent mode policies."
+}

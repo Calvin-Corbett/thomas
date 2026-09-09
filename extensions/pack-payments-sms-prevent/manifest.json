@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-sms-prevent",
+  "name": "Payments Sms Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "sms",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.sms",
+    "payments.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via sms with prevent mode policies."
+}

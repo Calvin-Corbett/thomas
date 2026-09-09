@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-slack-audit",
+  "name": "Ops Slack Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "slack",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.slack",
+    "ops.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via slack with audit mode policies."
+}

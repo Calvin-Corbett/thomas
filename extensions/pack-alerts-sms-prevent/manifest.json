@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-sms-prevent",
+  "name": "Alerts Sms Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "sms",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.sms",
+    "alerts.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via sms with prevent mode policies."
+}

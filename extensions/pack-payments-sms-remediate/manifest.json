@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-sms-remediate",
+  "name": "Payments Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.sms",
+    "payments.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via sms with remediate mode policies."
+}

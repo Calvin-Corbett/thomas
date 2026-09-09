@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-email-audit",
+  "name": "Fraud Email Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "email",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.email",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via email with audit mode policies."
+}

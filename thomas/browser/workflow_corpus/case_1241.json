@@ -1,0 +1,541 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-1241",
+  "title": "Browser workflow case 1241 (checkout)",
+  "category": "checkout",
+  "risk_level": "low",
+  "objective": "Validate checkout journey under offline_recover network conditions.",
+  "dimensions": {
+    "channel": "kiosk_web",
+    "region": "sa-east",
+    "network_profile": "offline_recover",
+    "build_variant": "candidate",
+    "locale": "en-US"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:checkout",
+    "region:sa-east",
+    "channel:kiosk_web",
+    "network:offline_recover"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "click",
+      "target": "[data-test='checkout-01']",
+      "input": "case-1241-value-01",
+      "expect": "checkout-expected-01",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "type",
+      "target": "[data-test='checkout-02']",
+      "input": "case-1241-value-02",
+      "expect": "checkout-expected-02",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "press",
+      "target": "[data-test='checkout-03']",
+      "input": "case-1241-value-03",
+      "expect": "checkout-expected-03",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "scroll_into_view",
+      "target": "[data-test='checkout-04']",
+      "input": "case-1241-value-04",
+      "expect": "checkout-expected-04",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "capture_screenshot",
+      "target": "[data-test='checkout-05']",
+      "input": "case-1241-value-05",
+      "expect": "checkout-expected-05",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "snapshot_dom",
+      "target": "[data-test='checkout-06']",
+      "input": "case-1241-value-06",
+      "expect": "checkout-expected-06",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "collect_console",
+      "target": "[data-test='checkout-07']",
+      "input": "case-1241-value-07",
+      "expect": "checkout-expected-07",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "collect_network",
+      "target": "[data-test='checkout-08']",
+      "input": "case-1241-value-08",
+      "expect": "checkout-expected-08",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "assert_text",
+      "target": "[data-test='checkout-09']",
+      "input": "case-1241-value-09",
+      "expect": "checkout-expected-09",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "assert_visibility",
+      "target": "[data-test='checkout-10']",
+      "input": "case-1241-value-10",
+      "expect": "checkout-expected-10",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "download_file",
+      "target": "[data-test='checkout-11']",
+      "input": "case-1241-value-11",
+      "expect": "checkout-expected-11",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "upload_file",
+      "target": "[data-test='checkout-12']",
+      "input": "case-1241-value-12",
+      "expect": "checkout-expected-12",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "switch_tab",
+      "target": "[data-test='checkout-13']",
+      "input": "case-1241-value-13",
+      "expect": "checkout-expected-13",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "close_tab",
+      "target": "[data-test='checkout-14']",
+      "input": "case-1241-value-14",
+      "expect": "checkout-expected-14",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "start_trace",
+      "target": "[data-test='checkout-15']",
+      "input": "case-1241-value-15",
+      "expect": "checkout-expected-15",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "stop_trace",
+      "target": "[data-test='checkout-16']",
+      "input": "case-1241-value-16",
+      "expect": "checkout-expected-16",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "export_pdf",
+      "target": "[data-test='checkout-17']",
+      "input": "case-1241-value-17",
+      "expect": "checkout-expected-17",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "check_a11y",
+      "target": "[data-test='checkout-18']",
+      "input": "case-1241-value-18",
+      "expect": "checkout-expected-18",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "open_url",
+      "target": "[data-test='checkout-19']",
+      "input": "case-1241-value-19",
+      "expect": "checkout-expected-19",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "wait_for_selector",
+      "target": "[data-test='checkout-20']",
+      "input": "case-1241-value-20",
+      "expect": "checkout-expected-20",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "click",
+      "target": "[data-test='checkout-21']",
+      "input": "case-1241-value-21",
+      "expect": "checkout-expected-21",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "type",
+      "target": "[data-test='checkout-22']",
+      "input": "case-1241-value-22",
+      "expect": "checkout-expected-22",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "press",
+      "target": "[data-test='checkout-23']",
+      "input": "case-1241-value-23",
+      "expect": "checkout-expected-23",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "scroll_into_view",
+      "target": "[data-test='checkout-24']",
+      "input": "case-1241-value-24",
+      "expect": "checkout-expected-24",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "capture_screenshot",
+      "target": "[data-test='checkout-25']",
+      "input": "case-1241-value-25",
+      "expect": "checkout-expected-25",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "network",
+      "query": "assert-checkout-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "console",
+      "query": "assert-checkout-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "text",
+      "query": "assert-checkout-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "visibility",
+      "query": "assert-checkout-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "network",
+      "query": "assert-checkout-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "console",
+      "query": "assert-checkout-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "text",
+      "query": "assert-checkout-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "visibility",
+      "query": "assert-checkout-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "network",
+      "query": "assert-checkout-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "console",
+      "query": "assert-checkout-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "text",
+      "query": "assert-checkout-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "visibility",
+      "query": "assert-checkout-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 3,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 24000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": true,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/1241/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/1241/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/1241/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/1241/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "checkout",
+    "kiosk_web",
+    "sa-east",
+    "offline_recover",
+    "severity:low"
+  ]
+}

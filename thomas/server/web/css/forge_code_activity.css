@@ -1,0 +1,362 @@
+/* -- tool call cards (UI-12/13/14) ------------------------------------- */
+/* The assistant .message-stack is a CSS grid with justify-items:start, so
+   full-width Forge blocks must justify-self:stretch to fill the column. */
+.fc-tool {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-md);
+    background: var(--fc-surface-2);
+    overflow: hidden;
+}
+
+.fc-tool-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 7px 11px;
+    font-family: var(--fc-mono);
+    font-size: 12px;
+    min-height: 34px;
+}
+
+.fc-tool-ic {
+    flex: 0 0 auto;
+    display: inline-flex;
+    color: var(--fc-ink-3);
+}
+.fc-tool-ic svg { width: 15px; height: 15px; }
+
+.fc-tool-verb {
+    flex: 0 0 auto;
+    color: var(--fc-accent);
+    font-weight: 600;
+    font-family: var(--font-sans);
+}
+
+.fc-tool.is-run .fc-tool-verb { color: var(--fc-mint); }
+.fc-tool.is-run .fc-tool-ic { color: var(--fc-mint); }
+
+.fc-tool-target {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--fc-ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-tool-status {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--fc-ink-3);
+}
+.fc-tool-status svg { width: 15px; height: 15px; }
+.fc-tool-status[data-state="running"] { color: var(--fc-accent); }
+.fc-tool-status[data-state="running"] svg { animation: fcSpin 0.8s linear infinite; }
+.fc-tool-status[data-state="success"] { color: var(--fc-mint); }
+.fc-tool-status[data-state="error"] { color: var(--fc-danger); }
+
+/* (duplicate fcSpin removed - defined above) */
+
+.fc-tool.is-error { border-color: var(--fc-danger); }
+
+/* collapsible tool output inside the card (progressive disclosure) */
+.fc-tool-body { border-top: 1px solid var(--fc-border); }
+.fc-tool-body > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 6px 11px;
+    font-family: var(--fc-mono);
+    font-size: 11px;
+    color: var(--fc-ink-3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.fc-tool-body > summary::-webkit-details-marker { display: none; }
+.fc-tool-body > summary::before {
+    content: '';
+    width: 0; height: 0;
+    border-left: 4px solid currentColor;
+    border-top: 3px solid transparent;
+    border-bottom: 3px solid transparent;
+    transition: transform 0.15s ease;
+}
+.fc-tool-body[open] > summary::before { transform: rotate(90deg); }
+.fc-tool-body.is-error > summary { color: var(--fc-danger); }
+
+.fc-tool-pre {
+    margin: 0;
+    padding: 9px 12px;
+    max-height: 300px;
+    overflow: auto;
+    border-top: 1px solid var(--fc-border);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    font: var(--fc-code-size)/1.55 var(--fc-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+    tab-size: 4;
+}
+
+/* one-line inline result (short, no expansion needed) */
+.fc-tool-inline {
+    padding: 6px 11px 8px 11px;
+    border-top: 1px solid var(--fc-border);
+    color: var(--fc-ink-3);
+    font: 11px/1.5 var(--fc-mono);
+    overflow-wrap: anywhere;
+}
+.fc-tool-inline.is-error { color: var(--fc-danger); }
+
+/* standalone result (no parent card) */
+.fc-result {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-r-md);
+    background: var(--fc-surface-2);
+    overflow: hidden;
+}
+.fc-result > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 7px 11px;
+    color: var(--fc-ink-3);
+    font: 11px var(--fc-mono);
+}
+.fc-result > summary::-webkit-details-marker { display: none; }
+.fc-result.is-error { border-color: var(--fc-danger); }
+.fc-result.is-error > summary { color: var(--fc-danger); }
+.fc-result-pre {
+    margin: 0;
+    padding: 9px 12px;
+    max-height: 300px;
+    overflow: auto;
+    border-top: 1px solid var(--fc-border);
+    background: var(--fc-surface-3);
+    color: var(--fc-ink-2);
+    font: var(--fc-code-size)/1.55 var(--fc-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.fc-result-line {
+    align-self: flex-start;
+    max-width: 100%;
+    color: var(--fc-ink-3);
+    font: 11px/1.5 var(--fc-mono);
+    overflow-wrap: anywhere;
+}
+.fc-result-line.is-error { color: var(--fc-danger); }
+
+/* -- reasoning: demoted + collapsible (UI-9) --------------------------- */
+.fc-reason { justify-self: stretch; width: 100%; max-width: 100%; }
+.fc-reason > summary {
+    cursor: pointer;
+    list-style: none;
+    color: var(--fc-ink-3);
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+}
+.fc-reason > summary::-webkit-details-marker { display: none; }
+.fc-reason > summary svg { width: 13px; height: 13px; opacity: 0.8; }
+.fc-reason-body {
+    margin: 6px 0 0;
+    padding: 8px 12px;
+    border-left: 2px solid var(--fc-rail);
+    color: var(--fc-ink-3);
+    font-size: 12px;
+    line-height: 1.6;
+    font-style: italic;
+}
+
+/* -- mid-task insight: the model's salient "I'm noticing…" observation --
+   Lighter + visually distinct from the bordered tool/diff cards: a soft
+   accent-tinted inset strip with a subtle bulb, sitting above the live tool
+   activity. Sourced organically from the model's own reasoning stream. */
+.fc-insight {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 8px 12px;
+    border-left: 2px solid var(--fc-accent);
+    border-radius: var(--fc-r-sm);
+    background: var(--fc-accent-soft);
+    color: var(--fc-ink-2);
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+.fc-insight-ic { color: var(--fc-accent); flex: 0 0 auto; margin-top: 1px; display: inline-flex; }
+.fc-insight-ic svg { width: 15px; height: 15px; }
+.fc-insight-text { font-style: italic; }
+
+/* -- quiet engine status note ------------------------------------------ */
+.fc-status {
+    justify-self: center;
+    color: var(--fc-ink-3);
+    font-size: 11px;
+    letter-spacing: 0.2px;
+}
+
+/* -- designed error surface (UI-20) ------------------------------------ */
+.fc-error {
+    justify-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    gap: var(--space-2);
+    padding: 10px 12px;
+    border: 1px solid var(--fc-danger);
+    border-left-width: 3px;
+    border-radius: var(--fc-r-md);
+    background: var(--fc-danger-soft);
+    color: var(--fc-danger);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.fc-error svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; }
+
+/* Actionable build error: a plain-language CAUSE up top, the raw provider/git/
+   permission detail collapsed but kept available, and a RETRY that re-sends the
+   same turn. Stacks vertically so the cause leads and the detail/retry sit under
+   it. (UI-20, Performance-33/35, UX-25/26/27) */
+.fc-error.is-build {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+}
+.fc-error-head {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+}
+.fc-error-cause { font-weight: 600; }
+.fc-error-detail {
+    font-family: var(--fc-mono);
+    font-size: 11px;
+    color: var(--fc-ink-2);
+}
+.fc-error-detail > summary {
+    cursor: pointer;
+    color: var(--fc-ink-3);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    list-style: none;
+}
+.fc-error-detail > summary::-webkit-details-marker { display: none; }
+.fc-error-detail[open] > summary { margin-bottom: 5px; }
+.fc-error-pre {
+    margin: 0;
+    padding: 8px 10px;
+    max-height: 180px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border-radius: var(--fc-r-sm);
+    background: var(--fc-surface);
+    color: var(--fc-ink-2);
+    line-height: 1.5;
+}
+.fc-error-actions { display: flex; justify-content: flex-end; }
+.fc-error-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 13px;
+    border-radius: var(--fc-r-sm);
+    border: 1px solid var(--fc-danger);
+    background: transparent;
+    color: var(--fc-danger);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.fc-error-retry svg { width: 14px; height: 14px; margin-top: 0; }
+.fc-error-retry:hover { background: var(--fc-danger-soft); }
+.fc-error-retry:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 1px; }
+.fc-error-retry:disabled { opacity: 0.5; cursor: default; }
+
+/* Transient "Reconnecting…" strip: shown while a dropped SSE stream is being
+   re-established (bounded attempts), hidden the moment data flows again or the
+   attempts are exhausted. A calm, non-destructive surface — it does NOT imply
+   the build failed; the honest terminal state lands only after the budget runs
+   out. (Performance-33/35, UX-25/26/27) */
+.fc-reconnect {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    padding: 7px 12px;
+    border-radius: var(--fc-r-md);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fc-warn);
+    background: var(--fc-warn-soft);
+    border: 1px solid rgba(233, 192, 122, 0.28);
+}
+.fc-reconnect-ic { width: 15px; height: 15px; flex: 0 0 auto; animation: fcSpin 0.9s linear infinite; }
+@keyframes fcSpin { to { transform: rotate(360deg); } }
+
+/* -- terminal-state pill (done / no-op / failed) ----------------------- */
+.fc-note {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 2px 0;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.fc-note svg { width: 14px; height: 14px; }
+.fc-note.is-done { color: var(--fc-mint); background: var(--fc-mint-soft); border: 1px solid rgba(71, 215, 172, 0.3); }
+.fc-note.is-warn { color: var(--fc-warn); background: var(--fc-warn-soft); border: 1px solid rgba(233, 192, 122, 0.28); }
+.fc-note.is-err { color: var(--fc-danger); background: var(--fc-danger-soft); border: 1px solid var(--fc-danger); }
+
+/* Mid-run follow-up: a calm, non-destructive "queued" strip with a Cancel.
+   Shown while a build is in flight and the user has typed the next instruction;
+   it auto-clears when the queued message fires or is cancelled. */
+.fc-queued {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    padding: 7px 12px;
+    border-radius: var(--fc-r-md);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fc-warn);
+    background: var(--fc-warn-soft);
+    border: 1px solid rgba(233, 192, 122, 0.28);
+}
+.fc-queued[hidden] { display: none; }
+.fc-queued .fc-queued-ic { width: 14px; height: 14px; flex: 0 0 auto; }
+.fc-queued-text { flex: 1 1 auto; }
+.fc-queued-cancel {
+    flex: 0 0 auto;
+    appearance: none;
+    border: 1px solid var(--fc-border-strong);
+    background: transparent;
+    color: var(--fc-ink-2);
+    font: inherit;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.fc-queued-cancel:hover { color: var(--fc-ink); border-color: var(--fc-ink-3); background: var(--fc-surface-2); }

@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""Create a clean git snapshot of the current repo for publish preflight."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+# Make `scripts.forge.publish` importable when this file is run directly
+# (`python scripts/forge/publish/snapshot.py`) as well as via
+# `python -m scripts.forge.publish.snapshot`.
+_SNAPSHOT_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_SNAPSHOT_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SNAPSHOT_REPO_ROOT))
+
+from scripts.forge.publish.private_markers import (  # noqa: E402
+    ACCEPTED_PRIVATE_MARKER_LINES,
+    PRIVATE_MARKER,
+    line_has_private_marker,
+    path_has_private_marker,
+)
+
+ROOT = _SNAPSHOT_REPO_ROOT
+DEFAULT_REPO_HYGIENE_BASELINE = ROOT / "docs" / "repo_hygiene_baseline.json"
+
+
+def _run_git(repo_root: Path, args: Sequence[str]) -> str:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"git {' '.join(args)} failed")
+    return str(proc.stdout or "")
+
+
+def _normalize_path(raw: str) -> str:
+    return str(raw or "").strip().replace("\\", "/")
+
+
+def _any_suffix(path: str, suffixes: Sequence[str]) -> bool:
+    lowered = _normalize_path(path).lower()
+    for raw in suffixes:
+        suffix = str(raw or "").strip().lower()
+        if suffix and lowered.endswith(suffix):
+            return True
+    return False
+
+
+def _any_prefix(path: str, prefixes: Sequence[str]) -> bool:
+    lowered = _normalize_path(path).lower()
+    for raw in prefixes:
+        prefix = _normalize_path(str(raw or "")).lower()
+        if prefix and lowered.startswith(prefix):
+            return True
+    return False
+
+
+def _list_git_paths(repo_root: Path, *, include_untracked: bool) -> list[str]:
+    tracked = {
+        _normalize_path(line) for line in _run_git(repo_root, ["ls-files"]).splitlines() if _normalize_path(line)
+    }
+    if not include_untracked:
+        return sorted(tracked)
+
+    untracked = {
+        _normalize_path(line)
+        for line in _run_git(repo_root, ["ls-files", "--others", "--exclude-standard"]).splitlines()
+        if _normalize_path(line)
+    }
+    return sorted(tracked | untracked)
+
+
+def _load_repo_hygiene_baseline(repo_root: Path) -> dict[str, Any] | None:
+    path = repo_root / DEFAULT_REPO_HYGIENE_BASELINE.relative_to(ROOT)
+    if not path.exists():
+        return None
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else None
+
+
+def _line_has_private_marker(line: str) -> bool:
+    return line_has_private_marker(line)
+
+
+def _has_private_marker(repo_root: Path, rel_path: str) -> bool:
+    return path_has_private_marker(repo_root, rel_path)
+
+
+def _publishable_normalized_path(repo_root: Path, raw: str) -> str:
+    rel = _normalize_path(raw)
+    if not rel or _has_private_marker(repo_root, rel):
+        return ""
+    return rel
+
+
+def _filter_publish_paths(
+    repo_root: Path,
+    rel_paths: Sequence[str],
+    *,
+    respect_repo_hygiene: bool,
+) -> list[str]:
+    if not respect_repo_hygiene:
+        return sorted({rel for path in rel_paths if (rel := _publishable_normalized_path(repo_root, path))})
+
+    baseline = _load_repo_hygiene_baseline(repo_root)
+    if not baseline:
+        return sorted({rel for path in rel_paths if (rel := _publishable_normalized_path(repo_root, path))})
+
+    allowed_root = {
+        _normalize_path(item) for item in (baseline.get("allowed_tracked_root_files") or []) if _normalize_path(item)
+    }
+    forbidden_prefixes = [
+        _normalize_path(item) for item in (baseline.get("forbidden_tracked_prefixes") or []) if _normalize_path(item)
+    ]
+    # publish_strip_prefixes: paths that are legitimately tracked in the source repo
+    # (so repo_hygiene.py does NOT flag them) but MUST be stripped before publishing.
+    # Use this for private content (research notes, internal plans, etc.) that lives
+    # in the dev repo but should not ship to the public mirror.
+    publish_strip_prefixes = [
+        _normalize_path(item) for item in (baseline.get("publish_strip_prefixes") or []) if _normalize_path(item)
+    ]
+    all_excluded_prefixes = forbidden_prefixes + publish_strip_prefixes
+    blocked_suffixes = [str(item) for item in (baseline.get("blocked_tracked_suffixes") or []) if str(item).strip()]
+
+    filtered: list[str] = []
+    for raw in rel_paths:
+        rel = _normalize_path(raw)
+        if not rel:
+            continue
+        if _has_private_marker(repo_root, rel):
+            continue
+        if "/" not in rel and allowed_root and rel not in allowed_root:
+            continue
+        if _any_prefix(rel, all_excluded_prefixes):
+            continue
+        if _any_suffix(rel, blocked_suffixes):
+            continue
+        filtered.append(rel)
+    return sorted(set(filtered))
+
+
+def _copy_snapshot_paths(repo_root: Path, snapshot_root: Path, rel_paths: Sequence[str]) -> list[str]:
+    copied: list[str] = []
+    for rel in rel_paths:
+        src = repo_root / rel
+        if not src.exists() or not src.is_file():
+            continue
+        dst = snapshot_root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        copied.append(rel)
+    return copied
+
+
+def _copy_directory_if_present(repo_root: Path, snapshot_root: Path, rel_path: str) -> None:
+    src = repo_root / rel_path
+    if not src.exists() or not src.is_dir():
+        return
+    dst = snapshot_root / rel_path
+    shutil.copytree(src, dst, dirs_exist_ok=True)
+
+
+def _remove_private_marker_files(snapshot_root: Path) -> list[str]:
+    removed: list[str] = []
+    for path in sorted(item for item in snapshot_root.rglob("*") if item.is_file()):
+        rel = _normalize_path(str(path.relative_to(snapshot_root)))
+        if _has_private_marker(snapshot_root, rel):
+            path.unlink()
+            removed.append(rel)
+    return removed
+
+
+def _resolve_snapshot_root(output_root: str | None) -> Path:
+    raw = str(output_root or "").strip()
+    if raw:
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = (ROOT / path).resolve()
+        return path
+    return Path(tempfile.mkdtemp(prefix="thomas-github-publish-snapshot-"))
+
+
+def _current_origin(repo_root: Path) -> str:
+    try:
+        return _run_git(repo_root, ["remote", "get-url", "origin"]).strip()
+    except Exception:
+        return ""
+
+
+def _init_snapshot_repo(snapshot_root: Path, *, origin_url: str) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=snapshot_root, check=True)
+    subprocess.run(["git", "config", "user.name", "Thomas Snapshot"], cwd=snapshot_root, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "snapshot@local.invalid"],
+        cwd=snapshot_root,
+        check=True,
+    )
+    subprocess.run(["git", "config", "core.autocrlf", "false"], cwd=snapshot_root, check=True)
+    if origin_url:
+        subprocess.run(["git", "remote", "add", "origin", origin_url], cwd=snapshot_root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=snapshot_root, check=True)
+    subprocess.run(["git", "commit", "-qm", "publish snapshot"], cwd=snapshot_root, check=True)
+    subprocess.run(["git", "branch", "dev"], cwd=snapshot_root, check=True)
+    subprocess.run(["git", "branch", "prod"], cwd=snapshot_root, check=True)
+
+
+def _run_preflight(snapshot_root: Path, *, deep: bool) -> dict[str, Any]:
+    cmd = [
+        "python",
+        "scripts/forge/publish/preflight.py",
+        "--json",
+        "--strict",
+    ]
+    if deep:
+        cmd.append("--deep")
+    proc = subprocess.run(
+        cmd,
+        cwd=snapshot_root,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except Exception:
+        payload = {"ok": False, "errors": [proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"]}
+    payload["exit_code"] = int(proc.returncode)
+    return payload
+
+
+def run(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Create a clean publish snapshot without touching the active tree.")
+    parser.add_argument("--repo-root", default=".", help="Source repository root.")
+    parser.add_argument("--output-root", default="", help="Optional snapshot destination directory.")
+    parser.add_argument(
+        "--include-untracked",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include untracked files in the snapshot (default: true).",
+    )
+    parser.add_argument(
+        "--respect-repo-hygiene",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Prune files rejected by docs/repo_hygiene_baseline.json when building the publish snapshot.",
+    )
+    parser.add_argument("--deep-preflight", action="store_true", help="Run deep publish preflight in snapshot.")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable output.")
+    args = parser.parse_args(argv)
+
+    repo_root = Path(args.repo_root).resolve()
+    snapshot_root = _resolve_snapshot_root(args.output_root)
+    if snapshot_root.exists() and any(snapshot_root.iterdir()):
+        raise SystemExit(f"snapshot destination must be empty: {snapshot_root}")
+    snapshot_root.mkdir(parents=True, exist_ok=True)
+
+    rel_paths = _list_git_paths(repo_root, include_untracked=bool(args.include_untracked))
+    excluded_marker_files = [rel for rel in rel_paths if _has_private_marker(repo_root, rel)]
+    rel_paths = _filter_publish_paths(
+        repo_root,
+        rel_paths,
+        respect_repo_hygiene=bool(args.respect_repo_hygiene),
+    )
+    copied = _copy_snapshot_paths(repo_root, snapshot_root, rel_paths)
+    removed_private_marker_files = sorted(set(excluded_marker_files + _remove_private_marker_files(snapshot_root)))
+
+    _init_snapshot_repo(snapshot_root, origin_url=_current_origin(repo_root))
+    preflight = _run_preflight(snapshot_root, deep=bool(args.deep_preflight))
+    payload: dict[str, Any] = {
+        "ok": bool(preflight.get("ok")),
+        "snapshot_root": str(snapshot_root),
+        "copied_file_count": len(copied),
+        "removed_private_marker_file_count": len(removed_private_marker_files),
+        "removed_private_marker_files": removed_private_marker_files,
+        "include_untracked": bool(args.include_untracked),
+        "respect_repo_hygiene": bool(args.respect_repo_hygiene),
+        "preflight": preflight,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"snapshot root: {snapshot_root}")
+        print(f"copied files: {len(copied)}")
+        print(f"removed private marker files: {len(removed_private_marker_files)}")
+        print(f"preflight ok: {bool(preflight.get('ok'))}")
+    return 0 if bool(preflight.get("ok")) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

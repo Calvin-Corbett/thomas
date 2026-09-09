@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-discord-prevent",
+  "name": "Qa Discord Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "discord",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.discord",
+    "qa.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via discord with prevent mode policies."
+}

@@ -1,0 +1,49 @@
+# Dependency review — block PRs that introduce vulnerable dependencies.
+#
+# Runs on every PR to dev or main. Fails the check if the PR adds any
+# dependency with a known CVE at "moderate" severity or higher.
+#
+# This is the PR-time complement to Dependabot:
+#   - Dependabot:        opens PRs to UPGRADE vulnerable deps
+#   - Dependency-review: blocks PRs that ADD vulnerable deps in the first place
+#
+# Docs: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/about-dependency-review
+
+name: Dependency review
+
+on:
+  pull_request:
+    branches: ["dev", "main"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Fail on moderate-or-worse CVEs in newly-added deps.
+          # Tune to "high" if too noisy.
+          fail-on-severity: moderate
+          # Comment a summary on the PR
+          comment-summary-in-pr: on-failure
+          # Allow these licenses (deny anything else for new deps).
+          # Adjust to match Thomas's licensing policy.
+          allow-licenses: >-
+            MIT,
+            Apache-2.0,
+            BSD-2-Clause,
+            BSD-3-Clause,
+            ISC,
+            CC0-1.0,
+            Python-2.0,
+            Unlicense,
+            0BSD

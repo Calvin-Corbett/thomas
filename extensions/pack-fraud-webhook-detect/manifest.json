@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-webhook-detect",
+  "name": "Fraud Webhook Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "webhook",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.webhook",
+    "fraud.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via webhook with detect mode policies."
+}

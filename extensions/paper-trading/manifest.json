@@ -1,0 +1,50 @@
+{
+  "id": "paper-trading",
+  "plugin_id": "paper-trading",
+  "name": "Paper Trading",
+  "display_name": "Paper Trading",
+  "version": "1.0.0",
+  "category": "finance",
+  "categories": [
+    "finance",
+    "automation"
+  ],
+  "target": "desktop",
+  "mode": "paper_trading",
+  "mode_id": "paper_trading",
+  "entrypoint": "hooks.py",
+  "publisher_id": "thomas-official",
+  "publisher_name": "Thomas",
+  "kind": "desktop_plugin",
+  "marketplace_type": "command_center",
+  "description": "Propose, approve, and execute simulated stock/ETF trades on a free Alpaca paper account. Thomas proposes with a thesis; you approve every order; outcomes are scored and learned from.",
+  "subtitle": "Paper-only stocks & ETFs with a human approving every trade.",
+  "icon": "ph-chart-line-up",
+  "api_namespace": "paper-trading",
+  "capabilities": [
+    "paper_trading.market_data",
+    "paper_trading.proposals",
+    "paper_trading.execution",
+    "paper_trading.journal",
+    "healthcheck"
+  ],
+  "tags": [
+    "finance",
+    "trading",
+    "paper",
+    "command_center",
+    "workspace",
+    "official"
+  ],
+  "requires": [],
+  "left_nav_behavior": "workspace",
+  "default_nav_section": "command_centers",
+  "default_nav_order": 530,
+  "surface": {
+    "entry_html": "web/index.html",
+    "title": "Paper Trading",
+    "surface_mode": "immersive"
+  },
+  "sha256": "",
+  "signature": "bundled"
+}

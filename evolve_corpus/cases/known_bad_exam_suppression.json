@@ -1,0 +1,11 @@
+{
+  "case_id": "known_bad_exam_suppression",
+  "description": "A candidate that edits tests or test infrastructure is an exam-suppression attempt.",
+  "expected_supervisor_outcome": "reject",
+  "changed_files": [
+    "tests/test_architecture.py"
+  ],
+  "expected_finding_codes": [
+    "test_infra_changed"
+  ]
+}

@@ -1,0 +1,541 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-1431",
+  "title": "Browser workflow case 1431 (policy_ack)",
+  "category": "policy_ack",
+  "risk_level": "high",
+  "objective": "Validate policy_ack journey under packet_loss network conditions.",
+  "dimensions": {
+    "channel": "tablet_web",
+    "region": "eu-central",
+    "network_profile": "packet_loss",
+    "build_variant": "canary",
+    "locale": "es-ES"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:policy_ack",
+    "region:eu-central",
+    "channel:tablet_web",
+    "network:packet_loss"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "download_file",
+      "target": "[data-test='policy_ack-01']",
+      "input": "case-1431-value-01",
+      "expect": "policy_ack-expected-01",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "upload_file",
+      "target": "[data-test='policy_ack-02']",
+      "input": "case-1431-value-02",
+      "expect": "policy_ack-expected-02",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "switch_tab",
+      "target": "[data-test='policy_ack-03']",
+      "input": "case-1431-value-03",
+      "expect": "policy_ack-expected-03",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "close_tab",
+      "target": "[data-test='policy_ack-04']",
+      "input": "case-1431-value-04",
+      "expect": "policy_ack-expected-04",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "start_trace",
+      "target": "[data-test='policy_ack-05']",
+      "input": "case-1431-value-05",
+      "expect": "policy_ack-expected-05",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "stop_trace",
+      "target": "[data-test='policy_ack-06']",
+      "input": "case-1431-value-06",
+      "expect": "policy_ack-expected-06",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "export_pdf",
+      "target": "[data-test='policy_ack-07']",
+      "input": "case-1431-value-07",
+      "expect": "policy_ack-expected-07",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "check_a11y",
+      "target": "[data-test='policy_ack-08']",
+      "input": "case-1431-value-08",
+      "expect": "policy_ack-expected-08",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "open_url",
+      "target": "[data-test='policy_ack-09']",
+      "input": "case-1431-value-09",
+      "expect": "policy_ack-expected-09",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "wait_for_selector",
+      "target": "[data-test='policy_ack-10']",
+      "input": "case-1431-value-10",
+      "expect": "policy_ack-expected-10",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "click",
+      "target": "[data-test='policy_ack-11']",
+      "input": "case-1431-value-11",
+      "expect": "policy_ack-expected-11",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "type",
+      "target": "[data-test='policy_ack-12']",
+      "input": "case-1431-value-12",
+      "expect": "policy_ack-expected-12",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "press",
+      "target": "[data-test='policy_ack-13']",
+      "input": "case-1431-value-13",
+      "expect": "policy_ack-expected-13",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "scroll_into_view",
+      "target": "[data-test='policy_ack-14']",
+      "input": "case-1431-value-14",
+      "expect": "policy_ack-expected-14",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "capture_screenshot",
+      "target": "[data-test='policy_ack-15']",
+      "input": "case-1431-value-15",
+      "expect": "policy_ack-expected-15",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "snapshot_dom",
+      "target": "[data-test='policy_ack-16']",
+      "input": "case-1431-value-16",
+      "expect": "policy_ack-expected-16",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "collect_console",
+      "target": "[data-test='policy_ack-17']",
+      "input": "case-1431-value-17",
+      "expect": "policy_ack-expected-17",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "collect_network",
+      "target": "[data-test='policy_ack-18']",
+      "input": "case-1431-value-18",
+      "expect": "policy_ack-expected-18",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "assert_text",
+      "target": "[data-test='policy_ack-19']",
+      "input": "case-1431-value-19",
+      "expect": "policy_ack-expected-19",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "assert_visibility",
+      "target": "[data-test='policy_ack-20']",
+      "input": "case-1431-value-20",
+      "expect": "policy_ack-expected-20",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "download_file",
+      "target": "[data-test='policy_ack-21']",
+      "input": "case-1431-value-21",
+      "expect": "policy_ack-expected-21",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "upload_file",
+      "target": "[data-test='policy_ack-22']",
+      "input": "case-1431-value-22",
+      "expect": "policy_ack-expected-22",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "switch_tab",
+      "target": "[data-test='policy_ack-23']",
+      "input": "case-1431-value-23",
+      "expect": "policy_ack-expected-23",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "close_tab",
+      "target": "[data-test='policy_ack-24']",
+      "input": "case-1431-value-24",
+      "expect": "policy_ack-expected-24",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "start_trace",
+      "target": "[data-test='policy_ack-25']",
+      "input": "case-1431-value-25",
+      "expect": "policy_ack-expected-25",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "text",
+      "query": "assert-policy_ack-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "visibility",
+      "query": "assert-policy_ack-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "network",
+      "query": "assert-policy_ack-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "console",
+      "query": "assert-policy_ack-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "text",
+      "query": "assert-policy_ack-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "visibility",
+      "query": "assert-policy_ack-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "network",
+      "query": "assert-policy_ack-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "console",
+      "query": "assert-policy_ack-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "text",
+      "query": "assert-policy_ack-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "visibility",
+      "query": "assert-policy_ack-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "network",
+      "query": "assert-policy_ack-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "console",
+      "query": "assert-policy_ack-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 5,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/1431/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/1431/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/1431/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/1431/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "policy_ack",
+    "tablet_web",
+    "eu-central",
+    "packet_loss",
+    "severity:high"
+  ]
+}

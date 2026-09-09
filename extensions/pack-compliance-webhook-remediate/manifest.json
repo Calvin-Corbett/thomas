@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-webhook-remediate",
+  "name": "Compliance Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.webhook",
+    "compliance.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via webhook with remediate mode policies."
+}

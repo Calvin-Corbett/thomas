@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-discord-escalate",
+  "name": "Fraud Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.discord",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via discord with escalate mode policies."
+}

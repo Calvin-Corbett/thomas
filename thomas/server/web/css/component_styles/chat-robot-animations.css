@@ -1,0 +1,198 @@
+    76%      { transform: rotate(-1deg) translateY(-1px); }
+    100%     { transform: rotate(0deg) translateY(0); }
+}
+
+/* 6. Lifting Ã¢â‚¬â€ raises a tiny barbell, then settles */
+.chat-robot-anim-lifting {
+    animation: chatRobotLifting 3.4s ease-in-out infinite;
+}
+.chat-robot-anim-lifting::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 12px;
+    width: 27px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.78), rgba(154,216,255,0.92), rgba(255,255,255,0.78));
+    box-shadow: 0 0 0 1px rgba(11, 23, 38, 0.56);
+    transform-origin: center center;
+    animation: chatRobotWeightLift 3.4s ease-in-out infinite;
+}
+@keyframes chatRobotLifting {
+    0%, 100% { transform: translateY(0) scale(1); }
+    18%      { transform: translateY(1px) scaleX(1.04) scaleY(0.96); }
+    34%      { transform: translateY(-4px) scaleX(0.98) scaleY(1.03); }
+    50%      { transform: translateY(-2px) scaleX(1.01) scaleY(0.99); }
+    66%      { transform: translateY(-5px) scaleX(0.99) scaleY(1.02); }
+    82%      { transform: translateY(0) scaleX(1.02) scaleY(0.98); }
+}
+@keyframes chatRobotWeightLift {
+    0%, 100% { transform: translateY(5px) scaleX(0.9); opacity: 0.86; }
+    22%      { transform: translateY(1px) scaleX(1); opacity: 1; }
+    36%      { transform: translateY(-5px) scaleX(1.02); opacity: 1; }
+    56%      { transform: translateY(-2px) scaleX(1); opacity: 1; }
+    70%      { transform: translateY(-6px) scaleX(1.02); opacity: 1; }
+    84%      { transform: translateY(4px) scaleX(0.92); opacity: 0.9; }
+}
+
+.chat-robot-anim-scanning {
+    animation: chatRobotScanning 3.1s ease-in-out infinite;
+}
+.chat-robot-anim-scanning::after {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 8px;
+    width: 36px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(108, 205, 255, 0), rgba(108, 205, 255, 0.92), rgba(108, 205, 255, 0));
+    opacity: 0.86;
+    animation: chatRobotScannerSweep 3.1s ease-in-out infinite;
+}
+@keyframes chatRobotScanning {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    18%      { transform: translateY(-1px) rotate(-1deg); }
+    48%      { transform: translateY(0) rotate(1deg); }
+    74%      { transform: translateY(-1px) rotate(-0.6deg); }
+}
+@keyframes chatRobotScannerSweep {
+    0%, 100% { transform: translateX(-4px); opacity: 0.24; }
+    28%      { transform: translateX(2px); opacity: 0.9; }
+    56%      { transform: translateX(-1px); opacity: 0.72; }
+    78%      { transform: translateX(4px); opacity: 0.82; }
+}
+
+.chat-robot-anim-shimmy {
+    animation: chatRobotShimmy 2.8s ease-in-out infinite;
+}
+@keyframes chatRobotShimmy {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    18%      { transform: translateX(-1px) translateY(-1px); }
+    34%      { transform: translateX(1px) translateY(0); }
+    50%      { transform: translateX(-1px) translateY(-1px); }
+    66%      { transform: translateX(1px) translateY(0); }
+    82%      { transform: translateX(0) translateY(-1px); }
+    45%  { transform: translateY(-6px) scale(1.03); opacity: 1; }
+    100% { transform: translateY(-2px) scale(0.98); opacity: 1; }
+}
+
+
+
+
+.chat-robot-landed {
+    display: block;
+    margin-top: 0;
+    width: 31px;
+    height: 29px;
+    position: relative;
+    image-rendering: pixelated;
+    animation: chatRobotLandDrop 0.58s cubic-bezier(0.22, 1.24, 0.34, 1) forwards,
+               chatRobotIdle 3s ease-in-out 0.62s infinite;
+}
+.chat-robot-landed-entry-wrap {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 31px;
+    height: 29px;
+}
+.chat-robot-landed-entry-wrap .chat-robot-portal {
+    width: 38px;
+    height: 38px;
+    left: 50%;
+    top: 50%;
+}
+.chat-robot-landed-entry {
+    opacity: 0;
+    animation: none;
+}
+.chat-robot-landed-entry.is-visible {
+    opacity: 1;
+    animation: chatRobotLandStepDrop 0.78s cubic-bezier(0.22, 1.24, 0.34, 1) forwards,
+               chatRobotIdle 3s ease-in-out 0.86s infinite;
+}
+.chat-robot-landed-steady {
+    animation: chatRobotIdle 3s ease-in-out infinite;
+}
+.chat-robot-landed .office-agent-head,
+.chat-robot-landed .agent-head {
+    position: absolute;
+    top: 0;
+    left: 8px;
+    width: 16px;
+    height: 9px;
+    border: 1px solid #0d1117;
+    background: #9ad8ff;
+}
+.chat-robot-landed .office-agent-eye,
+.chat-robot-landed .agent-eye {
+    position: absolute;
+    top: 3px;
+    width: 2px;
+    height: 2px;
+    background: #0b1726;
+}
+.chat-robot-landed .office-agent-eye-left,
+.chat-robot-landed .agent-eye-left { left: 3px; }
+.chat-robot-landed .office-agent-eye-right,
+.chat-robot-landed .agent-eye-right { left: 10px; }
+.chat-robot-landed .office-agent-body,
+.chat-robot-landed .agent-body {
+    position: absolute;
+    top: 10px;
+    left: 6px;
+    width: 18px;
+    height: 10px;
+    border: 1px solid #0d1117;
+    background: linear-gradient(to bottom, #9ad8ff 44%, #5aaeff 45%);
+}
+.chat-robot-landed .office-agent-leg,
+.chat-robot-landed .agent-leg {
+    position: absolute;
+    top: 21px;
+    width: 5px;
+    height: 7px;
+    border: 1px solid #0d1117;
+    background: #5aaeff;
+}
+.chat-robot-landed .office-agent-leg-left,
+.chat-robot-landed .agent-leg-left { left: 9px; }
+.chat-robot-landed .office-agent-leg-right,
+.chat-robot-landed .agent-leg-right { left: 17px; }
+
+@keyframes chatRobotLandDrop {
+    0%   { transform: translateY(10px) scale(0.18); opacity: 0; }
+    36%  { transform: translateY(-5px) scale(1.06); opacity: 1; }
+    64%  { transform: translateY(1px) scale(0.97); opacity: 1; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes chatRobotLandStepDrop {
+    0%   { transform: translateX(-3px) translateY(10px) scale(0.18); opacity: 0; }
+    40%  { transform: translateX(1px) translateY(-5px) scale(1.08); opacity: 1; }
+    72%  { transform: translateX(0) translateY(1px) scale(0.97); opacity: 1; }
+    100% { transform: translateX(0) translateY(0) scale(1); opacity: 1; }
+}
+@keyframes chatRobotIdle {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-1px); }
+}
+
+/* -- Restart overlay -- */
+.restart-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    color: var(--text-primary, #fff);
+    font-size: 1.1rem;
+}
+.restart-overlay.hidden { display: none; }
+.restart-overlay-inner {
+    background: var(--c-menu-bg);
+    padding: 24px 32px;
+    border-radius: 12px;
