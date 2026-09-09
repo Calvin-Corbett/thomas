@@ -1,6 +1,5 @@
 """Four files rode through the worktree-fleet salvage/restore operation as
-debris and were never cleaned up (recon: the internal design record
-recon/recon.md` Section 3c, Section 4 #4): `thomas/server/app_part03.py` is an
+debris and were never cleaned up: `thomas/server/app_part03.py` is an
 orphan half of a `*_part*.py` loader that only activates when ALL FOUR
 `app_part01..04.py` exist (`thomas/server/app.py:16-25`) -- only this one is
 present, so the branch has been permanently dead since the salvage. The three

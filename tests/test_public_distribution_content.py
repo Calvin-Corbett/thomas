@@ -87,3 +87,20 @@ def test_coordination_records_are_caught_outside_the_workboard_too():
 def test_known_issues_catalogue_is_not_distributable():
     assert inspect("docs/KNOWN_ISSUES.md", b"# Known Issues\n")
     assert not inspect("docs/TROUBLESHOOTING.md", b"# Troubleshooting\n")
+
+
+def test_a_citation_that_wraps_across_lines_is_still_caught():
+    # A line-based rule sees "docs/superpowers/" on one line and a bare
+    # filename on the next, and passes both. This is how twenty real leaks
+    # survived an automated sweep.
+    wrapped = b"WHY THIS EXISTS (phase 1.5, spec docs/superpowers/\nspecs/2026-08-24-praxis-first-design.md):\n"
+    assert inspect("scripts/tool.py", wrapped)
+    assert not inspect("scripts/tool.py", b"WHY THIS EXISTS (phase 1.5): the gate refuses that.\n")
+
+
+def test_a_bare_design_record_filename_is_caught_without_its_directory():
+    assert inspect("thomas/server/overlay/__init__.py", b"# phase 2 (2026-09-02-fork-by-overlay.md)")
+    assert inspect("docs/GUIDE.md", b"See 2026-08-27-branch-equilibrium.md for the rationale.")
+    # A published doc that date-SUFFIXES its name is a different shape.
+    assert not inspect("docs/GUIDE.md", b"See AGENT_ADVERSARIAL_AUDIT_2026-03-19.md for the rationale.")
+    assert not inspect("docs/GUIDE.md", b"Released 2026-09-07; see CHANGELOG.md.")

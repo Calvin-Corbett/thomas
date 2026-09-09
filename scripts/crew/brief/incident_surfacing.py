@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Incident surfacing: session start counts the open incidents that lack closure.
 
-WHY THIS EXISTS (phase 1.5 Task 3, spec the internal design record
-praxis-first-design.md §1.5): the closure gate
+WHY THIS EXISTS (phase 1.5 Task 3): the closure gate
 (``scripts/forge/gates/problem_closure_gate.py``) refuses a RESOLVING
 incident with no closure line, but says nothing about incidents that are
 already open and have been sitting there without ever being pointed at a

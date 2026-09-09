@@ -1,8 +1,7 @@
 """A deliberate deletion must leave a record a gate can read -- and a missing
 record file must never be confused with an empty one that lied.
 
-Five contracts are pinned here (spec: the internal design record
-graveyard-with-teeth.md, Task 1):
+Five contracts are pinned here:
 
 1. record + load round-trip for both kinds (branch, file).
 2. append-only: recording a new death never mutates a prior record, and ids

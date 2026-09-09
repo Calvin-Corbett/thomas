@@ -6,8 +6,7 @@ back in on a push. git's pre-push hook sees a ref about to be created and
 nothing more -- it cannot tell "never used" from "deliberately killed".
 ``dead_ref_gate.py`` is that distinction, made enforceable.
 
-Five contracts pinned here (plan:
-the internal design record Task 4):
+Five contracts pinned here:
 
 1. a dead branch name refused on a create-push (remote sha1 all zeros).
 2. an alive (never-recorded) branch name passes.

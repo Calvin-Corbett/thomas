@@ -2,6 +2,8 @@
 
 User-facing changes are recorded here. Development conversations and raw test reports are not release notes.
 
+## [Unreleased]
+
 ## [0.19.37] - 2026-09-08
 
 ### Changed

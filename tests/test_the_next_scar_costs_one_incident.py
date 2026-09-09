@@ -1,8 +1,8 @@
 """The next scar costs one incident -- capture teaches closure, session start
 counts the open ones.
 
-Pins phase 1.5 Task 3 (spec: the internal design record
-Task 3; scripts/crew/tasks/plans.py's `## Closure` template stub;
+Pins phase 1.5 Task 3 (scripts/crew/tasks/plans.py's
+`## Closure` template stub;
 scripts/crew/brief/incident_surfacing.py):
 
   * the generated PROBLEM.md template documents the three closure forms

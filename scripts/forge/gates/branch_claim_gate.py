@@ -42,9 +42,8 @@ ARGV FALLBACK: ``--ref NAME`` checks a single ref name directly, as if a push
 were creating it, without reading stdin at all -- for testing and for
 non-hook callers (CI, ad hoc checks), same as ``dead_ref_gate.py``'s.
 
-THE ASYMMETRY THIS GATE IS BUILT AROUND (plan:
-the internal design record, Task 2
-Contracts): destruction fails closed, surfacing fails open with a note. This
+THE ASYMMETRY THIS GATE IS BUILT AROUND: destruction fails closed,
+surfacing fails open with a note. This
 gate only ever BLOCKS A PUSH (fully reversible -- retry after claiming the
 branch); ``branch_sweep.py`` DELETES a local branch (destructive, only
 reversible via the archive ref it writes first). So the two modules make

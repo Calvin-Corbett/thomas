@@ -1,7 +1,5 @@
 """A branch is a claim that expires -- an anonymous fork stops being free.
 
-Plan: the internal design record Task 2.
-
 Contracts pinned here:
   1. claim CRUD round-trips (record/get/is_expired, the None-on-missing house
      law, the 60-day cap, the past-date rejection, the trunk-name rejection).
@@ -24,7 +22,7 @@ Contracts pinned here:
      creation time is NEVER treated as beyond grace (fail-closed).
   8. dry-run by default -- nothing is touched without --apply.
 
-Fix round 1 (task-2-review.md) additions:
+Fix round 1 additions:
   9. CRIT-1: a pre-existing archive ref at the same name is NEVER
      overwritten -- the collision is reported per-branch and that branch's
      local ref survives (not deleted), while the sweep continues.
@@ -595,7 +593,7 @@ def test_unknown_creation_time_is_never_treated_as_beyond_grace(tmp_path: Path) 
 
 
 def test_sweep_never_overwrites_a_pre_existing_archive_ref_on_collision(tmp_path: Path) -> None:
-    """CRIT-1 regression (task-2-review.md): a name that was archived by an
+    """CRIT-1 regression: a name that was archived by an
     earlier sweep, then re-created locally with the same branch name and an
     expired claim, must NOT clobber the earlier archive when swept again.
     The earlier archive ref must survive byte-identical, the branch must
@@ -652,7 +650,7 @@ def test_sweep_never_overwrites_a_pre_existing_archive_ref_on_collision(tmp_path
 
 
 def test_grace_window_uses_the_branch_reflog_entry_time_not_the_base_commits_date(tmp_path: Path) -> None:
-    """CRIT-2 regression (task-2-review.md): a branch cut TODAY from a base
+    """CRIT-2 regression: a branch cut TODAY from a base
     commit that is weeks old must get its full 7-day grace window -- the
     creation time is when the BRANCH was made, not when its base commit was
     authored. Before the fix, `_branch_created_at` read `%ct` (the base

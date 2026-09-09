@@ -1,8 +1,7 @@
 """An accepted risk has an owner, a date, and an expiry -- not a shrug.
 
-Five contracts are pinned here (spec: the internal design record
-forging-loop.md, Task 1), all copied byte-for-byte from the graveyard's
-established registry pattern (scripts/forge/graveyard.py):
+Five contracts are pinned here (Task 1), all copied byte-for-byte from the
+graveyard's established registry pattern (scripts/forge/graveyard.py):
 
 1. record + load round-trip; append-only; ids stay unique even when the same
    reason text is recorded twice.

@@ -11,9 +11,7 @@ death of a branch or a file is appended here, and downstream gates
 thing quietly reappear unless a resurrection was explicitly approved.
 
 THE HONESTY CONTRACT (this repo's documented disease is absence-reads-as-
-clean, per this program's own repeated audits -- see the resurrection
-census in the internal design record for
-one instance of the pattern):
+clean, per this program's own repeated audits):
   * a MISSING ``docs/ops/graveyard.json`` is legitimately "nothing has been
     recorded yet" -- ``load()`` returns an empty Graveyard and prints a NOTE
     so the absence is visible, never silent.

@@ -20,9 +20,7 @@ and when that sign-off runs out.
 
 THE HONESTY CONTRACT (identical shape to ``scripts/forge/graveyard.py``'s,
 this repo's documented disease is absence-reads-as-clean, per this program's
-own repeated audits -- see the resurrection census in
-the internal design record for one
-instance of the pattern):
+own repeated audits):
   * a MISSING ``docs/ops/accepted_risks.json`` is legitimately "nothing has
     been accepted yet" -- ``load()`` returns an empty ``Risks`` and prints a
     NOTE so the absence is visible, never silent.

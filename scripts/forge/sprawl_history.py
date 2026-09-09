@@ -67,8 +67,7 @@ FIVE DATA SOURCES, FIVE DIFFERENT HONESTY SHAPES:
 5. **Two CITED anchors**: the plan's own evidence line (746 unpushed / 63
    local / 70 stashes / 150+ remote, dated 2026-08-27, before this session's
    fixes) and this program's own mid-session measurement
-   the internal design records T1
-   line: 754 unpushed / 2 local / 157 remote(mirror) / 0 stashes). Neither
+   (754 unpushed / 2 local / 157 remote(mirror) / 0 stashes). Neither
    is re-derivable: the 61 local branches the first anchor counted are
    deleted, unarchived by any graveyard record, and their reflogs are gone
    with them (see BLIND SPOT below) -- there is no git state left to
@@ -178,7 +177,7 @@ CITED_ANCHORS: tuple[dict[str, Any], ...] = (
     {
         "date": "2026-08-27",
         "label": "original cleanup finding (before this session's fixes)",
-        "source": "the internal design record Evidence basis line",
+        "source": "the original cleanup review's evidence basis line",
         "unpushed": 746,
         "local_branches": 63,
         "remote_branches": 150,
@@ -188,7 +187,7 @@ CITED_ANCHORS: tuple[dict[str, Any], ...] = (
     {
         "date": "2026-08-27",
         "label": "mid-session measurement (Task 1's trunk_health, live TRUNK line)",
-        "source": "the internal design record T1 review line",
+        "source": "the T1 review line (mid-session trunk_health run)",
         "unpushed": 754,
         "local_branches": 2,
         "remote_branches": 157,

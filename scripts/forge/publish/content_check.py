@@ -58,6 +58,17 @@ INTERNAL_TASK_ID = re.compile(
 # one -- a live citation points the reader at a file they cannot see.
 INTERNAL_PLAN_PATH = re.compile(r'(?:docs/superpowers|\.superpowers)/')
 
+# The same path wrapped across two lines. A line-based rule sees only the head
+# and passes; the tail (`praxis-first-design.md §1.5`) sits on the next line and
+# is still an internal record name. This cost a real leak once -- an automated
+# sweep rewrote every head and left twenty tails behind, and the gate said PASS.
+INTERNAL_PLAN_WRAPPED = re.compile(r'(?:docs/superpowers|\.superpowers)/\s*\S')
+
+# A design record's own filename, with or without its directory: a leading
+# ISO date then a slug. Published docs in this tree date-suffix instead
+# (AGENT_AUDIT_2026-03-19.md), so this shape means an internal plan.
+INTERNAL_PLAN_FILE = re.compile(r'\b20[0-9]{2}-[01][0-9]-[0-3][0-9]-[a-z0-9-]+\.md\b')
+
 # An agent claim or board message, wherever it turns up.
 COORDINATION_RECORD = re.compile(r'^\s*[-*]?\s*(?:msg_id=msg-[0-9]{8}|agent=[a-z0-9-]+;)')
 
@@ -95,6 +106,11 @@ def inspect(path: str, data: bytes) -> list[str]:
     working_source = path.startswith(('tests/', 'scripts/')) or path in RULE_CARRIERS
     is_prose = path.endswith('.md') and path not in RULE_CARRIERS
 
+    # Checked against the whole file, not line by line, so a citation that wraps
+    # across a line break cannot slip between two passing lines.
+    if path not in RULE_CARRIERS and INTERNAL_PLAN_WRAPPED.search(text):
+        errors.append('unpublished design-record path (wrapped across lines)')
+
     for i, line in enumerate(text.splitlines(), 1):
         if path == 'plans/thomas/WORKBOARD.md' and re.search(r'^\s*-\s*(?:msg_id=|agent=)', line):
             errors.append(f'populated coordination record at line {i}')
@@ -104,6 +120,8 @@ def inspect(path: str, data: bytes) -> list[str]:
             errors.append(f'internal task identifier at line {i}')
         if path not in RULE_CARRIERS and INTERNAL_PLAN_PATH.search(line):
             errors.append(f'unpublished design-record path at line {i}')
+        if path not in RULE_CARRIERS and INTERNAL_PLAN_FILE.search(line):
+            errors.append(f'unpublished design-record filename at line {i}')
         if is_prose and SELF_CRITICAL.search(line):
             errors.append(f'self-critical product claim at line {i}')
         for match in LOCAL_PATH.finditer(line):

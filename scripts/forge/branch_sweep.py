@@ -3,8 +3,7 @@
 around forever -- it gets archived, recorded, and deleted.
 
 WHY STANDALONE, NOT A ``thomas/forge/branch_custodian.py`` EXTENSION: the
-plan the internal design record, Task 2)
-asked for exactly this check first. ``thomas/forge/branch_custodian.py`` is
+plan asked for exactly this check first. ``thomas/forge/branch_custodian.py`` is
 NOT a pinned/protected file -- it appears in neither
 ``agent_safety.toml[protected]`` nor ``[runtime_protection]`` nor
 ``enforcement_scripts``, and no hash for it is recorded in

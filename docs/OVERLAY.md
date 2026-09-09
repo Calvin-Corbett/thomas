@@ -1,6 +1,6 @@
 # The user overlay
 
-Every User's Thomas, phase 2 the internal design record.
+Every User's Thomas, phase 2.
 
 Your overlay is the layer that makes this Thomas yours: themes, restyled
 elements, a renamed agent identity, a default theme. It lives outside the

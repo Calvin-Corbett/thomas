@@ -1,5 +1,4 @@
-"""The sprawl curve never guesses (branch-equilibrium plan, phase 2 Task 3,
-the internal design record.
+"""The sprawl curve never guesses.
 
 ``scripts/forge/sprawl_history.py`` reads five sources -- remote-tracking
 reflogs, the graveyard, archive refs, hardcoded milestone shas, and two

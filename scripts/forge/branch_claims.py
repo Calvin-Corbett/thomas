@@ -13,8 +13,7 @@ registry to refuse an unclaimed push; ``scripts/forge/branch_sweep.py`` reads
 it to decide which local branches have outlived their claim.
 
 FIELD SHAPE: ``branch``/``owner``/``purpose``/``created_on``/``expires_on``/
-``refs`` -- the schema fixed by the plan
-the internal design record, Task 2). No
+``refs`` -- the schema is fixed, and every key is required. No
 ``id`` field: a claim is looked up by branch name directly (see NEWEST WINS
 below), the same way the graveyard's ``dead_ref_names()`` is keyed by branch
 name rather than record id.

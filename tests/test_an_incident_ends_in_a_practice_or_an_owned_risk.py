@@ -1,7 +1,6 @@
 """An incident may end in a practice or an owned risk -- never a shrug.
 
-Pins the closure gate's contract (spec: the internal design record
-forging-loop.md, Task 2; scripts/forge/gates/problem_closure_gate.py):
+Pins the closure gate's contract (scripts/forge/gates/problem_closure_gate.py):
 
   * a Task Problems entry or a PROBLEM.md header reaching `status=resolved`
     requires exactly one `closure:` line in that PROBLEM.md;

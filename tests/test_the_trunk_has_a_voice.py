@@ -1,5 +1,4 @@
-"""The trunk's syncability gets a voice at session start (branch-equilibrium
-plan, phase 2 Task 1, the internal design record.
+"""The trunk's syncability gets a voice at session start.
 
 Before this module, ``dev`` sat 746 commits unpushed because the pre-push
 gate battery had been failing silently for weeks -- nothing at session start

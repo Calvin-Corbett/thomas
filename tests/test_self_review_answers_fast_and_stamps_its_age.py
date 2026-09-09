@@ -2,12 +2,12 @@
 
 The handler used to run a 15-30s synchronous LLM generation inline, so any
 caller with an ordinary timeout saw HTTP_000 -- a working instrument reading
-as dead the internal design record Section 4 #5).
+as dead.
 The fix serves an app-scoped, TTL-cached, stamped report and refreshes it in
 the background, single-flighted. These tests never call a real model --
 `generate_self_review` is monkeypatched at the module level.
 
-Fix round 1 (`task-4-review.md`) found two Important issues in the first cut
+Fix round 1 found two Important issues in the first cut
 of this fix and this file grew tests for both: an exception escaping
 `generate_self_review` outside its own internal tuple left the cache's
 attempt clock unstamped, so the TTL never throttled and the entry never
