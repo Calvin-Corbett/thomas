@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -78,6 +79,51 @@ LEDGERS = {
     'docs/ops/graveyard.json': 'records',
     'docs/ops/branch_claims.json': 'records',
 }
+
+
+# What to DO about each finding. A gate that only says "no" invites the next
+# person to widen it until it says yes; a gate that names the remedy gets the
+# remedy. Keyed by the leading words of the reason strings below.
+REMEDIES = {
+    'internal artifact path':
+        'Working material, not product. Delete it from the release tree, and add its '
+        'prefix to publish_strip_prefixes in docs/repo_hygiene_baseline.json so the '
+        'next release drops it without anyone remembering to.',
+    'private planning record':
+        'Only the three plan TEMPLATES publish. plans/ is already in '
+        'publish_strip_prefixes -- this release tree was built without that strip step.',
+    'ops ledger carries':
+        'Ship the schema, not the history: set its records list to [] in the RELEASE '
+        'tree only. The gates that read this file keep working, and the internal '
+        'record stays on the development branch. Do NOT delete the file.',
+    'agent conversation record':
+        'Board traffic. Remove the line from the release tree; the board itself '
+        'publishes as an empty template.',
+    'populated coordination record':
+        'The published WORKBOARD.md is a template. Replace the claim and message '
+        'lines with "- none" under each heading.',
+    'internal task identifier':
+        'A board-minted task id. Reword to describe the change itself -- a reader '
+        'outside this repository cannot look the id up.',
+    'unpublished design-record path':
+        'The cited file is never published, so the citation points at nothing. '
+        'Remove the whole citation, including any filename left on the NEXT line.',
+    'unpublished design-record filename':
+        'A design record named without its directory. Remove the whole citation.',
+    'self-critical product claim':
+        'A public repository says what the software does. Move the assessment to the '
+        'development branch and describe behaviour here instead.',
+    'personal machine path':
+        'Replace with a placeholder such as C:/Users/<user>/... or a relative path.',
+}
+
+
+def remedy_for(reason: str) -> str:
+    """The fix for a finding, or '' when the reason has no registered remedy."""
+    for key, text in REMEDIES.items():
+        if reason.startswith(key):
+            return text
+    return ''
 
 
 def inspect(path: str, data: bytes) -> list[str]:
@@ -172,8 +218,18 @@ def main() -> int:
         for name, data in members:
             checked += 1
             for error in inspect(name, data):
-                findings.append({'origin': origin, 'path': name, 'reason': error})
+                findings.append({'origin': origin, 'path': name, 'reason': error, 'remedy': remedy_for(error)})
     print(json.dumps({'ok': not findings, 'files_checked': checked, 'findings': findings}, indent=2))
+    if findings:
+        # The JSON above is the record; this is what a person reads in the CI log.
+        print('\nHow to clear these findings:', file=sys.stderr)
+        seen = {}
+        for f in findings:
+            key = f['reason'].split(' at line')[0]
+            seen.setdefault(key, []).append(f['path'])
+        for key, paths in seen.items():
+            print(f'\n* {key}  ({len(paths)} file(s), e.g. {paths[0]})', file=sys.stderr)
+            print(f'  {remedy_for(key) or "No registered remedy -- add one to REMEDIES."}', file=sys.stderr)
     return 1 if findings else 0
 
 

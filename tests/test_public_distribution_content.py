@@ -132,3 +132,39 @@ def test_the_publisher_strips_everything_the_gate_blocks():
         "so a release carrying them fails the gate instead of shipping clean. "
         f"Add them to publish_strip_prefixes in docs/repo_hygiene_baseline.json: {missing}"
     )
+
+
+def test_every_finding_this_gate_can_produce_names_its_remedy():
+    """A gate that only says "no" gets widened until it says yes.
+
+    Every reason `inspect` can emit must map to a remedy, so the CI log tells
+    the reader what to change instead of leaving "make it green" as the only
+    obvious move. A new rule added without a REMEDIES entry fails here.
+    """
+    from scripts.forge.publish.content_check import remedy_for
+
+    triggers = [
+        ("benchmarks/adapter.py", b"pass\n"),
+        ("plans/session/log.md", b"# notes\n"),
+        ("docs/ops/graveyard.json", b'{"version": 1, "records": [{"id": "x"}]}'),
+        ("docs/notes.md", b"- msg_id=msg-20260909023718-root; summary=example"),
+        ("plans/thomas/WORKBOARD.md", b"- agent=example; scope=x"),
+        ("docs/plan.md", b"Tracked under REPO-TRUTH-COORDINATION-20260902."),
+        ("scripts/tool.py", b"# see docs/superpowers/plans/2026-08-27-x.md"),
+        ("docs/GUIDE.md", b"See 2026-08-27-branch-equilibrium.md for the rationale."),
+        ("docs/GUIDE.md", b"Known debt: app.py exceeds 1500 lines"),
+        ("docs/setup.md", b"C:/Users/" + b"private-account/project"),
+    ]
+
+    seen, missing = set(), set()
+    for path, data in triggers:
+        for reason in inspect(path, data):
+            seen.add(reason)
+            if not remedy_for(reason):
+                missing.add(reason)
+
+    assert seen, "the trigger corpus stopped tripping any rule"
+    assert not missing, (
+        "these findings have no entry in REMEDIES, so CI would report them with no "
+        f"instruction on what to change: {sorted(missing)}"
+    )
