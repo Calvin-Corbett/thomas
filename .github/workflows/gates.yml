@@ -444,6 +444,15 @@ jobs:
   workboard-changed-files-gate:
     name: workboard-changed-files-gate
     runs-on: ubuntu-latest
+    # This gate asks which active claim owns each changed file. That question only
+    # has an answer where agents coordinate -- the development branch. `main` is
+    # the published distribution: its WORKBOARD.md is an empty template by design,
+    # so every changed file reads as unclaimed and the gate can never pass there.
+    # Scoped here rather than taught to pass on an empty board, because on `dev`
+    # an empty board must stay a FAILURE, not a bypass.
+    # The other workboard gates still run on main: they check board integrity, and
+    # a populated board reaching the public repo is exactly what they should catch.
+    if: github.ref_name != 'main'
     steps:
       - uses: actions/checkout@v4
         with:
