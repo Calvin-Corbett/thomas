@@ -110,7 +110,15 @@ jobs:
         run: |
           python scripts/forge/gates/model_onboarding_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
+      # Fourth ledger-backed gate scoped off `main`, for the same reason as the
+      # workboard ones: it requires a matching entry in
+      # docs/ops/module_audit_log.json for every major-module change, and that
+      # ledger is listed in publish_strip_prefixes -- the published copy is
+      # empty on purpose. So on `main` any change under thomas/core/ asks for an
+      # audit entry the release tree is designed never to carry. The gate itself
+      # is untouched: on `dev`, where the ledger is real, it still enforces.
       - name: Module audit gate
+        if: github.ref_name != 'main'
         run: |
           python scripts/forge/gates/module_audit_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 

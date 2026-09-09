@@ -80,9 +80,9 @@
     },
     "thomas/core/agent_presence.py": {
       "owner": "thomas-core",
-      "max_lines": 1260,
+      "max_lines": 1154,
       "max_growth_lines": 0,
-      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "reason": "Frozen at its size after the session layer moved to agent_presence_sessions.py and the duplicate copies here were removed. Still over the 800-line soft limit, so it stays baselined; the pin drops with the file rather than being renewed.",
       "frozen": true
     },
     "scripts/crew/workboard/claim_utils.py": {

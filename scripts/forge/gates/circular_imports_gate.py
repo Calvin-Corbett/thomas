@@ -102,11 +102,22 @@ def _extract_thomas_imports(source: str) -> set[str]:
                         if len(parts) >= 2:
                             imports.add(f"thomas.{parts[1]}")
 
-    # Also catch string-based dynamic imports that AST might miss
-    # (e.g., in dicts, configs, or f-strings)
-    for match in re.finditer(r'["\']thomas\.(\w+)', source):
-        imports.add(f"thomas.{match.group(1)}")
-
+    # A regex over the raw source used to run here, adding every quoted string
+    # that began "thomas.", to catch module names held in dicts, configs or
+    # f-strings. It could not tell a name from an import, so any mention of a
+    # module inside a string literal was reported as importing it.
+    #
+    # thomas/core/agent_presence.py contains
+    # `if "thomas.server" in str(row.get("command"))` -- a substring test against
+    # a process command line. That read as thomas.core importing thomas.server,
+    # a forbidden pair, and the file became uneditable: the gate returned the
+    # same false verdict before and after any change, so it refused every one.
+    #
+    # Nothing is lost by removing it. A module name sitting in a dict is not an
+    # import; whatever finally imports it is either an import statement or an
+    # import_module() call, and the three branches above see both. This module's
+    # own docstring says AST detection "replaces the string-matching approach" --
+    # the fallback WAS that approach, still running underneath it.
     return imports
 
 

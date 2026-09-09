@@ -16,7 +16,7 @@
   "scripts/forge/gates/branch_claim_gate.py": "26c42bdbfa9d8299bb4374d5b1e8dbd766eaf949f4d6ebf634e0b9b5df191edb",
   "scripts/forge/gates/bulk_commit_guard.py": "3e1e0f0dab02305b157fb3a4ded0207475fb2f6162c72a17443a9588e918fef9",
   "scripts/forge/gates/changelog_gate.py": "7b9285d61a92b2a12164f04e6d8dd85c6022d7d9e73cacc40fdc5843384cee63",
-  "scripts/forge/gates/circular_imports_gate.py": "e2a5be8802740f107d66be61070f8d957bd2a5310fc177b65148e8040a66080a",
+  "scripts/forge/gates/circular_imports_gate.py": "5761672935daa6352fc7000b5579a2268884867ddf3e22b0151036ee4a707c36",
   "scripts/forge/gates/commit_growth_guard.py": "584f07c7057aa22e92ad07c089f7d69639ca2b03af23b1d4990996c002519b98",
   "scripts/forge/gates/commit_scope_gate.py": "6661469c24b0aa5d079e274cbdb0564f0eed8dcf5862f8ba5116f4f70fda303e",
   "scripts/forge/gates/core_overhead_guard.py": "ddaf8bf7142945aeaba35027aeda556e0b7889dece2e27b4c737d1d5c1c150e6",

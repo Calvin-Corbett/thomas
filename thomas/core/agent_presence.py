@@ -12,6 +12,24 @@ from typing import Any
 
 from . import agent_presence_inference
 
+# The session layer -- register/heartbeat/close and the identity checks that
+# bind a session to one agent and one PID -- lives in agent_presence_sessions.
+# It is re-exported here so that `agent_presence.register_session(...)` and its
+# siblings resolve to that ONE implementation. This module carried its own
+# older copies until 2026-09-09: the split added the new module on 2026-09-07
+# but removed nothing, so the two drifted. The copies here predated
+# `handoff_secret` and every SessionIdentityError check, which meant a caller
+# reaching them silently skipped session identity binding entirely.
+from .agent_presence_sessions import (  # noqa: F401  (re-exported API)
+    SessionIdentityError,
+    close_session,
+    current_session_id,
+    heartbeat_session,
+    register_session,
+    resolve_agent_id,
+    session_env_exports,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "AGENT_ID", "CODEX_AGENT_ID", "GEMINI_AGENT_ID", "CLAUDE_AGENT_ID")
 SESSION_ENV_KEYS = ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
@@ -143,130 +161,6 @@ def _write_json(path: Path, payload: Any) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(path)
-
-
-def current_session_id() -> str:
-    for key in SESSION_ENV_KEYS:
-        value = str(os.getenv(key, "")).strip()
-        if value:
-            return value
-    return ""
-
-
-def resolve_agent_id(explicit_agent: str | None = None) -> str:
-    explicit = str(explicit_agent or "").strip()
-    if explicit:
-        return explicit
-    for key in AGENT_ENV_KEYS:
-        value = str(os.getenv(key, "")).strip()
-        if value:
-            return value
-    return ""
-
-
-def session_env_exports(session_id: str) -> dict[str, str]:
-    token = str(session_id or "").strip()
-    return {"THOMAS_AGENT_SESSION_ID": token, "AGENT_SESSION_ID": token} if token else {}
-
-
-def register_session(
-    *,
-    repo_root: str | Path | None = None,
-    session_id: str | None = None,
-    agent_id: str | None = None,
-    display_name: str | None = None,
-    launcher: str = "",
-    task_summary: str = "",
-    scope: str | Sequence[str] | None = None,
-    claim_status: str = "",
-    folder_claims: Sequence[dict[str, Any]] | None = None,
-    pid: int | None = None,
-    command: str = "",
-    warnings: Sequence[str] | None = None,
-    origin: str = "explicit",
-) -> dict[str, Any]:
-    repo = resolve_repo_root(repo_root)
-    sid = str(session_id or current_session_id() or uuid.uuid4()).strip()
-    existing = _read_json(session_file_path(sid, repo), {})
-    now = _now()
-    payload = {
-        "session_id": sid,
-        "agent_id": resolve_agent_id(agent_id),
-        "display_name": str(display_name or existing.get("display_name") or resolve_agent_id(agent_id) or sid).strip(),
-        "repo_root": str(repo),
-        "pid": int(pid if pid is not None else existing.get("pid") or os.getpid()),
-        "launcher": str(launcher or existing.get("launcher") or Path(sys.argv[0] or "python").name),
-        "task_summary": str(task_summary or existing.get("task_summary") or "").strip(),
-        "scope": _normalize_scope(scope if scope is not None else existing.get("scope")),
-        "claim_status": str(claim_status or existing.get("claim_status") or "").strip(),
-        "folder_claims": list(folder_claims if folder_claims is not None else existing.get("folder_claims") or []),
-        "started_at": str(existing.get("started_at") or _to_iso(now)),
-        "last_heartbeat_at": _to_iso(now),
-        "last_activity_at": _to_iso(now),
-        "state": "active",
-        "confidence": "high",
-        "source_signals": _dedupe([*list(existing.get("source_signals") or []), "session"]),
-        "warnings": _dedupe(
-            [*list(existing.get("warnings") or []), *[str(item) for item in (warnings or []) if str(item).strip()]]
-        ),
-        "command": str(command or existing.get("command") or " ".join(sys.argv)).strip(),
-        "origin": str(origin or existing.get("origin") or "explicit").strip(),
-    }
-    _write_json(session_file_path(sid, repo), payload)
-    return payload
-
-
-def heartbeat_session(
-    *,
-    repo_root: str | Path | None = None,
-    session_id: str | None = None,
-    task_summary: str | None = None,
-    scope: str | Sequence[str] | None = None,
-    claim_status: str | None = None,
-    folder_claims: Sequence[dict[str, Any]] | None = None,
-    mark_active: bool = True,
-) -> dict[str, Any] | None:
-    repo = resolve_repo_root(repo_root)
-    sid = str(session_id or current_session_id()).strip()
-    if not sid:
-        return None
-    path = session_file_path(sid, repo)
-    payload = _read_json(path, {}) if path.exists() else {}
-    if not payload:
-        return None
-    now = _now()
-    payload["last_heartbeat_at"] = _to_iso(now)
-    if mark_active:
-        payload["last_activity_at"] = _to_iso(now)
-        payload["state"] = "active"
-    if task_summary is not None:
-        payload["task_summary"] = str(task_summary).strip()
-    if scope is not None:
-        payload["scope"] = _normalize_scope(scope)
-    if claim_status is not None:
-        payload["claim_status"] = str(claim_status).strip()
-    if folder_claims is not None:
-        payload["folder_claims"] = list(folder_claims)
-    payload["source_signals"] = _dedupe([*list(payload.get("source_signals") or []), "session"])
-    _write_json(path, payload)
-    return payload
-
-
-def close_session(*, repo_root: str | Path | None = None, session_id: str | None = None, state: str = "closed") -> bool:
-    repo = resolve_repo_root(repo_root)
-    sid = str(session_id or current_session_id()).strip()
-    path = session_file_path(sid, repo)
-    if not sid or not path.exists():
-        return False
-    payload = _read_json(path, {})
-    if not payload:
-        return False
-    now = _now()
-    payload["state"] = str(state or "closed").strip() or "closed"
-    payload["last_heartbeat_at"] = _to_iso(now)
-    payload["closed_at"] = _to_iso(now)
-    _write_json(path, payload)
-    return True
 
 
 def _is_pid_alive(pid: int | None) -> bool:
