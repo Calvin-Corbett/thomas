@@ -303,15 +303,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         # should record when it happened.
         existing_stamp = re.search(r"^\*\*Last Updated:\*\*\s*(\d{4}-\d{2}-\d{2})\s*$", current, re.M)
         if existing_stamp:
-            try:
-                doc, totals = build_document(repo_root, manifest, date_stamp=existing_stamp.group(1))
-            except Exception as exc:
-                message = f"Feature master sync failed: could not build document: {exc}"
-                if args.json:
-                    print(json.dumps({"ok": False, "gate": gate_name, "error": message}, ensure_ascii=False))
-                else:
-                    print(message)
-                return 1
+            # No error handling here on purpose: the identical call above has
+            # already succeeded against this manifest and repo, and the only
+            # difference is a literal date string. A second guard would catch
+            # nothing that the first did not.
+            doc, totals = build_document(repo_root, manifest, date_stamp=existing_stamp.group(1))
 
     changed = current != doc
 
