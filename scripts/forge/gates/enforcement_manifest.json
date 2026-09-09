@@ -32,7 +32,7 @@
   "scripts/forge/gates/merge_resurrection_gate.py": "c5095e354759136a3deb579c5b53493db9b79ed31fb0deecae98e91b75bf832a",
   "scripts/forge/gates/monolith_baseline_approval_gate.py": "d83f0bda41ff602549177a5e388289d7a2e1e7af98d1a4e4db3a91513080a632",
   "scripts/forge/gates/monolith_filename_guard.py": "46ed8367451cac828d9b133a777ae21ae1685d5b2ad598c0da9f959000fa8655",
-  "scripts/forge/gates/monolith_guard.py": "8883aff1b54e820ab8ff9c9c1cd36924188dca3361eeaef074511fbdef333e18",
+  "scripts/forge/gates/monolith_guard.py": "130a976adf29bab42db4703ab193930928fed8f2efd93f52da1d0e5624d4925f",
   "scripts/forge/gates/plan_structure_gate.py": "4784214e88f397fd33f83b4b00e6e1db5a330519a9e1150fb78b7f97c8329c51",
   "scripts/forge/gates/precommit_skip_policy.py": "afcefa01335338e5d4ffd2c3f00cac192fb76786fc03f0884f328cd208728146",
   "scripts/forge/gates/problem_closure_gate.py": "e1fbdf5321f964d056e8883ce9efa834e0c48438ec858d74a4fb672cae633218",

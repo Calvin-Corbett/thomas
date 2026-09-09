@@ -498,3 +498,112 @@ def test_monolith_guard_soft_limit_applies_in_staged_only_mode(tmp_path: Path) -
     assert report["ok"] is False
     reasons = {str(v.get("reason")) for v in report["violations"]}
     assert "changed file exceeds soft limit and is not baselined" in reasons
+
+
+def _baseline(tmp: Path, **overrides) -> Path:
+    """A minimal baseline; overrides replace top-level keys."""
+    data = {
+        "version": 1,
+        "scan_roots": ["thomas"],
+        "hard_limits": {"py": 1200, "css": 1600},
+        "waiver_policy": {
+            "require_metadata": True,
+            "allow_legacy_reason": False,
+            "default_owner": "qa",
+            "default_expires_on": "2099-12-31",
+            "default_max_growth_lines": 0,
+        },
+        "allowed_large_files": {},
+    }
+    data.update(overrides)
+    path = tmp / "docs" / "monolith_guard_baseline.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return path
+
+
+def _frozen(lines: int) -> dict:
+    return {
+        "owner": "thomas-core",
+        "frozen": True,
+        "max_lines": lines,
+        "max_growth_lines": 0,
+        "reason": "Frozen at its size when the growth ratchet replaced expiring waivers.",
+    }
+
+
+def test_a_frozen_file_needs_no_expiry_and_may_not_grow(tmp_path: Path) -> None:
+    """The point of a freeze: no date to keep, and no room to grow into."""
+    repo = tmp_path / "repo"
+    _write_lines(repo / "thomas" / "big.py", 1300)
+    baseline = _baseline(repo, allowed_large_files={"thomas/big.py": _frozen(1300)})
+
+    # Pinned at its own size, with no expires_on anywhere: accepted.
+    assert run_guard(repo, baseline)["ok"] is True
+
+    # One line larger is the whole failure condition.
+    _write_lines(repo / "thomas" / "big.py", 1301)
+    report = run_guard(repo, baseline)
+    assert report["ok"] is False
+    assert any(v["reason"] == "baselined file exceeded max_lines" for v in report["violations"])
+
+    # Shrinking never needs anyone's approval.
+    _write_lines(repo / "thomas" / "big.py", 900)
+    assert run_guard(repo, baseline)["ok"] is True
+
+
+def test_a_frozen_entry_that_grants_growth_is_a_contradiction(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _write_lines(repo / "thomas" / "big.py", 1300)
+    entry = _frozen(1300)
+    entry["max_growth_lines"] = 25
+    baseline = _baseline(repo, allowed_large_files={"thomas/big.py": entry})
+
+    report = run_guard(repo, baseline)
+    assert report["ok"] is False
+    assert any(v["reason"] == "frozen entry must set max_growth_lines to 0" for v in report["violations"])
+
+
+def test_a_frozen_entry_must_say_why(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _write_lines(repo / "thomas" / "big.py", 1300)
+    entry = _frozen(1300)
+    entry["reason"] = ""
+    baseline = _baseline(repo, allowed_large_files={"thomas/big.py": entry})
+
+    report = run_guard(repo, baseline)
+    assert report["ok"] is False
+    assert any(v["reason"] == "frozen entry missing reason" for v in report["violations"])
+
+
+def test_an_exempt_extension_is_not_size_checked(tmp_path: Path) -> None:
+    """A stylesheet is one cascade, not a module with responsibilities."""
+    repo = tmp_path / "repo"
+    _write_lines(repo / "thomas" / "styles.css", 3000)
+
+    # Without the exemption the size rule applies and this fails...
+    assert run_guard(repo, _baseline(repo))["ok"] is False
+
+    # ...and naming the type exempt is what turns it off.
+    exempt = _baseline(repo, size_limit_exempt_extensions=["css"])
+    assert run_guard(repo, exempt)["ok"] is True
+
+
+def test_an_expiring_waiver_still_expires(tmp_path: Path) -> None:
+    """Freezing added a branch; it must not have softened the old one."""
+    repo = tmp_path / "repo"
+    _write_lines(repo / "thomas" / "big.py", 1300)
+    baseline = _baseline(
+        repo,
+        allowed_large_files={
+            "thomas/big.py": {
+                "owner": "qa",
+                "expires_on": "2000-01-01",
+                "max_lines": 1400,
+                "reason": "temporary permission that has run out",
+            }
+        },
+    )
+    report = run_guard(repo, baseline)
+    assert report["ok"] is False
+    assert any(v["reason"] == "baselined waiver expired" for v in report["violations"])

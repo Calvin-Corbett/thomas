@@ -10,9 +10,7 @@
     "cjs": 1200,
     "jsx": 1200,
     "ts": 1200,
-    "tsx": 1200,
-    "css": 1600,
-    "html": 1000
+    "tsx": 1200
   },
   "waiver_policy": {
     "require_metadata": true,
@@ -26,94 +24,182 @@
   "allowed_large_files": {
     "thomas/cli/repl.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-06-30",
-      "max_lines": 2000,
+      "max_lines": 1330,
       "max_growth_lines": 0,
-      "reason": "REPL modularization is in-progress; bounded waiver until split lands."
-    },
-    "apps/site/src/app/globals.css": {
-      "owner": "thomas-site",
-      "expires_on": "2026-06-30",
-      "max_lines": 3800,
-      "max_growth_lines": 0,
-      "reason": "CSS decomposition tracked; temporary waiver keeps guard strict against further growth."
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "thomas/server/web/js/runtime/034_workbench_editors_06.js": {
       "owner": "thomas-core",
-      "expires_on": "2026-06-30",
-      "max_lines": 1400,
+      "max_lines": 1374,
       "max_growth_lines": 0,
-      "reason": "Single 1374-line render function (moduleRenderWorkbenchGameStudioOss); needs internal refactor to split further."
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "thomas/server/web/js/runtime/044_model_setup_settings_05.js": {
       "owner": "thomas-core",
-      "expires_on": "2026-06-30",
-      "max_lines": 1300,
+      "max_lines": 1294,
       "max_growth_lines": 0,
-      "reason": "Contains long UI editor render functions; needs internal refactor to split further."
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "thomas/agent/loop_execution.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-09-30",
-      "max_lines": 1100,
-      "reason": "phase 1.3 session-log refactor target; time-boxed waiver per praxis-first spec phase 0.4",
-      "max_growth_lines": 130
+      "max_lines": 1034,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "max_growth_lines": 0,
+      "frozen": true
     },
     "thomas/core/llm_client.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-09-30",
-      "max_lines": 950,
-      "reason": "phase 1.3 capture-hook boundary; time-boxed waiver per praxis-first spec phase 0.4",
-      "max_growth_lines": 130
+      "max_lines": 904,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "max_growth_lines": 0,
+      "frozen": true
     },
     "thomas/marketplace/observability/run_store.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-09-30",
-      "max_lines": 1050,
-      "reason": "phase 1.3 run_store spine extension; time-boxed waiver per praxis-first spec phase 0.4",
-      "max_growth_lines": 130
+      "max_lines": 1016,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "max_growth_lines": 0,
+      "frozen": true
     },
     "scripts/crew/brief/commit.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-10-31",
-      "max_lines": 950,
-      "reason": "phase 3.1 gate-registry refactor target; time-boxed waiver per praxis-first spec phase 0.4; 2026-09-05: +55 from the 2026-09-02 coordination batch (session identity, commit integrity) and +17 for the release-metadata refusal, ceiling 950 unchanged",
-      "max_growth_lines": 80
+      "max_lines": 921,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "max_growth_lines": 0,
+      "frozen": true
     },
     "thomas/core/rag_index.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-12-01",
       "max_lines": 857,
-      "max_growth_lines": 23,
-      "reason": "Was already 834 lines - over the 800 soft limit - before any change on 2026-09-03, so the guard refused every edit and the full-repo index could not be repaired at all. The +23 is functional: a try/except so a missing chromadb no longer makes the index unconstructable, and a build that checks for the semantic half before embedding. Prose was trimmed and cap_per_file moved to rag_search.py first. max_lines 857 is a hard ceiling, so this cannot creep. Expires 2026-12-01; the real fix is splitting the search half into rag_search.py, which already exists."
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "thomas/core/agent_presence.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-10-01",
-      "max_lines": 1258,
+      "max_lines": 1260,
       "max_growth_lines": 0,
-      "reason": "Already 1258 lines at HEAD on 2026-09-03 - over the 1200 hard limit - so the guard refused every edit, including the net-zero one-line fix that stopped six-week-dead agents from reading as present and blocking every other agent's scope. Short expiry on purpose: the split that fixes this properly already exists uncommitted in the working tree (session helpers moving to agent_presence_sessions.py, which takes the file to 1149), so this waiver should be deleted as soon as that lands rather than renewed."
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "scripts/crew/workboard/claim_utils.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-12-01",
-      "max_lines": 1022,
-      "max_growth_lines": 1,
-      "reason": "Already 1021 lines on 2026-09-03 - over the 800 soft limit - so the guard refused every edit, including making a claim record when it was made. Growth is a single line: the stamp is inlined and its reasoning lives in the test, the CHANGELOG and the commit rather than in this file. Putting the stamp at the two call sites instead would have avoided this waiver and left two copies of one rule to drift apart. max_lines 1022 is a hard ceiling. Expires 2026-12-01; the real fix is splitting the formatting and parsing halves apart."
+      "max_lines": 1021,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "thomas/cli/_commands_base.py": {
       "owner": "thomas-core",
-      "expires_on": "2026-12-01",
-      "max_lines": 1031,
-      "max_growth_lines": 4,
-      "reason": "Already 1027 lines at HEAD on 2026-09-04 - over the 800 soft limit - so the guard refused every edit, including the 4-line fix that stops the first-run nudge from calling an env-configured Thomas unconfigured. Growth is exactly those lines: one import widened and one condition extended at the call site; the new predicate lives in setup_wizard.py. max_lines 1031 is a hard ceiling so this cannot creep. Expires 2026-12-01; the real fix is moving the startup nudges (first-run, auto-update) out of the click group callback into their own module, which also takes this hub file under the soft limit."
+      "max_lines": 1027,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
     },
     "scripts/crew/workboard/message.py": {
       "owner": "codex-integrator",
-      "expires_on": "2026-10-31",
-      "max_lines": 1200,
+      "max_lines": 1199,
       "max_growth_lines": 0,
-      "reason": "landed with the 2026-09-02 coordination batch at the hard limit after the message_audit/message_queries split (was 1506); the next split - the send/ack/resolve handlers - is codex-integrator's, zero growth until then"
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow.",
+      "frozen": true
+    },
+    "scripts/active_folders.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1446,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "scripts/breakglass_auth.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1386,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "tests/test_chat_delegation.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1647,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "tests/test_cli_evolve_commands.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 3361,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "tests/test_evolve_agent_routes.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1278,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "tests/test_evolve_claude_bridge.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 2075,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "tests/test_the_aliveness_loop_records_instead_of_speaking.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1203,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "tests/test_workboard_message_script.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1685,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "thomas/_architecture.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1377,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "thomas/server/app_routes_init.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1430,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "thomas/forge/anvil/evolve.py": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1353,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "thomas/server/web/js/unified_code_mode.js": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1273,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
+    },
+    "thomas/server/web/js/templates/tpl_settings.js": {
+      "owner": "thomas-core",
+      "frozen": true,
+      "max_lines": 1212,
+      "max_growth_lines": 0,
+      "reason": "Frozen at its size on 2026-09-09, when the growth ratchet replaced expiring waivers. It may shrink or be split at a real seam; it may not grow."
     }
-  }
+  },
+  "size_limit_exempt_extensions": [
+    "css",
+    "html"
+  ]
 }

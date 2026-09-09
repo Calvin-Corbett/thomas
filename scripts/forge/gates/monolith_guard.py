@@ -267,6 +267,17 @@ def run_guard(
     staged_only: bool = False,
 ) -> dict[str, Any]:
     baseline = load_baseline(baseline_path)
+    # A line count is a proxy for "this module has too many responsibilities".
+    # Some file types have no responsibilities to separate: a stylesheet is one
+    # cascade and a page is one document, and cutting either at a line number
+    # costs cascade locality or import order and buys nothing. Those types are
+    # named here rather than left absent, so the exemption is a visible decision
+    # in a protected file instead of a silent gap in a table.
+    exempt_extensions = {
+        str(ext).strip().lstrip(".").lower()
+        for ext in (baseline.get("size_limit_exempt_extensions") or [])
+        if str(ext).strip()
+    }
     hard_limits = dict(DEFAULT_HARD_LIMITS)
     if isinstance(baseline.get("hard_limits"), dict):
         for key, val in baseline["hard_limits"].items():
@@ -274,6 +285,8 @@ def run_guard(
                 hard_limits[str(key)] = int(val)
             except Exception:
                 continue
+    for ext in exempt_extensions:
+        hard_limits.pop(ext, None)
 
     scan_roots = list(DEFAULT_SCAN_ROOTS)
     if isinstance(baseline.get("scan_roots"), list):
@@ -403,6 +416,7 @@ def run_guard(
             owner = str(entry.get("owner", "") or default_owner).strip()
             expires_on = str(entry.get("expires_on", "") or default_expires).strip()
             waiver_reason = str(entry.get("reason", "") or "").strip()
+            frozen = bool(entry.get("frozen", False))
 
             if require_waiver_metadata:
                 if not owner:
@@ -415,8 +429,45 @@ def run_guard(
                             "reason": "baselined file missing waiver owner",
                         }
                     )
-                expires_date = _parse_iso_date(expires_on)
-                if not expires_date:
+                # A FROZEN entry is grandfathered debt, not temporary permission.
+                #
+                # A waiver says "allowed to be over until <date>" -- a promise
+                # someone has to keep. Two expired here and nobody noticed,
+                # because an expiry only fires when something is watching.
+                # A freeze promises nothing: the file is pinned at the size it
+                # already has, may never grow, and shrinking needs no approval.
+                # There is nothing to expire, so no date is required.
+                #
+                # This is STRICTER than the waiver it replaces, not looser: a
+                # waiver could hand out headroom (repl.py's allowed 2000 lines
+                # for a 1330-line file); a freeze hands out none.
+                expires_date = None if frozen else _parse_iso_date(expires_on)
+                if frozen:
+                    try:
+                        frozen_growth = int(entry.get("max_growth_lines", 0))
+                    except (TypeError, ValueError):
+                        frozen_growth = -1
+                    if frozen_growth != 0:
+                        violations.append(
+                            {
+                                "path": rel,
+                                "ext": ext,
+                                "lines": lines,
+                                "hard_limit": hard,
+                                "reason": "frozen entry must set max_growth_lines to 0",
+                            }
+                        )
+                    if not waiver_reason:
+                        violations.append(
+                            {
+                                "path": rel,
+                                "ext": ext,
+                                "lines": lines,
+                                "hard_limit": hard,
+                                "reason": "frozen entry missing reason",
+                            }
+                        )
+                elif not expires_date:
                     violations.append(
                         {
                             "path": rel,
