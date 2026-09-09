@@ -10,11 +10,27 @@ def _read_text(relative_path: str) -> str:
 
 
 def test_readme_surfaces_user_first_story() -> None:
+    """A new reader can find the first command, where it lands, and what next.
+
+    This used to pin three exact sentences ("Fresh install: run `run-ui.cmd`",
+    "## Everyday Use", "## Grow Into Advanced Thomas Safely"). Pinning copy
+    makes any rewrite a test failure while saying nothing about whether the
+    README still works -- it broke when the public README was rewritten even
+    though the rewrite kept every one of these facts. Assert the property the
+    heading names -- can someone start? -- not the wording that carried it.
+    """
     readme = _read_text("README.md")
     assert readme.startswith("# Thomas")
-    assert "Fresh install: run `run-ui.cmd`" in readme
-    assert "## Everyday Use" in readme
-    assert "## Grow Into Advanced Thomas Safely" in readme
+    # The entry command, the address it serves on, and the setup step.
+    assert "run-ui.cmd" in readme
+    assert "127.0.0.1:8899" in readme
+    assert "Easy Setup" in readme
+    # Somewhere to go after the first run.
+    assert "ONBOARDING.md" in readme
+    # The first section a reader meets is about starting, not internals.
+    headings = [line for line in readme.splitlines() if line.startswith("## ")]
+    assert headings, "README has no sections"
+    assert "start" in headings[0].lower() or "install" in headings[0].lower()
 
 
 def _read_all_runtime_js() -> str:
