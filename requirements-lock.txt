@@ -31,7 +31,7 @@ click==8.3.1
 colorama==0.4.4
 coloredlogs==15.0.1
 configobj==5.0.9
-constantly==15.1.0
+constantly==23.10.4
 contourpy==1.3.2
 cryptography==46.0.7
 cycler==0.12.1
