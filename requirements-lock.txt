@@ -57,7 +57,7 @@ jeepney==0.7.1
 jsonpatch==1.32
 jsonpointer==2.0
 jsonschema==3.2.0
-keyring==23.5.0
+keyring==25.7.0
 kiwisolver==1.4.9
 launchpadlib==1.10.16
 lazr.restfulclient==0.14.4
