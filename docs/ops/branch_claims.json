@@ -1,4 +1,13 @@
 {
   "version": 1,
-  "records": []
+  "records": [
+    {
+      "branch": "chore/remove-private-security-tooling",
+      "owner": "Codex",
+      "purpose": "Remove private-only tooling from the public tree",
+      "created_on": "2026-09-19",
+      "expires_on": "2026-09-21",
+      "refs": null
+    }
+  ]
 }
