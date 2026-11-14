@@ -40,6 +40,7 @@ try:
         agent_presence,  # noqa: F401  -- re-exported for tests (mocked via mod.agent_presence.evaluate_soft_gate)
         claims_gate,
     )
+    from scripts.crew.workboard.coordination_root import coordination_root
 except ImportError:  # pragma: no cover
     from crew.brief import identity as agent_identity  # type: ignore
     from crew.workboard.claim_dispatch import (  # type: ignore
@@ -69,14 +70,20 @@ except ImportError:  # pragma: no cover
         _scope_guard_supported,  # noqa: F401
         claims_gate,
     )
+    from crew.workboard.coordination_root import coordination_root  # type: ignore
 
 ROOT = DEFAULT_WORKBOARD.parent.parent
 
 
 def _binding_repo_root(workboard_path: Path) -> Path:
+    """Where a session binding is checked: the coordination root of the board's checkout.
+
+    bootstrap_claim.py binds a session there and commit.py and the message tool check it there; for a linked
+    worktree that is the primary checkout. The claim itself is still written to ``workboard_path``.
+    """
     resolved = workboard_path.resolve()
     if resolved.name.casefold() == "workboard.md" and resolved.parent.name.casefold() == "thomas":
-        return resolved.parents[2]
+        return coordination_root(resolved.parents[2])
     return resolved.parent
 
 
@@ -450,6 +457,10 @@ def run(argv: Sequence[str] | None = None) -> int:
                 return 1
             print("Workboard claim tool: PASS")
             print(f"- {msg}")
+            if workboard_path.resolve() == Path(DEFAULT_WORKBOARD).resolve():
+                from scripts.crew.workboard.claim_release import sync_plans_after_release
+
+                print(f"- {sync_plans_after_release(workboard_path)}")
             return 0
 
         if args.claim:

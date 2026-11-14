@@ -135,8 +135,28 @@ def normalize_active_task_status(status: str) -> tuple[str | None, str | None]:
     return normalized, None
 
 
+#: Paths every agent must write and every gate must read, so no one agent can
+#: own them. While a single agent held the workboard in scope, every other
+#: agent was blocked from committing at all; `changelog.d` is the same rule on
+#: a directory, since every commit adds a fragment there and the directory
+#: exists so each agent writes its own -- a scope naming the bare directory
+#: collides with every active agent, and on 2026-09-09 left a P0 nobody could
+#: pick up. Legal INSIDE a scope, never an overlap BETWEEN two claims. Only
+#: the DIRECTORY is exempt; the same fragment named twice is still a conflict.
+SHARED_INFRASTRUCTURE = frozenset({"plans/thomas/WORKBOARD.md", "changelog.d"})
+
+
+def _is_shared_infrastructure(scope: str) -> bool:
+    normalized = _normalize_scope(scope).lower()
+    return normalized in {_normalize_scope(item).lower() for item in SHARED_INFRASTRUCTURE}
+
+
 def _is_glob(scope: str) -> bool:
-    return any(ch in scope for ch in "*?[")
+    # `[` is deliberately not a metacharacter. bootstrap_claim mints ids shaped
+    # `[WIP][HSK-...] name`, so a claim on a task's own plan directory is a path
+    # with bracket groups; reading them as character classes made any two WIP
+    # task scopes collide, and hid a bracketed path inside its real parent.
+    return any(ch in scope for ch in "*?")
 
 
 def _glob_prefix(pattern: str) -> str:
@@ -571,6 +591,8 @@ def _evaluate_board(
             overlaps: list[tuple[str, str]] = []
             for left_scope in left.scopes:
                 for right_scope in right.scopes:
+                    if _is_shared_infrastructure(left_scope) or _is_shared_infrastructure(right_scope):
+                        continue
                     if _scope_overlaps(left_scope, right_scope):
                         overlaps.append((left_scope, right_scope))
             if overlaps:

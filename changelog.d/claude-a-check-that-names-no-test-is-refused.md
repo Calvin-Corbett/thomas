@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Build team's `check.run` of pytest that names no test is refused at once instead of timing out 15 minutes later.** On 2026-10-07 a Build team ran `pytest -q -p no:cacheprovider --no-header --tb=short` with no target: the whole ~13k-test suite, about 53 minutes, against the tool's 15-minute limit, so it could never pass and only spent the team's time and a CPU slot. A pytest check now has to name a test file, a node id or a `-k` selection (the project folder itself, `.`, names nothing); otherwise nothing runs and the agent is told the whole suite is too large to run here and to name the test files it changed. (`thomas/tools/check_run.py`, `tests/test_the_builder_can_check_its_own_work.py`)

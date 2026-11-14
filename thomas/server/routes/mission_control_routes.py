@@ -20,9 +20,10 @@ from aiohttp import web
 # task_bot_runtime exports the name either way, so this works before and after
 # that split lands.
 from thomas.core import task_bot_runtime
+from thomas.core.event_loop_offload import off_loop
 from thomas.core.task_bot_runtime import TERMINAL_STATES
-from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
+from thomas.server.desktop_gate import desktop_row_is_on
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +116,14 @@ def build_mission_control_routes(
         autonomy_store = app.get("autonomy_store")
         if autonomy_store is not None:
             try:
-                aps = list(autonomy_store.list_approvals(status="pending", limit=240) or [])
+                # A SQLite read of up to 240 rows, and the store serialises every
+                # query behind one lock -- so a write in flight makes this wait.
+                # The store opens its connection with check_same_thread=False and
+                # holds that lock itself, so a worker thread is safe here.
+                aps = await off_loop(
+                    "mission_control.approvals",
+                    lambda: list(autonomy_store.list_approvals(status="pending", limit=240) or []),
+                )
             except Exception:
                 aps = []
             for ap in aps:
@@ -159,6 +167,11 @@ def build_mission_control_routes(
         dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]]
     ]:
         try:
+            # Its code loads only while its row is on, so a server started with the row off never loads it here.
+            if not desktop_row_is_on(app):
+                return None, None, []
+            from thomas.desktop_operator import manager as desktop_operator_manager
+
             snapshot = desktop_operator_manager.get_global_desktop_operator_manager().status_snapshot()
         except Exception:
             return None, None, []
@@ -286,6 +299,10 @@ def build_mission_control_routes(
                 runs = list(run_store_mod.list_runs(limit=160, offset=0, filters={}) or [])
             except Exception:
                 runs = []
+            # The pinned ambient-capture run is the per-process bucket for model calls
+            # that belong to no run (thomas/core/capture_context.py). It never ends, so
+            # listing it would show a worker that is "running" forever and is not one.
+            runs = [r for r in runs if str(r.get("mode") or "") != "ambient-capture"]
             active_runs = [r for r in runs if not str(r.get("ended_at") or "").strip()]
             finished_runs = [r for r in runs if str(r.get("ended_at") or "").strip()]
             selected_runs = active_runs[:24] + finished_runs[:16]
@@ -587,6 +604,10 @@ def build_mission_control_routes(
         events.sort(key=lambda e: _iso_to_epoch(e.get("ts")), reverse=True)
         events = events[:160]
 
+        from thomas.core.agent_monitor import mark_stalled
+
+        agents = mark_stalled(agents)
+
         active_agents = sum(
             1 for a in agents if str(a.get("status") or "") in {"running", "queued", "awaiting_approval", "blocked"}
         )
@@ -619,7 +640,14 @@ def build_mission_control_routes(
             if not force and isinstance(cached, dict) and (now - built_at) < snapshot_cache_ttl_s:
                 return cached
 
-            payload = _build_mission_control_payload()
+            # Blocking, and re-run about every two seconds for as long as anyone
+            # has Mission Control open: it rebuilds the whole execution summary
+            # from disk (task_bot_runtime.list_executions(refresh=True), measured
+            # at 218-303 ms on a 637-record board), reads the run store, and asks
+            # the autonomy store for its audit rows. Awaiting it where it stood
+            # meant the board describing the work froze the server running it.
+            # Nothing inside touches the loop, so it moves whole.
+            payload = await off_loop("mission_control.snapshot", _build_mission_control_payload)
             payload["approvals"] = await _mission_approvals_payload()
             payload["topology"] = _mission_topology_payload(payload)
             totals = payload.get("totals")

@@ -17,14 +17,19 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.forge.gates import _commit_base
     from scripts.forge.gates import workboard_claims as claims_gate
 except ImportError:  # pragma: no cover
+    from scripts.forge.gates import _commit_base  # type: ignore
     from scripts.forge.gates import workboard_claims as claims_gate  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
-DEFAULT_IGNORE_PATTERNS = ("plans/thomas/WORKBOARD.md",)
+# The board, and its append-only message archive (scripts/praxis/archive_board_messages.py): exactly the
+# monthly files, not anything else under the folder.
+ARCHIVE_WAIVER = "plans/thomas/archive/messages-[0-9][0-9][0-9][0-9]-[0-1][0-9].txt"  # matched case-sensitively, whole path only (see _matches_ignore)
+DEFAULT_IGNORE_PATTERNS = ("plans/thomas/WORKBOARD.md", ARCHIVE_WAIVER)
 
 
 def _runtime_protection_disabled() -> bool:
@@ -134,7 +139,7 @@ def _run_git(args: Sequence[str]) -> list[str] | None:
 
 def _git_changed_files(*, base: str | None, head: str, staged: bool) -> list[str]:
     if staged:
-        rows = _run_git(["diff", "--cached", "--name-only"])
+        rows = _run_git(["diff", "--cached", "--name-only", *_commit_base.args(ROOT)])
         return rows or []
 
     base_ref = str(base or "").strip()
@@ -169,6 +174,10 @@ def _matches_ignore(path: str, patterns: Sequence[str]) -> bool:
     for pattern in patterns:
         pat = _normalize_path(pattern)
         if not pat:
+            continue
+        if pat == ARCHIVE_WAIVER:
+            if fnmatch.fnmatchcase(candidate, pat):
+                return True
             continue
         if any(ch in pat for ch in "*?["):
             if fnmatch.fnmatchcase(candidate.lower(), pat.lower()):

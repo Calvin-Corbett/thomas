@@ -576,6 +576,7 @@ function moduleEnsureRuntime() {
                 storeUrl: '',
                 pendingStoreUrl: moduleReadPreferredMarketplaceStoreUrl(),
                 lastRefreshedAt: 0,
+                lastFailedAt: 0,
                 refreshPromise: null,
                 refreshSucceeded: false,
                 catalogSignature: '',
@@ -1169,8 +1170,12 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
     ) {
         return null;
     }
+    // A redraw asks, and a failed ask redraws, so without this wait a failure asks again at once, for ever. In a frame
+    // that is going away every ask fails at once, and that runs in one turn of the window's thread and freezes the window.
+    if (!force && !state.marketplace.refreshSucceeded && now - Number(state.marketplace.lastFailedAt) < MODULE_MARKETPLACE_REFRESH_TTL_MS) {
+        return null;
+    }
     state.marketplace.loading = true;
-    state.marketplace.error = '';
     state.marketplace.warning = '';
     state.marketplace.syncError = '';
     state.marketplace.degraded = false;
@@ -1278,8 +1283,11 @@ function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
             moduleWritePreferredMarketplaceStoreUrl(state.marketplace.storeUrl);
             moduleRenderInstalledPluginNav();
         } catch (error) {
-            state.marketplace.error = safeString(error?.message) || 'Unable to refresh marketplace catalog.';
+            state.marketplace.error = error?.status === 404
+                ? 'Marketplace and installed apps is turned off, or could not start. To turn it on, go to Settings, then Plugins.'
+                : (safeString(error?.message) || 'Unable to refresh marketplace catalog.');
             state.marketplace.refreshSucceeded = false;
+            state.marketplace.lastFailedAt = Date.now();
             if (!Array.isArray(state.marketplace.apps)) state.marketplace.apps = [];
             if (!Array.isArray(state.marketplace.modules)) state.marketplace.modules = [];
             if (!Array.isArray(state.marketplace.plugins)) state.marketplace.plugins = [];

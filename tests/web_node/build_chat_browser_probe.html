@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build + Chat browser regression probe</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { background: #101320; color: #f1f1ff; font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
+    main { max-width: 970px; margin: auto; }
+    section { background: #21263b; padding: 1rem 1.4rem; margin: 1rem 0; border-radius: 12px; }
+    button { padding: .65rem 1rem; margin: .4rem .5rem .4rem 0; cursor: pointer; }
+    #preview { width: 100%; height: 260px; border: 1px solid #777; background: white; }
+    #results, #relay-rows { white-space: pre-wrap; font-family: ui-monospace, monospace; }
+    .pass { color: #7ae7a1; } .fail { color: #ff8b8b; } .note { color: #b9b9d6; }
+    #errors:empty::before { content: "No page errors."; color: #7ae7a1; }
+    /* Shown on purpose: the sandboxed previews are the frames under test, and
+       seeing them render is half the point of opening this in a browser. */
+    #relay-frames { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+    #relay-frames iframe { width: 160px; height: 110px; border: 1px solid #555; background: #0b0d16; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Build + Chat browser regression probe</h1>
+  <p class="note">A hand-run page: the buttons below are for a person, and the headless equivalents of what they
+    do are <code>tests/web_node/build_preview_race.mjs</code>, <code>chat_edit_resend_failure.mjs</code> and
+    <code>shell_frame_relay.mjs</code>. Open this one when you want to <em>see</em> the same paths in a browser.
+    <code>tests/web_node/conftest.py</code> keeps this file from going stale between those days — it checks in
+    pytest that the scripts loaded below exist, that the exports clicked below are still exported, that every id
+    queried is in this markup, and that the relay table agrees with the shipped rule. It cannot press a button;
+    that part is yours.</p>
+  <p class="note"><strong>Why this page kept reporting a <code>postMessage</code> error.</strong> It used to load
+    three scripts — <code>unified_code_artifacts.js</code>, <code>unified_code_results.js</code> and
+    <code>chat_message_view.js</code> — and not one of them calls <code>postMessage</code>; only nine files under
+    <code>thomas/server/web/js</code> do, and none of those three is among them. So the error was never coming
+    from the code this page exercises. It came from outside: either the host page relaying into this page as a
+    frame (the <code>isOurFrame</code> bug the section below now covers), or from opening this file directly,
+    where the page's own origin is opaque, <code>location.origin</code> is <code>"null"</code>, and a post to
+    any frame it owns cannot be addressed at all.</p>
+  <p class="note"><strong>So serve it — do not double-click it.</strong> From the repo root, run
+    <code>python -m http.server 8010</code> and open
+    <code>http://127.0.0.1:8010/tests/web_node/build_chat_browser_probe.html</code>. A running Thomas cannot
+    serve this page: <code>/static/</code> maps onto <code>thomas/server/web</code> only, and this file lives
+    under <code>tests/</code>. Opened straight from disk it still works, but the page's own origin is opaque, so
+    the relay section can only report the half of its checks that do not need a real origin.</p>
+
+  <section>
+    <h2>Build: select, refresh and close a rendered page</h2>
+    <button id="open">Open generated page</button><button id="refresh">Refresh unchanged page</button><button id="close">Close preview</button>
+    <div id="build-status" role="status">No preview selected.</div>
+    <iframe id="preview" title="Generated Build page" sandbox="allow-scripts"></iframe>
+  </section>
+
+  <section>
+    <h2>Chat: edit a sent message</h2>
+    <div id="conversation">You: Original message<br>Thomas: Reply</div>
+    <button id="edit">Edit with rejected request</button><div id="chat-status" role="status">Transcript is intact.</div>
+    <p class="note">The edit reports friction to <code>/api/issues</code>, which this probe makes unreachable on
+      purpose. Both messages must survive the refused edit <em>and</em> the Page errors box must stay empty —
+      reporting a failure must not manufacture another one.</p>
+  </section>
+
+  <section>
+    <h2>Shell: internal frame traffic skips opaque-origin previews</h2>
+    <p class="note">Three shipped frames are <code>srcdoc</code> with <code>sandbox="allow-scripts"</code> —
+      Chat's live and build canvas frames, and Build's file-preview shot. They report an empty <code>src</code>
+      but have an opaque origin, so posting to them is refused. <code>sendTheme</code> must return
+      <code>false</code> for those and <code>true</code> for the frames Thomas really owns.</p>
+    <button id="relay">Run the relay check</button>
+    <div id="relay-rows">Not run yet.</div>
+    <div id="relay-frames"></div>
+  </section>
+
+  <section>
+    <h2>Page errors</h2>
+    <div id="errors" role="status" aria-live="polite"></div>
+  </section>
+
+  <output id="results" aria-live="polite">Waiting for interaction.</output>
+</main>
+<script>
+  'use strict';
+  const $ = selector => document.querySelector(selector);
+  const log = text => { $('#results').textContent = text; };
+  const noteError = text => {
+    const row = document.createElement('div');
+    row.className = 'fail';
+    row.textContent = text;
+    $('#errors').appendChild(row);
+  };
+  // Whatever goes wrong, it shows up on the page instead of only in devtools.
+  window.addEventListener('error', event => noteError('error: ' + (event.message || event.type)));
+  window.addEventListener('unhandledrejection', event => noteError('unhandled rejection: ' + event.reason));
+
+  // The shipped files, addressed RELATIVE to this page instead of through
+  // /static/js. `/static/` is a mapping the Thomas server makes onto
+  // thomas/server/web alone (app_routes_init.py, static_compat), so it can
+  // never reach a page that lives under tests/ -- and any other server rooted
+  // at the repo has no /static/ at all. Measured: the build engine's own
+  // offline browser smoke serves this page from the repo root and returned
+  //   SCRIPT: http://thomas-smoke.invalid/static/js/unified_code_artifacts.js
+  //   the page asked for static/js/unified_code_artifacts.js, which is not in
+  //   the project folder
+  // while that file sat in thomas/server/web/js the whole time. The load failed
+  // at the first script, so the page below never got wired up at all. A path
+  // relative to this file is correct from disk and from any server rooted at
+  // the repo, which is every way this page is opened.
+  const BASE = '../../thomas/server/web/js/';
+  function loadScript(name) {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = BASE + name;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error('could not load ' + el.src));
+      document.body.appendChild(el);
+    });
+  }
+
+  const graphic = '<!doctype html><html><body style="margin:0;background:#182043;color:white;font:24px system-ui;text-align:center"><h1>Rendered Build graphics</h1><canvas id="art" width="300" height="100"></canvas><script>const c=document.getElementById("art").getContext("2d");c.fillStyle="#8b8cff";c.fillRect(10,10,280,80);c.fillStyle="#101320";c.fillText("Thomas Build",40,65);<\/script></body></html>';
+
+  // Every button reports its own failure INTO THE PAGE. These handlers are
+  // async, so a throw inside one becomes a rejected promise that the browser
+  // only mentions in devtools; a page whose whole job is to show you what the
+  // shipped code did must not need devtools open to tell you it broke. The
+  // window-level listeners above stay as the net for anything no button owns,
+  // and the headless harnesses beside this file remain the automated verdict on
+  // an escaping rejection -- that is what chat_edit_resend_failure.mjs fails on.
+  const wire = (button, label, action) => {
+    button.onclick = async () => {
+      try {
+        await action();
+      } catch (error) {
+        noteError(label + ': ' + String((error && error.message) || error));
+        log(label + ' failed — see Page errors.');
+      }
+    };
+  };
+
+  function startBuildAndChat() {
+    const esc = value => String(value).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+    const state = { activeId: 'browser-probe', filePreview: null, tree: [], treePath: '', treeLoaded: false };
+    let draws = 0;
+    function render() {
+      draws++;
+      const page = state.filePreview;
+      $('#preview').hidden = !page;
+      if (page) $('#preview').srcdoc = page.content;
+      $('#build-status').textContent = page ? `Showing ${page.path} (${draws} renders).` : 'Preview closed.';
+    }
+    window.ThomasCodeResults.configure({ state, esc, isInternalResultPath: () => false,
+      lifecycle: () => ({ contextToken: s => ({ id: s.activeId }), contextMatches: (s, t) => s.activeId === t.id }),
+      render, pushLiveEvent: event => log(event.text) });
+
+    // Only intercept the fixture endpoints; every other request stays real.
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (url, options) => {
+      if (String(url).includes('/api/evolve/agent/conversations/') && String(url).includes('/file?path=')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true, path: 'index.html', content: graphic }) });
+      }
+      if (String(url).includes('/api/v2/chat/session/') && String(url).endsWith('/truncate')) {
+        return Promise.resolve({ ok: false, status: 403 });
+      }
+      // Never post probe noise into the real issue ledger -- and reject it, so
+      // the Page errors box below stays empty only if reportFriction really
+      // catches its own rejection instead of raising another page error.
+      if (String(url).includes('/api/issues')) {
+        return Promise.reject(new TypeError('Failed to fetch (probe: the issue ledger is deliberately unreachable)'));
+      }
+      return nativeFetch(url, options);
+    };
+
+    const messages = [{ role: 'user', text: 'Original message' }, { role: 'assistant', text: 'Reply' }];
+    const conversation = $('#conversation').innerHTML;
+    const chat = window.ThomasChatMessageView.create({
+      state: { messages, sessionId: 'fixture', streaming: false },
+      inputEl: { value: '', focus() {} }, threadEl: $('#conversation'), msgRefs: [{}, {}],
+      captureConversation: () => () => true,
+    });
+    const originalAlert = window.alert;
+    window.alert = message => { $('#chat-status').textContent = message; };
+    window.addEventListener('pagehide', () => { window.alert = originalAlert; });
+
+    wire($('#open'), 'Open generated page', async () => {
+      await window.ThomasCodeResults.loadFile('index.html');
+      log('Build rendered-page request completed.');
+    });
+    wire($('#refresh'), 'Refresh unchanged page', async () => {
+      const before = draws;
+      await window.ThomasCodeResults.loadFile('index.html');
+      log(draws === before ? 'PASS: unchanged Build preview did not restart.' : 'FAIL: unchanged preview restarted.');
+    });
+    wire($('#close'), 'Close preview', () => {
+      window.ThomasCodeResults.invalidateFileRequest();
+      state.filePreview = null;
+      render();
+      log('Build preview closed.');
+    });
+    wire($('#edit'), 'Edit with rejected request', async () => {
+      await chat.editMessageFrom(0);
+      log($('#conversation').innerHTML === conversation && messages.length === 2
+        ? 'PASS: rejected Chat edit preserved both messages.' : 'FAIL: transcript changed.');
+    });
+  }
+
+  function startRelay() {
+    const shell = window.ThomasWorkspaceShell;
+    const host = $('#relay-frames');
+    const rows = $('#relay-rows');
+    // label, attributes, and whether Thomas's own traffic belongs in it.
+    const cases = [
+      ["Chat .tc-live-frame (srcdoc, sandbox='allow-scripts')", { sandbox: 'allow-scripts', srcdoc: '<p>live</p>' }, false],
+      ["Chat .tc-build-frame (srcdoc, sandbox='allow-scripts')", { sandbox: 'allow-scripts', srcdoc: '<p>build</p>' }, false],
+      ["Build .tc-code-file-shot (srcdoc, sandbox='allow-scripts')", { sandbox: 'allow-scripts', srcdoc: graphic }, false],
+      ['sandbox="" (the most restrictive form)', { sandbox: '', srcdoc: '<p>sealed</p>' }, false],
+      ['lookalike token allow-same-origin-please', { sandbox: 'allow-same-origin-please', srcdoc: '<p>nope</p>' }, false],
+      ['workspace frame (srcdoc, unsandboxed)', { srcdoc: '<p>workspace</p>' }, true],
+      ['about:blank frame', { src: 'about:blank' }, true],
+    ];
+    wire($('#relay'), 'Run the relay check', () => {
+      host.textContent = '';
+      rows.textContent = '';
+      let failures = 0;
+      const servedOverHttp = location.protocol !== 'file:';
+      cases.forEach(([label, attributes, ours]) => {
+        const frame = document.createElement('iframe');
+        frame.title = label;
+        Object.entries(attributes).forEach(([name, value]) => frame.setAttribute(name, value));
+        host.appendChild(frame);
+        const sent = shell.sendTheme(frame, 'dark', null);
+        // On file:// even a frame we own cannot be posted to, so only the
+        // must-be-skipped rows are a verdict there.
+        const meaningful = ours ? servedOverHttp : true;
+        const ok = !meaningful || sent === ours;
+        if (!ok) failures++;
+        const row = document.createElement('div');
+        row.className = meaningful ? (ok ? 'pass' : 'fail') : 'note';
+        row.textContent = `${meaningful ? (ok ? 'PASS' : 'FAIL') : 'SKIP (file://)'}  sendTheme=${sent}  expected=${ours}  ${label}`;
+        rows.appendChild(row);
+      });
+      const verdict = document.createElement('div');
+      verdict.className = failures ? 'fail' : 'pass';
+      verdict.textContent = failures
+        ? `${failures} frame(s) were classified wrongly.`
+        : servedOverHttp
+          ? 'Every opaque-origin preview was skipped and every frame Thomas owns was themed.'
+          : 'Every opaque-origin preview was skipped. The frames Thomas owns were skipped too — serve this page to check them.';
+      rows.appendChild(verdict);
+      log(verdict.textContent);
+    });
+  }
+
+  (async () => {
+    try {
+      await loadScript('unified_code_artifacts.js');
+      await loadScript('unified_code_results.js');
+      await loadScript('chat_message_view.js');
+      startBuildAndChat();
+      await loadScript('workspace_shell.js');
+      startRelay();
+      log('Loaded. Click a button in any section.');
+    } catch (error) {
+      noteError(String(error && error.message || error));
+      log('The probe could not load the shipped scripts — see Page errors.');
+    }
+  })();
+</script>
+</body>
+</html>

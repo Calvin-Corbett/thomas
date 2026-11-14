@@ -7,6 +7,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.server.discord_bridge_key import turned_on_runtime
 from thomas.server.workspace_specialist_preferences import WorkspacePreferencesMixin
 from thomas.tools.base import ToolResult
 
@@ -26,15 +27,14 @@ class WorkspaceReadbackMixin(WorkspacePreferencesMixin):
         if action == "preferences.set":
             return self._read_structured_preference(str(arguments.get("key") or "").strip())
         if action == "canvas.spec.save":
-            from thomas.server.routes.canvas_studio_routes import _default_repo_root, _read_spec
+            from thomas.server.canvas_studio_shared import _default_repo_root, _read_spec
 
             return _read_spec(_default_repo_root(), str(arguments.get("target_id") or "").strip())
         if action == "library.project.move":
             return self._library_position(str(arguments.get("target_id") or "").strip())
         if action == "channels.discord.set_enabled":
-            from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
-
-            return await asyncio.to_thread(DiscordBridgeRuntime(self.config).status)
+            runtime = turned_on_runtime(self.app)
+            return None if runtime is None else await asyncio.to_thread(runtime.status)
         if action == "marketplace.plugin.set_enabled":
             from thomas.server.desktop_plugins import list_installed_plugins
 

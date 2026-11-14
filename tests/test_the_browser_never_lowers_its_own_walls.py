@@ -86,7 +86,9 @@ def test_web_content_is_never_given_a_preload() -> None:
     assert len(preloads) == 1, f"expected exactly one preload wiring, found {len(preloads)}"
     # ...and it is the chrome view that gets it.
     chrome_block = src[
-        src.index("chromeView = new WebContentsView") : src.index("win.contentView.addChildView(chromeView)")
+        src.index("shell.chromeView = new WebContentsView") : src.index(
+            "shell.win.contentView.addChildView(shell.chromeView)"
+        )
     ]
     assert "preload" in chrome_block
 
@@ -116,14 +118,12 @@ def test_navigation_from_the_bridge_is_restricted_to_http() -> None:
     assert '["http:", "https:"]' in src, "navigate must allow only http(s)"
 
 
-def test_page_context_travels_as_data_not_as_prose() -> None:
-    """The quick chat must not concatenate page text into the message.
-
-    The server wraps `page_context` as untrusted data. That protection is
-    worth nothing if the client glues the page's title into `message`
-    instead, so pin the shape here as well.
-    """
+def test_the_side_panel_sends_no_page_text_to_chat() -> None:
+    """The quick chat that lived in the side panel carried the tab as a
+    `page_context` field the server wraps as untrusted data. It left with the
+    Ask Thomas pill that opened it (2026-10 Build redesign), so the panel must
+    not reach the chat API at all: a page's own title has no path into a
+    message from here."""
     src = _read(PANEL_JS)
-    assert "page_context: qcPageContext()" in src, "page context must be its own field"
-    # The message sent is the user's text, untouched.
-    assert re.search(r"message:\s*text\b", src), "message must be the user's text alone"
+    assert "ThomasWorkspaceChatTransport" not in src, "the side panel talks to the chat API again"
+    assert "page_context" not in src

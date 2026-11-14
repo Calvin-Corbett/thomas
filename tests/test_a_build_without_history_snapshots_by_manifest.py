@@ -45,10 +45,18 @@ def test_the_claude_cli_dispatcher_takes_the_same_choice(monkeypatch, tmp_path: 
         (tmp_path / "out.txt").write_text("built", encoding="utf-8")
         return 0, ""
 
-    refused = dcc.dispatch_via_claude_cli("build", cwd=tmp_path, dry_run=False, verify=False, runner=runner)
+    refused = dcc.dispatch_via_claude_cli(
+        "build", cwd=tmp_path, dry_run=False, verify=False, runner=runner, claude_bin="claude"
+    )
     assert refused.ok is False and "not a git repository" in refused.reason, refused
     result = dcc.dispatch_via_claude_cli(
-        "build", cwd=tmp_path, dry_run=False, verify=False, runner=runner, allow_without_history=True
+        "build",
+        cwd=tmp_path,
+        dry_run=False,
+        verify=False,
+        runner=runner,
+        claude_bin="claude",
+        allow_without_history=True,
     )
     assert result.ok, result.reason
     assert result.changed_files == ["out.txt"], result

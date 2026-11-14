@@ -1,94 +1,74 @@
-"""The Windows authorization prompt hands pywin32 what it asks for (2026-09-07).
+"""The Windows authorization prompt checks the password (2026-09-22).
 
-An isolated self-edit run on 2026-09-07 (fc_20260907T053138_2b7f40) had every
-write inside its candidate copy refused by runtime protection, reached for the
-guarded write path, and that path died before any prompt appeared::
+History: on 2026-09-07 ``WindowsAuthGate._show_windows_dialog`` died with
+``TypeError: CREDUI_INFO must be a dict`` before any prompt appeared (this file's
+name is from that fix). Once it did appear, it was ``CredUIPromptForCredentials``
+with GENERIC credentials, and the gate treated OK as approval without checking
+what was typed. Any password, or none, approved a protected write. You were shown
+that box on 2026-09-22 for a self-fix Thomas was attempting.
 
-    TypeError: CREDUI_INFO must be a dict
-
-``WindowsAuthGate._show_windows_dialog`` passed the message text as the seventh
-argument of ``win32cred.CredUIPromptForCredentials``; pywin32 wants the
-``CREDUI_INFO`` structure there, as a dict with ``MessageText`` and
-``CaptionText``. The gate caught only ``OSError`` and ``pywintypes.error``, so
-the ``TypeError`` escaped the gate and every native authorization the runtime
-ever asked for on Windows failed before the user saw a dialog.
-
-pywin32 itself is stood in for here, with the exact refusal the real module
-gives a string, so the test runs on every platform and fails for the same
-reason the run did.
+The gate now uses ``verified_sign_in``: Windows' own sign-in (PIN or password),
+whose answer Windows checks. The verifier is stood in for here so the test runs
+on every platform, and so a wrong password can be simulated.
 """
 
 from __future__ import annotations
 
-import sys
-import types
+import inspect
+from types import SimpleNamespace
 
 import pytest
+from scripts import breakglass_auth
 
 from thomas.tools import windows_auth
 
 
-class _PyWinTypesError(Exception):
-    pass
+def _install_verifier(monkeypatch, *, ok: bool, calls: list, raises: Exception | None = None) -> None:
+    def prompt(*, prompt_caption: str, prompt_message: str):
+        calls.append({"caption": prompt_caption, "message": prompt_message})
+        if raises is not None:
+            raise raises
+        return SimpleNamespace(ok=ok, message="validated" if ok else "LogonUserW failed: wrong password")
 
-
-def _install_fake_pywin32(monkeypatch, *, result: int, calls: list) -> None:
-    def prompt(target, auth_error, username, password, save, flags, ui_info):
-        # pywin32's own check, verbatim in effect: the seventh argument is CREDUI_INFO.
-        if not isinstance(ui_info, dict):
-            raise TypeError("CREDUI_INFO must be a dict")
-        calls.append({"target": target, "flags": flags, "ui_info": ui_info})
-        return result, username, "", False
-
-    win32cred = types.ModuleType("win32cred")
-    win32cred.CredUIPromptForCredentials = prompt
-    win32cred.CREDUI_FLAGS_GENERIC_CREDENTIALS = 0x40000
-    win32cred.CREDUI_FLAGS_EXPECT_CONFIRMATION = 0x20000
-    win32cred.CREDUI_FLAGS_COMPLETE_USERNAME = 0x800
-    win32api = types.ModuleType("win32api")
-    win32api.GetUserName = lambda: "corbe"
-    pywintypes = types.ModuleType("pywintypes")
-    pywintypes.error = _PyWinTypesError
-    for name, module in (("win32cred", win32cred), ("win32api", win32api), ("pywintypes", pywintypes)):
-        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(breakglass_auth, "_run_windows_credential_prompt", prompt)
     monkeypatch.setattr(windows_auth.platform, "system", lambda: "Windows")
 
 
-def test_the_prompt_receives_the_credui_info_dict_and_a_confirmed_prompt_authorizes(monkeypatch) -> None:
+def test_a_verified_sign_in_authorizes_and_says_what_it_is_for(monkeypatch) -> None:
     calls: list = []
-    _install_fake_pywin32(monkeypatch, result=0, calls=calls)
+    _install_verifier(monkeypatch, ok=True, calls=calls)
     gate = windows_auth.WindowsAuthGate()
 
     assert gate.request_authorization("write thomas/server/web/js/browser_shell.js", "self-edit") is True
-
     assert len(calls) == 1
-    info = calls[0]["ui_info"]
-    assert "browser_shell.js" in info["MessageText"] and "self-edit" in info["MessageText"]
-    assert info["CaptionText"]
+    assert "browser_shell.js" in calls[0]["message"] and "self-edit" in calls[0]["message"]
+    assert calls[0]["caption"] == "Thomas", "every Thomas approval is the one prompt, captioned Thomas"
     assert gate.session_summary()["active"] is True
 
 
-def test_a_cancelled_prompt_denies_and_leaves_no_session(monkeypatch) -> None:
+def test_a_wrong_password_is_a_denial(monkeypatch) -> None:
+    """The box on 2026-09-22 would have said yes here. Windows now says no."""
     calls: list = []
-    _install_fake_pywin32(monkeypatch, result=1223, calls=calls)  # ERROR_CANCELLED
+    _install_verifier(monkeypatch, ok=False, calls=calls)
     gate = windows_auth.WindowsAuthGate()
 
-    assert gate.request_authorization("delete output", "destructive") is False
-    assert len(calls) == 1
+    assert gate.request_authorization("write thomas/core/capture_context.py", "self-fix") is False
     assert gate.session_summary() == {"active": False, "actions_approved": []}
 
 
 def test_a_dialog_failure_is_a_denial_not_a_crash(monkeypatch) -> None:
-    """Whatever pywin32 raises, the gate answers False; a crash in the prompt must
-    not escape into the tool that asked, which is what the run saw."""
-    _install_fake_pywin32(monkeypatch, result=0, calls=[])
+    """Whatever the prompt raises, the gate answers False; a crash in the prompt
+    must not escape into the tool that asked."""
+    _install_verifier(monkeypatch, ok=True, calls=[], raises=OSError("CredUI unavailable"))
+    assert windows_auth.WindowsAuthGate().request_authorization("write a file", "why") is False
 
-    def broken(*args):
-        raise TypeError("CREDUI_INFO must be a dict")
 
-    sys.modules["win32cred"].CredUIPromptForCredentials = broken
-    gate = windows_auth.WindowsAuthGate()
-    assert gate.request_authorization("write a file", "why") is False
+def test_the_unchecked_box_is_gone() -> None:
+    src = inspect.getsource(windows_auth)
+    assert "CredUIPromptForCredentials(" not in src, "the box that trusted OK is back"
+    # verified_sign_in asks through sign_in_answer (2026-10-09), which tells Cancel from a sign-in not accepted.
+    assert "sign_in_answer(" in inspect.getsource(windows_auth.verified_sign_in)
+    assert "_run_windows_credential_prompt" in inspect.getsource(windows_auth.sign_in_answer)
 
 
 if __name__ == "__main__":  # pragma: no cover

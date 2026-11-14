@@ -16,7 +16,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
-from thomas.benchmarks.benchmark_lane import get_benchmark_context
+from scripts.forge.gates._runtime_guard import runtime_protection_disabled
+from thomas.core.benchmark_lane import get_benchmark_context
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -70,8 +71,17 @@ def _summary(checks: list[dict[str, str]]) -> str:
     return ", ".join(parts) if parts else "0 checks"
 
 
-def _policy(status: str) -> dict[str, Any]:
-    if status == "blocked":
+def _policy(status: str, checks: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    blocked_ids = [str(check.get("id") or "") for check in (checks or []) if check.get("status") == "blocked"]
+    if status == "blocked" and blocked_ids == ["worktree-clean"]:
+        # A checkout several agents share is never clean, so "stop" alone stopped all of
+        # them. This checkout stays off-limits (the flags below are unchanged); the work can
+        # still start in a worktree of the agent's own.
+        summary = (
+            "Stop before editing this checkout: its only blocker is uncommitted work. "
+            "Start in a worktree of your own: `python scripts/forge/gates/worktree_creation_gate.py new <name>`."
+        )
+    elif status == "blocked":
         summary = "Stop before editing. Tell the user which environment blockers must be resolved or explicitly waived."
     elif status == "degraded":
         summary = "Tell the user the environment is degraded before using slower or lower-confidence fallbacks."
@@ -287,13 +297,16 @@ def _check_repo_pytest(root: Path) -> dict[str, str]:
 def _check_worktree_clean(root: Path) -> dict[str, str]:
     """Check that the git worktree has no uncommitted changes.
 
-    WORKTREE_RULES.md Rule 8 says agents must not start implementation
-    work in a dirty worktree. This check makes the state visible so agents
-    know what they're working with.
+    AGENTS.md says agents must not start implementation work in a dirty
+    worktree. This check makes the state visible so agents know what they're
+    working with. (It used to cite WORKTREE_RULES.md Rule 8, a file no longer
+    in the repository.)
 
     Returns 'blocked' by default because AGENTS.md forbids normal
-    implementation work in a dirty worktree. An explicit override downgrades
-    the result to 'degraded' for cleanup/remediation lanes only.
+    implementation work in a dirty worktree, and the advice names the way to
+    start anyway: a worktree of the agent's own, since a checkout several agents
+    share is never clean. An explicit override downgrades the result to
+    'degraded' for cleanup/remediation lanes only.
 
     Audit reference: Adversarial Audit Finding 11 (2026-03-19)
     """
@@ -373,8 +386,9 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
                     f"max_uncommitted_changed_lines={threshold}."
                 ),
                 user_action=(
-                    "Commit or stash the current branch state before continuing. "
-                    "Use a checkpoint/WIP commit if needed so the next agent does not build on hidden uncommitted work."
+                    "Commit or stash your own changes, or start in a worktree of your own: "
+                    "`python scripts/forge/gates/worktree_creation_gate.py new <name>`. A checkout several "
+                    "agents share stays dirty, so do not wait for it to come clean."
                 ),
             )
         benchmark_context, benchmark_error = get_benchmark_context(root)
@@ -397,7 +411,7 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
             return _result(
                 "worktree-clean",
                 "degraded",
-                f"Worktree is dirty but explicit override is set: {summary}. See WORKTREE_RULES.md Rule 8.",
+                f"Worktree is dirty but explicit override is set: {summary}. See AGENTS.md on dirty worktrees.",
                 user_action=(
                     "Limit work to audited cleanup/remediation and tell the user "
                     "you are using a dirty-worktree override."
@@ -406,13 +420,43 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
         return _result(
             "worktree-clean",
             "blocked",
-            f"Worktree is dirty: {summary}. See WORKTREE_RULES.md Rule 8.",
+            f"Worktree is dirty: {summary}. See AGENTS.md on dirty worktrees.",
             user_action=(
-                "Stop before normal implementation work. Commit/stash changes or use "
-                "an explicit dirty-worktree override for cleanup/remediation lanes only."
+                "Stop before normal implementation work in this checkout. Start in a worktree of your own "
+                "(`python scripts/forge/gates/worktree_creation_gate.py new <name>`), commit or stash your "
+                "own changes, or use an explicit dirty-worktree override for cleanup/remediation lanes only."
             ),
         )
     return _result("worktree-clean", "ok", "Worktree is clean — no uncommitted changes.")
+
+
+def _check_runtime_protection(root: Path) -> dict[str, str]:
+    """Report a live break-glass: while it is open, fourteen gates pass unconditionally.
+
+    On 2026-09-08 a flag signed two days earlier was still disabling
+    protected_files_gate, the deletion guard, merge_resurrection_gate, the
+    worktree guards and ten more -- every one printing PASS and exiting 0, with
+    no session-start report saying so. Break-glass now expires on its own; this
+    is the other half, so that while it is open nobody works through it unaware.
+    """
+    try:
+        disabled = runtime_protection_disabled(root)
+    except (OSError, ValueError):  # a broken flag is not evidence protection is off
+        return _result("runtime-protection", "ok", "Runtime protection state unreadable; assuming enforced.")
+    if not disabled:
+        return _result("runtime-protection", "ok", "Runtime protection is enforced.")
+    return _result(
+        "runtime-protection",
+        "degraded",
+        "Runtime protection is DISABLED by a signed break-glass flag: the gates that "
+        "honour it (protected files, deletions, monolith, merge-resurrection, worktree, "
+        "workboard claims) will PASS without checking anything.",
+        user_action=(
+            "Re-arm before trusting any gate result: python scripts/runtime_protection_toggle.py "
+            "(or delete runtime/.runtime_protection_disabled). Say in your report that gates were "
+            "not enforcing while it was open."
+        ),
+    )
 
 
 def evaluate_preflight(*, root: Path = ROOT, cwd: Path | None = None) -> dict[str, Any]:
@@ -426,6 +470,7 @@ def evaluate_preflight(*, root: Path = ROOT, cwd: Path | None = None) -> dict[st
         _check_ripgrep(),
         _check_repo_python(resolved_root),
         _check_repo_pytest(resolved_root),
+        _check_runtime_protection(resolved_root),
     ]
     status = _overall_status(checks)
     return {
@@ -434,7 +479,7 @@ def evaluate_preflight(*, root: Path = ROOT, cwd: Path | None = None) -> dict[st
         "root": str(resolved_root),
         "cwd": str(resolved_cwd),
         "checks": checks,
-        "policy": _policy(status),
+        "policy": _policy(status, checks),
     }
 
 

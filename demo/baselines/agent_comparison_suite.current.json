@@ -195,9 +195,7 @@
         "tests",
         "web"
       ],
-      "test_dataset_roots": [
-        "thomas/browser/workflow_corpus"
-      ],
+      "test_dataset_roots": [],
       "browser_roots": [
         "thomas/browser",
         "thomas/cli/commands/browser",
@@ -207,9 +205,7 @@
       "plugin_roots": [
         "thomas/plugins",
         "thomas/cli/commands/plugins",
-        "extensions",
-        "thomas/browser/workflows",
-        "thomas/browser/workflow_corpus"
+        "extensions"
       ],
       "gateway_roots": [
         "thomas/server/routes",
@@ -224,15 +220,10 @@
         "apps"
       ],
       "required_paths": [
-        "thomas/browser/workflow_corpus",
-        "thomas/browser/workflows",
         "extensions/catalog.json",
-        "thomas/plugins/extension_catalog_runtime.py",
-        "thomas/browser/workflow_runtime.py"
+        "thomas/plugins/extension_catalog_runtime.py"
       ],
       "production_asset_roots": [
-        "thomas/browser/workflows",
-        "thomas/browser/workflow_corpus",
         "extensions"
       ],
       "security_scan_roots": [
@@ -260,63 +251,6 @@
         "responses": "/v1/responses"
       },
       "strict_checks": [
-        {
-          "id": "workflow_profiles_cli",
-          "command": [
-            "{python}",
-            "-m",
-            "thomas",
-            "browser",
-            "workflows",
-            "list",
-            "--json",
-            "--limit",
-            "25"
-          ],
-          "assertions": [
-            {
-              "path": "count",
-              "op": "eq",
-              "value": 25
-            },
-            {
-              "path": "profiles.0.profile_id",
-              "op": "truthy",
-              "value": true
-            }
-          ]
-        },
-        {
-          "id": "workflow_corpus_validate",
-          "command": [
-            "{python}",
-            "-m",
-            "thomas",
-            "browser",
-            "workflow-cases",
-            "validate",
-            "--json",
-            "--limit",
-            "300"
-          ],
-          "assertions": [
-            {
-              "path": "total",
-              "op": "eq",
-              "value": 300
-            },
-            {
-              "path": "valid",
-              "op": "eq",
-              "value": 300
-            },
-            {
-              "path": "invalid",
-              "op": "eq",
-              "value": 0
-            }
-          ]
-        },
         {
           "id": "extension_catalog_strict",
           "command": [
@@ -353,41 +287,12 @@
             "-m",
             "pytest",
             "-q",
-            "tests/test_browser_workflow_runtime.py",
             "tests/test_extension_catalog_runtime.py",
             "tests/test_cli_production_assets_integration.py"
           ]
         }
       ],
       "performance_probes": [
-        {
-          "id": "perf_workflow_corpus_validate",
-          "repeat": 3,
-          "command": [
-            "{python}",
-            "-m",
-            "thomas",
-            "browser",
-            "workflow-cases",
-            "validate",
-            "--json",
-            "--limit",
-            "600"
-          ],
-          "throughput_numerator_path": "total",
-          "assertions": [
-            {
-              "path": "total",
-              "op": "eq",
-              "value": 600
-            },
-            {
-              "path": "invalid",
-              "op": "eq",
-              "value": 0
-            }
-          ]
-        },
         {
           "id": "perf_extension_catalog",
           "repeat": 2,
@@ -416,33 +321,6 @@
         }
       ],
       "resilience_probes": [
-        {
-          "id": "resilience_repeat_validate",
-          "repeat": 4,
-          "command": [
-            "{python}",
-            "-m",
-            "thomas",
-            "browser",
-            "workflow-cases",
-            "validate",
-            "--json",
-            "--limit",
-            "200"
-          ],
-          "assertions": [
-            {
-              "path": "total",
-              "op": "eq",
-              "value": 200
-            },
-            {
-              "path": "invalid",
-              "op": "eq",
-              "value": 0
-            }
-          ]
-        },
         {
           "id": "resilience_soak_models_status",
           "command": [

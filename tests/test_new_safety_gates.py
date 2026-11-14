@@ -211,11 +211,11 @@ class TestCircularImportsGate:
         imports = _extract_thomas_imports(source)
         assert "thomas.memory" in imports
 
-    def test_detects_string_reference(self):
-        """String references like 'thomas.X' should be detected."""
+    def test_string_reference_is_not_an_import(self):
+        """Since f810377f, a module named only in a string is not an import."""
         source = 'MODULE_NAME = "thomas.server.routes"\n'
         imports = _extract_thomas_imports(source)
-        assert "thomas.server" in imports
+        assert imports == set()
 
     def test_ignores_non_thomas_imports(self):
         """Non-thomas imports should not appear."""

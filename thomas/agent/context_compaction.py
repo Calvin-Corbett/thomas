@@ -36,6 +36,7 @@ from thomas.agent.context_compaction_heuristics import (
 )
 from thomas.core import capture_context
 from thomas.core.capture_context import CAPTURE_EXCEPTIONS
+from thomas.core.tokens import tool_group_spans
 from thomas.marketplace.observability.session_log_events import compaction_payload
 
 log = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class CompactionResult:
     segments_summarized: int = 0
     summary_text: str = ""
     elapsed_ms: float = 0.0
+    preserve_recent_reduced: bool = False
 
     @property
     def tokens_saved(self) -> int:
@@ -88,6 +90,17 @@ class CompactionResult:
         if self.original_tokens == 0:
             return 1.0
         return self.compacted_tokens / self.original_tokens
+
+
+def _is_completed_group(messages: list[dict[str, Any]], span: tuple[int, int]) -> bool:
+    """True when every tool call in the span's assistant message has its result inside the span."""
+    calls = {
+        str(call.get("id") or "")
+        for call in messages[span[0]].get("tool_calls") or []
+        if isinstance(call, dict) and call.get("id")
+    }
+    results = {str(messages[index].get("tool_call_id") or "") for index in range(span[0] + 1, span[1])}
+    return bool(calls) and calls <= results
 
 
 class ContextCompactor:
@@ -149,6 +162,7 @@ class ContextCompactor:
         target_budget: int = 20000,
         preserve_recent: int = 6,
         use_llm: bool = True,
+        pinned: set[int] | None = None,
     ) -> CompactionResult:
         """Compact a conversation to fit within a target token budget.
 
@@ -161,6 +175,9 @@ class ContextCompactor:
             preserve_recent: Number of most recent messages to preserve intact.
             use_llm: Whether to use LLM for intelligent summarization.
                      Falls back to heuristic compaction if False or no LLM.
+            pinned: ids (id()) of messages never compacted, such as the active task
+                    and current steering. System, developer and summary messages
+                    are never compacted either.
 
         Returns:
             CompactionResult with metrics about the compaction.
@@ -188,45 +205,67 @@ class ContextCompactor:
             preserve_recent,
         )
 
-        # Identify compactable vs preserved regions
-        # Never compact: system messages at start, most recent N messages,
-        # and already-compacted summary messages
+        # Identify compactable vs preserved regions. Never compact: system and
+        # developer messages, pinned messages (the active task and current steering,
+        # passed by the loop), already-compacted summaries, and the most recent N
+        # messages. A tool call and its results are one unit, so the preserved
+        # boundary never falls between them.
         preserve_recent = max(4, preserve_recent)
+        pinned_ids = set(pinned or ())
+        spans = tool_group_spans(messages)
+        raw_end = max(0, len(messages) - preserve_recent)
 
-        # Find the boundary between compactable and preserved
-        compactable_end = max(0, len(messages) - preserve_recent)
+        def _aligned_end(end: int, *, forward: bool) -> int:
+            for start, stop in spans:
+                if start < end < stop:
+                    return stop if forward else start
+            return end
 
-        # Separate system messages from the beginning
-        system_prefix_end = 0
-        for i, msg in enumerate(messages):
-            if msg.get("role") == "system":
-                system_prefix_end = i + 1
-            else:
-                break
+        def _protected(start: int, stop: int) -> bool:
+            # A unit (one message, or a tool exchange with anything stored between its results) is
+            # protected as a whole when any message in it is.
+            return any(
+                messages[index].get("role") in {"system", "developer"}
+                or id(messages[index]) in pinned_ids
+                or _is_compaction_summary(messages[index])
+                for index in range(start, stop)
+            )
 
-        # The compactable range is from system_prefix_end to compactable_end
-        if compactable_end <= system_prefix_end:
+        def _largest_region(end: int) -> tuple[int, int] | None:
+            best: tuple[int, int, int] | None = None
+            run_start: int | None = None
+            run_stop = 0
+            for start, stop in [*(span for span in spans if span[1] <= end), (end, end)]:
+                if start == end or _protected(start, stop):
+                    if run_start is not None and run_stop > run_start:
+                        tokens = estimate_conversation_tokens(messages[run_start:run_stop])
+                        if best is None or tokens > best[2]:
+                            best = (run_start, run_stop, tokens)
+                    run_start = None
+                else:
+                    if run_start is None:
+                        run_start = start
+                    run_stop = stop
+            return (best[0], best[1]) if best else None
+
+        region = _largest_region(_aligned_end(raw_end, forward=False))
+        straddling = next(((start, stop) for start, stop in spans if start < raw_end < stop), None)
+        if region is None and straddling is not None and _is_completed_group(messages, straddling):
+            # The newest tool group straddles the preserved boundary and nothing older
+            # can be compacted: compact that whole group rather than split it. Only a
+            # completed group (every call has its result) qualifies; a group still
+            # waiting for results is never compacted or split.
+            region = _largest_region(straddling[1])
+            result.preserve_recent_reduced = region is not None
+
+        if region is None:
             # Nothing to compact
             result.compacted_message_count = len(messages)
             result.compacted_tokens = estimate_conversation_tokens(messages)
             result.elapsed_ms = (time.monotonic() - t0) * 1000
             return result
 
-        # Skip already-compacted summaries in the compactable range
-        compactable_start = system_prefix_end
-        for i in range(system_prefix_end, compactable_end):
-            if _is_compaction_summary(messages[i]):
-                compactable_start = i + 1
-            else:
-                break
-
-        if compactable_start >= compactable_end:
-            # Everything in the compactable range is already a summary
-            result.compacted_message_count = len(messages)
-            result.compacted_tokens = estimate_conversation_tokens(messages)
-            result.elapsed_ms = (time.monotonic() - t0) * 1000
-            return result
-
+        compactable_start, compactable_end = region
         compactable = messages[compactable_start:compactable_end]
 
         # Group compactable messages into segments, keeping tool call/result
@@ -319,7 +358,7 @@ class ContextCompactor:
             messages[:] = new_messages
 
         # Fallback: progressive heuristic compaction if still over budget
-        dropped = _apply_heuristic_compaction(messages, target_budget, preserve_recent)
+        dropped = _apply_heuristic_compaction(messages, target_budget, preserve_recent, pinned=pinned_ids)
 
         result.compacted_message_count = len(messages)
         result.compacted_tokens = estimate_conversation_tokens(messages)

@@ -1,0 +1,3 @@
+### Changed
+
+- Green project copies use Git's shared object store instead of copying Git objects, and Build launches from the server's Python interpreter without copying a virtual environment into each green. Self-projects record their start request timestamp in green; a watcher records the first observed non-coordination edit in green's private metadata and logs the elapsed request-to-edit time. Direct and Chat-started projects timestamp the request before validation or look-back, while queued projects retain their enqueue time; independent sibling-change and repair-lesson reads now run concurrently before the team starts. Green removal tolerates a first-edit watch whose event loop has already closed.

@@ -197,7 +197,19 @@ class ToolResult:
     def to_content(self, max_len: int = 50_000) -> str:
         """Serialize to a string for inclusion in LLM messages."""
         if not self.ok:
-            return json.dumps({"ok": False, "error": self.error or "unknown error"})
+            failure = {"ok": False, "error": self.error or "unknown error"}
+            if self.data is not None:
+                text = (
+                    self.data if isinstance(self.data, str) else json.dumps(self.data, ensure_ascii=False, default=str)
+                )
+                limit = max(0, max_len)
+                if len(text) > limit:
+                    marker = f"\n... (truncated, {len(text)} chars total)"
+                    text = text[: max(0, limit - len(marker))] + marker[:limit]
+                # Only the tool's intended result data is exposed; preserve the
+                # failure status while allowing the model to inspect diagnostics.
+                failure["output"] = text
+            return json.dumps(failure, ensure_ascii=False) if self.data is not None else json.dumps(failure)
         if isinstance(self.data, str):
             text = self.data
         else:

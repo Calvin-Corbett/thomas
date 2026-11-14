@@ -1,0 +1,21 @@
+    /* Local, deterministic icon fallback: Settings must work fully offline. */
+    .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
+    .ph::before { content: "\2022"; }
+    .ph-magnifying-glass::before { content: "\2315"; }
+    .ph-gear::before { content: "\2699"; }
+    .ph-cpu::before { content: "\25A3"; }
+    .ph-plug::before { content: "\238B"; }
+    .ph-puzzle-piece::before { content: "\229E"; }
+    .ph-robot::before { content: "\25C9"; }
+    .ph-users-three::before { content: "\25C9"; }
+    .ph-shield-check::before { content: "\25C6"; }
+    .ph-palette::before { content: "\25D2"; }
+    .ph-wrench::before { content: "\25C7"; }
+    .ph-check::before { content: "\2713"; }
+    .ph-arrow-counterclockwise::before { content: "\21B6"; }
+    .ph-eye::before { content: "\25C9"; }
+    .ph-trash::before, .ph-x::before { content: "\00D7"; }
+    .ph-download::before { content: "\2193"; }
+    .ph-warning::before { content: "!"; }
+    .ph-floppy-disk::before, .ph-desktop::before { content: "\25A3"; }
+    .ph-arrow-clockwise::before { content: "\21BB"; }

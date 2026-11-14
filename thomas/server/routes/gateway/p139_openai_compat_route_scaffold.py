@@ -573,9 +573,6 @@ def register(app: web.Application) -> None:
         app[_SESSION_KEY] = {"session": app.get(_SESSION_KEY)}
     app.add_routes(routes)
 
-    # Ensure we clean up any shared session.
-    async def _cleanup_ctx(app_: web.Application):
-        yield
-        await _close_session(app_)
-
-    app.cleanup_ctx.append(_cleanup_ctx)
+    # Close any shared session when the app stops, or when a plugin's view of it stops. ``on_cleanup`` and not
+    # ``cleanup_ctx``: a context would make the view wait for a startup step before its routes join, and there is none.
+    app.on_cleanup.append(_close_session)

@@ -168,7 +168,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
 
     async def test_max_profile_keeps_mode_and_raises_iteration_budget(self):
         sid = await self._new_session_id()
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -206,7 +206,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         # assert since cd0203a7: cheap gets the same 400-pass runaway guard as max, and
         # a name promising otherwise is the same stale ration in prose.
         sid = await self._new_session_id()
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -234,7 +234,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
 
     async def test_optimal_profile_keeps_requested_mode_and_default_iterations(self):
         sid = await self._new_session_id()
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -263,7 +263,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
 
     async def test_balanced_alias_maps_to_optimal(self):
         sid = await self._new_session_id()
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -289,7 +289,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
 
     async def test_unknown_token_economy_falls_back_to_optimal_with_receipt(self):
         sid = await self._new_session_id()
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeOrchestratorBrainTokenEconomy):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -340,7 +340,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
             with self.subTest(text=text):
                 sid = await self._new_session_id()
                 with patch(
-                    "thomas.server.routes.chat_v2.OrchestratorBrain",
+                    "thomas.server.routes.chat_v2_support.OrchestratorBrain",
                     _FakeOrchestratorBrainTokenEconomy,
                 ):
                     resp = await self.client.post(

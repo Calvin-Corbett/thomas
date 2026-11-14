@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -494,3 +495,27 @@ def test_router_text_output_trims_long_current_thread_summaries() -> None:
     assert "msg-long: outgoing awaiting=peer state=open; Claude coordination context" in text
     assert long_summary not in text
     assert "..." in text
+
+
+def test_router_json_output_serializes_the_dataclass_reports(monkeypatch, capsys) -> None:
+    # build_startup_payload stores trunk_divergence and fleet_stall as dataclass
+    # Reports; `--json` used to die on them with "Object of type Report is not
+    # JSON serializable" after doing all the startup work.
+    payload = {
+        "lane": "chat",
+        "trunk_divergence": mod.trunk_divergence.Report(findings=["unpushed: 2 commit(s)"], detail={"ahead": 2}),
+        "fleet_stall": mod.fleet_stall.Report(stall=["no landing in 12h"], hours=12),
+    }
+    monkeypatch.setattr(mod, "build_startup_payload", lambda **_: payload)
+
+    assert mod.run(["--summary", "test", "--workflow-mode", "guided", "--json"]) == 0
+
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["lane"] == "chat"
+    assert emitted["trunk_divergence"] == {
+        "findings": ["unpushed: 2 commit(s)"],
+        "unknown": [],
+        "detail": {"ahead": 2},
+    }
+    assert emitted["fleet_stall"]["stall"] == ["no landing in 12h"]
+    assert emitted["fleet_stall"]["hours"] == 12

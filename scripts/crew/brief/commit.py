@@ -16,15 +16,19 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
-    from scripts.crew.brief import commit_integrity, coordination_barrier
+    from scripts.crew.brief import commit_attempts, commit_integrity, coordination_barrier, inflight
     from scripts.crew.brief import identity as agent_identity
+    from scripts.crew.brief.gate_parity import HOOK_PARITY_GATES, PATH_ARG_GATES
     from scripts.forge.gates import workboard_claims as claims_gate
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     from crew.brief import (
+        commit_attempts,  # type: ignore
         commit_integrity,  # type: ignore
         coordination_barrier,  # type: ignore
+        inflight,  # type: ignore
     )
     from crew.brief import identity as agent_identity  # type: ignore
+    from crew.brief.gate_parity import HOOK_PARITY_GATES, PATH_ARG_GATES  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 
@@ -39,6 +43,9 @@ PATH_SCOPED_GATES: dict[str, tuple[str, ...]] = {
         "apps/site/verification/",
     ),
 }
+# One registration for the inbox gate, shared by both entries and the three hooks in .pre-commit-config.yaml;
+# see workboard_inbox.py for why the commit path advises instead of blocking.
+_INBOX_GATE = (sys.executable, "scripts/forge/gates/workboard_inbox.py", "--advisory")
 LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("protected_files", (sys.executable, "scripts/forge/gates/protected_files_gate.py")),
     ("merge_resurrection", (sys.executable, "scripts/forge/gates/merge_resurrection_gate.py")),
@@ -46,7 +53,8 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("agent_safety", (sys.executable, "scripts/validate_agent_changes.py")),
     ("exception_handler", (sys.executable, "scripts/forge/gates/exception_handler_gate.py")),
     ("duplicate_filename", (sys.executable, "scripts/forge/gates/duplicate_filename_gate.py")),
-    ("workboard_inbox", (sys.executable, "scripts/forge/gates/workboard_inbox.py")),
+    ("workboard_inbox", _INBOX_GATE),
+    *HOOK_PARITY_GATES,
     (
         "active_folder_guard",
         (
@@ -113,7 +121,15 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("type_safety", (sys.executable, "scripts/forge/gates/type_safety_gate.py")),
     ("circular_imports", (sys.executable, "scripts/forge/gates/circular_imports_gate.py")),
     ("changelog", (sys.executable, "scripts/forge/gates/changelog_gate.py")),
-    ("workboard_inbox_final", (sys.executable, "scripts/forge/gates/workboard_inbox.py")),
+    # The Agent Verification Protocol gates (2026-03-19), written and protected but never called until now.
+    # Replayed over the last 60 commits on 2026-09-19 they stop 6 (one real catch, five asking for a sentence): 0 hard blocks.
+    ("verification_record", (sys.executable, "scripts/forge/gates/verification_record_gate.py")),
+    ("commit_scope", (sys.executable, "scripts/forge/gates/commit_scope_gate.py")),
+    ("shrinkage", (sys.executable, "scripts/forge/gates/shrinkage_gate.py")),
+    ("test_coverage", (sys.executable, "scripts/forge/gates/test_coverage_gate.py")),
+    ("dependency", (sys.executable, "scripts/forge/gates/dependency_gate.py")),
+    ("frontend_lint", (sys.executable, "scripts/forge/gates/frontend_lint_gate.py")),
+    ("workboard_inbox_final", _INBOX_GATE),
 )
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
 FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"
@@ -191,15 +207,18 @@ def _run_git(
     env: dict[str, str] | None = None,
     input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    # Bytes in, UTF-8 out. Text mode on Windows writes stdin as cp1252 with CRLF: every
+    # commit message reached git with a CR on each line, and a "→" crashed the commit.
+    proc = subprocess.run(
         ["git", *args],
         cwd=repo_root,
         env=env,
-        input=input_text,
+        input=None if input_text is None else input_text.encode("utf-8"),
         capture_output=True,
-        text=True,
         check=False,
     )
+    out, err = (raw.decode("utf-8", "replace").replace("\r\n", "\n") for raw in (proc.stdout, proc.stderr))
+    return subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
 
 
 def _git_output(repo_root: Path, args: Sequence[str], *, env: dict[str, str] | None = None) -> str:
@@ -407,18 +426,32 @@ def _build_commit_message(message: str, *, agent: str, scope_selection: ScopeSel
     )
 
 
-def _temp_index_env(agent: str, index_path: Path, *, scope_selection: ScopeSelection | None = None) -> dict[str, str]:
+def _temp_index_env(
+    agent: str, index_path: Path, *, scope_selection: ScopeSelection | None = None, base: str | None = None
+) -> dict[str, str]:
     env = os.environ.copy()
-    env["GIT_INDEX_FILE"] = str(index_path)
-    env["AGENT_ID"] = agent
-    env["THOMAS_AGENT_ID"] = agent
+    env.update(GIT_INDEX_FILE=str(index_path), AGENT_ID=agent, THOMAS_AGENT_ID=agent)
+    env.update(GIT_AUTHOR_NAME="Thomas-Agent", GIT_AUTHOR_EMAIL="352198248+Thomas-Agent@users.noreply.github.com")
+    # The tip this index was built on. A neighbour's landing moves HEAD but not this; gates that ask what is staged
+    # diff against it (workboard_agent_claim, workboard_changed_files). Always set here, so an inherited value never leaks.
+    env.pop("THOMAS_COMMIT_BASE", None)
+    if base:
+        env["THOMAS_COMMIT_BASE"] = base
     if scope_selection and scope_selection.source == FALLBACK_SOURCE:
         env[FALLBACK_SCOPE_ENV] = ",".join(scope_selection.scopes)
         env[FALLBACK_REASON_ENV] = scope_selection.reason
     return env
 
 
+def _python_paths(selected_paths: Sequence[str]) -> list[str]:
+    """The python files in a commit scope that still exist: ruff fails with E902 on a file this commit deletes or moves."""
+    return [p for p in (_normalize_path(x) for x in selected_paths) if p.endswith(".py") and (_REPO_ROOT / p).is_file()]
+
+
 def _gate_applies(gate_name: str, selected_paths: Sequence[str]) -> bool:
+    if gate_name in PATH_ARG_GATES and not _python_paths(selected_paths):
+        # ruff with no paths lints the whole repository; no python staged means nothing to lint.
+        return False
     prefixes = PATH_SCOPED_GATES.get(gate_name)
     if not prefixes:
         return True
@@ -432,6 +465,8 @@ def _resolved_gate_command(
     selected_paths: Sequence[str],
 ) -> list[str]:
     resolved = list(command)
+    if gate_name in PATH_ARG_GATES:
+        resolved.extend(_python_paths(selected_paths))
     if gate_name == "release_update":
         for path in selected_paths:
             normalized = _normalize_path(path)
@@ -446,11 +481,12 @@ def _prepare_temp_index(
     agent: str,
     selected_paths: Sequence[str],
     scope_selection: ScopeSelection,
+    base: str | None = None,
 ) -> tuple[Path, tempfile.TemporaryDirectory[str]]:
     holder = tempfile.TemporaryDirectory(prefix="thomas-agent-commit-")
     index_path = Path(holder.name) / "index"
-    env = _temp_index_env(agent, index_path, scope_selection=scope_selection)
-    _git_output(repo_root, ["read-tree", "HEAD"], env=env)
+    env = _temp_index_env(agent, index_path, scope_selection=scope_selection, base=base)
+    _git_output(repo_root, ["read-tree", base or "HEAD"], env=env)
     if selected_paths:
         proc = _run_git(repo_root, ["add", "-A", "--", *selected_paths], env=env)
         if proc.returncode != 0:
@@ -466,75 +502,6 @@ def _gate_script(command: Sequence[str]) -> str:
         if text.endswith(".py") and text != str(sys.executable):
             return text.replace("\\", "/")
     return ""
-
-
-def _is_untracked(repo_root: Path, path: str) -> bool:
-    """True when git does not track `path` at all.
-
-    Encoding is explicit: capturing git output as platform text broke a gate on
-    Windows over a single 0x9d byte, and the failure surfaced as a file
-    appearing absent from the index.
-    """
-    if not path:
-        return False
-    proc = subprocess.run(
-        ("git", "ls-files", "--", path),
-        cwd=str(repo_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    return proc.returncode == 0 and not proc.stdout.strip()
-
-
-def _run_local_gates(
-    repo_root: Path,
-    *,
-    agent: str,
-    index_path: Path,
-    selected_paths: Sequence[str],
-    scope_selection: ScopeSelection,
-    commit_message: str,
-    local_gate_commands: Sequence[tuple[str, Sequence[str]]],
-) -> tuple[bool, str | None, str]:
-    env = _temp_index_env(agent, index_path, scope_selection=scope_selection)
-    env["THOMAS_COMMIT_MESSAGE"] = str(commit_message or "")
-    skipped: list[str] = []
-    for gate_name, command in local_gate_commands:
-        if not _gate_applies(gate_name, selected_paths):
-            continue
-        # Authority requires review. An untracked gate script is one nobody has
-        # committed, and on 2026-09-02 exactly that refused every agent in this
-        # repo for twelve hours - its own author included - with no trace but
-        # commits stopping. It does not get to block the fleet. It is not hidden
-        # either: it is named below and on every session start by
-        # scripts/forge/fleet_stall.py, whose UNVERSIONED TOOLING line exists
-        # for this. Commit the gate and it takes effect again immediately.
-        script = _gate_script(command)
-        if _is_untracked(repo_root, script):
-            skipped.append(f"{gate_name} ({script})")
-            continue
-        resolved_command = _resolved_gate_command(
-            gate_name,
-            command,
-            selected_paths=selected_paths,
-        )
-        proc = subprocess.run(
-            resolved_command,
-            cwd=repo_root,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        output = ((proc.stdout or "") + (proc.stderr or "")).strip()
-        if proc.returncode != 0:
-            return False, gate_name, output
-    if skipped:
-        return True, None, "skipped unreviewed gate(s), commit them to restore: " + ", ".join(skipped)
-    return True, None, ""
 
 
 def _create_commit_object(
@@ -614,13 +581,12 @@ def commit_scoped_changes(
     repo_root: Path = ROOT,
     workboard_path: Path = DEFAULT_WORKBOARD,
     local_gate_commands: Sequence[tuple[str, Sequence[str]]] = LOCAL_GATE_COMMANDS,
+    require_slot: bool = False,
 ) -> CommitResult:
-    has_session_source = any(
-        str(os.getenv(key) or "").strip() for key in ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
-    )
-    if has_session_source or repo_root.resolve() == ROOT.resolve():
-        try:
-            resolved_agent = agent_identity.require_bound_agent(agent, repo_root=repo_root)
+    session_keys = ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
+    if any(str(os.getenv(key) or "").strip() for key in session_keys) or repo_root.resolve() == ROOT.resolve():
+        try:  # one session, one root: a binding is validated where the message tool validates it
+            resolved_agent = agent_identity.require_bound_agent(agent, repo_root=coordination_root(repo_root))
         except ValueError as exc:
             return CommitResult(
                 ok=False,
@@ -649,8 +615,9 @@ def commit_scoped_changes(
             suggested_command='python scripts/agent_commit.py --agent <agent-id> --message "<message>"',
         )
 
+    barrier_board = coordination_board(workboard_path)  # unread P0 mail: the shared board; claims stay on this one
     try:
-        coordination_barrier.require_clear_p0(workboard_path, bound_agent=resolved_agent)
+        coordination_barrier.require_clear_p0(barrier_board, bound_agent=resolved_agent)
     except coordination_barrier.CoordinationBlocked as exc:
         return CommitResult(
             ok=False,
@@ -661,7 +628,7 @@ def commit_scoped_changes(
             claim_scopes=(),
             selected_paths=(),
             dry_run=bool(dry_run),
-            next_step="ACK the named P0 coordination message before committing.",
+            next_step=f"ACK the named P0 coordination message on {barrier_board} before committing.",
         )
 
     scope_selection: ScopeSelection | None = None
@@ -766,10 +733,18 @@ def commit_scoped_changes(
             scope_source=scope_selection.source,
         )
 
+    refused = {
+        "ok": False,
+        "agent": resolved_agent,
+        "branch": None,
+        "claim_scopes": tuple(scope_selection.scopes),
+        "selected_paths": tuple(selected_paths),
+        "dry_run": bool(dry_run),
+        "scope_source": scope_selection.source,
+    }
     stray_versions = _stray_version_files(repo_root, selected_paths)
     if stray_versions:
         return CommitResult(
-            ok=False,
             blocker_class="release_metadata_dirty",
             message=(
                 "a version bump is in progress outside this commit: "
@@ -777,138 +752,42 @@ def commit_scoped_changes(
                 + ". It is never swept in. Include both pyproject.toml and thomas/__init__.py to land the"
                 " bump as one, or park them (git stash push -- pyproject.toml thomas/__init__.py) first."
             ),
-            agent=resolved_agent,
-            branch=None,
-            claim_scopes=tuple(scope_selection.scopes),
-            selected_paths=tuple(selected_paths),
-            dry_run=bool(dry_run),
-            scope_source=scope_selection.source,
+            **refused,
         )
+    held = inflight.refusal(repo_root, selected_paths)  # another session's uncommitted lines in these files
+    if held:
+        return CommitResult(**held, **refused)
     claimed_changed = [path for path in selected_paths if path not in RELEASE_METADATA_FILES]
     if not claimed_changed:
         scope_label = (
             "selected explicit fallback scope" if scope_selection.source == FALLBACK_SOURCE else "active claim scope"
         )
         return CommitResult(
-            ok=False,
             blocker_class="no_claimed_changes",
             message=f"no changed files inside the {scope_label} were found for this commit",
-            agent=resolved_agent,
-            branch=None,
-            claim_scopes=tuple(scope_selection.scopes),
-            selected_paths=tuple(selected_paths),
-            dry_run=bool(dry_run),
-            scope_source=scope_selection.source,
             next_step="Update the selected files or narrow --include to paths that currently have changes.",
+            **refused,
         )
 
-    branch: str | None = None
-    holder: tempfile.TemporaryDirectory[str] | None = None
-    try:
-        branch = _current_branch(repo_root)
-        head_before = _current_head(repo_root)
-        generated_trailers = _commit_trailers(agent=resolved_agent, scope_selection=scope_selection)
-        full_message = commit_integrity.compose_message(message, generated_trailers)
-        coordination_barrier.require_clear_p0(workboard_path, bound_agent=resolved_agent)
-        index_path, holder = _prepare_temp_index(
-            repo_root,
-            agent=resolved_agent,
-            selected_paths=selected_paths,
-            scope_selection=scope_selection,
-        )
-        gates_ok, gate_name, gate_output = _run_local_gates(
-            repo_root,
-            agent=resolved_agent,
-            index_path=index_path,
-            selected_paths=selected_paths,
-            scope_selection=scope_selection,
-            commit_message=full_message,
-            local_gate_commands=local_gate_commands,
-        )
-        if not gates_ok:
-            return CommitResult(
-                ok=False,
-                blocker_class="local_gate_failed",
-                message=f"local gate failed: {gate_name}",
-                agent=resolved_agent,
-                branch=branch,
-                claim_scopes=tuple(scope_selection.scopes),
-                selected_paths=tuple(selected_paths),
-                dry_run=bool(dry_run),
-                gate_name=gate_name,
-                gate_output=gate_output,
-                scope_source=scope_selection.source,
-                next_step=(
-                    "Fix the reported local gate failure, or adjust the explicit fallback paths if the gate reports an ownership conflict."
-                ),
-            )
-        if dry_run:
-            return CommitResult(
-                ok=True,
-                blocker_class=None,
-                message="local scoped commit checks passed (dry-run)",
-                agent=resolved_agent,
-                branch=branch,
-                claim_scopes=tuple(scope_selection.scopes),
-                selected_paths=tuple(selected_paths),
-                dry_run=True,
-                scope_source=scope_selection.source,
-            )
-        coordination_barrier.require_clear_p0(workboard_path, bound_agent=resolved_agent)
-        commit_sha = _create_commit_object(
-            repo_root,
-            agent=resolved_agent,
-            index_path=index_path,
-            parent_head=head_before,
-            message=full_message,
-            expected_body=message,
-            expected_trailers=generated_trailers,
-        )
-        if _current_head(repo_root) != head_before:
-            return CommitResult(
-                ok=False,
-                blocker_class="branch_race",
-                message="HEAD changed during scoped commit preparation; branch was not advanced",
-                agent=resolved_agent,
-                branch=branch,
-                claim_scopes=tuple(scope_selection.scopes),
-                selected_paths=tuple(selected_paths),
-                dry_run=False,
-                scope_source=scope_selection.source,
-                next_step="Re-run the scoped commit after refreshing the branch state.",
-            )
-        _update_branch_ref(repo_root, branch=branch, commit_sha=commit_sha, expected_head=head_before)
-        _sync_live_index(repo_root, selected_paths)
-        return CommitResult(
-            ok=True,
-            blocker_class=None,
-            message="scoped agent commit created",
-            agent=resolved_agent,
-            branch=branch,
-            claim_scopes=tuple(scope_selection.scopes),
-            selected_paths=tuple(selected_paths),
-            commit_sha=commit_sha,
-            dry_run=False,
-            scope_source=scope_selection.source,
-        )
-    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-        return CommitResult(
-            ok=False,
-            blocker_class="broken_repo_tool",
-            message=str(exc),
-            agent=resolved_agent,
-            branch=branch,
-            claim_scopes=tuple(scope_selection.scopes),
-            selected_paths=tuple(selected_paths),
-            dry_run=bool(dry_run),
-            scope_source=scope_selection.source,
-        )
-    finally:
-        if holder is not None:
-            holder.cleanup()
+    # Branch, temp index, gates, commit object and swap live in commit_attempts: it rebases and tries again when a
+    # neighbour lands first, and takes this module as `core` so every helper above stays the one to patch.
+    return commit_attempts.land(
+        sys.modules[__name__],
+        repo_root=repo_root,
+        workboard_path=barrier_board,  # land reads its board for the P0 barrier alone
+        agent=resolved_agent,
+        scope_selection=scope_selection,
+        selected_paths=selected_paths,
+        include_paths=include_paths,
+        message=message,
+        dry_run=dry_run,
+        local_gate_commands=with_inbox_board(local_gate_commands, barrier_board),
+        require_slot=require_slot,
+    )
 
 
 from scripts.crew.brief import scoped_commit_cli
+from scripts.crew.workboard.coordination_root import coordination_board, coordination_root, with_inbox_board
 
 _render_result = scoped_commit_cli.render_result
 

@@ -1,3 +1,9 @@
+"""The six ``/api/onboarding/desktop`` routes, through a whole app with a stand-in for the host service.
+
+They are the desktop row's, so this names ``thomas.server.rows.desktop``: a check finds a test by following imports and
+dotted names, and nothing here imports the row.
+"""
+
 from __future__ import annotations
 
 import tempfile
@@ -108,7 +114,7 @@ class TestOnboardingDesktopRoutes(AioHTTPTestCase):
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self._stub_service = _StubHostService()
         self._patcher = patch(
-            "thomas.server.routes.onboarding_aiohttp.get_global_desktop_host_service",
+            "thomas.server.routes.desktop_aiohttp.get_global_desktop_host_service",
             lambda: self._stub_service,
         )
         self._patcher.start()

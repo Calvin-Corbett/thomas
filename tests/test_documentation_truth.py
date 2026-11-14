@@ -67,7 +67,13 @@ _LIVE_CHAT_TOKENS = (
     "model-owned",
 )
 _CLI_HELP_CASES = (
-    (("--help",), "Usage: python -m thomas [OPTIONS] COMMAND [ARGS]...", "Plain `thomas` starts the interactive REPL"),
+    # Click before 8.5 prints the group's command as COMMAND, later Click as [COMMAND] because plain `thomas` runs the
+    # REPL with no command. Both are the same true usage line; the lock pins 8.3.1 but a newer Click may be installed.
+    (
+        ("--help",),
+        re.compile(r"Usage: python -m thomas \[OPTIONS\] \[?COMMAND\]? \[ARGS\]\.\.\."),
+        "Plain `thomas` starts the interactive REPL",
+    ),
     (("repl", "--help"), "Usage: python -m thomas repl [OPTIONS]", "Start the interactive REPL"),
     (("serve", "--help"), "Usage: python -m thomas serve [OPTIONS]", "Run the web UI + HTTP API server"),
 )
@@ -196,10 +202,11 @@ def test_documented_cli_surfaces_are_click_registered() -> None:
             text=True,
         )
         output = completed.stdout + completed.stderr
-        if completed.returncode != 0 or usage not in output or description not in output:
+        has_usage = bool(usage.search(output)) if isinstance(usage, re.Pattern) else usage in output
+        if completed.returncode != 0 or not has_usage or description not in output:
             failures.append(
                 f"arguments={arguments!r}, exit={completed.returncode}, "
-                f"usage={usage in output}, description={description in output}"
+                f"usage={has_usage}, description={description in output}"
             )
 
     assert not failures, f"checked {len(_CLI_HELP_CASES)} Click help surfaces; failures: {failures}"

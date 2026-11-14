@@ -65,8 +65,9 @@ async def _create_llm_call(config, model_profile: str):
     the signature expected by :class:`DocumentAnalyzer`.
     """
     from thomas.core.llm import LLMClient
+    from thomas.core.llm_slot import models
 
-    llm = LLMClient(config, profile=model_profile)
+    llm = models().open(config, default=LLMClient, profile=model_profile)
 
     _vision_checked: dict = {}
 

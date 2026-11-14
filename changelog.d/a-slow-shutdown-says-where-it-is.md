@@ -1,0 +1,3 @@
+### Fixed
+
+- **A shutdown that takes long now says where it is.** On 2026-11-09 the server behind your desktop app wrote its exit record at 17:18:06 and its process ended at 17:20:59; in between the port was closed, nothing was logged, and the next server could not start, so the app was unreachable for five and a half minutes. Nothing could say which step was waiting. Now, once a shutdown has gone on for 20 seconds, Thomas writes where every thread is to `shutdown-<pid>-<number>-<seconds>s.txt` in his log folder, and again every 20 seconds (at most 15 times), with one warning line each. A shutdown that ends in time writes nothing. This does not make the shutdown faster yet: it is what will name the step to fix.

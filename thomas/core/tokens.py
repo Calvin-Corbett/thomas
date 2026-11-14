@@ -12,9 +12,13 @@ For precise counting with a specific model, set THOMAS_TOKEN_RATIO env var.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+from collections.abc import Sequence
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 # Chars-per-token ratio. Conservative default that slightly overestimates
 # token count (better to trim too early than blow the context window).
@@ -38,6 +42,17 @@ def _trim_marker_count(message: dict[str, Any]) -> int:
         return 0
     match = _TRIM_MARKER_COUNT.search(content)
     return int(match.group(1)) if match else 0
+
+
+class ContextBudgetExhausted(ValueError):
+    """The request cannot hold tool results produced in the current run, and no summary covers them.
+
+    Raised instead of sending a request without them, so the run stops rather than continuing blind.
+    """
+
+
+class RequiredRequestTooLarge(ValueError):
+    """The message budget cannot fit the required instructions and latest request."""
 
 
 def estimate_tokens(text: str) -> int:
@@ -120,6 +135,7 @@ def trim_messages_to_budget(
     tools_tokens: int = 0,
     preserve_first: int = 1,
     preserve_last: int = 4,
+    required: Sequence[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Trim a message list to fit within a token budget.
 
@@ -128,6 +144,7 @@ def trim_messages_to_budget(
     - Always keep the last `preserve_last` messages (recent conversation)
     - Drop middle messages oldest-first
     - Insert a "[conversation trimmed]" marker where messages were dropped
+    - Keep a tool call and its results together, and never drop a required message
 
     Args:
         messages: Full message list (excluding system message)
@@ -136,6 +153,8 @@ def trim_messages_to_budget(
         tools_tokens: Tokens consumed by tool specifications
         preserve_first: Keep this many messages from the start
         preserve_last: Keep this many messages from the end
+        required: Messages, by identity, that are never dropped (the active task and
+            current steering)
 
     Returns:
         Trimmed message list that fits within budget
@@ -152,29 +171,62 @@ def trim_messages_to_budget(
         # Not enough messages to trim intelligently — just return all
         return messages
 
-    head = messages[:preserve_first]
-    tail = messages[-preserve_last:]
-    middle = messages[preserve_first:-preserve_last]
+    required_ids = {id(message) for message in required or ()}
+    spans = tool_group_spans(messages)
+
+    # Head and tail are whole spans. A tool call and its results are one unit, so
+    # neither boundary may fall between them; a tail boundary inside a group moves
+    # back to the start of the group, keeping recent results with their call.
+    head_end = 0
+    for _start, end in spans:
+        if end > preserve_first:
+            break
+        head_end = end
+    tail_start = len(messages)
+    for start, _end in reversed(spans):
+        if len(messages) - tail_start >= preserve_last or start < head_end:
+            break
+        tail_start = start
+
+    head = messages[:head_end]
+    tail = messages[tail_start:]
+    middle_spans = [(start, end) for start, end in spans if start >= head_end and end <= tail_start]
+    required_spans = [
+        (start, end)
+        for start, end in middle_spans
+        if any(id(messages[index]) in required_ids for index in range(start, end))
+    ]
 
     # Calculate protected token cost
     head_tokens = estimate_messages_tokens(head)
     tail_tokens = estimate_messages_tokens(tail)
-    remaining_budget = available - head_tokens - tail_tokens
 
-    if remaining_budget <= 0:
-        # Even head+tail don't fit — keep only tail
-        return tail
+    if available - head_tokens - tail_tokens <= 0:
+        # Even head and tail do not fit: keep the tail and every required message.
+        kept_before_tail = [message for message in head if id(message) in required_ids]
+        for start, end in required_spans:
+            kept_before_tail.extend(messages[start:end])
+        return kept_before_tail + tail
 
-    # Keep middle messages from the end (most recent) that fit
-    kept_middle: list[dict[str, Any]] = []
+    def _span_tokens(span: tuple[int, int]) -> int:
+        return sum(estimate_message_tokens(message) for message in messages[span[0] : span[1]])
+
+    remaining_budget = available - head_tokens - tail_tokens - sum(_span_tokens(span) for span in required_spans)
+
+    # Keep middle spans from the end (most recent) that fit; required spans always stay.
+    kept: set[tuple[int, int]] = set(required_spans)
     used = 0
     # Iterate backwards (newest to oldest)
-    for msg in reversed(middle):
-        msg_tokens = estimate_message_tokens(msg)
-        if used + msg_tokens > remaining_budget:
+    for span in reversed(middle_spans):
+        if span in kept:
+            continue
+        span_tokens = _span_tokens(span)
+        if used + span_tokens > remaining_budget:
             break
-        kept_middle.insert(0, msg)
-        used += msg_tokens
+        kept.add(span)
+        used += span_tokens
+    kept_middle = [message for span in middle_spans if span in kept for message in messages[span[0] : span[1]]]
+    dropped_messages = [message for span in middle_spans if span not in kept for message in messages[span[0] : span[1]]]
 
     # A marker left by an EARLIER trim is not one lost message: it is the only
     # record of the N this list has already lost. `_build_messages` trims twice
@@ -184,7 +236,7 @@ def trim_messages_to_budget(
     # had lost 23, deleting the sentence that said so. Same shape as the
     # compaction bug fixed in 1d8a26b8, one layer down. Absorbing the dropped
     # marker's count keeps the number true whatever order the stages run in.
-    dropped = sum(_trim_marker_count(message) or 1 for message in middle[: len(middle) - len(kept_middle)])
+    dropped = sum(_trim_marker_count(message) or 1 for message in dropped_messages)
     if dropped > 0:
         trim_marker = {
             "role": "system",
@@ -200,6 +252,38 @@ def _tool_call_ids(message: dict[str, Any]) -> set[str]:
     if not isinstance(calls, list):
         return set()
     return {str(call.get("id") or "") for call in calls if isinstance(call, dict) and call.get("id")}
+
+
+def tool_group_spans(messages: list[dict[str, Any]]) -> list[tuple[int, int]]:
+    """Split messages into units that are kept or dropped whole.
+
+    An assistant message with tool calls runs to the last result for those calls
+    that arrives before the next assistant message, so it also holds anything
+    stored between its results, such as a live user amendment. No shortening step
+    can then leave a result whose call is gone. Every other message is its own unit.
+    """
+    spans: list[tuple[int, int]] = []
+    index = 0
+    while index < len(messages):
+        end = index + 1
+        call_ids = _tool_call_ids(messages[index]) if messages[index].get("role") == "assistant" else set()
+        if call_ids:
+            pending = set(call_ids)
+            scan = index + 1
+            while scan < len(messages) and pending:
+                message = messages[scan]
+                if message.get("role") == "assistant":
+                    break
+                if message.get("role") == "tool":
+                    call_id = str(message.get("tool_call_id") or "")
+                    if call_id not in call_ids:
+                        break
+                    pending.discard(call_id)
+                    end = scan + 1
+                scan += 1
+        spans.append((index, end))
+        index = end
+    return spans
 
 
 def _compact_tool_arguments(raw: Any) -> str:
@@ -272,64 +356,108 @@ def _drop_orphan_tool_results(messages: list[dict[str, Any]]) -> list[dict[str, 
     return result
 
 
-def _turn_span(messages: list[dict[str, Any]], start: int) -> tuple[int, int]:
-    role = str(messages[start].get("role") or "")
-    end = start + 1
-    if role == "user":
-        while end < len(messages) and messages[end].get("role") not in {"system", "user", "developer"}:
-            end += 1
-    elif role == "assistant":
-        call_ids = _tool_call_ids(messages[start])
-        while end < len(messages) and messages[end].get("role") == "tool":
-            if str(messages[end].get("tool_call_id") or "") not in call_ids:
-                break
-            end += 1
-    return start, end
-
-
 def fit_messages_to_hard_cap(
     messages: list[dict[str, Any]],
     *,
     hard_cap: int,
     anchor_source: list[dict[str, Any]] | None = None,
+    required_anchors: Sequence[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Fit disposable history without altering required request context.
 
     Large completed tool arguments are first replaced with valid, compact JSON.
-    Older turns are then removed atomically. The most recent user message and
-    every system/developer instruction are retained byte-for-byte. If those
-    required messages cannot fit, fail instead of silently deleting policy or
-    request text.
+    Older turns are then removed atomically. The most recent user message, every
+    system/developer instruction and every required anchor (the active task and
+    current steering, passed by the caller) are retained byte-for-byte; a required
+    anchor missing from the list is restored after the leading instructions. If
+    those required messages cannot fit, fail instead of silently deleting policy
+    or request text.
     """
 
     cap = int(hard_cap)
     if cap <= 0:
-        raise ValueError(f"Model message budget must be positive; received {cap} estimated tokens")
+        required_tokens = estimate_messages_tokens(list(messages))
+        raise RequiredRequestTooLarge(
+            f"Request messages need {required_tokens} estimated tokens, exceeding the {cap}-token message budget"
+        )
 
-    fitted = _drop_orphan_tool_results(_compact_completed_tool_calls(list(messages)))
+    compacted = _compact_completed_tool_calls(list(messages))
+    fitted = _drop_orphan_tool_results(compacted)
+    if len(compacted) != len(fitted):
+        log.warning("Dropped %d tool result(s) whose tool call is not in the request", len(compacted) - len(fitted))
     sources = anchor_source if anchor_source is not None else messages
     anchor = next((dict(message) for message in reversed(sources) if message.get("role") == "user"), None)
     if anchor is not None and not any(message.get("role") == "user" for message in fitted):
         fitted.insert(1 if fitted else 0, anchor)
+
+    required = [message for message in required_anchors or () if isinstance(message, dict)]
+
+    def _same(left: dict[str, Any], right: dict[str, Any]) -> bool:
+        return left is right or (left.get("role") == right.get("role") and left.get("content") == right.get("content"))
+
+    for order, message in enumerate(required):
+        if any(_same(message, present) for present in fitted):
+            continue
+        # Restore in canonical order (the task, then amendments in order): after the unit holding
+        # the nearest earlier anchor that is present, never inside a tool exchange; with none
+        # present, after the leading instructions.
+        earlier = [
+            position
+            for position, present in enumerate(fitted)
+            if any(_same(present, anchor_message) for anchor_message in required[:order])
+        ]
+        if earlier:
+            insert_at = next(stop for start, stop in tool_group_spans(fitted) if start <= earlier[-1] < stop)
+        else:
+            insert_at = 0
+            while insert_at < len(fitted) and fitted[insert_at].get("role") in {"system", "developer"}:
+                insert_at += 1
+        fitted.insert(insert_at, message)
+
+    def _protected(position: int, anchor_index: int) -> bool:
+        message = fitted[position]
+        if position == anchor_index or message.get("role") in {"system", "developer"}:
+            return True
+        return any(_same(required_message, message) for required_message in required)
 
     while estimate_messages_tokens(fitted) > cap and len(fitted) > 2:
         anchor_index = next(
             (index for index in range(len(fitted) - 1, -1, -1) if fitted[index].get("role") == "user"),
             -1,
         )
+        spans = tool_group_spans(fitted)
+        span_by_start = {start: (start, stop) for start, stop in spans}
+
+        def _turn(start_index: int) -> tuple[int, int]:
+            # A user turn runs to the next unit that opens with a user or instruction message. A user
+            # amendment stored inside a tool exchange belongs to that exchange, not to a new turn.
+            unit = span_by_start[start_index]
+            if fitted[start_index].get("role") != "user":
+                return unit
+            stop = unit[1]
+            while stop in span_by_start and fitted[stop].get("role") not in {"system", "user", "developer"}:
+                stop = span_by_start[stop][1]
+            return start_index, stop
+
         removable: tuple[int, int] | None = None
-        index = 1
+        index = next((start for start, _stop in spans if start >= 1), len(fitted))
         while index < len(fitted):
-            span = _turn_span(fitted, index)
-            required_instruction = fitted[span[0]].get("role") in {"system", "developer"}
-            if not required_instruction and not (span[0] <= anchor_index < span[1]):
-                removable = span
+            turn = _turn(index)
+            if not any(_protected(position, anchor_index) for position in range(*turn)):
+                removable = turn
                 break
-            index = span[1]
-        if removable is None and anchor_index >= 0:
-            index = anchor_index + 1
-            if index < len(fitted) and fitted[index].get("role") not in {"system", "developer"}:
-                removable = _turn_span(fitted, index)
+            if fitted[turn[0]].get("role") == "user" and _protected(turn[0], anchor_index):
+                # The turn opens with a protected request: its later work can still go, one whole unit at a time.
+                inner = span_by_start[turn[0]][1]
+                while inner < turn[1]:
+                    unit = span_by_start[inner]
+                    if not any(_protected(position, anchor_index) for position in range(*unit)):
+                        removable = unit
+                        break
+                    inner = unit[1]
+                if removable is not None:
+                    break
+            index = turn[1]
         if removable is None:
             break
         del fitted[removable[0] : removable[1]]
@@ -337,7 +465,7 @@ def fit_messages_to_hard_cap(
 
     required_tokens = estimate_messages_tokens(fitted)
     if required_tokens > cap:
-        raise ValueError(
+        raise RequiredRequestTooLarge(
             "Required system/developer instructions and latest user request need "
             f"{required_tokens} estimated tokens, exceeding the {cap}-token message budget"
         )

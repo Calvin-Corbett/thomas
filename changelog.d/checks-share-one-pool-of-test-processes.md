@@ -1,0 +1,3 @@
+### Changed
+
+- The check before your card runs each change's tests in one pool of test processes shared by every check on this machine (12 on this PC), instead of one process per copy. Each process's memory is measured and kept apart from Build's, the memory reserve is counted once, the tests folder is collected with a list of the files to run instead of naming each file, and a file that list names with no test result fails the check rather than passing unseen. A test process the pool could not start holds the check back for another try; it is never counted as a failure of the change, or as a pass, though a regression, a lint finding or a size problem the check proved on its own still sends the change back. `THOMAS_PRECARD_PARALLEL=off` brings back the earlier way.

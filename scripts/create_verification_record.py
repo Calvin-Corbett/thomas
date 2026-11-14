@@ -36,7 +36,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-RECORD_PATH = ROOT / ".git" / "agent_verification.json"
+
+
+def _record_path() -> Path:
+    """Where this checkout keeps its record: .git/ normally, the worktree's own git dir in a linked worktree (.git is a file there)."""
+    fallback = ROOT / ".git" / "agent_verification.json"
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--git-path", "agent_verification.json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return fallback
+    found = done.stdout.strip()
+    if done.returncode != 0 or not found:
+        return fallback
+    path = Path(found)
+    return path if path.is_absolute() else ROOT / path
+
+
+RECORD_PATH = _record_path()
 REGRESSION_COMMAND = "python -m pytest tests/test_architecture.py -x --tb=short -q"
 
 
@@ -105,6 +127,12 @@ def run(argv: list[str] | None = None) -> int:
     parser.add_argument("--shrinkage-reason", default="", help="If you deleted significant code, explain why.")
     parser.add_argument("--scope-reason", default="", help="If committing 20+ files, explain why.")
     parser.add_argument("--skip-regression", action="store_true", help="Skip regression tests (not recommended).")
+    parser.add_argument(
+        "--test-timeout",
+        type=int,
+        default=120,
+        help="Seconds the test command may run before it counts as failed (default 120).",
+    )
     args = parser.parse_args(argv)
 
     print("Creating verification record...")
@@ -113,7 +141,7 @@ def run(argv: list[str] | None = None) -> int:
 
     # Step 1: Run the agent's tests
     print(f"Running tests: {args.test_command}")
-    test_code, test_output = _run_command(args.test_command)
+    test_code, test_output = _run_command(args.test_command, timeout=args.test_timeout)
     test_passed, test_failed = _parse_pytest_output(test_output)
     print(f"  Result: {test_passed} passed, {test_failed} failed (exit code {test_code})")
 
@@ -127,7 +155,9 @@ def run(argv: list[str] | None = None) -> int:
         print(test_output[-500:] if len(test_output) > 500 else test_output)
 
     # Step 2: Run regression tests
-    regression_passed = True
+    # A skipped check is not a pass. This defaulted to True, so --skip-regression
+    # wrote "command": "skipped" next to "passed": true, and the gate accepted it.
+    regression_passed = False
     regression_output = ""
     if not args.skip_regression:
         print()
@@ -137,6 +167,7 @@ def run(argv: list[str] | None = None) -> int:
         print(f"  Result: {'PASS' if regression_passed else 'FAIL'} (exit code {reg_code})")
     else:
         print("Skipping regression tests (--skip-regression)")
+        print("  Recorded as NOT passed: the commit gate refuses a skipped regression check.")
 
     # Step 3: Build the record
     record = {
@@ -169,7 +200,14 @@ def run(argv: list[str] | None = None) -> int:
     print(f"Verification record written to: {RECORD_PATH}")
     print()
 
-    if test_failed > 0 or not regression_passed:
+    # A run that timed out, could not start, or failed after its tests counts zero failures but is not clean: it printed
+    # "Record is clean" over "Command timed out after 120s" on 2026-11-06. The test command's own exit code decides too.
+    if test_code != 0 or test_failed > 0 or not regression_passed:
+        if test_code != 0 and test_failed == 0:
+            print(f"NOTE: The test command did not finish cleanly (exit code {test_code}), so nothing here is a pass.")
+            print("Its output above says why: a time limit (--test-timeout), a command that could not start, or")
+            print("a failure after the tests ran. The pre-commit hook will block your commit until it passes.")
+            return 1
         print("NOTE: The record contains failures. The pre-commit hook will")
         print("block your commit until tests pass. Fix and re-run this script.")
         return 1

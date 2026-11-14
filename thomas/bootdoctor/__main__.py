@@ -10,11 +10,14 @@ import argparse
 import asyncio
 import socket
 import sys
+import tempfile
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from thomas.bootdoctor.check_command import run_check
+from thomas.bootdoctor.collaborators import stored_api_key, windows_authorize
 from thomas.bootdoctor.runtime_helpers import (
     BootDoctorPathPolicy,
     RestrictedTool,  # noqa: F401  -- re-exported for tests/test_bootdoctor_cli.py
@@ -26,11 +29,13 @@ from thomas.bootdoctor.runtime_helpers import (
     read_report_excerpt,
     rescue_reason,
 )
+from thomas.core.boot_checks import answers_as_thomas, config_file_path, run_offline_checks
 from thomas.core.boot_doctor import (
     probe_boot_runtime,
     run_boot_doctor,
     write_boot_doctor_status,
 )
+from thomas.core.boot_process import thomas_owns_port
 from thomas.core.config import AppConfig, load_config
 
 
@@ -62,22 +67,40 @@ def _parse_report_path(raw_report: str, root: Path) -> Path | None:
     return path.resolve()
 
 
-def _write_fallback_report(path: Path, *, reason: str, port: int, error: BaseException) -> None:
+def _write_fallback_report(
+    path: Path,
+    *,
+    reason: str,
+    port: int,
+    error: BaseException,
+    root: Path | None = None,
+    config_path: str = "",
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "Thomas Boot Doctor Report (Fallback)",
-        f"Generated (UTC): {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        f"Generated (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
         f"Reason: {reason}",
         f"Port: {int(port)}",
         "",
         f"Failure: {type(error).__name__}: {error}",
         "",
         "Traceback:",
-        traceback.format_exc().rstrip(),
+        "".join(traceback.format_exception(error)).rstrip(),
         "",
+    ]
+    if root is not None:
+        # The full report failed, but the offline checks are read-only and cheap, so the
+        # fallback still names a damaged database or a config file that will not parse.
+        rows, _corrupt = run_offline_checks(root, config_path=config_path or None)
+        lines.append("Findings:")
+        lines.extend(f"- [{status}] {check}: {detail}" for check, status, detail in rows)
+        lines.append("")
+    lines += [
         "Offline Recovery Steps:",
         f"- Run `run-ui.cmd -NoTray -Port {int(port)}`.",
         f"- Run `python -m thomas.bootdoctor report --port {int(port)} --force`.",
+        "- Run `python -m thomas.bootdoctor check` to test thomas.toml, the data folders and every database.",
         "- If this repeats, inspect syntax errors in optional CLI modules.",
     ]
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -100,8 +123,19 @@ def _port_listening(host: str, port: int) -> bool:
 
 
 def _runtime_detected(host: str, port: int) -> bool:
+    """True only when Thomas itself holds the port.
+
+    Any listener used to count, so an unrelated program on the port made
+    BootDoctor refuse to run and a rescue report a foreign server as "Thomas
+    is healthy again". Thomas answers /api/health; one that is still starting,
+    or too busy to answer the second request in time, has bound the port but
+    does not answer, so a Thomas process listening counts too. Only a foreign
+    owner is left out.
+    """
     state = _runtime_state(host, port)
-    return bool(state.get("listening")) or bool(state.get("ready"))
+    if state.get("ready") and answers_as_thomas(str(host or "127.0.0.1"), int(port)):
+        return True
+    return bool(state.get("listening")) and thomas_owns_port(int(port))
 
 
 def _load_config_safe(config_path: str) -> tuple[AppConfig, str]:
@@ -110,7 +144,8 @@ def _load_config_safe(config_path: str) -> tuple[AppConfig, str]:
         cfg = load_config(path_obj)
         return cfg, ""
     except (OSError, TypeError, ValueError) as exc:
-        return AppConfig(), f"config load failed ({type(exc).__name__}: {exc}); using defaults"
+        where = config_file_path(Path.cwd(), config_path)
+        return AppConfig(), f"config load failed for {where} ({type(exc).__name__}: {exc}); using defaults"
 
 
 def _run_report(
@@ -123,6 +158,7 @@ def _run_report(
     auto_repair: bool,
     allow_ai: bool,
     relaunch: bool = False,
+    config_path: str = "",
 ) -> Path:
     try:
         return run_boot_doctor(
@@ -134,18 +170,28 @@ def _run_report(
             auto_repair=bool(auto_repair),
             allow_ai=bool(allow_ai),
             relaunch=bool(relaunch),
+            config_path=Path(config_path).expanduser() if str(config_path or "").strip() else None,
+            authorize=windows_authorize,
+            secret_lookup=stored_api_key,
         )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         fallback = report_path
         if fallback is None:
-            stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             fallback = (root / "runtime" / "boot_doctor" / f"boot_doctor_{stamp}.txt").resolve()
-        _write_fallback_report(
-            fallback,
-            reason=str(reason or "").strip() or "startup failure",
-            port=int(port),
-            error=exc,
-        )
+        details = {
+            "reason": str(reason or "").strip() or "startup failure",
+            "port": int(port),
+            "error": exc,
+            "root": root,
+            "config_path": str(config_path or ""),
+        }
+        try:
+            _write_fallback_report(fallback, **details)
+        except OSError:
+            # An unwritable runtime folder can be the very fault being reported.
+            fallback = Path(tempfile.gettempdir()) / fallback.name
+            _write_fallback_report(fallback, **details)
         return fallback
 
 
@@ -155,8 +201,10 @@ def _build_bootdoctor_agent(
     config: AppConfig,
     root: Path,
 ):
+    from thomas.agent.kernel_wiring import build_agent_loop
     from thomas.agent.loop import AgentLoop
     from thomas.core.llm import LLMClient
+    from thomas.core.llm_slot import models
 
     if not config.models:
         return None, None, None
@@ -167,8 +215,9 @@ def _build_bootdoctor_agent(
         print(f"[bootdoctor] selected model profile not found; using '{profile}'.")
 
     model_cfg = config.get_model(profile)
-    llm = LLMClient(
+    llm = models().open(
         model_cfg,
+        default=LLMClient,
         fallback_configs=config.failover_chain(profile),
         failover_enabled=bool(config.failover.enabled and getattr(config.failover, "chat_auto_failover", False)),
         failover_cooldown_s=config.failover.cooldown_seconds,
@@ -185,12 +234,9 @@ def _build_bootdoctor_agent(
         "3) Keep edits tightly scoped to startup-critical files.\n"
         "4) Prefer diagnostics before edits.\n"
         "5) Avoid destructive actions.\n"
-        "6) Thomas uses monolith source loaders in some startup paths. If a traceback points at a stub "
-        "file like thomas/agent/loop.py or thomas/server/routes/chat_aiohttp.py, inspect and edit the "
-        "matching *_part*.py files instead of the stub when required.\n"
         f"Writable scope: {policy.describe_write_scope()}\n"
     )
-    agent = AgentLoop(
+    agent = build_agent_loop(
         config,
         llm,
         tools,
@@ -198,6 +244,7 @@ def _build_bootdoctor_agent(
         thread_id="bootdoctor",
         autonomy_level=2,
         max_parallel_tools=2,
+        default=AgentLoop,
     )
     return agent, llm, policy
 
@@ -242,6 +289,7 @@ async def _run_interactive_loop(
                     auto_repair=not bool(args.no_auto_repair),
                     allow_ai=not bool(args.no_ai),
                     relaunch=bool(getattr(args, "relaunch", False)),
+                    config_path=str(args.config or ""),
                 )
                 print(f"[bootdoctor] report: {report}")
                 continue
@@ -299,6 +347,7 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
             auto_repair=not bool(args.no_auto_repair),
             allow_ai=not bool(args.no_ai),
             relaunch=bool(getattr(args, "relaunch", False)),
+            config_path=str(args.config or ""),
         )
         print("[bootdoctor] no model profiles configured; chat disabled.")
         print(f"[bootdoctor] report: {report}")
@@ -314,6 +363,7 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
         auto_repair=not bool(args.no_auto_repair),
         allow_ai=not bool(args.no_ai),
         relaunch=bool(getattr(args, "relaunch", False)),
+        config_path=str(args.config or ""),
     )
     return await _run_interactive_loop(
         agent=agent,
@@ -354,6 +404,7 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
         auto_repair=not bool(args.no_auto_repair),
         allow_ai=not bool(args.no_ai),
         relaunch=bool(getattr(args, "relaunch", False)),
+        config_path=str(args.config or ""),
     )
     if _runtime_detected(str(args.host), int(args.port)):
         write_boot_doctor_status(
@@ -368,6 +419,22 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
         print(f"[bootdoctor] recovery report: {report}")
         print("[bootdoctor] Thomas is healthy again.")
         return 0
+
+    if _port_listening(str(args.host), int(args.port)):
+        # Something that does not answer as Thomas holds the port and the report names it. A model pass is asked to
+        # edit files, and a rescue started with no window has nobody to answer the prompt that would follow.
+        write_boot_doctor_status(
+            root,
+            status="failed",
+            phase="awaiting_user",
+            message=f"Something that does not answer as Thomas is using port {int(args.port)}, so Thomas cannot start.",
+            reason=reason,
+            port=int(args.port),
+            extra={"report_path": str(report)},
+        )
+        print(f"[bootdoctor] Something that does not answer as Thomas is using port {int(args.port)}.")
+        print(f"[bootdoctor] report: {report}")
+        return 1
 
     agent = llm = policy = None
     if config.models:
@@ -385,10 +452,11 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
         )
         print("[bootdoctor] No model profiles are configured for rescue chat.")
         print(f"[bootdoctor] report: {report}")
-        try:
-            input("[bootdoctor] Press Enter to close this window.")
-        except (KeyboardInterrupt, EOFError):
-            print("")
+        if not bool(getattr(args, "no_interactive", False)):
+            try:
+                input("[bootdoctor] Press Enter to close this window.")
+            except (KeyboardInterrupt, EOFError):
+                print("")
         return 1
 
     try:
@@ -451,6 +519,7 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
                 auto_repair=not bool(args.no_auto_repair),
                 allow_ai=not bool(args.no_ai),
                 relaunch=bool(getattr(args, "relaunch", False)),
+                config_path=str(args.config or ""),
             )
             if _runtime_detected(str(args.host), int(args.port)):
                 write_boot_doctor_status(
@@ -478,6 +547,10 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
             extra={"report_path": str(report)},
         )
         print(f"[bootdoctor] Automatic recovery exhausted {max_attempts} attempt(s).")
+        if bool(getattr(args, "no_interactive", False)):
+            # A hidden launcher has no one to type at the prompt; waiting would leave an invisible process behind.
+            print(f"[bootdoctor] report: {report}")
+            return 1
         print("[bootdoctor] Staying open for manual follow-up.")
         return await _run_interactive_loop(
             agent=agent,
@@ -502,8 +575,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="chat",
-        choices=("chat", "report", "rescue"),
-        help="Use 'report' for one-shot diagnostics, 'chat' for interactive repair, or 'rescue' for startup recovery mode.",
+        choices=("chat", "report", "rescue", "check"),
+        help=(
+            "Use 'report' for one-shot diagnostics, 'chat' for interactive repair, 'rescue' for startup "
+            "recovery mode, or 'check' to test thomas.toml, the data folders and every database."
+        ),
     )
     parser.add_argument("--host", default="127.0.0.1", help="Runtime host to check.")
     parser.add_argument("--port", type=int, default=8899, help="Runtime port to check.")
@@ -518,6 +594,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--relaunch", action="store_true", help="Leave a recovered Thomas server running after repair.")
     parser.add_argument("--startup-context", default="", help="Optional JSON context payload for rescue mode.")
     parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Rescue mode: never wait for typed input. Use when the window is hidden.",
+    )
+    parser.add_argument(
+        "--quarantine",
+        action="store_true",
+        help="Check mode: move damaged database files aside (renamed, never deleted).",
+    )
+    parser.add_argument(
         "--max-attempts",
         type=int,
         default=3,
@@ -531,14 +617,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = _resolve_repo_root(args.root)
-    runtime_detected = _runtime_detected(str(args.host), int(args.port))
-    if runtime_detected and not bool(args.force):
-        print(f"[bootdoctor] runtime detected on {args.host}:{int(args.port)}; refusing activation without --force.")
-        return 2
+    # A plain `check` only reads, so it is safe beside a running Thomas; moving files is not.
+    if args.command != "check" or bool(args.quarantine):
+        runtime_detected = _runtime_detected(str(args.host), int(args.port))
+        if runtime_detected and not bool(args.force):
+            print(
+                f"[bootdoctor] runtime detected on {args.host}:{int(args.port)}; refusing activation without --force."
+            )
+            return 2
 
     config, warning = _load_config_safe(args.config)
     if warning:
         print(f"[bootdoctor] warning: {warning}")
+
+    if args.command == "check":
+        return run_check(
+            root=root,
+            memory_root=config.memory.root_path,
+            config_path=str(args.config or ""),
+            quarantine=bool(args.quarantine),
+        )
 
     report_path = _parse_report_path(args.report, root)
 
@@ -552,6 +650,7 @@ def main(argv: list[str] | None = None) -> int:
             auto_repair=not bool(args.no_auto_repair),
             allow_ai=not bool(args.no_ai),
             relaunch=bool(getattr(args, "relaunch", False)),
+            config_path=str(args.config or ""),
         )
         print(report)
         return 0

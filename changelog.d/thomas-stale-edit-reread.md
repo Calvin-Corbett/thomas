@@ -1,0 +1,5 @@
+### Fixed
+- `diff.create` counts absent-text misses by resolved file and `old_str` within a run. On the second miss, it says the text is not in the file now and tells the agent to read it again with `fs.read_file` before the next edit.
+- Repeated-miss guidance shows current numbered lines around the remembered first-nonblank-line location, distinguishes approximate and unknown locations, and handles empty files and snippets copied from numbered reads.
+- Runner-owned histories separate reused registries' runs while preserving enclosing histories across nested runs and session-only bindings.
+- Remembered anchors resist unrelated first-line matches while the successful edit's replacement block remains present, including after it moves, and handle partial-line replacements and deletions. A recognizable replacement header preserves its anchor when the body changes; once the replacement disappears, a new unique first-line occurrence can update the anchor even after an originally ambiguous match or a move onto a formerly unrelated line number. Full-block deletions retain their last genuine anchor even when an unrelated matching first line appears later.

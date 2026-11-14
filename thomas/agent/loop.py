@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
 
 from thomas.agent.hook_events import HookEvent, emit_hook
@@ -223,6 +224,8 @@ class AgentLoop(_AgentLoopBase):
 
         See _agent_loop_run for full documentation.
         """
+        if _quality_retry_count == 0:
+            self._tool_run_state = (self._run_id, {})
         # Hook surface (run category): run_start fires before the first event and
         # run_end fires exactly once when the run is exhausted or closed.
         await emit_hook(
@@ -236,19 +239,22 @@ class AgentLoop(_AgentLoopBase):
             },
         )
         try:
-            async for event in _agent_loop_run(
-                self,
-                prompt,
-                intent_text=intent_text,
-                mode=mode,
-                tools_policy=tools_policy,
-                token_economy=token_economy,
-                max_iterations=max_iterations,
-                job_type=job_type,
-                _quality_retry_count=_quality_retry_count,
-                _quality_carry_forward_events=_quality_carry_forward_events,
-            ):
-                yield event
+            async with aclosing(
+                _agent_loop_run(
+                    self,
+                    prompt,
+                    intent_text=intent_text,
+                    mode=mode,
+                    tools_policy=tools_policy,
+                    token_economy=token_economy,
+                    max_iterations=max_iterations,
+                    job_type=job_type,
+                    _quality_retry_count=_quality_retry_count,
+                    _quality_carry_forward_events=_quality_carry_forward_events,
+                )
+            ) as loop_events:
+                async for event in loop_events:
+                    yield event
         finally:
             await emit_hook(
                 self,

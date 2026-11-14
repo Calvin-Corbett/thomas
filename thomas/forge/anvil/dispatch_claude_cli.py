@@ -3,25 +3,35 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.tool_failures import ToolFailures
+from thomas.core.claude_alias_ids import remember_engine_model
+
 from .bridge_config import emergency_stop_active, emergency_stop_path
 from .bridge_prompts import compose_headless_prompt
+from .build_model_receipt import is_model_receipt, started_model
 from .build_verify import _verify_and_iterate
-from .forge_code_settings import direct_shell_allowed
+from .forge_code_settings import direct_shell_allowed, live_edit_allowed
 from .forge_event_stream import (
     CLAUDE_CLI_LOGIN_GUIDANCE,
     CLI_READ_ONLY_TOOL_NAMES,
     FORGE_EVENT_KEY,
+    PLAN_LIMIT_PREFIX,
     ClaudeStreamTranslator,
     _default_emit,
     _stream_cli,
     is_claude_cli_login_error,
 )
+from .run_channel_client import RunChannelClient
+from .run_channel_mcp import DELETE_TOOL_NAME, MCP_TOOL_NAMES, server_config
 from .task_context import repo_context_for
 
 # Safe default toolset for a dispatched headless build: edit files only — NO shell,
@@ -77,6 +87,11 @@ class CliDispatchResult:
     # `stdout_tail` is not a substitute; it is a truncated tail of raw stream
     # JSON, not the reply.
     reply: str = ""
+    # The EXACT model the engine reported it ran, which is not the `model`
+    # argument this dispatch was given: that one is an alias the CLI resolves
+    # privately, and until this field existed the resolution was thrown away
+    # with the init event that carried it (build_model_receipt.py).
+    model_used: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -88,6 +103,7 @@ class CliDispatchResult:
             # Counted, not inlined: a summary line stays readable, and a zero
             # here is the visible symptom of the bug above.
             "reply_chars": len(self.reply),
+            "model_used": self.model_used,
         }
 
 
@@ -233,6 +249,7 @@ def dispatch_via_claude_cli(
         guardrails=guardrails,
         autonomy_level=autonomy_level,
         project_root=cwd,
+        timeout=timeout,
     )
     if dry_run:
         return CliDispatchResult(False, "dry-run (claude not invoked)", prompt)
@@ -249,17 +266,26 @@ def dispatch_via_claude_cli(
     saw_reply = False
     saw_final = False
     saw_refusal = False
-    saw_tool_activity = False
-    saw_named_tool = False
-    saw_mutating_tool = False
-    saw_failed_tool_result = False
+    tool_verdict = ToolFailures(inspection=_is_read_only_cli_tool)
     saw_login_failure = False
+    plan_limit = ""  # the plan's usage-limit error, when the plan refused the run
     final_reply = ""
+    model_used = ""  # the exact model the engine reported, not the alias asked for
 
     def emit_event(event: dict[str, Any]) -> None:
-        nonlocal saw_reply, saw_final, saw_refusal, saw_tool_activity, saw_named_tool, saw_mutating_tool
-        nonlocal saw_failed_tool_result, saw_login_failure, final_reply
+        nonlocal saw_reply, saw_final, saw_refusal, saw_login_failure, final_reply, plan_limit, model_used
         kind = str(event.get(FORGE_EVENT_KEY) or "")
+        if is_model_receipt(event):
+            # The first id is the one the run started on; a later one means the
+            # engine moved mid-run, which must not overwrite that. Teaching
+            # claude_alias_ids here rather than in the translator is deliberate:
+            # only this frame knows which ALIAS was asked for, and a resolution
+            # without its alias is not a resolution. Only the `init` receipt
+            # teaches it: modelUsage also names helper models (started_model).
+            model_used = model_used or str(event.get("model") or "")
+            remember_engine_model(model, started_model(event))
+        if kind == "error" and str(event.get("text") or "").startswith(PLAN_LIMIT_PREFIX):
+            plan_limit = str(event.get("text") or "")
         if kind == "error" and is_claude_cli_login_error(str(event.get("text") or "")):
             # The CLI died unauthenticated. Remember it so the run's recorded
             # reason names the situation instead of only "claude exited 1" —
@@ -287,25 +313,7 @@ def dispatch_via_claude_cli(
             if _is_action_refusal(reply_text):
                 saw_refusal = True
         elif kind in {"tool", "tool_result"}:
-            saw_tool_activity = True
-            if kind == "tool_result" and bool(event.get("is_error")):
-                saw_failed_tool_result = True
-            # ``tool`` always carries a name; a ``tool_result`` carries one only
-            # when the translator correlated it back to its call.
-            name = str(event.get("name") or "").strip()
-            if name and name != "tool":
-                saw_named_tool = True
-                # The translator stamps ``access`` ("read"/"write") onto tool
-                # events, classifying Bash by its COMMAND rather than its name.
-                # Trust the stamp when present — without it, an explain-only run
-                # whose Bash ran `ls` counted as write-capable and an errored
-                # read demoted the whole answered run. Name-based classification
-                # stays as the fallback for unstamped events; it fails toward
-                # write, so an unseen command is never relaxed. Same contract as
-                # _confirmed_conversation_reply and dispatch_agent_loop.
-                access = str(event.get("access") or "").strip()
-                if access == "write" or (access != "read" and not _is_read_only_cli_tool(name)):
-                    saw_mutating_tool = True
+            tool_verdict.observe(event)
         emit_sink(event)
 
     def _run_pass(p: str) -> tuple[int, str]:
@@ -327,6 +335,20 @@ def dispatch_via_claude_cli(
         # The run's file fence, as Claude Code permission deny rules: a fenced
         # write is refused by the CLI itself, never left to the brief's prose.
         fence_settings = _fence_settings_file(cwd, protected_paths)
+        channel_keys = ("THOMAS_RUN_CHANNEL_URL", "THOMAS_CODE_RUN_ID", "THOMAS_RUN_CHANNEL_TOKEN")
+        channel_present = any(os.environ.get(key) for key in channel_keys)
+        channel = RunChannelClient.from_environment()
+        if channel_present and channel is None:
+            raise ValueError("incomplete Claude run-channel credentials")
+        mcp_dir = tempfile.TemporaryDirectory(prefix="thomas-praxis-mcp-") if channel else None
+        mcp_flags: list[str] = []
+        # Deleting a file is editing: offered on the same condition as a live edit, never to a
+        # read-only run (forge_code_runner makes that run a dry run, so it never reaches here).
+        may_delete = bool(channel) and live_edit_allowed(autonomy_level=autonomy_level, file_access=file_access)
+        if mcp_dir is not None:
+            config = Path(mcp_dir.name) / "mcp.json"
+            config.write_text(json.dumps(server_config(sys.executable, offer_delete=may_delete)), encoding="utf-8")
+            mcp_flags = ["--mcp-config", str(config), "--strict-mcp-config"]
         cmd = [
             claude,
             "-p",
@@ -335,11 +357,18 @@ def dispatch_via_claude_cli(
             "--permission-mode",
             "dontAsk",
             *(["--settings", str(fence_settings)] if fence_settings else []),
+            *mcp_flags,
             "--tools",
             *cli_tools,
             "--allowedTools",
             *cli_tools,
-            *(["--disallowedTools", "Bash"] if deny_bash else []),
+            *(MCP_TOOL_NAMES if channel else ()),
+            *((DELETE_TOOL_NAME,) if may_delete else ()),
+            *(
+                ["--disallowedTools", "Task", *(("Bash",) if deny_bash else ())]
+                if channel
+                else (["--disallowedTools", "Bash"] if deny_bash else [])
+            ),
             "--output-format",
             "stream-json",
             "--input-format",
@@ -353,20 +382,22 @@ def dispatch_via_claude_cli(
         # (suppress pre-observation plan reasoning; dedupe repeats) needs run-level
         # state, and each pass re-plans, so the gate resets between passes.
         translate = ClaudeStreamTranslator()
-        if runner is not None:
-            # Buffered fallback (tests / injection): the injected runner asserts on
-            # argv and has no Windows arg-length limit, so keep the prompt as an arg.
-            rc_, out_ = runner([claude, "-p", p, *cmd[2:]], str(cwd), timeout)
-            for ln in str(out_).splitlines():
-                if ln.strip():
-                    for ev in translate(ln):
-                        emit_event(ev)
-            return rc_, out_
-        # Wrap the prompt as a stream-json user message — the input form claude
-        # expects under --input-format stream-json. A raw stdin prompt is ignored
-        # in stream-json mode (empty turn / no edits, which silently no-ops a build).
-        stdin_payload = json.dumps({"type": "user", "message": {"role": "user", "content": p}}) + "\n"
-        return _stream_cli(cmd, str(cwd), timeout, translate, emit_event, stdin_text=stdin_payload)
+        try:
+            if runner is not None:
+                # Buffered fallback (tests / injection): the injected runner asserts on
+                # argv and has no Windows arg-length limit, so keep the prompt as an arg.
+                rc_, out_ = runner([claude, "-p", p, *cmd[2:]], str(cwd), timeout)
+                for ln in str(out_).splitlines():
+                    if ln.strip():
+                        for ev in translate(ln):
+                            emit_event(ev)
+                return rc_, out_
+            # Claude consumes a structured user message in stream-json mode.
+            stdin_payload = json.dumps({"type": "user", "message": {"role": "user", "content": p}}) + "\n"
+            return _stream_cli(cmd, str(cwd), timeout, translate, emit_event, stdin_text=stdin_payload)
+        finally:
+            if mcp_dir is not None:
+                mcp_dir.cleanup()
 
     from thomas.forge.anvil import forge_code_git
 
@@ -382,7 +413,14 @@ def dispatch_via_claude_cli(
         # the real verifier before we accept it.
         if verify and (rc == 0 or saw_final):
             vrc = _verify_and_iterate(
-                cwd, snap_before, emit_event, _run_pass, goal, verifier=verifier, max_fix_iters=max_fix_iters
+                cwd,
+                snap_before,
+                emit_event,
+                _run_pass,
+                goal,
+                verifier=verifier,
+                max_fix_iters=max_fix_iters,
+                timeout=timeout,
             )
             if vrc != 0:
                 rc, verify_failed = vrc, True
@@ -391,17 +429,10 @@ def dispatch_via_claude_cli(
 
     changed = forge_code_git.project_delta_since(cwd, snap_before)
     action_refused = saw_refusal
-    # See the same rule in dispatch_agent_loop: a run that changed nothing can
-    # still have answered. Relaxed only with positive evidence -- names were
-    # visible and every one was read-only.
-    read_only_run = saw_named_tool and not saw_mutating_tool
-    # The same contract dispatch_agent_loop settled on 2026-08-05: a
-    # write-capable tool disqualifies the answer only when a tool FAILURE was
-    # also seen. Git truth (`not changed`) is already established below, every
-    # result succeeded, and the answer arrived -- demoting that run to a
-    # failure was manufacturing an error out of the tool's NAME. Unnamed tool
-    # activity still disqualifies: nothing is known about what it did.
-    tools_disqualify = saw_tool_activity and not read_only_run and (saw_failed_tool_result or not saw_named_tool)
+    # See dispatch_agent_loop: a no-change run can still have answered.
+    # The shared verdict tracks which failures remain unresolved by later calls;
+    # a clean write-capable tool is not a failed edit.
+    tools_disqualify = tool_verdict.unresolved
     process_completed = rc == 0 or saw_final
     conversation_reply = process_completed and not changed and saw_reply and not tools_disqualify and not action_refused
     succeeded = (
@@ -417,6 +448,8 @@ def dispatch_via_claude_cli(
             # The exit code is kept in `returncode`; the sentence carries what
             # the owner can actually do about it.
             reason = CLAUDE_CLI_LOGIN_GUIDANCE
+        elif plan_limit:
+            reason = plan_limit  # your plan's usage limit, with its reset: not "claude exited 1"
         elif verify_failed:
             reason = f"verification failed (exit {rc}) after fix attempts"
         else:
@@ -444,4 +477,5 @@ def dispatch_via_claude_cli(
         changed_files=changed,
         stdout_tail=str(out)[-2000:],
         reply=final_reply,
+        model_used=model_used,
     )

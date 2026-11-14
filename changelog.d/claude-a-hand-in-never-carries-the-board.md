@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Thomas project's change no longer carries Thomas's own bookkeeping to your card.** Every project copy runs the tooling that keeps the board: the startup router updates `plans/thomas/WORKBOARD.md`, and the automatic checks log failures under `plans/thomas/problems/`. A hand-in took everything that changed in the copy, so a web-size change reached your card with a board timestamp and two logged gate failures that were none of the team's work, and landing it would have put one copy's bookkeeping over the live board. Those paths are now left out of every hand-in, and the copy still keeps them on disk.

@@ -84,6 +84,11 @@
       button.dataset.uiId = 'chat.action.canvas';
       button.dataset.uiLabel = 'Canvas button';
     }
+    // Outside a workspace this button was "Canvas", and Canvas is gone from Chat: you said "I keep seeing this
+    // thing. It says canvas. We removed the canvas thing from Thomas." It shows only where it has its other job.
+    // It is hidden inside a workspace too now: over Settings it read "Chat", and you said "There's a thing that says
+    // chat at the top right. That's not supposed to be there." (2026-11-10)
+    button.style.display = 'none';
     button.dataset.workspaceChatOpen = isOpen() ? 'true' : 'false';
     button.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
     button.setAttribute('aria-controls', 'tc-workspace-chat-drawer');

@@ -2,7 +2,7 @@
 
 GET /api/chat/todos -> {"todos": [record, ...]} newest first; a record is
 {session_id, title, items: [{text, status}], updated_at}. The chat page polls
-this and draws the plan under the reply. Registered from parity_routes.
+this and draws the plan under the reply. The chat row registers it.
 """
 
 from __future__ import annotations

@@ -27,9 +27,15 @@ def test_model_catalog_refresh_merges_live_models_and_latest_alias(tmp_path, mon
                 models=["gpt-5.5", "gpt-5.4", "gpt-5.3-codex"],
                 to_dict=lambda: {"ok": True, "status": "ok", "models": ["gpt-5.5", "gpt-5.4", "gpt-5.3-codex"]},
             )
-        return SimpleNamespace(ok=False, models=[], to_dict=lambda: {"ok": False, "status": "offline", "models": []})
+        return SimpleNamespace(
+            ok=False,
+            models=[],
+            status="offline",
+            error="",
+            to_dict=lambda: {"ok": False, "status": "offline", "models": []},
+        )
 
-    monkeypatch.setattr("thomas.models.catalog.handshake_models_async", _fake_handshake)
+    monkeypatch.setattr("thomas.models.sources.generic.handshake_models_async", _fake_handshake)
 
     cfg = _config(tmp_path)
     payload = build_model_catalog(cfg, refresh=True, timeout_s=0.5)

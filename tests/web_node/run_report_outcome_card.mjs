@@ -16,9 +16,12 @@
 // Prints JSON: { "<name>": "<html>", ... }
 import fs from 'node:fs';
 import vm from 'node:vm';
+import path from 'node:path';
 
 globalThis.window = {};
 const sourcePath = process.argv[2];
+const artifactPath = path.join(path.dirname(sourcePath), 'unified_code_artifacts.js');
+vm.runInThisContext(fs.readFileSync(artifactPath, 'utf8'), { filename: artifactPath });
 vm.runInThisContext(fs.readFileSync(sourcePath, 'utf8'), { filename: sourcePath });
 const api = window.ThomasCodeResults;
 api.configure({

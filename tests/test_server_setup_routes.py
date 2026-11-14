@@ -1,4 +1,8 @@
-"""Tests for thomas.server.routes.setup_aiohttp (bootstrap, repair, diagnostics, local pull)."""
+"""Tests for thomas.server.routes.setup_aiohttp (bootstrap, repair, diagnostics, local pull).
+
+The routes are served by the row in thomas.server.rows.setup, which no test imports. Naming it here is how a check
+finds this file when the row changes.
+"""
 
 import tempfile
 import unittest

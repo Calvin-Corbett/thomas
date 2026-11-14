@@ -6,11 +6,16 @@ import json
 import re
 from typing import Any
 
-from thomas.core.file_access import file_access_refusal_remedy, is_file_access_refusal
+from thomas.core.file_access import (
+    file_access_refusal_remedy,
+    is_deterministic_policy_refusal,
+    is_file_access_refusal,
+)
 
 _MAX_TOOL_RESULT_CHARS = 5_000
 _CODE_INSPECTION_TOOLS = frozenset(
     {
+        "code.repo_index",
         "code.find_definition",
         "code.find_references",
         "code.project_structure",
@@ -197,21 +202,28 @@ def _tool_result_with_recovery(tool_name: str, result_text: str) -> str:
 def _failed_tool_signature(tool_name: str, args: dict[str, Any], result_text: str) -> str:
     """Identify one exact failing call without conflating a tool's other uses."""
     args_signature = json.dumps(args, sort_keys=True, separators=(",", ":"))
-    error_signature = " ".join(result_text.lower().split())[:500]
+    error_signature = re.sub(r"\d+", "0", " ".join(result_text.casefold().split()))
     return f"{tool_name}:{args_signature}:{error_signature}"
 
 
 def _record_failed_tool(counts: dict[str, int], tool_name: str, args: dict[str, Any], result_text: str) -> int:
     """Count an exact failure across intervening successful inspection calls.
 
-    A file-access policy refusal is deterministic — the identical call gets the
-    identical refusal forever — so it counts double: with the loop's stability
-    stop at >= 3, the first refusal is surfaced (with its recovery note) and
-    the second IDENTICAL attempt stops the spin instead of the third. A
-    different attempt (other args, other tool) is a different signature with
-    its own fresh count, so trying an allowed path is never impeded.
+    A policy refusal is deterministic — the identical call gets the identical
+    refusal forever — so it counts double: with the loop's stability stop at
+    >= 3, the first refusal is surfaced (with its recovery note) and the second
+    IDENTICAL attempt stops the spin instead of the third. A different attempt
+    (other args, other tool) is a different signature with its own fresh count,
+    so trying an allowed path is never impeded.
+
+    This counted only FILE-ACCESS refusals until 2026-09-19. Runtime-protection
+    blocks — the other deterministic ladder — scored 1, as though a write into
+    Thomas's own runtime might succeed on a retry. That misclassification is a
+    fact about this line; the observed symptom that led here was a chat task
+    card that hit one such block and then ran ten more minutes without
+    surfacing it, which the logs show but do not attribute to a retry loop.
     """
     signature = _failed_tool_signature(tool_name, args, result_text)
-    increment = 2 if is_file_access_refusal(result_text) else 1
+    increment = 2 if is_deterministic_policy_refusal(result_text) else 1
     counts[signature] = counts.get(signature, 0) + increment
     return counts[signature]

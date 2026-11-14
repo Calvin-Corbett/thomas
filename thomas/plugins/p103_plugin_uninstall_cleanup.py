@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, TypedDict
 
+from thomas.core.file_access import path_is_inside
+
 # -------------------------
 # Errors
 # -------------------------
@@ -291,8 +293,7 @@ def _ensure_inside_root(root: Path, target: Path) -> None:
     root_abs = root.expanduser().resolve()
     target_abs = target.expanduser().resolve()
 
-    common = Path(os.path.commonpath([str(root_abs), str(target_abs)]))
-    if common != root_abs:
+    if not path_is_inside(target_abs, root_abs):
         raise PluginUninstallCleanupError(
             code="invalid_target",
             message="refusing to operate outside extensions directory",

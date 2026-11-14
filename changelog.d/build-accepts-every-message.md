@@ -1,0 +1,2 @@
+### Fixed
+- When you send Build a message while its run is still going, or while every run slot on this computer is taken, Build now accepts it: the feed shows a quiet "Queued, runs next" or "Waiting for a free slot…" line and your message starts when there is room, instead of the red "another Code run is still active" error. A Thomas project whose preparation stood still is started again up to twice before it is reported as stalled.

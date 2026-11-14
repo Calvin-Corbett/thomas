@@ -1,0 +1,86 @@
+/* The System page: what Thomas is doing and how he is, a page at a time (js/system_page.js).
+   Plain on purpose. One idea per page, big numbers, a few shapes, and the app's own panel style: the surface, border,
+   corner and type of the Context window and Steps panels in Build. No boxes inside boxes, no colour for decoration. */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--c-bg, #0f1115); color: var(--c-text, #e7e9ee); font: 14px/1.5 var(--font-sans, system-ui, sans-serif); }
+
+.sy-shell { display: grid; grid-template-columns: 208px minmax(0, 1fr); height: 100%; }
+.sy-nav { display: flex; flex-direction: column; gap: 4px; padding: 26px 14px 18px 22px; border-right: 1px solid var(--c-border, rgba(255, 255, 255, .09)); }
+.sy-nav h1 { margin: 0 0 14px 10px; font: 700 20px/1.2 var(--font-sans, inherit); letter-spacing: -.01em; color: var(--c-strong, #f8f9ff); }
+#sy-pages { display: grid; gap: 2px; }
+.sy-tab { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: none; color: var(--c-dim, #a3a8b3); font: 550 14px/1.2 var(--font-sans, inherit); text-align: left; cursor: pointer; }
+.sy-tab:hover { background: var(--c-hover, rgba(255, 255, 255, .06)); color: var(--c-text, #e7e9ee); }
+.sy-tab[aria-selected="true"] { background: var(--c-surface-2, rgba(255, 255, 255, .07)); color: var(--c-strong, #f8f9ff); }
+.sy-tab b { min-width: 20px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-accent, #7c8cff) 22%, transparent); color: var(--c-strong, #fff); font: 650 11.5px/1.2 var(--font-sans, inherit); text-align: center; }
+.sy-tab:focus-visible, .sy-btn:focus-visible, .sy-switch:focus-visible, .sy-row:focus-visible { outline: 2px solid var(--c-accent, #7c8cff); outline-offset: 2px; }
+.sy-quiet { margin: auto 10px 0; color: var(--c-muted, #7d828c); font-size: 12px; }
+
+.sy-page { overflow-y: auto; padding: 34px clamp(22px, 5vw, 64px) 60px; outline: none; }
+.sy-page > * { max-width: 880px; }
+.sy-page h2 { margin: 0 0 6px; font: 700 26px/1.2 var(--font-sans, inherit); letter-spacing: -.015em; color: var(--c-strong, #f8f9ff); }
+.sy-lede { margin: 0 0 28px; color: var(--c-dim, #a3a8b3); font-size: 15px; }
+.sy-page h3 { margin: 34px 0 12px; font: 650 13px/1.2 var(--font-sans, inherit); color: var(--c-muted, #7d828c); }
+.sy-note { color: var(--c-dim, #a3a8b3); }
+
+/* Big numbers, in a row. */
+.sy-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 28px 34px; }
+.sy-figures b { display: block; font: 700 38px/1.05 var(--font-sans, inherit); letter-spacing: -.02em; color: var(--c-strong, #f8f9ff); font-variant-numeric: tabular-nums; }
+.sy-figures span { color: var(--c-dim, #a3a8b3); font-size: 13.5px; }
+
+/* A ring for one percentage. */
+.sy-rings { display: flex; flex-wrap: wrap; gap: 44px; }
+.sy-ring { display: grid; justify-items: center; gap: 10px; }
+.sy-ring svg { width: 148px; height: 148px; transform: rotate(-90deg); }
+.sy-ring circle { fill: none; stroke-width: 10; }
+.sy-ring .is-track { stroke: color-mix(in srgb, var(--c-text, #fff) 12%, transparent); }
+.sy-ring .is-value { stroke: var(--c-accent, #7c8cff); stroke-linecap: round; transition: stroke-dashoffset .7s cubic-bezier(.2, .8, .2, 1); }
+.sy-ring .is-over { stroke: var(--c-strong, #fff); }
+.sy-ring figcaption { display: grid; justify-items: center; gap: 2px; margin-top: -98px; height: 88px; align-content: center; }
+.sy-ring figcaption b { font: 700 28px/1 var(--font-sans, inherit); color: var(--c-strong, #f8f9ff); font-variant-numeric: tabular-nums; }
+.sy-ring figcaption span { color: var(--c-dim, #a3a8b3); font-size: 12.5px; }
+.sy-ring p { margin: 0; color: var(--c-muted, #7d828c); font-size: 12.5px; }
+
+.sy-spark { display: block; width: 100%; height: 90px; }
+.sy-spark polyline { fill: none; stroke: var(--c-accent, #7c8cff); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.sy-spark line { stroke: color-mix(in srgb, var(--c-text, #fff) 30%, transparent); stroke-dasharray: 3 4; }
+
+/* Bars: a name, a bar as long as its share, its number. */
+.sy-bars { display: grid; gap: 14px; }
+.sy-bar { display: grid; grid-template-columns: minmax(120px, 220px) 1fr auto; align-items: center; gap: 14px; font-size: 14px; }
+.sy-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-bar i { display: block; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--c-text, #fff) 12%, transparent); overflow: hidden; }
+.sy-bar i u { display: block; height: 100%; border-radius: inherit; background: var(--c-accent, #7c8cff); }
+.sy-bar b { color: var(--c-dim, #a3a8b3); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Rows: one thing per line, with what you can do to it at the end. */
+.sy-list { display: grid; }
+.sy-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 18px; padding: 14px 0; border-top: 1px solid var(--c-border, rgba(255, 255, 255, .09)); }
+.sy-row:first-child { border-top: 0; }
+.sy-row strong { font: 600 15px/1.35 var(--font-sans, inherit); color: var(--c-strong, #f8f9ff); overflow-wrap: anywhere; }
+.sy-row p { grid-column: 1; margin: 2px 0 0; color: var(--c-dim, #a3a8b3); font-size: 13.5px; overflow-wrap: anywhere; }
+.sy-row small { color: var(--c-muted, #7d828c); font-size: 12.5px; }
+.sy-row .sy-do { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 8px; align-items: center; }
+.sy-facts { display: grid; grid-template-columns: 170px 1fr; gap: 12px 18px; margin: 0; font-size: 15px; }
+.sy-facts dt { color: var(--c-muted, #7d828c); }
+.sy-facts dd { margin: 0; color: var(--c-text, #e7e9ee); overflow-wrap: anywhere; }
+
+.sy-btn { padding: 8px 14px; border: 1px solid var(--c-border-2, rgba(255, 255, 255, .15)); border-radius: 9px; background: transparent; color: var(--c-text, #e7e9ee); font: 600 13px/1 var(--font-sans, inherit); cursor: pointer; }
+.sy-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--c-accent, #7c8cff) 22%, transparent); }
+.sy-btn:disabled { opacity: .5; cursor: default; }
+.sy-search { width: min(360px, 100%); margin-bottom: 8px; padding: 9px 12px; border: 1px solid var(--c-border-2, rgba(255, 255, 255, .15)); border-radius: 9px; background: color-mix(in srgb, var(--c-text, #fff) 5%, transparent); color: var(--c-text, #e7e9ee); font: inherit; }
+.sy-switch { position: relative; flex: none; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--c-text, #fff) 18%, transparent); cursor: pointer; transition: background .2s; }
+.sy-switch i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.sy-switch[aria-checked="true"] { background: var(--c-accent, #7c8cff); }
+.sy-switch[aria-checked="true"] i { transform: translateX(16px); }
+.sy-switch:disabled { opacity: .4; cursor: default; }
+.sy-said { margin: 14px 0 0; color: var(--c-dim, #a3a8b3); font-size: 13.5px; min-height: 20px; }
+
+@media (max-width: 720px) {
+  .sy-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .sy-nav { padding: 14px; border-right: 0; border-bottom: 1px solid var(--c-border, rgba(255, 255, 255, .09)); }
+  #sy-pages { grid-auto-flow: column; overflow-x: auto; }
+  .sy-quiet { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sy-ring .is-value, .sy-switch i { transition: none; } }

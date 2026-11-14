@@ -1,0 +1,3 @@
+### Fixed
+
+- **A command your request only reports on is no longer a command that must pass.** The size-rule request said the whole-repository guard "prints Monolith guard FAILED: 6 violation(s) on dev today", and then asked the team to leave three of those violations. The checklist still made that guard a command that had to exit 0. It never could, so the team finished the work and still could not hand it in. A command that is the subject of a report ("`x` prints…", "`x` failed…") in a sentence that asks for nothing is now what the request saw, not a check. A report that also asks for something ("`x` fails; fix it") still makes the command a check, and so do "run `x`" and "`x` must pass".

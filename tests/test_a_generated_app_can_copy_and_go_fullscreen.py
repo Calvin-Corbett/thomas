@@ -60,6 +60,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
 CHAT_HTML = ROOT / "thomas" / "server" / "web" / "chat.html"
@@ -77,13 +80,13 @@ def _allow(tag: str) -> str:
 
 
 def _viewer_stage_tag() -> str:
-    match = re.search(_VIEWER_STAGE, RESULTS_JS.read_text(encoding="utf-8"))
+    match = re.search(_VIEWER_STAGE, read_code_sources(RESULTS_JS.parent))
     assert match, "the Code viewer stage iframe is gone or was rewritten"
     return match.group(1)
 
 
 def _chat_canvas_tag() -> str:
-    match = re.search(_CHAT_CANVAS, CHAT_HTML.read_text(encoding="utf-8"), re.S)
+    match = re.search(_CHAT_CANVAS, read_chat_sources(CHAT_HTML), re.S)
     assert match, "Chat's canvas 'render' iframe is gone or was rewritten"
     return match.group(1)
 
@@ -132,7 +135,7 @@ def test_the_decorative_previews_cannot_fill_the_screen_or_read_the_clipboard() 
     delegated per embed and these embeds delegate nothing.
     """
 
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
     offenders = []
     for cls in ("tc-code-artifact-thumb", "tc-code-artifact-shot"):
         for match in re.finditer(re.escape(cls) + r".{0,300}?<iframe([^>]*)>", js, re.S):

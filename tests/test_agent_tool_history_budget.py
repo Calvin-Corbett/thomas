@@ -193,6 +193,33 @@ def test_hard_cap_rejects_oversized_required_developer_instruction() -> None:
     assert developer["content"] == "required policy " * 1000
 
 
+def test_build_helper_cache_key_and_role_survive_followup_requests() -> None:
+    owner = _ResponsesOwner()
+    owner.config = SimpleNamespace(
+        model="gpt-5.6-sol",
+        reasoning_effort="medium",
+        _build_prompt_cache_key="build-helper:read_only:gpt-5.6-sol",
+    )
+    role = "Read the private snapshot; report findings without making edits."
+    first = _build_openai_codex_request(
+        owner, [{"role": "system", "content": role}, {"role": "user", "content": "Inspect source"}], None
+    )
+    followup = _build_openai_codex_request(
+        owner,
+        [
+            {"role": "system", "content": role},
+            {"role": "user", "content": "Inspect source"},
+            {"role": "assistant", "content": "First finding"},
+            {"role": "user", "content": "Continue"},
+        ],
+        None,
+    )
+    assert first["instructions"] == followup["instructions"] == role
+    assert first["prompt_cache_key"] == followup["prompt_cache_key"] == owner.config._build_prompt_cache_key
+    assert first["reasoning"] == followup["reasoning"] == {"effort": "medium"}
+    assert first["input"][0] == followup["input"][0] == {"role": "user", "content": "Inspect source"}
+
+
 def test_codex_transport_keeps_developer_content_in_instructions() -> None:
     instructions, items = _responses_input_from_messages(
         _ResponsesOwner(),

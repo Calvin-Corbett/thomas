@@ -1,0 +1,3 @@
+### Fixed
+
+- A self-fix whose test imports only `web` from aiohttp, or only aiohttp's helpers that run entirely inside the test (`make_mocked_request`, `make_mocked_coro`, `unused_port` and the test-loop helpers), no longer asks you a second time, on a guarded "new network reach" card of its own, for that test file. This holds only in files under `tests/`, and only for a line that is exactly such an import. aiohttp's test client and test servers (`TestClient`, `TestServer`, `RawTestServer`, `BaseTestServer`, `AioHTTPTestCase`) still get their own card, in tests too: the client carries a live aiohttp session, and the servers can listen beyond this machine. So do `import aiohttp`, any other name from aiohttp, any other client library, and any real address.

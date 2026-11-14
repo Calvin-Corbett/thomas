@@ -1,0 +1,3 @@
+### Fixed
+
+- **A file is no longer "held by another session" after that session committed it.** The commit tool refuses a file another live session wrote and has not committed, so one session cannot carry another's lines under its own message. It compared the held version with the newest commit only. A file its holder committed, and anyone then committed again, read "not committed yet" for as long as the holder stayed open, which is days. On 2026-11-09 a hold from 09:19 that was committed at 10:00 still refused another commit that evening. A hold now ends when its lines are in any commit of that file. Lines that were never committed still hold, as before.

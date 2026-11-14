@@ -1,4 +1,4 @@
-// What a Code run produced, and how it is handed back: the run report, the
+// What a Build run produced, and how it is handed back: the run report, the
 // artifact cards in the reply, and the preview documents behind them.
 //
 // Split out of unified_code_mode.js, which had grown past the 1500-line ceiling
@@ -21,15 +21,22 @@
   let isInternalResultPath = null;
   let lifecycle = null;
   let render = null;
-  // Two more collaborators arrived with the workspace readers at the bottom of
-  // this file: the live feed a failed read reports into, and the one wrapper
-  // that turns a rejected promise into a reported error instead of an unhandled
-  // rejection. Injected like the rest -- there is one of each, in
-  // unified_code_mode.js, never a second copy here.
+  // The workspace readers' collaborators (the live feed a failed read reports
+  // into, the one rejected-promise wrapper): injected, never a second copy.
   let pushLiveEvent = null;
   let safely = null;
   let recordPreferenceWarning = null;
 
+  const artifactsFeature = window.ThomasCodeArtifacts.create({
+    get _ARTIFACT_THUMB_BUDGET() { return _ARTIFACT_THUMB_BUDGET; },
+    get esc() { return esc; }, set esc(value) { esc = value; },
+    get isInternalResultPath() { return isInternalResultPath; }, set isInternalResultPath(value) { isInternalResultPath = value; },
+    get lifecycle() { return lifecycle; }, set lifecycle(value) { lifecycle = value; },
+    get openViewer() { return openViewer; },
+    get render() { return render; }, set render(value) { render = value; },
+    get safely() { return safely; }, set safely(value) { safely = value; },
+    get state() { return state; }, set state(value) { state = value; },
+  });
   function configure(deps) {
     state = deps.state;
     esc = deps.esc;
@@ -44,21 +51,17 @@
   // Did the engine SKIP this check rather than run it? Matched on the engine's
   // own marker rather than the word "skipped", which turns up in unrelated
   // evidence such as "1 files checked, 1 skipped". Same test run_report.py uses
-  // (`_SKIPPED_EVIDENCE`), so the two surfaces cannot drift.
-  //
-  // Module scope because BOTH the per-check rows and the headline counts need
-  // it, and the rows are built first. See the long note in runReportHtml.
+  // (`_SKIPPED_EVIDENCE`), so the two surfaces cannot drift. Module scope: the
+  // per-check rows and the headline counts both need it (see runReportHtml).
   function wasSkipped(item) {
     return /[A-Z][A-Z_]*_SKIPPED\b/.test(String((item && item.evidence) || ''));
   }
 
   function reportRow(ok, heading, label, glyph) {
-    // Whole class names, never a bare `ph-` prefix with the suffix interpolated
-    // after it. The icon guard scans for literal `ph-*` names, so a suffix
-    // assembled at runtime is invisible to it: a bogus name injected here
-    // rendered as a bullet on every "Check passed" row while
-    // tests/test_every_icon_the_ui_asks_for_is_drawn.py stayed green. Written in
-    // full, the name is a literal the guard can see.
+    // Whole class names, never a `ph-` prefix with an interpolated suffix: the
+    // icon guard (tests/test_every_icon_the_ui_asks_for_is_drawn.py) scans for
+    // literal `ph-*` names, and a runtime-assembled one once rendered as a
+    // bullet on every "Check passed" row while the guard stayed green.
     return `<div class="tc-code-technical${ok ? '' : ' is-error'}"><i class="ph ${glyph || (ok ? 'ph-check-circle' : 'ph-warning')}"></i><div><strong>${esc(heading)}</strong><code>${esc(label)}</code></div></div>`;
   }
 
@@ -71,7 +74,7 @@
   // attention pointers / rubric mapping), rendered as collapsible sections with
   // the existing technical-log styling. Defensive: an absent or malformed
   // report renders nothing — older turns have no report field.
-  function runReportHtml(report) {
+  function runReportHtml(report, options) {
     if (!report || typeof report !== 'object') return '';
     // What KIND of run is this card grading? The server records the outcome
     // word on the report (run_report.build_run_report); older turns predate it
@@ -86,7 +89,7 @@
     // error. One line says WHY there is no card, which is more sight than
     // either silence or a scorecard of fabricated counts.
     if (outcome === 'conversation') {
-      return '<div class="tc-code-result-note"><span><i class="ph ph-info" aria-hidden="true"></i>This was an answer, not a build — nothing to verify.</span></div>';
+      return '';
     }
     const list = value => Array.isArray(value) ? value : [];
     const attempts = list(report.attempts).map(item => reportRow(!/fail/i.test(String(item.outcome || '')), `Pass ${item.pass || '?'} · ${String(item.outcome || 'unknown')}`, `${String(item.goal || '')} → ${String(item.exit_state || '')}`));
@@ -141,6 +144,12 @@
     const ran = checks.length - skipped;
     const passed = checks.filter(item => item.passed === true && !wasSkipped(item)).length;
     const failed = checks.filter(item => item.passed !== true).length;
+
+    // A run whose contract settled has a verdict per ask: the Verifier's card
+    // shows them (ThomasCodeCards.proofHtml), these sections as its details.
+    const proof = window.ThomasCodeCards?.proofHtml({ esc, report, checks: { ran, passed, failed, skipped }, detailsHtml: sections,
+      actions: options?.actions !== false });
+    if (proof) return proof;
 
     // The rubric is where a run admits what it did NOT check, and it was not
     // reaching the verdict at all -- the headline was computed from
@@ -275,250 +284,18 @@
       <div class="tc-code-technical-log">${sections}</div>
     </details>`;
   }
-
-  // Does this page ask for the network? The embedded preview's CSP blocks
-  // every outbound connection, so a perfectly working generated app opens
-  // straight into its own error state -- measured (w2-code-network,
-  // w2-code-impossible): "Live feed unavailable", "Google sign-in is still
-  // loading" -- with nothing anywhere saying the PREVIEW is the reason. This
-  // scan exists so the viewer can SAY so (one visible line, see viewerHtml),
-  // never to reject or reshape anything: a flagged page still renders exactly
-  // as before. Prose like "data is fetched daily" and plain <a href="https://"
-  // links do not count -- an anchor navigates, it does not connect.
-  function htmlWantsNetwork(html) {
-    const s = String(html || '');
-    return /\bfetch\s*\(/.test(s)
-      || /\bnew\s+(?:XMLHttpRequest|WebSocket|EventSource)\b/.test(s)
-      || /\bnavigator\.sendBeacon\b/.test(s)
-      || /<(?:script|img|iframe|audio|video|source)\b[^>]*\bsrc\s*=\s*["']https?:\/\//i.test(s)
-      || /<link\b[^>]*\bhref\s*=\s*["']https?:\/\//i.test(s);
-  }
-
-  function artifactHtml(artifact) {
-    const file = String(artifact.file || '');
-    const url = `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`;
-    const title = `<strong>${esc(file)}</strong><a href="${url}" target="_blank" rel="noopener">Open</a>`;
-    if (artifact.kind === 'html') return `<section class="tc-code-artifact"><header>${title}</header><div class="tc-code-artifact-shot"><iframe src="${url}" sandbox="allow-scripts allow-forms allow-same-origin" title="Preview ${esc(file)}" tabindex="-1" scrolling="no"></iframe></div></section>`;
-    if (artifact.kind === 'image') return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
-    // PDF/schematic artifacts preview inline too (parity with chat), not just a link.
-    if (artifact.kind === 'pdf' || /\.pdf(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><iframe src="${url}#toolbar=0&navpanes=0&view=FitH" title="Preview ${esc(file)}"></iframe></section>`;
-    if (/\.svg(?:$|[?#])/i.test(file)) return `<section class="tc-code-artifact"><header>${title}</header><img src="${url}" alt="Generated artifact ${esc(file)}"></section>`;
-    return `<section class="tc-code-artifact is-link"><header>${title}</header><span>${esc(artifact.kind || 'artifact')} result</span></section>`;
-  }
-
-  // What Thomas just made, named and openable, inside the reply itself.
-  // The turn already carries artifacts -- [{file:'trey-badlands.html',kind:'html'}]
-  // -- and all the reply said was "1 result ready". A count is not a delivery:
-  // the owner had to follow a build by typing "where is it" and then "what's the
-  // full directory name". Handing back a thing you cannot open is the same as
-  // not handing it back.
-  function artifactCardsHtml(turn, turnKey) {
-    const items = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
-    if (!items.length) return '';
-    const rows = items.map(a => {
-      const file = String(a.file);
-      const playable = /\.x?html?$/i.test(file);
-      const doc = state.artifactDocs && state.artifactDocs[file];
-      // Keyed per turn: the same file is listed by every turn that touched it,
-      // so keying by name alone opened six copies of the game at once.
-      const slot = `${turnKey}::${file}`;
-      const open = !!(state.artifactOpen && state.artifactOpen[slot]);
-      // A live thumbnail of the real thing, exactly as Chat shows a deliverable:
-      // you can see what it is before you commit to opening it.
-      const thumb = (playable && doc)
-        ? `<span class="tc-code-artifact-thumb"><iframe tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin" src="${esc(doc)}"></iframe></span>`
-        : `<span class="tc-code-artifact-thumb is-icon"><i class="ph ${playable ? 'ph-play-circle' : 'ph-file'}"></i></span>`;
-      const hint = playable ? 'Click to open it beside the chat' : 'Click to view';
-      // No inline stage. Expanding in place dropped a tall frame into the
-      // middle of the transcript, so the result became something you scroll
-      // past rather than something you use, and a full-screen app never fits
-      // in a card anyway. It opens in the viewer panel instead — see
-      // `viewerHtml`.
-      const expanded = '';
-      // Chat's deliverable card carries a download beside it; a result you can
-      // only look at inside Thomas is not really yours yet.
-      const save = `<button class="tc-code-artifact-save" data-code-save-artifact="${esc(file)}" type="button" title="Download ${esc(file)}" aria-label="Download ${esc(file)}"><i class="ph ph-download-simple" aria-hidden="true"></i></button>`;
-      // Open the real thing in a real tab. Expanding in place is fine for a
-      // glance, but it drops a tall frame into the middle of the transcript and
-      // the page it made is then something you scroll past rather than use --
-      // a full-screen app does not fit in a card. Chat gives a deliverable this
-      // escape hatch and Code did not, so the only way out was Download.
-      // Built the same way `artifactHtml` builds it, from the conversation this
-      // turn belongs to. A turn's artifact entry is only {file, kind, ext} --
-      // it carries no URL of its own.
-      const openUrl = state.activeId
-        ? `/api/evolve/agent/artifact/${encodeURIComponent(state.activeId)}/${file.split('/').map(encodeURIComponent).join('/')}`
-        : '';
-      const openTab = (playable && openUrl)
-        ? `<a class="tc-code-artifact-pop" href="${esc(openUrl)}" target="_blank" rel="noopener noreferrer" title="Open ${esc(file)} in a new tab" aria-label="Open ${esc(file)} in a new tab"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>`
-        : '';
-      // The combined card the owner asked for (2026-08-10): thumbnail plus a
-      // REAL action row in plain words — Open in chat, Open in separate
-      // window, Download — instead of two unlabeled icons.
-      const actions = `<div class="tc-code-artifact-actions">
-        <button class="tc-code-artifact-act is-primary" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button">Open in chat</button>
-        ${(playable && openUrl) ? `<a class="tc-code-artifact-act" href="${esc(openUrl)}" target="_blank" rel="noopener noreferrer">Open in separate window</a>` : ''}
-        <button class="tc-code-artifact-act" data-code-save-artifact="${esc(file)}" type="button">Download</button>
-      </div>`;
-      return `<div class="tc-code-artifact">
-        <div class="tc-code-artifact-row">
-          <button class="tc-code-artifact-open" data-code-open-artifact="${esc(file)}" data-code-artifact-slot="${esc(slot)}" type="button" aria-expanded="${open ? 'true' : 'false'}">
-            ${thumb}
-            <span class="tc-code-artifact-meta">
-              <span class="tc-code-artifact-name">${esc(file)}</span>
-              <span class="tc-code-artifact-verb">${hint}</span>
-            </span>
-          </button>
-        </div>${actions}${expanded}
-      </div>`;
-    }).join('');
-    // "See every change" now renders ABOVE the closing rule (turnHtml owns
-    // it) — the card below the line carries only the deliverable itself.
-    return `<div class="tc-code-artifacts"><div class="tc-code-artifacts-head">${items.length === 1 ? 'Thomas made this' : `Thomas made ${items.length} things`}</div>${rows}</div>`;
-  }
-
-  // Fetch a result's document once and keep it, so the card can show a live
-  // thumbnail and expand in place without re-reading on every render.
-  // `quiet` skips the redraw. render() rewrites the thread's innerHTML, which
-  // DESTROYS every preview iframe and restarts its navigation from scratch.
-  // Resolving four thumbnails one at a time therefore reloaded all of them four
-  // times, and a frame recreated before it finished never painted -- the game
-  // sat on about:blank showing a broken-document icon while the server was
-  // serving it perfectly. Resolve the batch, then draw once.
-  async function ensureArtifactDoc(path, quiet) {
-    const file = String(path || '');
-    if (!file) return false;
-    state.artifactDocs = state.artifactDocs || {};
-    if (state.artifactDocs[file] !== undefined) return true;
-    const token = lifecycle().contextToken(state);
-    if (!token.id) return false;
-    // A real loopback origin, the same service Chat previews deliverables
-    // through. srcdoc has no origin and no base URL, so anything the page loads
-    // at RUNTIME fails: Thomas moved a game's renderer to a dynamic loader and
-    // the preview 404'd it 51 times and silently fell back to the old canvas.
-    //
-    // One origin serves the WHOLE project, so ask for it once and address the
-    // other files within it. Asking per file re-minted the grant and tore down
-    // the previous one, which blanked a card that was already showing a page:
-    // opening the game killed the thumbnail of the shell page beside it.
-    let url = null;
-    const base = state.previewBase && state.previewBase.cid === token.id ? state.previewBase.url : '';
-    if (base) url = `${base}/${file.split('/').map(encodeURIComponent).join('/')}`;
-    else {
-      try {
-        const r = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/preview?path=${encodeURIComponent(file)}`);
-        const d = await r.json();
-        if (r.ok && d && d.ok && d.url) url = String(d.url);
-      } catch (e) { url = null; }
-    }
-    if (!lifecycle().contextMatches(state, token)) return false;
-    if (!url) return false;
-    if (!base) {
-      // Everything up to the capability; the tail is per file.
-      const cut = url.lastIndexOf('/');
-      if (cut > 0) state.previewBase = { cid: token.id, url: url.slice(0, cut) };
-    }
-    state.artifactDocs[file] = url;
-    // Learn whether the page asks for the network BEFORE the redraw that shows
-    // it, through the same validated read the asset inliner uses. Awaited on
-    // purpose: a flag arriving after render() would need another render, and
-    // render() rewrites innerHTML, which destroys every live preview iframe
-    // (see the note above). One extra file read per HTML artifact, once.
-    if (/\.x?html?$/i.test(file)) {
-      state.artifactNet = state.artifactNet || {};
-      if (state.artifactNet[file] === undefined) {
-        try {
-          const body = await readProjectFile(token.id, file);
-          state.artifactNet[file] = body === null ? false : htmlWantsNetwork(body);
-        } catch (e) { state.artifactNet[file] = false; }
-      }
-    }
-    if (!quiet) render();
-    return true;
-
-  }
+  function htmlWantsNetwork(...args) { return artifactsFeature.htmlWantsNetwork(...args); }
+  function artifactHtml(...args) { return artifactsFeature.artifactHtml(...args); }
+  function artifactCardsHtml(...args) { return artifactsFeature.artifactCardsHtml(...args); }
+  function ensureArtifactDoc(...args) { return artifactsFeature.ensureArtifactDoc(...args); }
 
   // Pull the documents for what a conversation produced so the results are
   // VISIBLE on arrival rather than after a click. Capped, newest turns first.
   const _ARTIFACT_THUMB_BUDGET = 4;
-  async function hydrateArtifactThumbnails() {
-    const turns = (state.conversation && state.conversation.turns) || [];
-    const wanted = [];
-    for (let i = turns.length - 1; i >= 0 && wanted.length < _ARTIFACT_THUMB_BUDGET; i -= 1) {
-      const turn = turns[i];
-      if (!turn || turn.role !== 'agent') continue;
-      for (const a of turn.artifacts || []) {
-        const file = a && a.file ? String(a.file) : '';
-        if (!file || isInternalResultPath(file) || !/\.x?html?$/i.test(file)) continue;
-        if (wanted.includes(file)) continue;
-        wanted.push(file);
-        if (wanted.length >= _ARTIFACT_THUMB_BUDGET) break;
-      }
-    }
-    let resolved = false;
-    for (const file of wanted) {
-      try { resolved = (await ensureArtifactDoc(file, true)) || resolved; } catch (e) { /* one bad result must not stop the rest */ }
-    }
-    if (resolved) render();
-  }
-
-  // Open what the last completed turn produced. Prefers a page, because a page
-  // is the thing you can actually look at; falls back to whatever else it made.
-  async function presentNewestResult() {
-    const turns = (state.conversation && state.conversation.turns) || [];
-    for (let i = turns.length - 1; i >= 0; i -= 1) {
-      const turn = turns[i];
-      if (!turn || turn.role !== 'agent' || !turn.ok) continue;
-      const made = (turn.artifacts || []).filter(a => a && a.file && !isInternalResultPath(a.file));
-      if (!made.length) return false;
-      const pick = made.find(a => /\.x?html?$/i.test(String(a.file))) || made[0];
-      const file = String(pick.file);
-      state.artifactOpen = state.artifactOpen || {};
-      state.artifactOpen[`${turn.run_id || turn.ts || '0'}::${file}`] = true;   // in the conversation
-      try { return await ensureArtifactDoc(file); } catch (e) { return false; }
-    }
-    return false;
-  }
-
-  function readProjectFile(conversationId, path) {
-    return fetch(`/api/evolve/agent/conversations/${encodeURIComponent(conversationId)}/file?path=${encodeURIComponent(path)}`)
-      .then(r => r.json())
-      .then(d => (d && d.ok ? String(d.content || '') : null))
-      .catch(() => null);
-  }
-
-  // A previewed page is shown with srcdoc, which has NO project base URL: a
-  // relative <script src="renderer.js"> resolves against the Thomas server and
-  // 404s, so a multi-file build would preview as the page minus everything it
-  // depends on. Thomas had just split a game's chase-camera renderer into its
-  // own file, which would have rendered here as a game with no renderer.
-  //
-  // The referenced local files are pulled through the SAME validated read as the
-  // page itself and inlined, so nothing new is exposed and no new route exists.
-  // Remote URLs are left alone -- the sandbox has no same-origin and the CSP
-  // still applies to them.
-  async function inlineLocalAssets(conversationId, html, pagePath) {
-    const dir = String(pagePath || '').includes('/') ? String(pagePath).replace(/\/[^/]*$/, '/') : '';
-    const isLocal = ref => ref && !/^(?:[a-z]+:)?\/\//i.test(ref) && !ref.startsWith('data:') && !ref.startsWith('#');
-    const resolve = ref => (ref.startsWith('/') ? ref.slice(1) : dir + ref).split('?')[0].split('#')[0];
-    let out = html;
-
-    const scripts = [...html.matchAll(/<script\b([^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*)>\s*<\/script\s*>/gi)];
-    for (const m of scripts) {
-      if (!isLocal(m[2])) continue;
-      const body = await readProjectFile(conversationId, resolve(m[2]));
-      if (body === null) continue;
-      out = out.replace(m[0], `<script>\n/* inlined from ${m[2]} for preview */\n${body}\n</script>`);
-    }
-    const links = [...html.matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+\.css)["'][^>]*>/gi)];
-    for (const m of links) {
-      if (!isLocal(m[1])) continue;
-      const body = await readProjectFile(conversationId, resolve(m[1]));
-      if (body === null) continue;
-      out = out.replace(m[0], `<style>\n/* inlined from ${m[1]} for preview */\n${body}\n</style>`);
-    }
-    return out;
-  }
+  function hydrateArtifactThumbnails(...args) { return artifactsFeature.hydrateArtifactThumbnails(...args); }
+  function presentNewestResult(...args) { return artifactsFeature.presentNewestResult(...args); }
+  function readProjectFile(...args) { return artifactsFeature.readProjectFile(...args); }
+  function inlineLocalAssets(...args) { return artifactsFeature.inlineLocalAssets(...args); }
 
   // ---------- The viewer: what Thomas made, beside the conversation ----------
   // A panel that slides in from the right, the way a result is normally handed
@@ -912,18 +689,23 @@
     if (!response.ok) throw new Error(data.error || `Changes could not be loaded (${response.status})`);
     if (!lifecycle().contextMatches(state, token)) return false;
     state.changes = Array.isArray(data.changed) ? data.changed : [];
+    state.changesNotice = data.history_available === false
+      ? { id: token.id, text: 'Version history is off. Change comparison and Revert are unavailable.' } : null;
     if (!(options && options.deferRender)) render();
     return true;
   }
 
+  let treeRequestId = 0;
   async function loadTree(path, options) {
     const token = (options && options.token) || lifecycle().contextToken(state);
     if (!token.id) return false;
+    const requestId = ++treeRequestId;
     const query = path ? `?path=${encodeURIComponent(path)}` : '';
     const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/tree${query}`);
     const data = await response.json();
+    // A slower folder response must not replace a later folder selection.
+    if (requestId !== treeRequestId || !lifecycle().contextMatches(state, token)) return false;
     if (!response.ok || !data.ok) throw new Error(data.error || `Project files could not be loaded (${response.status})`);
-    if (!lifecycle().contextMatches(state, token)) return false;
     state.tree = Array.isArray(data.entries) ? data.entries : [];
     state.treeLoaded = true;
     state.treePath = String(data.path || '');
@@ -931,22 +713,28 @@
     return true;
   }
 
+  let fileRequestId = 0;
+  function invalidateFileRequest() { fileRequestId++; }
   async function loadFile(path) {
     const token = lifecycle().contextToken(state);
     if (!token.id) return false;
+    const requestId = ++fileRequestId;
+    const current = () => requestId === fileRequestId && lifecycle().contextMatches(state, token);
     const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(token.id)}/file?path=${encodeURIComponent(path)}`);
     const data = await response.json();
-    if (!lifecycle().contextMatches(state, token)) return false;
+    if (!current()) return false;
     if (!response.ok || !data.ok) pushLiveEvent({ type: 'error', text: data.error || 'File preview failed.' });
     else {
       if (/\.x?html?$/i.test(String(path))) {
         try { data.content = await inlineLocalAssets(token.id, String(data.content || ''), String(path)); }
         catch (e) { /* preview the page as-is rather than not at all */ }
-        if (!lifecycle().contextMatches(state, token)) return false;
+        if (!current()) return false;
       }
+      // A live refresh need not destroy and restart a running preview iframe.
+      if (state.filePreview && state.filePreview.path === data.path && state.filePreview.content === data.content) return true;
       state.filePreview = data;
     }
-    render();
+    if (current()) render();
     return response.ok && data.ok;
   }
 
@@ -978,54 +766,7 @@
     if (!playable) return;
     autoPlaytest(String(playable.file));
   }
-
-  // The two artifact controls a rendered turn carries. Bound here, beside the
-  // cards `artifactCardsHtml` stamps them into, for the same reason `bindViewer`
-  // is: the markup and the click that answers it belong to one module.
-  //
-  // Kept LAST before the exports on purpose. The guard that a result opens in
-  // the conversation rather than being pushed to the side panel
-  // (test_code_presents_what_it_made.py) reads everything from the
-  // `[data-code-open-artifact]` selector to the next `});` and requires no
-  // drawer state in it; anything appended after this that touches
-  // `state.drawerOpen` would be read as part of this handler.
-  function bindArtifactActions(root) {
-    root.querySelectorAll('[data-code-open-artifact]').forEach(button => button.addEventListener('click', () => {
-      // Opens IN THE CONVERSATION. Sending the result to a side panel is still
-      // telling someone where to go and look; Chat puts a deliverable in the
-      // thread and Code is meant to be Chat that builds rather than dispatches.
-      const file = button.dataset.codeOpenArtifact;
-      const slot = button.dataset.codeArtifactSlot || file;
-      state.artifactOpen = state.artifactOpen || {};
-      state.artifactOpen[slot] = true;
-      // Opens BESIDE the conversation rather than inside it. The card stays a
-      // snapshot you can read at a glance; the real thing gets the height of
-      // the window, and from there it can fill Thomas or leave for its own tab.
-      openViewer(file);
-      render();
-      // Fetch the previewable copy after the panel is up, then redraw so the
-      // frame swaps from the plain artifact URL to the asset-inlined document.
-      void safely(async () => { await ensureArtifactDoc(file); render(); }, 'That result could not be opened.');
-    }));
-    root.querySelectorAll('[data-code-save-artifact]').forEach(button => button.addEventListener('click', () => {
-      // Saved from the file Thomas actually wrote, read through the same
-      // validated endpoint. Not the inlined preview copy, which carries
-      // dependencies folded in for display only.
-      const file = button.dataset.codeSaveArtifact;
-      void safely(async () => {
-        const token = lifecycle().contextToken(state);
-        if (!token.id) return false;
-        const content = await readProjectFile(token.id, file);
-        if (content === null) throw new Error('could not read ' + file);
-        const url = URL.createObjectURL(new Blob([content], { type: 'application/octet-stream' }));
-        const a = document.createElement('a');
-        a.href = url; a.download = file.split('/').pop();
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        return true;
-      }, 'That result could not be downloaded.');
-    }));
-  }
+  function bindArtifactActions(...args) { return artifactsFeature.bindArtifactActions(...args); }
 
   window.ThomasCodeResults = {
     bindArtifactActions,
@@ -1035,6 +776,7 @@
     checkpointChanges,
     loadChanges,
     loadFile,
+    invalidateFileRequest,
     loadTree,
     maybeAutoPlaytest,
     playtestChatCardHtml,

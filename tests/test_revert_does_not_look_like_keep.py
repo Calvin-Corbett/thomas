@@ -28,9 +28,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODE_CSS = ROOT / "thomas" / "server" / "web" / "css" / "unified_code_mode.css"
+# Since the 2026-10 Build redesign the drawer's OUTPUTS rows (Keep / Revert) are
+# drawn by unified_code_drawer.js and styled with the agents.
+AGENTS_CSS = ROOT / "thomas" / "server" / "web" / "css" / "unified_code_agents.css"
 ACTIVITY_CSS = ROOT / "thomas" / "server" / "web" / "css" / "unified_code_activity.css"
+TOKENS_CSS = ROOT / "thomas" / "server" / "web" / "css" / "tokens.css"
 
 FAILURE_COLOUR = "#ff9a9a"
+REVERT = "button.tc-agents-revert"
 
 
 # `\bcolor\s*:` also matches `border-color:` -- `-` is a word boundary, so the
@@ -67,22 +72,28 @@ def _rule_body(css: str, selector_fragment: str, *, resting_only: bool = False) 
 
 
 def test_revert_is_not_drawn_like_keep() -> None:
-    css = MODE_CSS.read_text(encoding="utf-8")
-    resting = _rule_body(css, "data-code-revert", resting_only=True)
+    css = AGENTS_CSS.read_text(encoding="utf-8")
+    resting = _rule_body(css, REVERT, resting_only=True)
 
     assert resting, "Revert has no resting style of its own, so it renders identically to Keep"
     assert _COLOR_DECLARATION.search(resting), (
-        "Revert must take a text colour that distinguishes it from Keep at rest, "
-        "not only on hover"
+        "Revert must take a text colour that distinguishes it from Keep at rest, not only on hover"
     )
 
 
 def test_revert_uses_the_colour_failure_already_uses() -> None:
-    """A second, unrelated red would be a new system rather than the same one."""
+    """A second, unrelated red would be a new system rather than the same one.
 
-    revert = _rule_body(MODE_CSS.read_text(encoding="utf-8"), "data-code-revert", resting_only=True)
-    assert FAILURE_COLOUR in revert.lower(), (
-        f"Revert should reuse {FAILURE_COLOUR}, the colour the failed-verdict rail already uses"
+    The drawer rides the Build palette's token (`--c-danger`), which tokens.css
+    pins to the failed-verdict rail's colour in Build."""
+
+    revert = _rule_body(AGENTS_CSS.read_text(encoding="utf-8"), REVERT, resting_only=True)
+    assert "var(--c-danger)" in revert, "Revert should take the failure colour's token"
+    tokens = TOKENS_CSS.read_text(encoding="utf-8")
+    # The one Dark every page wears unless Light is chosen; it was Build's own block before 2026-11-10.
+    build = tokens[tokens.index(':where(html:not([data-theme="light"])') :]
+    assert f"--c-danger: {FAILURE_COLOUR}" in build[: build.index("}")].lower(), (
+        f"Build's --c-danger is no longer {FAILURE_COLOUR}, the failed-verdict rail's colour"
     )
 
     activity = ACTIVITY_CSS.read_text(encoding="utf-8").lower()
@@ -95,25 +106,23 @@ def test_revert_uses_the_colour_failure_already_uses() -> None:
 def test_keep_is_left_alone() -> None:
     """The point is the contrast. Styling both would restore the problem."""
 
-    css = MODE_CSS.read_text(encoding="utf-8")
-    keep = _rule_body(css, "data-code-keep")
-    assert FAILURE_COLOUR not in keep.lower(), "Keep must not borrow the destructive colour"
+    keep = _rule_body(AGENTS_CSS.read_text(encoding="utf-8"), "button.tc-agents-keep")
+    assert keep, "Keep has no rule at all"
+    assert "--c-danger" not in keep and FAILURE_COLOUR not in keep.lower(), (
+        "Keep must not borrow the destructive colour"
+    )
 
 
-def test_the_revert_rule_can_still_win_over_the_shared_hover() -> None:
-    """Equal specificity means source order decides, so order is load-bearing.
+def test_the_revert_rule_can_still_win_over_the_shared_rule() -> None:
+    """Order is load-bearing: the rule Keep and Revert share sets a neutral
+    colour, and at equal specificity the later rule wins. If the shared rule is
+    ever moved below Revert's own, Revert silently looks like Keep again."""
 
-    `.tc-code-change button:hover` and `.tc-code-change button[data-code-revert]`
-    both score (0,2,1). If the shared rule is ever moved below this one, Revert
-    silently loses its colour on hover and the two look alike again at exactly
-    the moment someone is about to click.
-    """
-
-    css = MODE_CSS.read_text(encoding="utf-8")
-    shared_hover = css.find(".tc-code-change button:hover")
-    revert_rule = css.find(".tc-code-change button[data-code-revert]")
-    assert shared_hover != -1 and revert_rule != -1, "expected both rules to exist"
-    assert revert_rule > shared_hover, (
-        "the Revert rule must stay after the shared hover rule; at equal specificity "
-        "the later rule wins, and moving it up makes Revert look like Keep again"
+    css = re.sub(r"/\*.*?\*/", "", AGENTS_CSS.read_text(encoding="utf-8"), flags=re.S)
+    shared = css.find("button.tc-agents-keep,")
+    revert_rule = css.find(".tc-agents-drawer button.tc-agents-revert {")
+    assert shared != -1 and revert_rule != -1, "expected both rules to exist"
+    assert revert_rule > shared, (
+        "the Revert rule must stay after the rule it shares with Keep; at equal "
+        "specificity the later rule wins, and moving it up makes Revert look like Keep again"
     )

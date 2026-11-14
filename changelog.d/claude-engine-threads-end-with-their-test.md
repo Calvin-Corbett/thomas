@@ -1,0 +1,2 @@
+### Fixed
+- **Stopping an upkeep engine ends its loop at once.** Each engine's poll loop now waits on a stop signal instead of sleeping through its whole interval, so a stop takes effect in milliseconds rather than after the next poll, which could be an hour away. In the test suite, every engine thread a test starts is stopped when that test ends, so a later test no longer runs beside an earlier test's loops, and a loop from one test never writes into the data folder of another.

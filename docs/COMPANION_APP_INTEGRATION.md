@@ -68,6 +68,7 @@ Read:
 - `GET /api/companion/v1/releases/{release_id}/manifest`
 - `GET /api/companion/v1/releases/{release_id}/download`
 - `GET /api/companion/v1/audit/events`
+- `GET /api/companion/v1/calendar` — The Infinite phone app reads this from version 1.5.0: it answers with `connected`, at most 250 events in the next 30 days containing only `id`, `title`, `start`, `end`, and `location`, plus `provider` and `synced_at`, refreshed at most once a minute. If the provider is not configured or does not answer within 35 seconds, it answers 503 with `connected: false` and a reconnect hint.
 
 Mutating control-plane:
 - `POST /api/companion/v1/modules/{module_id}/enable`

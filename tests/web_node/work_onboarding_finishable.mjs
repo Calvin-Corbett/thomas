@@ -15,11 +15,18 @@ import vm from 'node:vm';
 
 const supportPath = process.argv[2];
 const modePath = process.argv[3];
-if (!supportPath || !modePath) throw new Error('support and Work mode module paths are required');
+// The adapter creates the Work steer module at load, as the page loads it first.
+const steerPath = process.argv[4];
+if (!supportPath || !modePath || !steerPath) throw new Error('support, Work mode and Work steer module paths are required');
 
 const requests = [];
 const encoder = new TextEncoder();
 let onboardingPatchStatus = 200;
+let streamedOnboardingState = null;
+let persistedPhase = null;
+let rejectPhaseOnce = '';
+const onboardingPhases = ['goal_discovery', 'workflow_mapping', 'workflow_configuration', 'ready'];
+const saveBoundary = new Error('reached job creation');
 
 function response(data, status = 200) {
   return {
@@ -33,6 +40,7 @@ function response(data, status = 200) {
 
 function streamResponse() {
   const chunks = [encoder.encode([
+    ...(streamedOnboardingState ? [JSON.stringify({ type: 'work_onboarding_state', state: streamedOnboardingState })] : []),
     JSON.stringify({ type: 'text', text: 'Noted - one question: how formal should the menu be?' }),
     JSON.stringify({ type: 'done', session_id: 'session-1' }),
     '',
@@ -48,6 +56,7 @@ async function stubFetch(url, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const body = options.body ? JSON.parse(options.body) : null;
   requests.push({ url: String(url), method, body });
+  if (url === '/api/work/apps/app-1/jobs' && method === 'POST') throw saveBoundary;
   if (url === '/api/v2/chat') return streamResponse();
   if (url === '/api/work/apps' && method === 'POST') {
     return response({ ok: true, app: { id: 'app-1', name: 'Plan a small dinner party', goal: '', onboarding: { fields: {} } } });
@@ -59,6 +68,16 @@ async function stubFetch(url, options = {}) {
   if (url === '/api/work/apps/app-1/onboarding' && method === 'PATCH') {
     if (onboardingPatchStatus !== 200) {
       return response({ ok: false, error: 'Work onboarding needs a workflow map and explicit workflow selection before configuration' }, onboardingPatchStatus);
+    }
+    if (body.phase === rejectPhaseOnce) {
+      rejectPhaseOnce = '';
+      return response({ ok: false, error: 'Temporary save failure' }, 503);
+    }
+    if (persistedPhase !== null && body.phase) {
+      if (onboardingPhases.indexOf(body.phase) > onboardingPhases.indexOf(persistedPhase) + 1) {
+        return response({ ok: false, error: 'Work onboarding must define the goal before mapping and configuring workflows' }, 409);
+      }
+      persistedPhase = body.phase;
     }
     return response({ ok: true, onboarding: { fields: { session_id: 'session-1' } } });
   }
@@ -73,13 +92,16 @@ async function stubFetch(url, options = {}) {
 const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
 let workAdapter;
+const currentContext = { profile: 'fixture-profile', modelId: 'fixture-model', dials: {
+  autonomy: 2, fileAccess: 1, tokenEconomy: 'balanced', guardrails: true, effort: 'high', memory: false,
+} };
 const modeWindow = {
   location: { href: 'http://127.0.0.1:8899/' },
   confirm: () => true,
   ThomasUnifiedModes: {
     registerAdapter(name, adapter) { if (name === 'work') workAdapter = adapter; },
     host: () => ({
-      getContext: () => ({ dials: {} }),
+      getContext: () => currentContext,
       renderHistory() {},
       setBusy() {},
       announce() {},
@@ -103,10 +125,11 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(supportPath, 'utf8'), context, { filename: supportPath });
+vm.runInContext(fs.readFileSync(steerPath, 'utf8'), context, { filename: steerPath });
 const modeSource = fs.readFileSync(modePath, 'utf8');
 const instrumented = modeSource.replace(
   /\n\}\)\(\);\s*$/,
-  '\n  window.__ThomasWorkModeTest = { state, send, safely, selectOnboardingWorkflow };\n})();',
+  '\n  window.__ThomasWorkModeTest = { state, send, safely, selectOnboardingWorkflow, finishOnboarding };\n})();',
 );
 if (instrumented === modeSource) throw new Error('could not instrument Work mode adapter');
 vm.runInContext(instrumented, context, { filename: modePath });
@@ -183,14 +206,15 @@ const supportState = {
   activeApp: { id: 'app-1', name: 'Plan a small dinner party' },
   onboardingPhase: 'workflow_configuration',
   onboardingWorkflowId: 'dinner-party-plan',
+  // The user named the workflow on their second turn ("Use Dinner party plan:
+  // casual, one pot dishes"). Readiness needs this because the model's
+  // selected_workflow_configured is its own claim; the turn is what the USER did.
+  onboardingSelectionUserTurn: 2,
+  sessionId: 'session-1',
   messages: [
     { role: 'user', text: 'Plan a small dinner party for 6 people on Saturday.' },
     { role: 'assistant', text: 'Select **Dinner party plan** in the workflow options to lock it in.' },
-    { role: 'user', text: 'Yes - use the Dinner party plan workflow.' },
-    { role: 'assistant', text: 'How formal should the menu be?' },
-    { role: 'user', text: 'Casual, one pot dishes.' },
-    { role: 'assistant', text: 'Great, casual it is.' },
-    { role: 'user', text: 'That is everything.' },
+    { role: 'user', text: 'Use Dinner party plan: casual, one pot dishes. That is everything.' },
     { role: 'assistant', text: 'The Dinner party plan flow is configured.' },
     { role: 'system', text: 'Work onboarding needs a workflow map and explicit workflow selection before configuration' },
   ],
@@ -223,14 +247,134 @@ assert.ok(!/is-user[^>]*>(?:(?!article).)*workflow map and explicit/.test(rows),
 const markdownRenders = true;
 const html = support.onboardingHtml();
 assert.ok(html.includes('data-work-finish'), 'a configured one-workflow map must show the Create job button');
+assert.match(html, /data-work-finish\s*>/, 'a complete two-turn job must enable its final save control');
+assert.equal(supportState.messages.filter(row => row.role === 'user').length, 2);
 const oneWorkflowFinishable = true;
+
+// Save and rendering share readiness; incomplete and busy states cannot write.
+Object.assign(state, supportState);
+await assert.rejects(exposed.finishOnboarding(), error => error === saveBoundary);
+const saveCall = requests.find(row => row.url.endsWith('/jobs') && row.method === 'POST');
+assert.equal(saveCall.body.history_session_id, 'session-1');
+assert.equal(saveCall.body.goal, 'Plan a dinner party for six on Saturday');
+assert.equal(saveCall.body.settings.autonomy, 2, 'Assist can save without changing autonomy');
+const saveCalls = () => requests.filter(row => row.url.endsWith('/jobs') && row.method === 'POST').length;
+const cases = [
+  ['configured', false, /Finish configuring/],
+  ['selected', '', /Choose one workflow/],
+  ['goal', '', /Confirm the goal/],
+  ['session', '', /restore the job session/],
+  ['running', true, /Wait for Thomas/],
+];
+for (const [field, value, reason] of cases) {
+  const fieldState = field === 'configured' || field === 'goal' ? supportState.structuredOnboardingState : supportState;
+  const key = { configured: 'selected_workflow_configured', selected: 'onboardingWorkflowId', goal: 'confirmed_goal', session: 'sessionId', running: 'running' }[field];
+  const previous = fieldState[key];
+  fieldState[key] = value;
+  Object.assign(state, supportState);
+  const incompleteHtml = support.onboardingHtml();
+  assert.match(incompleteHtml, /data-work-finish disabled aria-describedby="tc-work-finish-reason"/);
+  assert.match(incompleteHtml, reason, `${field} must expose its disabled reason`);
+  await assert.rejects(exposed.finishOnboarding(), reason);
+  assert.equal(saveCalls(), 1, `${field} state must not create a job`);
+  fieldState[key] = previous;
+}
+const instruction = support.onboardingInstruction('Dinner party', 2);
+assert.match(instruction, /mark selected_workflow_configured true/);
+assert.match(instruction, /Create job & continue this flow/);
+assert.match(instruction, /every autonomy setting, including Assist/);
+
+// The user's requested setting is not a control mutation. Both the private
+// model context and the transport must reflect the visible Tools controls.
+Object.assign(state, supportState);
+state.running = false;
+for (const autonomy of [4, 2]) {
+  currentContext.dials.autonomy = autonomy;
+  await workAdapter.send('Keep Assist autonomy and keep the current model.');
+  const request = requests.filter(row => row.url === '/api/v2/chat').at(-1).body;
+  const match = request.message.match(/Current Tools controls for this turn: (\{[^\n]*?\})\./);
+  assert.ok(match, 'onboarding private context omitted the actual controls');
+  const controls = JSON.parse(match[1]);
+  const expected = {
+    profile: 'fixture-profile', model: 'fixture-profile', model_id: 'fixture-model', autonomy_level: autonomy,
+    file_access: 1, token_economy: 'balanced', thomas_guardrails: true, reasoning_effort: 'high', memory: false,
+  };
+  assert.deepEqual(controls, expected);
+  for (const [key, value] of Object.entries(controls)) assert.equal(request[key], value, `${key} differs from the model context`);
+  assert.match(request.message, /cannot change autonomy, model, or any Tools setting/);
+  assert.match(request.message, /never treat a requested setting in conversation as the current setting/);
+  assert.match(request.message, /Tools > Autonomy/);
+  assert.equal(request.display_prompt, 'Keep Assist autonomy and keep the current model.');
+  assert.equal(currentContext.dials.autonomy, autonomy, 'onboarding must not mutate the Tools control');
+}
+
+const resultState = { automations: [{ id: 'run', name: 'Inventory', enabled: true,
+  trigger: { type: 'manual' }, delegation: { state: 'succeeded', last_run: {
+    status: 'succeeded', result: { workers: [{ artifacts: [
+      { name: 'counts <review>.csv', url: '/deliverable/stage/counts.csv' },
+      { name: 'duplicate', url: '/deliverable/stage/counts.csv' },
+      { name: 'bad', url: 'javascript:alert(1)' },
+    ] }] },
+  } } }] };
+const resultViews = modeWindow.ThomasWorkSupport.create({ state: resultState, esc,
+  safeArtifactHref: value => String(value || '').startsWith('/deliverable/') ? value : '',
+});
+const resultHtml = resultViews.automationHtml();
+assert.equal((resultHtml.match(/href="\/deliverable\/stage\/counts.csv"/g) || []).length, 1,
+  'A verified worker download must appear once in the automation result');
+assert.ok(resultHtml.includes('counts &lt;review&gt;.csv'), 'Artifact labels must be escaped');
+assert.ok(!resultHtml.includes('javascript:'), 'Unsafe artifact links must not render');
+resultState.automations[0].delegation.last_run.status = 'failed';
+assert.ok(!resultViews.automationHtml().includes('href="/deliverable/'),
+  'A failed run must not present its files as verified results');
+
+// A streamed mapping must not skip the store's persisted discovery phase.
+state.activeApp.onboarding = { phase: 'goal_discovery' };
+state.stage = 'onboarding';
+state.error = '';
+persistedPhase = 'goal_discovery';
+streamedOnboardingState = {
+  phase: 'workflow_configuration',
+  confirmed_goal: 'Plan a dinner party for six on Saturday',
+  workflows: [{ id: 'dinner-party-plan', name: 'Dinner party plan', purpose: 'Dinner', type: 'manual' }],
+  selected_workflow_id: 'dinner-party-plan',
+  selected_workflow_configured: false,
+};
+const transitionStart = requests.length;
+await workAdapter.send('Use the dinner party plan.');
+assert.equal(state.error, '', 'streamed phase skipped the persisted workflow mapping');
+assert.equal(persistedPhase, 'workflow_configuration');
+const orderedPhaseUpdates = requests.slice(transitionStart)
+  .filter(row => row.method === 'PATCH' && row.url.endsWith('/onboarding')).map(row => row.body);
+assert.deepEqual(orderedPhaseUpdates.map(update => update.phase), ['workflow_mapping', 'workflow_configuration']);
+assert.equal(state.activeApp.onboarding.phase, 'workflow_configuration');
+assert.ok(orderedPhaseUpdates.every(update => update.fields.confirmed_goal === streamedOnboardingState.confirmed_goal));
+assert.equal(requests.slice(transitionStart).filter(row => row.url === '/api/issues').length, 0, 'valid progress must not emit action_error');
+
+// A failed later PATCH must retain the last acknowledged phase for retry.
+state.activeApp.onboarding = { phase: 'goal_discovery' };
+persistedPhase = 'goal_discovery';
+rejectPhaseOnce = 'workflow_configuration';
+await assert.rejects(() => context.window.__ThomasWorkModeTest.selectOnboardingWorkflow('dinner-party-plan'), /Temporary save failure/);
+assert.equal(state.activeApp.onboarding.phase, 'workflow_mapping');
+const retryStart = requests.length;
+await context.window.__ThomasWorkModeTest.selectOnboardingWorkflow('dinner-party-plan');
+assert.deepEqual(requests.slice(retryStart).filter(row => row.url.endsWith('/onboarding')).map(row => row.body.phase), ['workflow_configuration']);
+assert.equal(persistedPhase, 'workflow_configuration');
 
 console.log(JSON.stringify({
   ok: true,
+  orderedPhaseTransitions: true,
+  orderedPhaseUpdates,
   composerTextCarried,
   namedSelectionAccepted,
   ambiguityStaysUnselected,
   fourXxIsVisible,
   markdownRenders,
   oneWorkflowFinishable,
+  twoTurnSaveReached: true,
+  incompleteAndBusySaveBlocked: true,
+  actualToolsContextIncluded: true,
+  requestedSettingsDoNotOverrideControls: true,
+  verifiedWorkDownloadsVisible: true,
 }));

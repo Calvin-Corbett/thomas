@@ -23,6 +23,7 @@ from thomas.core.events import EventType
 from thomas.server import worker_runtime
 from thomas.server.chat_budget_ledger import get_chat_budget_ledger
 from thomas.server.routes.chat_v2_keys import APP_CHAT_BUDGET_LEDGER
+from thomas.tools.registry import ToolRegistry
 
 
 class _FakeLLM:
@@ -114,6 +115,9 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             def unregister(self, name):  # noqa: ANN001
                 self._tools.pop(name, None)
 
+            def register(self, tool):  # noqa: ANN001
+                self._tools[tool.name] = tool
+
         class _RegistryCaptureLoop:
             def __init__(self, _config, _llm, tools, **_kwargs):  # noqa: ANN001
                 captured_names.update(tools._tools)
@@ -140,7 +144,8 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
                     )
                 ]
 
-        self.assertEqual(captured_names, {"dummy.echo", "fs.read_file", "fs.write_file", "shell.exec"})
+        # task.spawn: a lead worker may hand work to one level of helpers (30fc8915).
+        self.assertEqual(captured_names, {"dummy.echo", "fs.read_file", "fs.write_file", "shell.exec", "task.spawn"})
         self.assertEqual(set(registry._tools), captured_names)
 
     async def test_worker_emits_one_terminal_runtime_receipt_after_late_failover(self):
@@ -180,7 +185,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _LateFailoverLLM),
                 patch.object(worker_runtime, "AgentLoop", _LateFailoverLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 events = [
                     event
@@ -228,6 +233,9 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             def unregister(self, name):  # noqa: ANN001
                 self._tools.pop(name, None)
 
+            def register(self, tool):  # noqa: ANN001
+                self._tools[tool.name] = tool
+
             async def execute(self, name, args):  # noqa: ANN001, ANN202
                 calls.append((name, args))
                 raise AssertionError("prose must not execute a tool")
@@ -255,7 +263,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
                 ]
 
         self.assertEqual(calls, [])
-        self.assertEqual(set(registry._tools), {"fs.read_file", "fs.write_file", "shell.exec"})
+        self.assertEqual(set(registry._tools), {"fs.read_file", "fs.write_file", "shell.exec", "task.spawn"})
         self.assertEqual(
             [event["text"] for event in events if event["type"] == "text"],
             [prose],
@@ -291,7 +299,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _RaisingAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 with self.assertRaisesRegex(RuntimeError, "constructor failed"):
                     _ = [
@@ -314,7 +322,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 stream = worker_runtime.run_agent_worker_events(
                     app,
@@ -337,7 +345,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 events = [
                     ev
@@ -389,7 +397,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _UsageLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 events = [
                     event
@@ -435,7 +443,10 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
         self.assertIn("substantive text directly", _FakeAgentLoop.last_prompt)
         self.assertIn("done", [event["type"] for event in events])
 
-    async def test_terminal_less_loop_emits_completed_runtime_receipt_before_done(self):
+    async def test_terminal_less_loop_emits_its_receipt_then_an_error_never_done(self):
+        # Since 9524a23f a stream that closes without a terminal event is not proof
+        # the task finished: the receipt is kept, and the run ends in a retryable
+        # error rather than being counted as accepted work.
         class _TerminalLessLoop:
             def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
                 pass
@@ -462,7 +473,8 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
                     )
                 ]
 
-        self.assertEqual([event["type"] for event in events[-2:]], ["model_runtime", "done"])
+        self.assertEqual([event["type"] for event in events[-2:]], ["model_runtime", "error"])
+        self.assertTrue(events[-1]["retryable"])
         self.assertEqual(events[-2]["runtime"]["active"]["model"], "gpt-5.6-sol")
 
     async def test_openai_codex_uses_identical_translation(self):
@@ -479,7 +491,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 _ = [
                     event
@@ -502,7 +514,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 events = [
                     ev
@@ -530,7 +542,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 _ = [
                     ev
@@ -563,7 +575,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _EndingLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 events = [
                     ev
@@ -578,7 +590,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(_FakeLLM.instances[-1].closed)
 
     def test_resolve_profile_precedence_role_over_chat_over_default(self):
-
+        # Calvin's design: a per-specialist (role) override wins; otherwise the
         # chat's model is the pipeline default.
         cfg = AppConfig()
         cfg.models = {
@@ -587,13 +599,13 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
         }
         cfg.default_model = "local"
         with patch(
-            "thomas.server.model_preferences.read_user_model_role_preferences",
+            "thomas.preferences.model_prefs.read_user_model_role_preferences",
             return_value=("chatgpt", ""),
         ):
             # role override (chatgpt) beats the chat's model (local)
             self.assertEqual(worker_runtime._resolve_profile(cfg, "local", role="coding"), "chatgpt")
         with patch(
-            "thomas.server.model_preferences.read_user_model_role_preferences",
+            "thomas.preferences.model_prefs.read_user_model_role_preferences",
             return_value=("", ""),
         ):
             # no role override -> the chat's model is the default
@@ -609,7 +621,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
                 with (
                     patch.object(worker_runtime, "LLMClient", _FakeLLM),
                     patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                    patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                    patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
                 ):
                     _ = [
                         ev
@@ -644,7 +656,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 events = [
                     ev
@@ -670,7 +682,7 @@ class TestAgentWorkerParity(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(worker_runtime, "LLMClient", _FakeLLM),
                 patch.object(worker_runtime, "AgentLoop", _FakeAgentLoop),
-                patch("thomas.server.app_helpers._build_tools", return_value=SimpleNamespace(_tools={})),
+                patch("thomas.server.app_helpers._build_tools", return_value=ToolRegistry()),
             ):
                 _ = [
                     ev

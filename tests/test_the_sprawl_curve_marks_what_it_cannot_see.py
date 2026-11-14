@@ -1,4 +1,5 @@
-"""The sprawl curve never guesses.
+"""The sprawl curve never guesses (branch-equilibrium plan, phase 2 Task 3,
+docs/superpowers/plans/2026-08-27-branch-equilibrium.md).
 
 ``scripts/forge/sprawl_history.py`` reads five sources -- remote-tracking
 reflogs, the graveyard, archive refs, hardcoded milestone shas, and two
@@ -32,11 +33,8 @@ import scripts.forge.sprawl_history as sprawl_history
 TRUNK_BRANCH = "dev"
 TRUNK_REMOTE = "dev-origin"
 
-# A date range that deliberately does NOT overlap 2026-08-27 -- the real date
-# every hardcoded CITED_ANCHORS entry and every "measured, this run" anchor
-# carries. Using it isolates "does the bucketing/unknown-marking logic work"
-# from "do the real anchors happen to land in my fixture's window", which
-# would conflate two different things this suite tests separately.
+# This range predates both the fixed cited anchors and the fixture repo's
+# 2026 root commit. The anchor-week tests below fix today's date explicitly.
 NON_ANCHOR_SINCE = date(2020, 1, 1)
 NON_ANCHOR_UNTIL = date(2020, 3, 1)
 
@@ -149,17 +147,30 @@ def test_signal_counts_are_honest_zeros_not_unknown_when_no_events_exist(bare_re
         assert row["worktree_archive_original_created_count"] == 0
 
 
-def test_only_the_real_anchor_week_carries_a_known_live_branch_count(bare_repo: Path) -> None:
-    """The hardcoded CITED_ANCHORS and the 'measured, this run' anchor both
-    carry the real date 2026-08-27. A series that spans that date should
-    show a known value in EXACTLY that one week; every other week in the
-    same span stays unknown -- no interpolation leaks it sideways."""
+@pytest.mark.parametrize("fixed_today", [date(2026, 8, 27), date(2026, 10, 7)])
+def test_only_the_real_anchor_week_carries_a_known_live_branch_count(
+    bare_repo: Path, monkeypatch: pytest.MonkeyPatch, fixed_today: date
+) -> None:
+    """Fix the module's today to an anchor day or an out-of-window day.
+    Exactly the cited 2026-08-27 week is known in either case; the live
+    measurement wins that week only when today's anchor lands there."""
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(fixed_today.year, fixed_today.month, fixed_today.day)
+
+    monkeypatch.setattr(sprawl_history, "date", FixedDate)
     since = date(2026, 8, 1)
     until = date(2026, 9, 1)
     rows = sprawl_history.build_weekly_series(bare_repo, since=since, until=until)
     known_weeks = [r for r in rows if r["live_branch_local"] != "unknown"]
     assert len(known_weeks) == 1
-    assert known_weeks[0]["live_branch_local_provenance"] == "measured"  # live_today applied last, wins the week
+    assert known_weeks[0]["week_start"] == "2026-08-22"
+    if fixed_today == date(2026, 8, 27):
+        assert known_weeks[0]["live_branch_local_provenance"] == "measured"
+    else:
+        assert known_weeks[0]["live_branch_local_provenance"] == "cited"
     other_weeks = [r for r in rows if r is not known_weeks[0]]
     assert all(r["live_branch_local"] == "unknown" for r in other_weeks)
 

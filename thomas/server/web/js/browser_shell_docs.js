@@ -1,4 +1,22 @@
-
+/* browser_shell_docs.js — a tab is a document that is only ever hidden.
+ *
+ * Calvin's invariant (2026-09-01): one live DOM per tab. Switching shows and
+ * hides persistent containers; drafts, scroll and in-flight streams survive;
+ * nothing re-mounts on a switch. chat.html cannot give a second conversation
+ * its own thread (selectChat wipes #tc-thread and aborts the stream, and the
+ * file is beyond the monolith limit so it cannot change), so every extra
+ * Chat, Build or Work tab is a second chat.html document in an iframe. The
+ * top-level page stays the home tab and is never driven by the strip again.
+ *
+ * Hidden means visibility:hidden + inert on the frame and a paused living
+ * world inside it — never display:none (which drops the child's layout and
+ * scroll) and never a DOM move (which reloads an iframe).
+ *
+ * Three facts about chat.html this module reads, all verified on dev at
+ * 9933a233: the selected sidebar row carries background var(--c-surface-2)
+ * inline (renderChats); a Code row carries class is-active; the mode button
+ * for a running mode carries data-running (unified_mode_shell.updateChrome).
+ */
 "use strict";
 
 (function () {
@@ -57,7 +75,8 @@
       if (tab.missing) return;
       const row = selectedRow(doc, tab.mode);
       if (!row && tab.chatId && hasContent(tab, doc)) return;
-      const id = row ? row.dataset.historyId : "";
+      const code = tab.mode === "code" && doc.defaultView && doc.defaultView.ThomasCodeMode;
+      const id = code && code.conversationId ? code.conversationId() : row ? row.dataset.historyId : "";
       if (id === (tab.chatId || "")) return;
       tab.chatId = id;
       setTitle(tab, (row && row.dataset.historyTitle) || LABELS[tab.mode]);
@@ -196,8 +215,9 @@
         mo.observe(wrap, { childList: true, subtree: true });
       });
     }
-    async function settle(tab, doc) {
+    async function settle(tab, doc, current) {
       const row = await waitForRow(doc, tab.chatId);
+      if (!current()) return false;
       if (!row) { tab.missing = true; setStatus(tab, "error"); setTitle(tab, "Not in the list"); return false; }
       // Compare identities: the child's own restore re-renders the list between
       // the row appearing and this continuation, so the element may be stale.
@@ -216,20 +236,37 @@
       const btn = doc && doc.getElementById("tc-sidebar-toggle");
       if (btn) btn.click();
     }
-    async function wireDoc(tab) {
-      const doc = docOf(tab), win = winOf(tab);
-      if (!doc || !win || !shellOf(doc)) { setStatus(tab, "error"); return; }
-      if (tab.mode !== "chat" && shellOf(doc).dataset.surfaceMode !== tab.mode && win.ThomasUnifiedModes) {
+    async function wireDoc(tab, doc, win, current) {
+      if (shellOf(doc).dataset.surfaceMode !== tab.mode && win.ThomasUnifiedModes) {
         try { await win.ThomasUnifiedModes.setMode(tab.mode); } catch (_) { /* the mode buttons stay honest */ }
       }
+      if (!current()) return false;
+      if (shellOf(doc).dataset.surfaceMode !== tab.mode) {
+        setStatus(tab, "error");
+        if (!tab.loadErrorTitle) tab.loadErrorTitle = tab.title;
+        setTitle(tab, "Could not open " + LABELS[tab.mode]);
+        if (tab.freshBoot) { tab.freshBoot = false; bootingFresh = Math.max(0, bootingFresh - 1); }
+        return false;
+      }
       let found = true;
-      if (tab.chatId && tab.mode !== "code") found = await settle(tab, doc);
+      if (tab.chatId && tab.mode === "code" && win.ThomasCodeMode) {
+        try { await win.ThomasCodeMode.openConversation(tab.chatId, { withinTab: true }); }
+        catch (_) {
+          if (current()) { setStatus(tab, "error"); setTitle(tab, "Could not open Build"); }
+          return false;
+        }
+      }
+      if (tab.chatId && tab.mode !== "code") found = await settle(tab, doc, current);
+      if (!current()) return false;
       // A new chat must be new. The child's boot restores whatever the reload
       // keys name once its list has rendered, so wait for the list, give the
       // restore its turn, and undo it if it happened.
       if (tab.mode === "chat" && !tab.chatId) {
-        await waitForRow(doc, "");
-        await new Promise(r => setTimeout(r, 120));
+        // Explicit child addresses never restore a different tab's conversation.
+        // Older cached pages expose their boot promise instead of an arbitrary
+        // history-row timeout (an empty history is a valid ready state).
+        if (!win.ThomasChatBoot && win.ThomasChatReady) await win.ThomasChatReady;
+        if (!current()) return false;
         if (selectedRow(doc, "chat")) {
           const fresh = doc.getElementById("tc-newchat");
           if (fresh) { tab.suppress = true; try { fresh.click(); } finally { setTimeout(() => { tab.suppress = false; }, 0); } }
@@ -245,14 +282,47 @@
       assertTheme(tab);
       if (keys && keys.attachTo) keys.attachTo(win);
       if (sidebar.collapsed !== sidebarCollapsed(doc)) clickSidebarToggle(doc);
+      if (tab.loadErrorTitle) { setTitle(tab, tab.loadErrorTitle); tab.loadErrorTitle = ""; }
       tab.ready = true;
       tab.frame.classList.add("is-ready");
+      if (tab.loader) { tab.loader.remove(); tab.loader = null; }
       pauseWorld(tab, getActiveId() !== tab.id);
       if (getActiveId() === tab.id) show(tab);
       setStatus(tab, isBusy(doc, tab.mode) ? "working" : "idle");
       if (found) learn(tab, doc);
       writeReloadTarget();
     }
+    function prepareDoc(tab) {
+      if (!docs.includes(tab)) return Promise.resolve(false);
+      const doc = docOf(tab), win = winOf(tab);
+      if (doc && doc === tab.reloadingDocument) return Promise.resolve(false);
+      if (tab.wiredDocument === doc && tab.wiring) return tab.wiring;
+      tab.ready = false; tab.frame.classList.remove("is-ready");
+      // A stale ready message can arrive while navigation has only an empty
+      // document. Do not cache it and prevent the real load from wiring later.
+      if (!doc || !win || !shellOf(doc)) return Promise.resolve(false);
+      tab.reloadingDocument = null;
+      const generation = (tab.wireGeneration || 0) + 1;
+      tab.wireGeneration = generation; tab.wiredDocument = doc;
+      const current = () => docs.includes(tab) && tab.wireGeneration === generation && docOf(tab) === doc;
+      tab.wiring = wireDoc(tab, doc, win, current).catch(() => {
+        if (!current()) return false;
+        setStatus(tab, "error");
+        if (tab.freshBoot) { tab.freshBoot = false; bootingFresh = Math.max(0, bootingFresh - 1); }
+      });
+      return tab.wiring;
+    }
+    // The child announces that its shell is ready before nested previews and
+    // background history requests finish. Only our own held documents can do so.
+    window.addEventListener("message", event => {
+      if (event.origin !== location.origin || !event.data || event.data.type !== "thomas:surface-ready") return;
+      const tab = docs.find(t => winOf(t) === event.source);
+      if (tab) void prepareDoc(tab);
+    });
+    // "Open in its own tab" on a conversation row's menu (sidebar_history.js), from any document.
+    window.addEventListener("thomas:conversation:open-tab", e => {
+      const d = e.detail || {}; if (d.chatId) open({ mode: d.mode || "chat", chatId: String(d.chatId), title: d.title || "" });
+    });
     function open(spec) {
       const mode = spec.mode === "code" || spec.mode === "work" ? spec.mode : "chat";
       const held = spec.chatId && getTabs().find(t => t.mode === mode && t.chatId === spec.chatId && (t.kind === "doc" || t === homeTab));
@@ -278,14 +348,17 @@
       frame.title = title;
       frame.inert = true;
       frame.setAttribute("aria-hidden", "true");
-      frame.addEventListener("load", () => {
-        wireDoc(tab).catch(() => {
-          setStatus(tab, "error");
-          if (tab.freshBoot) { tab.freshBoot = false; bootingFresh = Math.max(0, bootingFresh - 1); }
-        });
-      });
+      frame.addEventListener("load", () => { void prepareDoc(tab); });
       frame.src = policy.docUrlFor({ mode, chatId: spec.chatId });
       rowWrap.appendChild(frame);
+      // The frame is hidden until its page is up, and what showed through meanwhile was the home page's own old
+      // content (a title and an empty body, no composer). A plain loading screen stands in until it is ready.
+      const loader = document.createElement("div");
+      loader.className = "bt-doc-loading";
+      loader.setAttribute("aria-hidden", "true");
+      loader.innerHTML = '<div class="bt-doc-loading-col"><i></i><i></i><i></i><span>Opening…</span></div><div class="bt-doc-loading-composer"></div>';
+      rowWrap.appendChild(loader);
+      tab.loader = loader;
       tab.frame = frame;
       docs.push(tab);
       activate(tab.id);
@@ -297,29 +370,48 @@
       const doc = docOf(tab);
       if (doc && doc.documentElement) doc.documentElement.classList.toggle("bt-doc-hidden", paused);
     }
+    // Which mode the document on show is in, on the outer shell: a Build tab
+    // wears Build's Dark look, and so does the chrome around it (tokens.css).
+    function markActiveMode(mode) {
+      const shell = document.getElementById("tc-shell");
+      if (!shell) return;
+      if (mode) shell.dataset.btActiveMode = mode; else delete shell.dataset.btActiveMode;
+    }
     function hideAll() {
       docs.forEach(t => {
         t.frame.classList.remove("is-active"); t.frame.inert = true; t.frame.setAttribute("aria-hidden", "true");
+        if (t.loader) t.loader.classList.remove("is-active");
         pauseWorld(t, true);
       });
       asideEl.inert = true;
+      markActiveMode("");
     }
     function show(tab) {
+      markActiveMode(tab.mode);
       tab.frame.classList.add("is-active"); tab.frame.inert = false; tab.frame.removeAttribute("aria-hidden");
+      if (tab.loader) tab.loader.classList.add("is-active");
       pauseWorld(tab, false);
       tab.activatedAt = Date.now();
       const doc = docOf(tab);
       if (tab.ready && doc && (!doc.activeElement || doc.activeElement === doc.body)) {
-        const input = doc.getElementById("tc-input"); if (input) setTimeout(() => input.focus(), 40);
+        const input = doc.getElementById("tc-input");
+        if (input) setTimeout(() => {
+          // A switch, reload or intervening click owns focus after this was queued.
+          if (getActiveId() === tab.id && tab.ready && docOf(tab) === doc && input.isConnected
+            && (!doc.activeElement || doc.activeElement === doc.body)) input.focus();
+        }, 40);
       }
     }
     function remove(tab) {
       const i = docs.indexOf(tab); if (i >= 0) docs.splice(i, 1);
       if (tab.freshBoot) { tab.freshBoot = false; bootingFresh = Math.max(0, bootingFresh - 1); }
+      if (tab.loader) { tab.loader.remove(); tab.loader = null; }
       if (tab.frame) tab.frame.remove();
     }
     function reload(tab) {
-      tab.ready = false; tab.frame.classList.remove("is-ready"); setStatus(tab, "working");
+      tab.reloadingDocument = docOf(tab);
+      tab.wireGeneration = (tab.wireGeneration || 0) + 1; tab.wiredDocument = null;
+      tab.ready = false; tab.wiring = null; tab.frame.classList.remove("is-ready"); setStatus(tab, "working");
       if (tab.mode === "chat" && tab.chatId) storage(ls => ls.setItem(LAST_CHAT, tab.chatId));
       tab.frame.src = policy.docUrlFor({ mode: tab.mode, chatId: tab.chatId });
     }

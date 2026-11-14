@@ -19,6 +19,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.chat.conversation import ConversationManager
+from thomas.chat.session_store import SessionUnreadable
 from thomas.core import task_bot_runtime
 from thomas.server.app_keys import APP_SECRETS
 from thomas.server.routes.chat_v2_announcements import _announcement_lock_for
@@ -323,12 +324,13 @@ def setup_media_generation_routes(
     app: web.Application,
     *,
     data_root: Path,
+    start_task: Callable[..., asyncio.Task[Any]],
     require_api_access: Callable[[web.Request], Any] | None = None,
 ) -> None:
+    """``start_task`` starts each job's two tasks. The row hands it ``ctx.task``, so that a stop cancels them itself."""
     guard = require_api_access or (lambda _request: None)
     config_path = Path(data_root) / ".thomas" / "media_lanes.json"
     jobs: dict[str, dict[str, Any]] = {}
-    tasks: set[asyncio.Task[Any]] = set()
 
     async def persist_media_message(
         session_id: str,
@@ -349,10 +351,24 @@ def setup_media_generation_routes(
             raise web.HTTPServiceUnavailable(reason="Chat persistence is not ready. Please retry.")
         async with turn_lock:
             async with _announcement_lock_for(app, session_id):
-                conversation = await store.load(session_id) or ConversationManager()
+                try:
+                    conversation = await store.load(session_id) or ConversationManager()
+                except SessionUnreadable as exc:
+                    # The saved chat exists but cannot be read now: saving a
+                    # new one would replace it. Leave it and fail the request.
+                    _LOG.error("media message left the conversation untouched for %s: %s", session_id[:12], exc)
+                    raise web.HTTPServiceUnavailable(
+                        reason="The conversation could not be read right now. Please retry."
+                    ) from exc
                 metadata = {"media_artifact": artifact} if artifact else {"media_request": True}
                 updated = conversation.append_message(role, content, metadata=metadata)
-                meta = await store.load_meta(session_id)
+                try:
+                    meta = await store.load_meta(session_id)
+                except SessionUnreadable as exc:
+                    _LOG.error("media message left the settings untouched for %s: %s", session_id[:12], exc)
+                    raise web.HTTPServiceUnavailable(
+                        reason="The conversation could not be read right now. Please retry."
+                    ) from exc
                 if not await store.save(session_id, updated, meta, force=True):
                     raise web.HTTPServiceUnavailable(reason="The media request could not be saved. Please retry.")
 
@@ -407,11 +423,15 @@ def setup_media_generation_routes(
             progress(5, "Starting the background worker")
             output.parent.mkdir(parents=True, exist_ok=True)
             if provider == "local":
-                worker = asyncio.create_task(asyncio.to_thread(_local_generate, medium, prompt, output, progress))
+                worker = start_task(
+                    lambda: asyncio.to_thread(_local_generate, medium, prompt, output, progress), name="local worker"
+                )
             else:
                 progress(20, "Sending the prompt to Hugging Face")
                 key = app[APP_SECRETS].get(f"media_{medium}_api") or ""
-                worker = asyncio.create_task(asyncio.to_thread(_api_generate, medium, prompt, key, output))
+                worker = start_task(
+                    lambda: asyncio.to_thread(_api_generate, medium, prompt, key, output), name="provider worker"
+                )
             await asyncio.shield(worker)
             await asyncio.to_thread(_verify_media, medium, output)
             current = task_bot_runtime.get_execution(job_id, data_root) or {}
@@ -534,9 +554,8 @@ def setup_media_generation_routes(
                 "progress_text": "Queued",
                 "session_id": session_id,
             }
-            task = asyncio.create_task(run_job(job_id, medium, prompt, str(status["provider"]), output))
-            tasks.add(task)
-            task.add_done_callback(tasks.discard)
+            provider = str(status["provider"])
+            start_task(lambda: run_job(job_id, medium, prompt, provider, output), name=f"job {job_id}")
             return {"ok": True, "job_id": job_id, "job": jobs[job_id], "execution": dict(record, state="executing")}
         except Exception:
             _LOG.exception("Media worker could not be started after execution creation")
@@ -553,14 +572,6 @@ def setup_media_generation_routes(
             raise
 
     app[MEDIA_START] = start_job
-
-    async def stop_workers(_app: web.Application) -> None:
-        pending = list(tasks)
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
-
-    app.on_cleanup.append(stop_workers)
 
     async def generate(request: web.Request) -> web.Response:
         try:

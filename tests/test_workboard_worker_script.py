@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+import scripts.crew.workboard.claim_evidence as claim_evidence
 import scripts.crew.workboard.message as message_tool
 import scripts.crew.workboard.worker as mod
 import scripts.forge.gates.workboard_claims as gate
@@ -23,12 +25,12 @@ def _fake_subprocess_run_landing_a_commit(head_shas: list[str]):
     scripts/crew/workboard/worker.py).
 
     `git rev-parse HEAD` calls answer with `head_shas` in order (so the
-    before/after reads can differ, simulating a landed commit); every other
-    `git ...` list-form call (the evidence library's ancestor/message/time
-    lookups, and the claim release's dirty-scope check) answers with an
-    empty success response; anything else (the task's own shell command)
-    gets the generic success stub. Fully hermetic -- git is never actually
-    invoked.
+    before/after reads can differ, simulating a landed commit). Since 9ac14311,
+    the exact `git show-ref --verify refs/heads/dev` probe must return a
+    `<sha> refs/heads/dev` line for the evidence check to find dev. Other
+    `git ...` list-form calls answer with empty success; anything else
+    (the task's own shell command) gets the generic success stub. Fully
+    hermetic -- git is never actually invoked.
     """
     shas = list(head_shas)
 
@@ -38,6 +40,8 @@ def _fake_subprocess_run_landing_a_commit(head_shas: list[str]):
             if len(cmd) >= 3 and cmd[1] == "rev-parse" and cmd[2] == "HEAD":
                 sha = shas.pop(0) if shas else "0" * 40
                 return _Completed(stdout=f"{sha}\n")
+            if cmd == ["git", "show-ref", "--verify", "refs/heads/dev"]:
+                return _Completed(stdout=f"{'c' * 40} refs/heads/dev\n")
             return _Completed(stdout="")
         return _Completed()
 
@@ -45,17 +49,13 @@ def _fake_subprocess_run_landing_a_commit(head_shas: list[str]):
 
 
 def _fake_subprocess_run_landing_a_commit_but_evidence_refused(head_shas: list[str]):
-    """Same as `_fake_subprocess_run_landing_a_commit`, except the merge-base
-    ancestry check (`_verify_commit` in claim_evidence.py) reports the
-    landed sha as NOT an ancestor of `dev` (exit 1 -- the ordinary "real
-    finding" case; the separate `dev`-resolves probe `_ref_resolves` runs
-    on any nonzero merge-base exit still succeeds via the catch-all below,
-    so this exercises the T1-pinned "unknown/non-ancestor sha stays
-    failed" path, not the target-unresolvable GIT_UNAVAILABLE path).
-    Simulates a commit that landed somewhere other than `dev` by the time
-    evidence verification ran -- worker.py's attempted `done` transition is
-    REFUSED, not held (a commit DID land, unlike the no-commit-landed
-    REVIEW HOLD case).
+    """Like `_fake_subprocess_run_landing_a_commit`, the exact dev ref
+    resolves through `git show-ref --verify refs/heads/dev` with a sha line,
+    as required since 9ac14311. Unlike that fake, the merge-base ancestry
+    check returns 1: the landed sha is not an ancestor of dev. This exercises
+    a non-ancestor refusal, not the target-unresolvable path. The worker's
+    attempted `done` transition is refused rather than held because HEAD
+    changes across the simulated pipeline run.
     """
     shas = list(head_shas)
 
@@ -65,12 +65,36 @@ def _fake_subprocess_run_landing_a_commit_but_evidence_refused(head_shas: list[s
             if len(cmd) >= 3 and cmd[1] == "rev-parse" and cmd[2] == "HEAD":
                 sha = shas.pop(0) if shas else "0" * 40
                 return _Completed(stdout=f"{sha}\n")
+            if cmd == ["git", "show-ref", "--verify", "refs/heads/dev"]:
+                return _Completed(stdout=f"{'c' * 40} refs/heads/dev\n")
             if len(cmd) >= 3 and cmd[1] == "merge-base" and cmd[2] == "--is-ancestor":
                 return _Completed(stdout="", returncode=1)
             return _Completed(stdout="")
         return _Completed()
 
     return _run
+
+
+@pytest.mark.parametrize(
+    ("fake_factory", "expected_status"),
+    [
+        (_fake_subprocess_run_landing_a_commit, "attested"),
+        (_fake_subprocess_run_landing_a_commit_but_evidence_refused, "failed"),
+    ],
+)
+def test_worker_git_fakes_resolve_dev_before_verifying_evidence(
+    tmp_path: Path, monkeypatch, fake_factory, expected_status: str
+) -> None:
+    monkeypatch.setattr(mod.subprocess, "run", fake_factory(["a" * 40, "b" * 40]))
+
+    assert claim_evidence._resolve_verify_target_branch(tmp_path) == "refs/heads/dev"
+    assert claim_evidence._ref_resolves("refs/heads/dev", tmp_path) == "c" * 40
+    verdict = claim_evidence.verify_evidence(claim_evidence.parse_evidence(f"commit:{'b' * 40}"), repo_root=tmp_path)
+
+    assert verdict.status == expected_status
+    assert verdict.reason_code != claim_evidence.REASON_CODE_GIT_UNAVAILABLE
+    if expected_status == "failed":
+        assert "is not an ancestor" in verdict.reason
 
 
 def _final_json_payload(captured_stdout: str) -> dict:
@@ -130,7 +154,9 @@ def test_worker_stops_before_task_when_inbox_has_unread_message(tmp_path: Path, 
         ),
     )
     catalog = tmp_path / "catalog.json"
-    catalog.write_text(json.dumps({"tasks": {"task-a": ["python -c \"print('should not run')\""]}}, indent=2), encoding="utf-8")
+    catalog.write_text(
+        json.dumps({"tasks": {"task-a": ["python -c \"print('should not run')\""]}}, indent=2), encoding="utf-8"
+    )
 
     ok_send, send_payload = message_tool.send_message(
         workboard,
@@ -197,9 +223,7 @@ def test_worker_executes_assigned_task_and_releases_on_success(tmp_path: Path, m
     # HEAD sha read as having changed across the pipeline run, so the task
     # reads as having landed a commit and the auto-done path has evidence to
     # offer (see `_fake_subprocess_run_landing_a_commit`'s docstring).
-    monkeypatch.setattr(
-        mod.subprocess, "run", _fake_subprocess_run_landing_a_commit(["a" * 40, "b" * 40])
-    )
+    monkeypatch.setattr(mod.subprocess, "run", _fake_subprocess_run_landing_a_commit(["a" * 40, "b" * 40]))
 
     rc = mod.run(
         [
@@ -348,9 +372,7 @@ def test_worker_success_triggers_immediate_redispatch(tmp_path: Path, monkeypatc
 
     # phase-1.4 task-2: `done` requires evidence -- see
     # `_fake_subprocess_run_landing_a_commit`'s docstring.
-    monkeypatch.setattr(
-        mod.subprocess, "run", _fake_subprocess_run_landing_a_commit(["a" * 40, "b" * 40])
-    )
+    monkeypatch.setattr(mod.subprocess, "run", _fake_subprocess_run_landing_a_commit(["a" * 40, "b" * 40]))
 
     rc = mod.run(
         [
@@ -577,3 +599,4 @@ def test_worker_refuses_done_when_the_landed_commit_fails_evidence_verification(
     assert "evidence=" not in text
 
     assert "DONE REFUSED task-a:" in out
+    assert "commit `" + "b" * 40 + "` is not an ancestor of refs/heads/dev" in payload["errors"][0]

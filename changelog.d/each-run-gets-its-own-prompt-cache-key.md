@@ -1,0 +1,3 @@
+### Changed
+
+- **Each Build run and each helper now has its own prompt-cache key, so more of what Thomas sends is served from the model provider's cache.** The token log showed only 29.4% of the prompt tokens of the last 1,003 calls served from cache (30.0% for gpt-6.1-sol, 22.9% for gpt-6.1-terra): the lead model sent no key, and every helper of one mode and model shared one, so runs piled onto the same few machines and spilled to machines without their earlier calls. A run's calls each resend the run so far plus a little more, so one key per run, and one per helper, keeps them where the call before them is cached. The token log will show the share after this.

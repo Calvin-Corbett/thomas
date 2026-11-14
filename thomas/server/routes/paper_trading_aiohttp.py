@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 from aiohttp import web
 
+from thomas.core.plugin_data import plugin_data_dir
 from thomas.server.app_keys import (
     APP_CONFIG,
     APP_LOCAL_STEP_UP_AUTH_PROVIDER,
@@ -26,12 +27,12 @@ from thomas.server.app_keys import (
 _log = logging.getLogger(__name__)
 
 _PLUGIN_ID = "paper-trading"
-_PLUGIN_RELATIVE = Path(".thomas") / "plugins" / "paper-trading"
 
 
 def _data_dir(app: web.Application) -> Path:
     config = app[APP_CONFIG]
-    return Path(config.memory.root_path) / _PLUGIN_RELATIVE
+    # Outside the install folder, which install and uninstall delete: see thomas/core/plugin_data.py.
+    return plugin_data_dir(config.memory.root_path, _PLUGIN_ID)
 
 
 def _memory(app: web.Application) -> Any:

@@ -721,6 +721,12 @@ Write-Output ('SERVICE_REMOVED=' + $serviceName)
 _GLOBAL_HOST_SERVICE: DesktopHostCapabilityService | None = None
 
 
+def forget_global_desktop_host_service() -> None:
+    """Drop the shared service, so the next use reads the environment again. What it saved stays on disk."""
+    global _GLOBAL_HOST_SERVICE
+    _GLOBAL_HOST_SERVICE = None
+
+
 def get_global_desktop_host_service() -> DesktopHostCapabilityService:
     global _GLOBAL_HOST_SERVICE
     if _GLOBAL_HOST_SERVICE is None:

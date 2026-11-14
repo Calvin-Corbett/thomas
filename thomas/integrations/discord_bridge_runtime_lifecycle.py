@@ -304,6 +304,10 @@ class DiscordBridgeRuntimeLifecycleMixin:
             self.stop()
         return self.start()
 
+    def is_running(self) -> bool:
+        """Whether the bridge process this runtime started is alive. It reads and writes nothing."""
+        return self._probe_process(self.load_state().get("pid")) is not None
+
     def run_voice_probe(
         self,
         *,

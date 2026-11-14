@@ -39,6 +39,7 @@ def build_canvas_llm(root: Path, profile: str | None, model_id: str | None = Non
     try:
         from thomas.core.config import load_config
         from thomas.core.llm_client import LLMClient
+        from thomas.core.llm_slot import models
 
         config = load_config(Path(root) / "thomas.toml")
         model_config = config.get_model(profile or None)
@@ -55,7 +56,7 @@ def build_canvas_llm(root: Path, profile: str | None, model_id: str | None = Non
             f"has_api_key={bool(getattr(model_config, 'api_key', None))} "
             f"backend={getattr(model_config, 'backend', None)!r}"
         )
-        client = LLMClient(model_config)
+        client = models().open(model_config, default=LLMClient)
         LLM_CACHE[key] = client
         return client
     except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError):

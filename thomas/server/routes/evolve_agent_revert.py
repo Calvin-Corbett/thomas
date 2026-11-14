@@ -25,11 +25,21 @@ import hashlib
 import json
 import re
 import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from thomas.forge.anvil import forge_code_git
+
+# Claiming an approval is a check-then-set on a dict the whole app shares, and it
+# must happen exactly once per approval. It used to be atomic for free, because
+# every handler ran on the one event loop. This function now runs in a worker
+# thread (its git reads and file hashing were blocking that loop), so "only the
+# loop runs at a time" is no longer true and two concurrent reverts could both
+# read `approved` before either wrote `executing`. The lock restores the
+# guarantee the split-out docstring above already claims.
+_CLAIM_LOCK = threading.Lock()
 
 
 def _normalize_repo_file(file: str) -> str:
@@ -85,13 +95,16 @@ def _revert_action_hash(root: Path, conversation_id: str, file: str) -> str:
             content_state = "unreadable"
     else:
         content_state = "missing"
+    # One status read for both answers: unified_diff would otherwise take its own,
+    # so binding an approval cost two full `git status -uall` scans of the project.
+    untracked = forge_code_git.untracked_paths(root)
     payload = {
         "action": "revert_file",
         "conversation_id": conversation_id,
         "project_root": str(root.resolve()),
         "file": file,
-        "untracked": forge_code_git.is_untracked(root, file),
-        "diff": forge_code_git.unified_diff(root, file),
+        "untracked": file in untracked,
+        "diff": forge_code_git.unified_diff(root, file, untracked=untracked),
         "content": content_state,
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -146,28 +159,31 @@ def _authorize_conversation_revert(
         )
 
     action_hash = _revert_action_hash(root, conversation_id, normalized)
-    approval = approvals.get(approval_id) if approval_id else None
-    valid = bool(
-        isinstance(approval, dict)
-        and approval.get("state") == "approved"
-        and approval.get("action_hash") == action_hash
-        and float(approval.get("expires_at") or 0) >= time.time()
-    )
-    if valid:
-        approval["state"] = "executing"
-        approval["executing_at"] = time.time()
-        return normalized, None, 0
+    # Read the state and claim it under one lock: between those two steps is
+    # exactly where a second request must not be able to see "approved".
+    with _CLAIM_LOCK:
+        approval = approvals.get(approval_id) if approval_id else None
+        valid = bool(
+            isinstance(approval, dict)
+            and approval.get("state") == "approved"
+            and approval.get("action_hash") == action_hash
+            and float(approval.get("expires_at") or 0) >= time.time()
+        )
+        if valid:
+            approval["state"] = "executing"
+            approval["executing_at"] = time.time()
+            return normalized, None, 0
 
-    new_id = f"approval-{secrets.token_urlsafe(10)}"
-    approvals[new_id] = {
-        "id": new_id,
-        "state": "pending",
-        "action_hash": action_hash,
-        "risk": "discard conversation-owned file changes",
-        "summary": f"Revert {normalized}? This permanently discards its current changes.",
-        "expires_at": time.time() + 600,
-    }
-    public = {key: value for key, value in approvals[new_id].items() if key != "action_hash"}
+        new_id = f"approval-{secrets.token_urlsafe(10)}"
+        approvals[new_id] = {
+            "id": new_id,
+            "state": "pending",
+            "action_hash": action_hash,
+            "risk": "discard conversation-owned file changes",
+            "summary": f"Revert {normalized}? This permanently discards its current changes.",
+            "expires_at": time.time() + 600,
+        }
+        public = {key: value for key, value in approvals[new_id].items() if key != "action_hash"}
     return (
         normalized,
         {
@@ -182,9 +198,10 @@ def _authorize_conversation_revert(
 
 def _finish_approval_execution(approval: dict[str, Any] | None, *, succeeded: bool) -> None:
     """Consume a claimed approval only after its protected action starts or succeeds."""
-    if not isinstance(approval, dict) or approval.get("state") != "executing":
-        return
-    approval.pop("executing_at", None)
-    approval["state"] = "consumed" if succeeded else "approved"
-    if succeeded:
-        approval["consumed_at"] = time.time()
+    with _CLAIM_LOCK:
+        if not isinstance(approval, dict) or approval.get("state") != "executing":
+            return
+        approval.pop("executing_at", None)
+        approval["state"] = "consumed" if succeeded else "approved"
+        if succeeded:
+            approval["consumed_at"] = time.time()

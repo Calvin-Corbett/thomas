@@ -22,24 +22,26 @@ WAVE-2 routes (LLM; resolve the persisted default profile, read result['text']):
     POST /api/canvas/template        -> {prompt, spec?, selection_id?} -> spec
     POST /api/canvas/spec-from-sketch-> vision: {image_data_url} -> spec
 
-Persistence uses the SessionStore idiom: write to a temp file in the same
-directory then ``os.replace`` for atomicity. Specs live under
-``<root>/.thomas/canvas/<id>.json``.
+Saving and reading a spec, the repo root and the default profile live in ``thomas.server.canvas_studio_shared``,
+which the workspace helpers also use. Specs live under ``<root>/.thomas/canvas/<id>.json``.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
-import re
-import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
 
+from thomas.server.canvas_studio_shared import (
+    _default_repo_root,
+    _read_spec,
+    _resolve_default_profile,
+    _write_spec,
+)
 from thomas.server.routes.canvas_studio_specgen import (
     _SKETCH_SYSTEM_PROMPT,
     _TEMPLATE_SYSTEM_PROMPT,
@@ -60,43 +62,6 @@ __all__ = [
     "spec_to_tokens_css",
 ]
 
-_REPO_MARKERS = ("pyproject.toml", "thomas", ".git")
-_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
-
-
-# --------------------------------------------------------------------------- #
-# root / profile resolution (mirrors evolve_loop_routes)
-# --------------------------------------------------------------------------- #
-def _default_repo_root() -> Path:
-    here = Path.cwd()
-    for base in (here, *here.parents):
-        if any((base / marker).exists() for marker in _REPO_MARKERS):
-            return base
-    return here
-
-
-def _canvas_dir(root: Path) -> Path:
-    return Path(root) / ".thomas" / "canvas"
-
-
-def _resolve_default_profile(root: Path) -> str:
-    """Resolve the user's persisted default model profile (evolve idiom).
-
-    A UI-Studio AI action should think with the model the user picked in the
-    chat UI. Resolved once at the API boundary; fully guarded so a config/import
-    failure never hard-fails the route (it degrades to an empty profile, and the
-    LLM routes then return a clear error instead of crashing).
-    """
-    try:
-        from thomas.core.config import load_config
-        from thomas.preferences.model_resolution import resolve_effective_model
-
-        cfg = load_config(Path(root) / "thomas.toml")
-        profile, _ = resolve_effective_model(cfg, user_id="default")
-        return str(profile or "").strip()
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError):
-        return ""
-
 
 async def _json_body(request: web.Request) -> dict[str, Any]:
     try:
@@ -106,41 +71,6 @@ async def _json_body(request: web.Request) -> dict[str, Any]:
         # a transport failure should still surface.
         return {}
     return body if isinstance(body, dict) else {}
-
-
-# --------------------------------------------------------------------------- #
-# persistence (atomic temp-file + os.replace — SessionStore idiom)
-# --------------------------------------------------------------------------- #
-def _safe_spec_id(spec: dict[str, Any]) -> str:
-    raw = str(spec.get("id") or "").strip()
-    if raw and _ID_RE.match(raw):
-        return raw
-    return "spec_" + uuid.uuid4().hex
-
-
-def _write_spec(root: Path, spec: dict[str, Any]) -> str:
-    directory = _canvas_dir(root)
-    directory.mkdir(parents=True, exist_ok=True)
-    spec_id = _safe_spec_id(spec)
-    spec["id"] = spec_id
-    target = directory / f"{spec_id}.json"
-    tmp = directory / f".{spec_id}.{uuid.uuid4().hex}.tmp"
-    tmp.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, target)
-    return spec_id
-
-
-def _read_spec(root: Path, spec_id: str) -> dict[str, Any] | None:
-    if not _ID_RE.match(spec_id or ""):
-        return None
-    path = _canvas_dir(root) / f"{spec_id}.json"
-    if not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else None
-    except (json.JSONDecodeError, OSError):
-        return None
 
 
 # --------------------------------------------------------------------------- #

@@ -1,3 +1,4 @@
+import path from 'node:path';
 // The unified shell's chat reply must RENDER PROGRESSIVELY as the server
 // streams it, and still render (buffered, honestly) when it cannot stream.
 //
@@ -32,10 +33,7 @@ const checks = {};
 // ---- 1. chat.html wiring ----
 checks.moduleScriptTagPresent = html.includes('/static/js/chat_stream_consumer.js');
 
-const streamStart = html.indexOf('async function streamReal(');
-const streamEnd = html.indexOf('\n    function newChat(', streamStart);
-if (streamStart < 0 || streamEnd < 0) throw new Error('could not extract streamReal from chat.html');
-const streamSource = html.slice(streamStart, streamEnd);
+const streamSource = fs.readFileSync(path.join(path.dirname(htmlPath), 'js/chat_stream_actions.js'), 'utf8');
 
 checks.streamRealConsumesThroughModule = streamSource.includes('ThomasChatStreamConsumer.consume(');
 checks.streamRealPaintsThroughPainter = streamSource.includes('createTextPainter') && streamSource.includes('painter.paint(acc)');

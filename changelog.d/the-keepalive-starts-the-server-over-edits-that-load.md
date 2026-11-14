@@ -1,0 +1,3 @@
+### Fixed
+
+- **The keepalive starts the server behind your desktop app even when other work is left uncommitted.** It refused to start that server while any server file in the checkout had an uncommitted edit: on 2026-11-09 from 07:04 to 08:02 it refused every two minutes, for 38 files that all loaded. The server that had just stopped was running those same files. Since Thomas now restarts himself without waiting for such files, this refusal would have left the app down after a restart until someone committed. The keepalive now refuses only for a file Python cannot read yet, and its log line names that file.

@@ -16,6 +16,9 @@ from thomas.server.routes import evolve_agent_runtime
 
 
 class _EmptyStdout:
+    async def read(self, _n: int = -1) -> bytes:
+        return await self.readline()
+
     async def readline(self) -> bytes:
         return b""
 

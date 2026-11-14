@@ -11,6 +11,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from thomas.core.owned_root import freedom_transit_dir, global_skills_dir
+
 from .connectors import installed_connector_ids
 from .migration import SCHEMA_VERSION, migrate_legacy_work_state
 from .store_automations import WorkAutomationMixin, validate_automation_definitions
@@ -21,6 +23,7 @@ from .store_skills import WorkSkillMixin
 from .store_workflows import (
     WorkWorkflowMixin,
     normalize_workflow_memory,
+    validate_workflow_automation_link,
     validate_workflow_automation_links,
     validate_workflow_memory,
 )
@@ -45,6 +48,16 @@ _ACCOUNT_STATUSES = {"planned", "active", "needs_reconnect", "archived"}
 _ONBOARDING_STATES = {"collecting", "ready", "blocked"}
 _ONBOARDING_PHASES = ("goal_discovery", "workflow_mapping", "workflow_configuration", "ready")
 _PROMOTION_STATES = {"job_private", "requested", "approved", "rejected"}
+# Malformed app-owned JSON can also trip ordinary Python shape errors in validators.
+_APP_VALIDATION_ERRORS = (
+    WorkCorruptStateError,
+    WorkValidationError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+    IndexError,
+)
 
 
 class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, WorkSkillMixin, WorkAutomationMixin):
@@ -68,6 +81,8 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
             else self.root_path / ".thomas" / "skills"
         )
         self._lock = threading.RLock()
+        self._quarantined_apps: dict[str, Any] = {}
+        self.work_warnings: list[dict[str, str]] = []
         self._state = self._load_or_initialize()
 
     @classmethod
@@ -76,8 +91,8 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
         return cls(
             root,
             runtime_apps_root=root / ".thomas" / "workforce" / "apps",
-            user_work_apps_path=Path.home() / ".thomas" / "freedom_transit" / "work_apps.json",
-            global_skills_root=Path.home() / ".thomas" / "skills",
+            user_work_apps_path=freedom_transit_dir() / "work_apps.json",
+            global_skills_root=global_skills_dir(),
         )
 
     def _load_or_initialize(self) -> dict[str, Any]:
@@ -93,40 +108,119 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
             state = json.loads(self.state_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise WorkCorruptStateError("durable Work state could not be read safely") from exc
+        if not isinstance(state, dict):
+            raise WorkCorruptStateError("durable Work state must be an object")
+        if not isinstance(state.get("apps"), dict):
+            raise WorkCorruptStateError("durable Work state is missing required collections")
+        original_apps = copy.deepcopy(state.get("apps", {}))
         changed = False
         if "global_skills" not in state:
             state["global_skills"] = {}
             changed = True
-        for app in state.get("apps", {}).values() if isinstance(state.get("apps"), dict) else ():
-            onboarding = app.get("onboarding") if isinstance(app, dict) else None
-            if isinstance(onboarding, dict) and "phase" not in onboarding:
-                onboarding["phase"] = "ready" if onboarding.get("state") == "ready" else "goal_discovery"
-                changed = True
-            for job in app.get("jobs", {}).values() if isinstance(app, dict) else ():
-                if isinstance(job, dict) and "activity" not in job:
-                    job["activity"] = []
+        # Validate store-wide invariants first; only app-local faults can be set aside.
+        # Original stored apps are restored verbatim during healthy-app writes.
+        self._validate_state({**state, "apps": {}})
+        for app_id, app in list(state["apps"].items()):
+            try:
+                onboarding = app.get("onboarding") if isinstance(app, dict) else None
+                if isinstance(onboarding, dict) and "phase" not in onboarding:
+                    onboarding["phase"] = "ready" if onboarding.get("state") == "ready" else "goal_discovery"
                     changed = True
-                expected_scope = f"work/{app.get('id', '')}/{job.get('id', '')}" if isinstance(job, dict) else ""
-                if isinstance(job, dict) and "memory" not in job:
-                    job["memory"] = {
-                        "scope": expected_scope,
-                        "summary": "",
-                        "workflows": [],
-                        "metadata": {},
-                    }
-                    changed = True
-                elif isinstance(job, dict) and isinstance(job.get("memory"), dict):
-                    if job["memory"].get("scope") != expected_scope:
-                        job["memory"]["scope"] = expected_scope
+                jobs = app.get("jobs") if isinstance(app, dict) else None
+                for job in jobs.values() if isinstance(jobs, dict) else ():
+                    if isinstance(job, dict) and "activity" not in job:
+                        job["activity"] = []
                         changed = True
-                if (
-                    isinstance(job, dict)
-                    and isinstance(job.get("memory"), dict)
-                    and normalize_workflow_memory(job["memory"])
-                ):
-                    changed = True
+                    expected_scope = f"work/{app.get('id', '')}/{job.get('id', '')}" if isinstance(job, dict) else ""
+                    if isinstance(job, dict) and "memory" not in job:
+                        job["memory"] = {
+                            "scope": expected_scope,
+                            "summary": "",
+                            "workflows": [],
+                            "metadata": {},
+                        }
+                        changed = True
+                    elif isinstance(job, dict) and isinstance(job.get("memory"), dict):
+                        if job["memory"].get("scope") != expected_scope:
+                            job["memory"]["scope"] = expected_scope
+                            changed = True
+                    if (
+                        isinstance(job, dict)
+                        and isinstance(job.get("memory"), dict)
+                        and normalize_workflow_memory(job["memory"])
+                    ):
+                        changed = True
+                self._validate_state({**state, "apps": {app_id: app}})
+            except _APP_VALIDATION_ERRORS as exc:
+                warning = {"app_id": str(app_id), "job_id": "", "workflow_id": "", "reason": str(exc)}
+                warnings = [warning]
+                if isinstance(app, dict) and isinstance(app.get("jobs"), dict):
+                    app_without_jobs = {**app, "jobs": {}}
+                    try:
+                        self._validate_state({**state, "apps": {app_id: app_without_jobs}})
+                    except _APP_VALIDATION_ERRORS:
+                        pass  # App metadata is untrusted; no job can be safely attributed.
+                    else:
+                        warnings = []
+                        for job_id, job in app["jobs"].items():
+                            one_job = {**app, "jobs": {job_id: job}}
+                            try:
+                                self._validate_state({**state, "apps": {app_id: one_job}})
+                            except _APP_VALIDATION_ERRORS as job_error:
+                                link_warnings: list[dict[str, str]] = []
+                                if isinstance(job_error.__cause__, WorkConflictError):
+                                    memory = job.get("memory") if isinstance(job, dict) else None
+                                    workflows = memory.get("workflows") if isinstance(memory, dict) else None
+                                    for workflow in workflows if isinstance(workflows, list) else ():
+                                        if not isinstance(workflow, dict):
+                                            continue
+                                        automation_id = workflow.get("automation_id")
+                                        if not automation_id:
+                                            continue
+                                        try:
+                                            validate_workflow_automation_link(
+                                                job,
+                                                workflow_id=str(workflow["id"]),
+                                                workflow_type=str(workflow["type"]),
+                                                automation_id=str(automation_id),
+                                            )
+                                        except WorkConflictError as link_error:
+                                            link_warnings.append(
+                                                {
+                                                    "app_id": str(app_id),
+                                                    "job_id": str(job_id),
+                                                    "workflow_id": str(workflow["id"]),
+                                                    "reason": str(link_error),
+                                                }
+                                            )
+                                workflow_id = ""
+                                if "workflow" in str(job_error) or isinstance(job_error, (TypeError, ValueError)):
+                                    memory = job.get("memory") if isinstance(job, dict) else None
+                                    workflows = memory.get("workflows") if isinstance(memory, dict) else None
+                                    if (
+                                        isinstance(workflows, list)
+                                        and len(workflows) == 1
+                                        and isinstance(workflows[0], dict)
+                                    ):
+                                        workflow_id = str(workflows[0].get("id") or "")
+                                warnings.extend(
+                                    link_warnings
+                                    or [
+                                        {
+                                            **warning,
+                                            "job_id": str(job_id),
+                                            "workflow_id": workflow_id,
+                                            "reason": str(job_error),
+                                        }
+                                    ]
+                                )
+                        if not warnings:
+                            warnings = [warning]
+                self._quarantined_apps[app_id] = original_apps[app_id]
+                self.work_warnings.extend(warnings)
+                del state["apps"][app_id]
         self._validate_state(state)
-        if changed:
+        if changed and not self._quarantined_apps:
             self._persist(state)
         return state
 
@@ -199,7 +293,23 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
             result = operation(candidate)
             candidate["updated_at"] = utc_now_iso()
             self._validate_state(candidate)
+            if self._quarantined_apps:
+                if self.state_path.exists():
+                    try:
+                        stored = json.loads(self.state_path.read_text(encoding="utf-8"))
+                    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        raise WorkCorruptStateError("durable Work state could not be read safely") from exc
+                    if not isinstance(stored, dict) or not isinstance(stored.get("apps"), dict):
+                        raise WorkCorruptStateError("durable Work state is missing required collections")
+                    if any(
+                        stored["apps"].get(app_id) != original for app_id, original in self._quarantined_apps.items()
+                    ):
+                        raise WorkConflictError("an excluded Work app changed on disk; reload before writing")
+                candidate["apps"].update(copy.deepcopy(self._quarantined_apps))
             self._persist(candidate)
+            if self._quarantined_apps:
+                for app_id in self._quarantined_apps:
+                    del candidate["apps"][app_id]
             self._state = candidate
             return copy.deepcopy(result)
 
@@ -262,7 +372,7 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
         now = utc_now_iso()
 
         def operation(state: dict[str, Any]) -> dict[str, Any]:
-            if app_id in state["apps"]:
+            if app_id in state["apps"] or app_id in self._quarantined_apps:
                 raise WorkConflictError("work app id already exists")
             app = {
                 "id": app_id,
@@ -399,23 +509,14 @@ class WorkStore(WorkJobMixin, WorkWorkflowMixin, WorkConnectorBindingMixin, Work
                     user_turns = sum(
                         1 for message in messages if isinstance(message, dict) and message.get("role") == "user"
                     )
-                    thomas_turns = sum(
-                        1 for message in messages if isinstance(message, dict) and message.get("role") == "thomas"
-                    )
-                    if user_turns < 4 or thomas_turns < 4:
-                        raise WorkConflictError(
-                            "Work onboarding needs four user answers and four Thomas follow-ups before launch"
-                        )
                     selection_turn = effective_fields.get("selected_workflow_user_turn")
                     if (
                         isinstance(selection_turn, bool)
                         or not isinstance(selection_turn, int)
                         or selection_turn < 1
-                        or user_turns <= selection_turn
+                        or user_turns < selection_turn
                     ):
-                        raise WorkConflictError(
-                            "Work onboarding needs an answer after the selected workflow configuration begins"
-                        )
+                        raise WorkConflictError("Work onboarding needs a workflow selection at a recorded user turn")
                 onboarding["state"] = status
                 if status == "ready" and app.get("status") == "onboarding":
                     app["status"] = "active"

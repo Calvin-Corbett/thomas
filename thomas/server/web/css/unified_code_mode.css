@@ -11,20 +11,40 @@
   top: 14px;
   right: 18px;
   z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
+/* "Step 2 of 5": a small pill directly under the Activity button, on its right
+   edge. Hidden while the plan has no steps. */
+.tc-code-step-pill {
+  padding: 2px 9px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-composer-bg);
+  color: var(--c-dim);
+  font: 500 10.5px/1.4 var(--font-sans);
+  white-space: nowrap;
+}
+.tc-code-step-pill[hidden] { display: none; }
+
+/* The Activity button (design 3a): icon, "Activity", the run's status in
+   words, an "N agents" pill and a status dot. unified_code_mode.js writes the
+   parts; their looks are here. */
 .tc-code-context > button {
-  min-height: 34px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   border: 1px solid var(--c-border-2);
-  border-radius: 10px;
-  padding: 0 11px;
-  background: color-mix(in srgb, var(--c-composer-bg) 92%, transparent);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--c-composer-bg);
   color: var(--c-dim);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--c-bg) 42%, transparent);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  font: 600 12.5px/1 var(--font-sans);
   cursor: pointer;
 }
 
@@ -34,18 +54,33 @@
   color: var(--c-text);
 }
 
-.tc-code-context > button small {
+.tc-code-context > button small,
+.tc-code-context .tc-code-activity-status {
   color: var(--c-muted);
-  font-size: 10px;
+  font: 500 10.5px/1 var(--font-sans);
 }
 
-.tc-code-activity-count {
+.tc-code-context .tc-code-activity-count {
+  padding: 1px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  color: var(--c-dim);
+  font: 500 10.5px/1.4 var(--font-sans);
+  white-space: nowrap;
+}
+.tc-code-context .tc-code-activity-count:empty { display: none; }
+
+.tc-code-activity-dot {
+  flex: 0 0 auto;
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--c-accent);
-  box-shadow: 0 0 12px var(--c-accent);
+  background: var(--c-muted);
 }
+.tc-code-activity-dot[data-tone="working"] { background: var(--c-accent); }
+.tc-code-activity-dot[data-tone="paused"] { background: var(--c-warn); }
+.tc-code-activity-dot[data-tone="done"] { background: var(--c-success); }
+.tc-code-activity-dot[data-tone="failed"] { background: var(--c-danger); }
 
 .tc-code-layout {
   width: 100%;
@@ -62,24 +97,17 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 52px var(--tc-code-gutter, 24px) 86px;
+  /* 58px clears the Activity button above the first turn (design 3a). The
+     foot is short: the queue and status line sit above the composer now, so
+     the newest turn belongs right against them. */
+  padding: 58px var(--tc-code-gutter, 24px) 24px;
   scrollbar-width: thin;
   scrollbar-color: var(--c-border-2) transparent;
 }
 
-/* A conversation shorter than the window sat pinned to the TOP, leaving the
-   newest message stranded above a gap -- measured on a 1080p screen, 175px of
-   empty surface between the last turn and the composer, with nothing to
-   scroll. A conversation reads bottom-up in time, so the newest thing belongs
-   next to the box you reply in.
-   `margin-top: auto` rather than `justify-content: flex-end`, because the
-   latter makes the top of an overflowing transcript unreachable. Once the
-   content is taller than the surface this has no effect at all and normal
-   scrolling takes over.
-   Scoped with `:has()` so it only applies when real turns exist -- the empty
-   state stays centred, which is where a hero belongs. Browsers without `:has()`
-   simply keep the previous top-aligned behaviour. */
-#tc-code-turns:has(.tc-code-turn) { margin-top: auto; }
+/* A conversation starts at the TOP of the reading column and grows downward;
+   the composer stays pinned below. Auto-scroll to the newest turn is done in
+   script, so a short transcript needs no bottom-pinning rule. */
 
 .tc-code-transcript::-webkit-scrollbar { width: 9px; }
 .tc-code-transcript::-webkit-scrollbar-track { background: transparent; }
@@ -94,7 +122,7 @@
   position: absolute;
   inset: 0 0 0 auto;
   z-index: 12;
-  width: min(var(--tc-code-drawer-width, 360px), 92vw);
+  width: min(var(--tc-code-drawer-width, 460px), 92vw);
   min-width: 0;
   overflow-y: auto;
   padding: 0 16px 32px;
@@ -108,55 +136,9 @@
 
 .tc-code-panel.is-drawer-open .tc-code-actions { transform: translateX(0); }
 
-.tc-code-drawer-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  min-height: 58px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 -16px 12px;
-  padding: 0 14px 0 18px;
-  border-bottom: 1px solid var(--c-border);
-  background: color-mix(in srgb, var(--c-sidebar) 94%, transparent);
-  backdrop-filter: blur(18px);
-}
-
-/* The flex ITEM has to be allowed to shrink, not just the text inside it.
-   `min-width: auto` is the default for a flex item and refuses to go below its
-   content, so setting `text-overflow: ellipsis` on the `small` alone did
-   nothing: the wrapper grew to fit the label and the label went with it.
-   Measured after that half-fix -- ellipsis applied, and still 458px wide inside
-   a 280px drawer. Both levels are needed. */
-.tc-code-drawer-head > div { min-width: 0; }
-.tc-code-drawer-head strong,
-.tc-code-drawer-head small { display: block; }
-.tc-code-drawer-head strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tc-code-drawer-head strong { font-size: 13px; }
-/* Truncated like every other filename in this rail. The project label is a path
-   segment with no spaces to break at, so a long one ran straight out of the
-   280px drawer and was cut off at the VIEWPORT edge -- measured at 458px wide
-   inside a 280px panel, with no ellipsis to say it had been shortened.
-   `.tc-code-change header strong` and `.tc-code-artifact-name` beside it already
-   did exactly this; the subtitle and the file tree were the two that did not. */
-.tc-code-drawer-head small {
-  margin-top: 2px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--c-muted);
-  font-size: 10.5px;
-}
-.tc-code-drawer-head > button,
-.tc-code-actions button,
-.tc-code-change button {
+/* Every button in the drawer starts from one look; the agents' cards and the
+   Keep / Revert rows (unified_code_agents.css) name their own on top. */
+.tc-code-actions button {
   border: 1px solid var(--c-border);
   border-radius: 8px;
   background: transparent;
@@ -165,46 +147,9 @@
   cursor: pointer;
 }
 
-.tc-code-drawer-head > button {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-
-.tc-code-actions button:hover:not(:disabled),
-.tc-code-change button:hover {
+.tc-code-actions button:hover:not(:disabled) {
   border-color: var(--c-accent-line);
   background: var(--c-hover);
-}
-
-/* Revert permanently discards a file's changes -- its own approval card says
-   "This permanently discards its current changes" -- and it sits directly
-   beside Keep, which is benign. Measured on a real run, the two were identical
-   on colour, background, border, font-weight, font-size AND padding; the only
-   difference between them was the 6px the longer word adds. Drawing two
-   actions with opposite consequences the same way encodes something false.
-   Three files means three of each, so the row reads as six equivalent buttons.
-
-   #ff9a9a is the colour the failed-verdict rail and icon already use, so this
-   reads as the same system rather than a second, unrelated red. Kept to the
-   text and border at rest rather than a filled red button: the drawer is a
-   place for reviewing work, and a shouty control there would pull the eye away
-   from the diff, which is the thing actually worth reading.
-
-   Equal-specificity note: `.tc-code-change button:hover` above and
-   `.tc-code-change button[data-code-revert]` here both score (0,2,1), so this
-   must stay AFTER it to win at rest. The hover rule below scores (0,3,1) and
-   wins outright. */
-.tc-code-change button[data-code-revert] {
-  color: var(--c-danger, #ff9a9a);
-  border-color: color-mix(in srgb, var(--c-danger, #ff9a9a) 34%, transparent);
-}
-
-.tc-code-change button[data-code-revert]:hover {
-  border-color: var(--c-danger, #ff9a9a);
-  background: color-mix(in srgb, var(--c-danger, #ff9a9a) 14%, transparent);
 }
 
 .tc-code-actions button:disabled { opacity: .42; cursor: default; }
@@ -235,9 +180,9 @@
 .tc-code-section-title {
   margin: 8px 0;
   color: var(--c-muted);
-  font: 750 10.5px/1.2 var(--font-label, inherit);
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font: 750 10.5px/1.2 var(--font-sans);
+
+
 }
 
 .tc-code-tree { margin-top: 18px; }
@@ -284,7 +229,7 @@
   color: var(--c-text);
   font-size: 15.5px;
   line-height: 1.72;
-  letter-spacing: .002em;
+
 }
 
 .tc-code-turn.is-user {
@@ -315,7 +260,23 @@
 
 .tc-code-message-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
 .tc-code-message-head strong { font-size: 13px; }
-.tc-code-message-head small { color: var(--c-muted); font: 11.5px/1.2 var(--font-label, inherit); }
+.tc-code-turn.is-user .tc-code-message-head strong { color: var(--c-user-text); }
+.tc-code-autopilot-note {
+  width: fit-content;
+  max-width: min(100%, 600px);
+  margin: 12px auto 24px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  color: var(--c-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.tc-code-autopilot-note details { margin-top: 4px; text-align: left; }
+.tc-code-autopilot-note summary { cursor: pointer; }
+.tc-code-autopilot-full { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tc-code-autopilot-steer { color: var(--c-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tc-code-message-head small { color: var(--c-muted); font: 11.5px/1.2 var(--font-sans); }
 .tc-code-copy {
   width: 26px;
   height: 26px;
@@ -386,7 +347,8 @@
    forced onto the composer's wrapper below. */
 #tc-shell[data-surface-mode="code"] {
   --tc-code-gutter: 24px;
-  --tc-code-col-ideal: 768px;
+  /* The design's reading measure for the transcript and the composer alike. */
+  --tc-code-col-ideal: 860px;
   --tc-code-col-reserve: 0px;
   --tc-code-col-inset: max(0px, calc((100% - var(--tc-code-col-ideal)) / 2));
   --tc-code-col-width: min(
@@ -401,11 +363,12 @@
 
    `!important` because the wrapper carries `padding: 6px 18px 18px` INLINE,
    which outranks any stylesheet rule without it -- the first attempt at this
-   set 24px here, changed nothing, and the composer stayed 18px out. Only the
-   sides are overridden, so the inline top and bottom survive. */
+   set 24px here, changed nothing, and the composer stayed 18px out. The sides,
+   and the design's 14px foot; the inline top survives. */
 #tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] {
   padding-left: var(--tc-code-gutter) !important;
   padding-right: var(--tc-code-gutter) !important;
+  padding-bottom: 14px !important;
 }
 
 /* `.tc-rail` anchors the composer to a VIEWPORT position with `!important` --
@@ -415,6 +378,9 @@
    to the right of the conversation directly above it. */
 #tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] > .tc-rail {
   width: var(--tc-code-col-width);
+  /* chat.html gives this rail an inline `max-width: 768px`, which capped the composer at 700px inside while the
+     transcript took the full column; the same width for both is the point. */
+  max-width: none !important;
   margin-left: var(--tc-code-col-inset) !important;
   margin-right: auto !important;
 }
@@ -428,7 +394,7 @@
    would leave no column at all. */
 @media (min-width: 721px) {
   #tc-shell[data-surface-mode="code"][data-code-side="activity"] {
-    --tc-code-col-reserve: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 360px), 92vw));
+    --tc-code-col-reserve: calc(var(--tc-code-gutter) + min(var(--tc-code-drawer-width, 460px), 92vw));
   }
 }
 
@@ -442,10 +408,68 @@
   padding-right: calc(var(--tc-code-gutter) + var(--tc-code-viewer-width, min(760px, 62vw))) !important;
 }
 
+/* ==== Build's frame (design 3a) ==========================================
+   Solid ground: no living world behind the text and no dimming column. The
+   palette itself is forced in tokens.css. `!important` wherever chat.html
+   carries the value inline. */
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) .tc-world,
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) > main::before { display: none !important; }
+
+/* The top bar is the header: project and branch chips, the task on the right. */
+#tc-shell[data-surface-mode="code"] header[data-ui-id="chat.topbar"] { height: 46px; padding: 0 18px !important; gap: 8px !important; }
+#tc-shell[data-surface-mode="code"] header[data-ui-id="chat.topbar"] > .tc-topbar-spacer { display: none; }
+#tc-shell:not([data-surface-mode="code"]) #tc-code-header { display: none; }
+#tc-code-header:not([hidden]) { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+/* Inline blocks, not flex: an ellipsis needs a block container to reach the text. */
+.tc-code-header-chip {
+  display: inline-block; min-width: 0; max-width: 34%; height: 26px; padding: 0 9px;
+  border: 1px solid var(--c-border); border-radius: 6px; line-height: 24px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tc-code-header-chip:empty { display: none; }
+.tc-code-header-chip.is-project { color: var(--c-text); font-size: 12.5px; font-weight: 650; }
+/* The folder is a mask, so writing the project's name into the chip keeps it. */
+.tc-code-header-chip.is-project::before {
+  content: ""; display: inline-block; width: 13px; height: 13px; margin-right: 7px; vertical-align: -2px;
+  background: var(--c-dim);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.9' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.9' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+/* The chat's name: plain text beside the project chip, no border or bubble. */
+.tc-code-header-title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-text); font: 600 13px/1.2 var(--font-sans);
+}
+
+/* The composer card and its row: +, Tools, project, mic, the 34px primary.
+   The primary's fill rides --send-* (unified_code_composer.js); here only its box. */
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) .tc-composer-card { padding: 10px 10px 10px 14px !important; backdrop-filter: none !important; }
+/* Focus shows on the card's edge rather than as a ring inside it. */
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) .tc-composer-card:focus-within { border-color: var(--c-accent-line) !important; }
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) #tc-input { font-size: 15px !important; padding: 2px 0 0 !important; }
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) #tc-input:focus-visible { outline: none !important; }
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) .tc-composer-row { gap: 6px !important; }
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) #tc-attach-btn,
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) #tc-mic-btn { width: 32px !important; height: 32px !important; border-radius: 8px !important; }
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) #tc-tools-btn { height: 32px !important; padding: 0 11px !important; border-radius: 8px !important; font-size: 12.5px !important; }
+#tc-shell[data-surface-mode="code"] #tc-code-project-btn { height: 32px !important; border-radius: 8px !important; font-size: 12.5px; font-weight: 600; }
+#tc-shell[data-surface-mode="code"] #tc-code-project-label { font-size: 12.5px !important; font-weight: 600 !important; }
+#tc-shell:is([data-surface-mode="code"], [data-surface-mode="chat"], [data-surface-mode="work"]) #tc-send { width: 34px !important; height: 34px !important; border-radius: 8px !important; }
+#tc-shell[data-surface-mode="code"] .tc-composer-note { display: none; }
+
+/* The + menu and the Tools sheet: the design's radii, the AI-settings label in
+   mono, and the selects on the darker field the design draws them on. */
+#tc-shell[data-surface-mode="code"] .tc-create-menu { border-radius: 10px; backdrop-filter: none; }
+#tc-shell[data-surface-mode="code"] .tc-create-menu button { min-height: 38px; border-radius: 7px; }
+#tc-shell[data-surface-mode="code"] .tc-create-menu button:first-child { border-radius: 7px 7px 0 0; }
+#tc-shell[data-surface-mode="code"] #tc-tools-menu { border-radius: 10px !important; }
+#tc-shell[data-surface-mode="code"] .tc-tools-heading { font: 600 10.5px/1.2 var(--font-sans); }
+#tc-shell[data-surface-mode="code"] .tc-tools-field select { border-color: var(--c-border-2); border-radius: 6px; background: var(--c-user-bg); }
+
 @media (max-width: 720px) {
   #tc-shell[data-surface-mode="code"] { --tc-code-gutter: 16px; }
   .tc-code-context { top: 10px; right: 10px; }
-  .tc-code-transcript { padding: 52px var(--tc-code-gutter, 16px) 72px; }
+  .tc-code-transcript { padding: 52px var(--tc-code-gutter, 16px) 24px; }
   .tc-code-actions { width: min(420px, 94vw); }
   .tc-code-drawer-resize { display: none; }
   .tc-code-turn.is-user { max-width: 90%; }
@@ -454,3 +478,34 @@
 @media (prefers-reduced-motion: reduce) {
   .tc-code-actions { transition: none; }
 }
+
+/* The pinned STEPS card: top right, directly under the Activity button, only
+   where the reading column leaves room (1280px and up). Narrower, the pill
+   stands in. Hidden while the drawer or an agent chat is open. */
+.tc-code-steps-pin { display: none; width: 290px; max-height: 50vh; overflow-y: auto; border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18); }
+.tc-code-steps-pin:empty { display: none !important; }
+.tc-code-steps-pin .tc-code-plan { background: var(--c-composer-bg); }
+.tc-code-steps-pin .tc-code-plan-head { padding: 7px 10px; }
+.tc-code-steps-pin .tc-code-plan-row { align-items: flex-start; gap: 8px; padding: 5px 10px; font-size: 13px; }
+.tc-code-steps-pin .tc-code-plan-mark { margin-top: 3px; }
+.tc-code-steps-pin .tc-code-plan-owner:empty { display: none; }
+.tc-code-steps-pin .tc-code-plan-time { width: auto; min-width: 30px; }
+@media (min-width: 1280px) {
+  .tc-code-steps-pin { display: block; }
+  .tc-code-step-pill { display: none; }
+  .tc-code-panel.is-drawer-open .tc-code-steps-pin,
+  .tc-code-panel:has(.tc-code-agent-chat) .tc-code-steps-pin { display: none; }
+  .tc-code-panel.is-drawer-open .tc-code-step-pill,
+  .tc-code-panel:has(.tc-code-agent-chat) .tc-code-step-pill { display: inline-block; }
+}
+
+/* Where the viewport is too narrow for the card to sit beside a centred column,
+   the column (and the composer, which reads the same variable) moves left just
+   far enough to clear it. Wide screens keep the centring untouched. */
+@media (min-width: 1280px) {
+  #tc-shell[data-surface-mode="code"]:has(.tc-code-panel:not(.is-drawer-open) .tc-code-steps-pin:not(:empty)) {
+    --tc-code-col-inset: max(0px, min(calc((100% - var(--tc-code-col-ideal)) / 2), calc(100% - var(--tc-code-col-ideal) - 330px)));
+  }
+}
+.tc-code-steps-pin .tc-code-plan-row { flex-wrap: wrap; }
+.tc-code-steps-pin .tc-code-plan-owner { order: 3; flex-basis: 100%; padding-left: 24px; margin-top: -2px; }

@@ -63,7 +63,7 @@ class _FakeBrain:
     probe_args: dict[str, Any] = {}
     delay_s = 0.0
 
-    def __init__(self, *, config, llm, memory_engine, registry, runtime_policy=None):  # noqa: ANN001
+    def __init__(self, *, config, llm, memory_engine, registry, runtime_policy=None, ready_models=None):  # noqa: ANN001
         self.llm = llm
         self.registry = registry
         self.runtime_policy = runtime_policy
@@ -173,7 +173,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
     async def _chat(self, payload: dict[str, Any]):
         with (
             patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeBrain),
         ):
             return await self.client.post("/api/chat", json=payload)
 
@@ -295,9 +295,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
 
         session_id = await self._new_session_id()
         await self._patch_preferences({"autonomy": {"default_level": "L4"}})
-        response = await self._chat(
-            {"session_id": session_id, "profile": "local", "message": "run the task"}
-        )
+        response = await self._chat({"session_id": session_id, "profile": "local", "message": "run the task"})
         self.assertEqual(response.status, 200, await response.text())
         self.assertEqual(_FakeBrain.calls[-1]["kwargs"]["autonomy_level"], 4)
 
@@ -394,7 +392,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         _FakeBrain.delay_s = 0.04
         with (
             patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeBrain),
         ):
             first, second = await asyncio.gather(
                 self.client.post(
@@ -435,7 +433,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
 
         with (
             patch("thomas.server.routes.chat_v2.LLMClient", _FakeLLMClient),
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeBrain),
             patch("thomas.server.routes.chat_v2.start_background_delegation", _capture),
         ):
             response = await self.client.post(

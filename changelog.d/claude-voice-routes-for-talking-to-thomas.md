@@ -1,0 +1,3 @@
+### Added
+
+- **Thomas can now keep your voice choice and use Voice Studio for speech, and it can turn off and on while Thomas runs.** You asked for a way to "talk to Thomas" with Voice Studio. This first step adds the five `/api/voice` routes as a plugin called Talk to Thomas, which ships on. They keep the voice you choose, with one default saved, ask Voice Studio on this computer to turn a recording into words and words into sound, and name the smallest and fastest model you have set up. Voice Studio has to be running already, and nothing here starts it. No page uses these routes yet, so nothing you normally use changes. While it is off the routes answer 404, and your saved voice stays where it was.

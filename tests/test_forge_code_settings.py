@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from thomas.forge.anvil import forge_code_runner
+from thomas.forge.anvil import agent_passes, forge_code_runner
 from thomas.forge.anvil.bridge_prompts import compose_headless_prompt
 from thomas.forge.anvil.dispatch_claude_cli import CliDispatchResult
 from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeSettingsError
@@ -151,7 +151,7 @@ def test_headless_prompt_carries_exact_file_access_guardrails_and_autonomy() -> 
     assert "File access = full" in prompt
     assert "Guardrails = strict" in prompt
     assert "Autonomy level = 4" in prompt
-    assert "progress updates at meaningful milestones" in prompt
+    assert "say what matters in plain words" in prompt
     assert "not raw tool output" in prompt
 
 
@@ -172,7 +172,7 @@ def test_claude_settings_report_reasoning_as_unsupported() -> None:
         {"engine": "parallel"},
         {"model_id": "bad model id"},
         {"reasoning_effort": "infinite"},
-        {"autonomy_level": 5},
+        {"autonomy_level": 6},  # 5 is Autopilot, which the Chat menu offers
         {"file_access": "internet"},
         {"memory": "sometimes"},
         {"guardrails": "disabled"},
@@ -196,7 +196,7 @@ def test_configured_runner_reuses_agent_loop_and_propagates_profile(
         captured.update({"goal": goal, **kwargs})
         return CliDispatchResult(True, "finished", "prompt", returncode=0)
 
-    monkeypatch.setattr(forge_code_runner, "dispatch_via_agent_loop", _dispatch)
+    monkeypatch.setattr(agent_passes, "dispatch_via_agent_loop", _dispatch)
     args = forge_code_runner.build_parser().parse_args(
         [
             "build it",
@@ -237,7 +237,7 @@ def test_configured_runner_applies_every_execution_dial(
         captured.update({"goal": goal, **kwargs})
         return CliDispatchResult(False, "dry-run", "prompt", returncode=1)
 
-    monkeypatch.setattr(forge_code_runner, "dispatch_via_agent_loop", _dispatch)
+    monkeypatch.setattr(agent_passes, "dispatch_via_agent_loop", _dispatch)
     args = forge_code_runner.build_parser().parse_args(
         [
             "review it",

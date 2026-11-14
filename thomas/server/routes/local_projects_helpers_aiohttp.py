@@ -181,9 +181,9 @@ def _read_registry(app: web.Application) -> list[dict[str, Any]]:
 
 def _write_registry(app: web.Application, projects: list[dict[str, Any]]) -> None:
     path = _registry_path(app)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump({"version": _REGISTRY_VERSION, "projects": projects}, f)
+    from thomas.server.routes.local_projects_registry import write_registry_atomically
+
+    write_registry_atomically(path, {"version": _REGISTRY_VERSION, "projects": projects})
 
 
 def _resolve_project_root(path_raw: Any) -> Path:

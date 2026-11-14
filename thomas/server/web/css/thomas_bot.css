@@ -1,0 +1,73 @@
+/* The agent bots (js/thomas_bot.js): a pixel bot standing in a small box, moving
+   the way its agent is doing. Working rocks and steps in place, done breathes,
+   waiting paces across the box and out of sight and back. The eyes blink with
+   the existing `bot-blink` (chat_shell.css). */
+
+.tb-box {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+/* The agent card's box has a floor: the lower quarter is a shade lighter, and
+   the bot is lifted 2px so its feet rest on that line rather than in it. */
+.tb-md {
+  width: 38px;
+  height: 30px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, transparent 0 76%, var(--c-surface) 76% 100%), var(--c-surface-2);
+}
+
+.tb-sm {
+  width: 22px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--c-surface-2);
+}
+
+/* The bot is drawn 58x54 and scaled down around its own centre, so its layout
+   box is centred by margins. That leaves `transform` free for the motion. */
+.tb-motion {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 54px;
+  margin: -29px 0 0 -29px;
+}
+.tb-sm .tb-motion { margin-top: -28px; }
+
+.tb-box.is-working .tb-motion { animation: tb-work .7s ease-in-out infinite; }
+.tb-box.is-working .tb-leg { animation: tb-leg .35s steps(2) infinite; }
+.tb-box.is-working .tb-leg-r { animation-delay: .175s; }
+
+.tb-box.is-done .tb-motion { animation: tb-idle 3.2s ease-in-out infinite; }
+
+.tb-box.is-waiting .tb-motion { animation: tb-walk 4.8s ease-in-out infinite alternate; }
+.tb-box.is-waiting .tb-leg { animation: tb-leg .4s steps(2) infinite; }
+.tb-box.is-waiting .tb-leg-r { animation-delay: .2s; }
+
+/* Failed and stopped bots stand still; failed ones also lose their colour. */
+.tb-box.is-failed .tb-motion > div { filter: saturate(.25) brightness(.8) !important; }
+.tb-box.is-idle .tb-motion { opacity: .72; }
+
+@keyframes tb-work {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  25% { transform: translateY(-1.5px) rotate(-3deg); }
+  75% { transform: translateY(-1.5px) rotate(3deg); }
+}
+@keyframes tb-leg { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes tb-idle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+@keyframes tb-walk {
+  0% { transform: translateX(-34px); }
+  22%, 78% { transform: translateX(0); }
+  100% { transform: translateX(34px); }
+}
+
+/* `!important` because the blink is an inline style on the eyes. */
+@media (prefers-reduced-motion: reduce) {
+  .tb-box .tb-motion,
+  .tb-box .tb-motion * { animation: none !important; }
+}

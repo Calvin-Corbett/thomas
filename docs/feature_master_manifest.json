@@ -113,17 +113,6 @@
       ]
     },
     {
-      "id": 8,
-      "name": "Clipboard Monitor",
-      "location": "thomas/intake/clipboard_watcher.py",
-      "code_paths": [
-        "thomas/intake/clipboard_watcher.py"
-      ],
-      "inbox_globs": [
-        "Inbox/**/*clipboard*screenshot*intake*.zip"
-      ]
-    },
-    {
       "id": 9,
       "name": "Python Sandbox",
       "location": "thomas/tools/sandbox.py",

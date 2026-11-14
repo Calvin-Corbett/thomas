@@ -1,0 +1,3 @@
+### Changed
+
+- **Watching a check's test processes no longer costs most of a CPU core.** You said the CPU was still capped at 100%. Each running test shard had a watcher that, every half second, asked Windows for every process on the machine to find its own (~25 ms of CPU each time), so a check with 16 shards spent about 0.82 of a core just watching. All watchers now read one shared list, taken at most once every half second: 1.12 CPU-seconds every 15 seconds instead of 12.36 with 16 shards, finding the same processes. A process that started before its shard is not counted, as before, and stopping a shard still looks at its processes afresh.

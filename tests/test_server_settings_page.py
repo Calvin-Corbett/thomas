@@ -56,8 +56,11 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertNotIn("GPT-5.6 Luna (when available)", text)
         self.assertIn('value="gpt-5.5">GPT-5.5', text)
         self.assertIn('value="openai_codex">ChatGPT / Codex (signed in)', text)
-        for theme in ("nebula", "dark", "light", "aurora", "sandstone"):
-            self.assertIn(f'<option value="{theme}">', text)
+        # Two looks only (2026-11-10: "get rid of the theme selector, just make it dark or light"). Dark is stored under the old default's name.
+        self.assertIn('<option value="nebula">Dark</option>', text)
+        self.assertIn('<option value="light">Light</option>', text)
+        for theme in ("dark", "aurora", "sandstone"):
+            self.assertNotIn(f'<option value="{theme}">'.format(theme=theme), text)
         self.assertIn("data-thomas-theme-select", text)
         self.assertIn("Isolated Desktop Mode", text)
         self.assertIn("Install Host Service", text)
@@ -81,6 +84,41 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertIn("Local, deterministic icon fallback", text)
         self.assertIn("Setup unavailable", text)
         self.assertNotIn("Opening Google OAuth consent screen", text)
+
+    async def test_settings_plugins_section_replaces_plugin_management(self):
+        resp = await self.client.get("/settings")
+        self.assertEqual(resp.status, 200)
+        text = await resp.text()
+
+        rail = re.findall(r'data-section="([^"]+)"', text)
+        place = rail.index("plugins")
+        self.assertEqual((rail[place - 1], rail[place + 1]), ("integrations", "autonomy"))
+        self.assertRegex(text, r'id="plugins" class="settings-panel" data-ui-id="settings\.panel\.plugins"')
+        self.assertIn("Parts of Thomas you can turn off and on. Thomas keeps running while you do.", text)
+        panel = text.split('id="plugins"', 1)[1].split("settings.autonomy-panel.js", 1)[0]
+        # Rows come from a fetch: one in the markup would get script01's generic click, which saves nothing.
+        self.assertNotIn("toggle-switch", panel)
+        self.assertNotIn("Save Changes", panel)
+        self.assertNotIn("Reset", panel)
+        self.assertIn('<div id="pluginsHost"></div>', panel)
+        for gone in ("pluginDirectory", "autoLoadPlugins", "Plugin Management", "settings.advanced.plugins"):
+            self.assertNotIn(gone, text)
+
+        self.assertLess(text.index("/static/settings.style01.css"), text.index("/static/css/settings_plugins.css"))
+        self.assertLess(text.index("/static/settings.script01.js"), text.index("/static/settings.plugins-panel.js"))
+        for asset in ("/static/settings.plugins-panel.js", "/static/css/settings_plugins.css"):
+            self.assertEqual((await self.client.get(asset)).status, 200, asset)
+
+    async def test_the_plugins_rail_icon_and_search_lead_to_the_section(self):
+        root = Path(__file__).resolve().parents[1]
+        web = root / "thomas" / "server" / "web"
+        script = (web / "settings.script01.js").read_text(encoding="utf-8")
+
+        self.assertIn(".ph-puzzle-piece::before", (web / "css" / "settings_icons.css").read_text(encoding="utf-8"))
+        self.assertIn("'plugin': 'plugins'", script)
+        for gone in ("pluginDirectory", "autoLoadPlugins"):
+            self.assertNotIn(gone, script)
+        self.assertLess(len(script.splitlines()), 800)
 
     async def test_chat_shell_boots_without_parser_blocking_cdn_assets(self):
         resp = await self.client.get("/")
@@ -194,7 +232,12 @@ class TestServerSettingsPage(AioHTTPTestCase):
 
     async def test_settings_ui_editability_contract_protects_sensitive_controls(self):
         root = Path(__file__).resolve().parents[1]
-        html = (root / "thomas" / "server" / "web" / "settings.html").read_text(encoding="utf-8")
+        web = root / "thomas" / "server" / "web"
+        html = (web / "settings.html").read_text(encoding="utf-8")
+        for panel in ("autonomy", "privacy", "appearance"):
+            extracted = (web / f"settings.{panel}-panel.js").read_text(encoding="utf-8")
+            markup = extracted.split("`", 1)[1].rsplit("`", 1)[0]
+            html = html.replace(f'<script src="/static/settings.{panel}-panel.js"></script>', markup)
         ui_ids = re.findall(r'data-ui-id="([^"]+)"', html)
 
         self.assertEqual(len(ui_ids), len(set(ui_ids)))

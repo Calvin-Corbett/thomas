@@ -306,6 +306,6 @@ def test_handle_slash_dispatches_repo_command_end_to_end(tmp_path: Path, monkeyp
             self.agent_turns.append(prompt)
 
     repl = _Repl()
-    should_exit, handled = asyncio.run(repl._handle_slash("/greet test-user"))
+    should_exit, handled = asyncio.run(repl._handle_slash("/greet Calvin"))
     assert (should_exit, handled) == (False, True)
-    assert repl.agent_turns == ["Say hello to test-user"]
+    assert repl.agent_turns == ["Say hello to Calvin"]

@@ -25,8 +25,19 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.forge.anvil import forge_code_projects, forge_code_store, forge_code_tree
+from thomas.core.event_loop_offload import off_loop
+from thomas.forge.anvil import (
+    forge_code_conversations,
+    forge_code_git,
+    forge_code_projects,
+    forge_code_store,
+    forge_code_tree,
+)
+from thomas.forge.anvil.forge_code_self_edit import SelfEditSnapshotError
 from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeSettingsError
+from thomas.server.dial_elevation import cap_payload
+
+from .evolve_agent_self_edit_policy import resolve_source, validate_scope
 
 # What "no usable body" actually looks like coming out of ``request.json()``:
 # an empty or malformed payload, or bytes that are not text. Named rather than
@@ -73,6 +84,13 @@ def _friendly_project_error(exc: Exception, requested_root: Any = None) -> str:
     return f"Thomas can't open {where} right now."
 
 
+def _current_branch(project_root: Path) -> str | None:
+    """The branch the project is on, for the Build header; ``None`` when detached or there is no history."""
+    rc, out, _err = forge_code_git._run_git(project_root, ["symbolic-ref", "--short", "-q", "HEAD"], timeout=5)
+    branch = out.strip() if rc == 0 else ""
+    return branch or None
+
+
 def build_evolve_agent_conversation_handlers(
     *,
     require_api_access: Callable[[web.Request], None],
@@ -90,21 +108,39 @@ def build_evolve_agent_conversation_handlers(
     place for it to go stale.
     """
 
-    async def conversations_list(request: web.Request) -> web.Response:
-        require_api_access(request)
-        root = catalog_root()
+    def _collect_conversations(root: Path) -> list[dict[str, Any]]:
+        """Walk every known project root and read every conversation summary.
+
+        Measured 2026-09-24 against the live store: 4.4 s -- 0.25 s to resolve
+        213 roots, the rest reading and parsing 439 conversation files. All of it
+        was on the server's event loop, so opening the Code history made the
+        whole server stop answering for four seconds. The registry is read once
+        here rather than per conversation, which is the other half of the cost.
+        """
+        registry = forge_code_conversations._load_registry(root)
         by_id: dict[str, dict[str, Any]] = {}
         for project_root in forge_code_projects.conversation_roots(root):
             for summary in forge_code_store.list_conversations(project_root):
                 cid = str(summary.get("id") or "")
                 if not cid or cid in by_id:
                     continue
-                metadata = forge_code_projects.conversation_metadata(root, cid) or {}
+                metadata = registry.get(cid) or {}
                 enriched = dict(summary)
                 enriched["project_root"] = str(metadata.get("project_root") or project_root)
                 enriched["settings"] = metadata.get("settings") or {}
                 by_id[cid] = enriched
-        summaries = sorted(by_id.values(), key=lambda row: str(row.get("updated_at") or ""), reverse=True)
+        return sorted(by_id.values(), key=lambda row: str(row.get("updated_at") or ""), reverse=True)
+
+    async def conversations_list(request: web.Request) -> web.Response:
+        require_api_access(request)
+        summaries = await off_loop("code_conversations.list", _collect_conversations, catalog_root())
+        if request.query.get("slim") == "1":
+            # The Build sidebar only needs each task's own fields. The per-task settings (847 KB across 851 tasks) and
+            # the same rows grouped again by day (1.18 MB) made a 2.4 MB answer that took 0.8 s idle and over 30 s
+            # on a busy machine. Every other caller still gets the full answer below.
+            return web.json_response(
+                {"ok": True, "conversations": [{k: v for k, v in row.items() if k != "settings"} for row in summaries]}
+            )
         return web.json_response(
             {
                 "ok": True,
@@ -126,12 +162,18 @@ def build_evolve_agent_conversation_handlers(
         enriched = dict(conv)
         enriched["project_root"] = str(project_root)
         enriched["settings"] = metadata.get("settings") or {}
+        from thomas.server.routes.autopilot_continuation_history import continuation_history
+
+        enriched["continuation_history"] = continuation_history(conv)
+        enriched["branch"] = await off_loop("code_conversation.branch", _current_branch, project_root)
         return web.json_response({"ok": True, "conversation": enriched})
 
     async def conversation_new(request: web.Request) -> web.Response:
         require_api_access(request)
         try:
-            body = await request.json()
+            # The settings saved here become the conversation's; raised dials
+            # count only with a Hello approval (dial_elevation).
+            body = cap_payload(await request.json())
         except _EMPTY_BODY_ERRORS:
             body = {}
         title = str((body or {}).get("title") or "").strip()
@@ -148,6 +190,11 @@ def build_evolve_agent_conversation_handlers(
         if history_choice not in ("setup", "without"):
             history_choice = ""
         try:
+            self_edit = bool((body or {}).get("self_edit"))
+            self_scope = []
+            if self_edit:
+                requested_root = str(resolve_source((body or {}).get("project_identity")))
+                self_scope = validate_scope(Path(requested_root), (body or {}).get("self_edit_scope"))
             # Everything Thomas builds lands in ~/.thomas/workspaces/<exec-id>,
             # which is never a git repo -- so every app Thomas made for the user
             # was unopenable until now. Prepare Thomas's own folders on demand.
@@ -201,11 +248,13 @@ def build_evolve_agent_conversation_handlers(
                 },
                 status=409,
             )
-        except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError) as exc:
+        except (forge_code_projects.ForgeCodeProjectError, ForgeCodeSettingsError, SelfEditSnapshotError) as exc:
             return web.json_response(
                 {
                     "ok": False,
-                    "error": _friendly_project_error(exc, requested_root),
+                    "error": str(exc)
+                    if isinstance(exc, SelfEditSnapshotError)
+                    else _friendly_project_error(exc, requested_root),
                     "detail": str(exc),
                     "code": "invalid_code_configuration",
                 },
@@ -224,6 +273,9 @@ def build_evolve_agent_conversation_handlers(
                 str(p)[:400] for p in ((body or {}).get("protected_paths") or []) if isinstance(p, str) and p.strip()
             ],
         )
+        if self_edit:
+            conv["self_edit_scope"] = self_scope
+            forge_code_store._write_conversation(project_root, conv)
         report = settings.capability_report()
         forge_code_projects.bind_conversation(
             catalog_root(),

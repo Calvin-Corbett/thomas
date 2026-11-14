@@ -105,85 +105,8 @@ def resolve_base_url(explicit: str | None) -> str:
     return _strip_trailing_slash(candidate)
 
 
-def _discover_route_strings(module_name: str) -> set[str]:
-    """Best-effort: import a module and scan for route/path-looking strings."""
-    try:
-        import importlib
-
-        mod = importlib.import_module(module_name)
-    except (ImportError, AttributeError, RuntimeError):
-        return set()
-
-    candidates: set[str] = set()
-
-    def visit(obj: Any, depth: int) -> None:
-        if depth <= 0 or obj is None:
-            return
-        if isinstance(obj, str):
-            if obj.startswith("/") and ("node" in obj.lower() or "device" in obj.lower()):
-                candidates.add(obj)
-            return
-        if isinstance(obj, Mapping):
-            for k, v in obj.items():
-                if isinstance(k, str) and k in {"path", "route", "url", "endpoint"} and isinstance(v, str):
-                    if v.startswith("/") and ("node" in v.lower() or "device" in v.lower()):
-                        candidates.add(v)
-                visit(v, depth - 1)
-            return
-        if isinstance(obj, (list, tuple, set, frozenset)):
-            for item in obj:
-                visit(item, depth - 1)
-            return
-
-        # generic object attribute scan (small, shallow)
-        for attr in ("path", "route", "url", "endpoint"):
-            try:
-                val = getattr(obj, attr)
-            except (ImportError, AttributeError, RuntimeError):
-                continue
-            visit(val, depth - 1)
-
-    for name in dir(mod):
-        if name.startswith("_"):
-            continue
-        try:
-            value = getattr(mod, name)
-        except (ImportError, AttributeError, RuntimeError):
-            continue
-        visit(value, depth=4)
-
-    return candidates
-
-
-_DEFAULT_PATH_PREFERENCES: Sequence[str] = (
-    "/nodes",
-    "/api/nodes",
-    "/v1/nodes",
-    "/devices",
-    "/api/devices",
-    "/v1/devices",
-)
-
-
-def _pick_best_path(candidates: set[str]) -> str | None:
-    if not candidates:
-        return None
-    lowered = {c.lower(): c for c in candidates}
-    for preferred in _DEFAULT_PATH_PREFERENCES:
-        if preferred in lowered:
-            return lowered[preferred]
-    return sorted(candidates, key=len)[0]
-
-
 def normalize_nodes_path(nodes_path: str | None) -> str:
-    """Determine the nodes endpoint path.
-
-    Priority:
-    1) explicit nodes_path
-    2) best-effort discovery from server routes (thomas.server.routes.core_aiohttp)
-    3) best-effort discovery from CLI parity registry (thomas.cli.parity_commands)
-    4) fallback to '/nodes'
-    """
+    """Determine the nodes endpoint path: the explicit nodes_path, else '/nodes'."""
     if nodes_path is not None:
         p = nodes_path.strip()
         if not p:
@@ -191,17 +114,6 @@ def normalize_nodes_path(nodes_path: str | None) -> str:
         if not p.startswith("/"):
             p = "/" + p
         return p
-
-    # Discovery attempts (safe if modules are absent).
-    # `thomas.server.routes.core_aiohttp` used to head this list. It was
-    # measured returning an empty set even while it existed -- this scan only
-    # collects strings containing "node"/"device", and that module's route table
-    # was private, so dir() never saw it. The module has since been deleted, so
-    # the entry is now impossible as well as useless.
-    for module_name in ("thomas.cli.parity_commands",):
-        discovered = _pick_best_path(_discover_route_strings(module_name))
-        if discovered:
-            return discovered
 
     return "/nodes"
 

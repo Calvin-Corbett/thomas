@@ -1,0 +1,3 @@
+### Changed
+
+- **Ready-made sets of plugins can now be fetched and applied.** A new plugin called Ready-made plugin sets serves three sets, Everyday, Just chat and build, and Everything, and the plain headings the long list of plugins is filed under. Applying a set turns on the plugins it names and turns off every other plugin that can be turned off, so you no longer have to press the switches one at a time. Chat and Build cannot be turned off, so a set leaves them on, and the answer says what it turned on, what it turned off and what it left alone, and why. The Plugins page does not use it yet.

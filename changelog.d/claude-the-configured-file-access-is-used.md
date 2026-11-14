@@ -1,0 +1,3 @@
+### Fixed
+
+- **Setting the file-access level in config did nothing for delegated work.** `chat_delegation` fell back to a hardcoded `1` (workspace) whenever a request carried no explicit level — `clamp_file_access_level` even takes a `default=` keyword built for exactly this and the call bypassed it. So `[tools] file_access` was parsed, stored and honoured by the filesystem tools, while the path that decides whether a task may touch the Thomas repo ignored it and turned every such task away before it began. The fallback now asks what the owner actually configured; absent config is still workspace, so this widens nothing on its own.

@@ -1,0 +1,3 @@
+### Changed
+
+- **Autopilot's follow-up runs are a card, with a summary at the end of the task.** You asked for the "Self-continuations that ran" text to become a nice card, and for the end of a run to show the total follow-ups and the code files added and removed. While autopilot works the card shows a shimmering line ("Initializing autopilot fix…", then which follow-up it is on and what it came after); each earlier follow-up shows how it ended and why; and when nothing is running it adds a summary: follow-ups, files changed, lines added and removed. The +/− total in the top bar now shows from the moment a task opens, as +0 −0, instead of appearing only after the first edit.

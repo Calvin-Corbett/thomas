@@ -1,0 +1,126 @@
+/* Cards and widgets beside the conversation (js/attention_cards.js).
+   They are drawn as the app's own panels are: the surface, border, radius, type and bars of the Context window and
+   Steps panels in Build (unified_code_header.css, unified_code_cards.css). No colour says what kind of card it is. */
+
+#tc-attention {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 2px 24px;
+  font-family: var(--font-sans, inherit);
+  scrollbar-width: none;
+}
+#tc-attention[hidden] { display: none; }
+
+.tc-attn-card {
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 14px;
+  border: 1px solid var(--c-border-2, rgba(255, 255, 255, .15));
+  border-radius: 14px;
+  background: var(--c-menu-bg, var(--c-composer-bg, #22252b));
+  color: var(--c-text, #e7e9ee);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
+  transform-origin: top left;
+  animation: tc-attn-open .32s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes tc-attn-open { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
+
+.tc-attn-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: grab; user-select: none; touch-action: none; }
+#tc-attention.is-dragging .tc-attn-head { cursor: grabbing; }
+.tc-attn-title { flex: 1; min-width: 0; font: 650 14px/1.25 var(--font-sans, inherit); color: var(--c-strong, #f8f9ff); overflow-wrap: anywhere; }
+.tc-attn-close { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--c-dim, #a3a8b3); font-size: 15px; line-height: 1; cursor: pointer; }
+.tc-attn-close:hover, .tc-attn-close:focus-visible { background: var(--c-hover, rgba(255, 255, 255, .06)); color: var(--c-text, #e7e9ee); outline: none; }
+
+.tc-attn-body { margin: 0; color: var(--c-dim, #a3a8b3); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tc-attn-hint { display: block; color: var(--c-muted, #7d828c); font-size: 11.5px; line-height: 1.45; }
+.tc-attn-label { display: block; color: var(--c-muted, #7d828c); font: 600 11.5px/1.2 var(--font-sans, inherit); }
+.tc-attn-blocks { display: grid; gap: 14px; }
+
+.tc-attn-image, .tc-attn-frame { display: block; width: 100%; border: 1px solid var(--c-border, rgba(255, 255, 255, .09)); border-radius: 10px; background: #0e0f13; }
+.tc-attn-image { max-height: 260px; object-fit: contain; }
+.tc-attn-frame { height: 170px; }
+.tc-attn-frame.is-preview { height: 220px; }
+
+/* Buttons are the app's pill: the one on the Context window panel. */
+.tc-attn-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tc-attn-option {
+  padding: 8px 14px; border: 1px solid var(--c-border-2, rgba(255, 255, 255, .15)); border-radius: 9px; background: transparent;
+  color: var(--c-text, #e7e9ee); font: 600 12.5px/1 var(--font-sans, inherit); cursor: pointer; transition: background .2s, transform .2s;
+}
+.tc-attn-option.is-first { border-color: var(--c-accent-line, rgba(140, 160, 255, .45)); background: color-mix(in srgb, var(--c-accent, #7c8cff) 14%, transparent); }
+.tc-attn-option:hover { background: color-mix(in srgb, var(--c-accent, #7c8cff) 26%, transparent); transform: translateY(-1px); }
+.tc-attn-option:focus-visible, .tc-attn-reply textarea:focus-visible, .tc-attn-pill:focus-visible, .tc-attn-toggle button:focus-visible { outline: 2px solid var(--c-accent, #7c8cff); outline-offset: 2px; }
+
+.tc-attn-reply { display: grid; justify-items: start; gap: 8px; }
+.tc-attn-reply textarea {
+  box-sizing: border-box; width: 100%; resize: vertical; min-height: 46px; padding: 8px 10px; border-radius: 9px;
+  border: 1px solid var(--c-border-2, rgba(255, 255, 255, .15)); background: color-mix(in srgb, var(--c-text, #fff) 5%, transparent);
+  color: var(--c-text, #e7e9ee); font: inherit; font-size: 12.5px;
+}
+.tc-attn-error { margin: 0; color: var(--c-dim, #a3a8b3); font-size: 12px; }
+.tc-attn-error::before { content: "! "; font-weight: 700; color: var(--c-strong, #fff); }
+.tc-attn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A reading: one big number, as on the Context window panel. */
+.tc-attn-reading { display: grid; gap: 4px; }
+.tc-attn-total { display: flex; align-items: baseline; gap: 8px; }
+.tc-attn-total b { font: 700 24px/1 var(--font-sans, inherit); letter-spacing: -.01em; color: var(--c-strong, #f8f9ff); font-variant-numeric: tabular-nums; }
+.tc-attn-total span { color: var(--c-dim, #a3a8b3); font-size: 12.5px; }
+
+/* A meter: a name and its number over one bar, with a tick where the limit is. */
+.tc-attn-meter, .tc-attn-spark { display: grid; gap: 7px; }
+.tc-attn-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--c-text, #e7e9ee); }
+.tc-attn-line b { color: var(--c-strong, #f8f9ff); font-weight: 650; font-variant-numeric: tabular-nums; }
+.tc-attn-track { position: relative; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--c-text, #fff) 12%, transparent); }
+.tc-attn-track i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--c-accent, #7c8cff); transition: width .6s cubic-bezier(.2, .8, .2, 1); }
+.tc-attn-track u { position: absolute; top: -3px; bottom: -3px; width: 2px; border-radius: 2px; background: color-mix(in srgb, var(--c-text, #fff) 40%, transparent); }
+.tc-attn-meter.is-over .tc-attn-track i { background: var(--c-strong, #fff); }
+
+/* Rows: a name, its value, and a small note. */
+.tc-attn-rows { display: grid; gap: 9px; }
+.tc-attn-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 2px 10px; font-size: 12.5px; }
+.tc-attn-row span { color: var(--c-text, #e7e9ee); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-attn-row b { color: var(--c-dim, #a3a8b3); font-weight: 550; font-variant-numeric: tabular-nums; }
+.tc-attn-row em { grid-column: 1 / -1; color: var(--c-muted, #7d828c); font-style: normal; font-size: 11.5px; }
+
+/* Steps: the Steps panel's own head, bar and marks. */
+.tc-attn-steps-head { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; }
+.tc-attn-steps-bar { flex: 1; height: 2px; overflow: hidden; border-radius: 2px; background: var(--c-surface-2, rgba(255, 255, 255, .07)); }
+.tc-attn-steps-bar i { display: block; height: 100%; background: var(--c-accent, #7c8cff); }
+.tc-attn-steps-count { color: var(--c-dim, #a3a8b3); font: 600 11px/1 var(--font-sans, inherit); }
+.tc-attn-steps ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.tc-attn-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.4; color: color-mix(in srgb, var(--c-text, #fff) 50%, transparent); }
+.tc-attn-step-mark { display: grid; place-items: center; flex: none; width: 15px; height: 15px; margin-top: 2px; border: 1.5px solid var(--c-border-2, rgba(255, 255, 255, .2)); border-radius: 50%; color: var(--c-accent-ink, #0c0d10); font-size: 8.5px; font-weight: 800; }
+.tc-attn-step.is-done .tc-attn-step-mark { border-color: var(--c-accent, #7c8cff); background: var(--c-accent, #7c8cff); }
+.tc-attn-step.is-active { color: var(--c-strong, #f8f9ff); }
+.tc-attn-step.is-active .tc-attn-step-mark { border-color: var(--c-accent, #7c8cff); }
+.tc-attn-step-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tc-attn-step em { color: var(--c-dim, #a3a8b3); font-style: normal; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.tc-attn-spark-line { display: block; width: 100%; height: 34px; }
+.tc-attn-spark-line polyline { stroke: var(--c-accent, #7c8cff); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+
+/* A switch. */
+.tc-attn-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--c-text, #e7e9ee); }
+.tc-attn-toggle button { position: relative; flex: none; width: 36px; height: 21px; padding: 0; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--c-text, #fff) 18%, transparent); cursor: pointer; transition: background .2s; }
+.tc-attn-toggle button i { position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.tc-attn-toggle button[aria-checked="true"] { background: var(--c-accent, #7c8cff); }
+.tc-attn-toggle button[aria-checked="true"] i { transform: translateX(15px); }
+.tc-attn-toggle button:disabled { opacity: .45; cursor: default; }
+
+/* No gutter: one counter, and the cards only when you ask for them. */
+.tc-attn-pill {
+  align-self: flex-start; min-width: 32px; height: 32px; padding: 0 10px; border-radius: 16px; cursor: pointer;
+  border: 1px solid var(--c-border-2, rgba(255, 255, 255, .15)); background: var(--c-menu-bg, #22252b); color: var(--c-strong, #f8f9ff);
+  font: 650 12.5px/1 var(--font-sans, inherit); box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+#tc-attention.is-compact:not(.is-expanded) .tc-attn-card { display: none; }
+#tc-attention.is-compact:not(.is-expanded) { overflow: visible; }
+
+@media (prefers-reduced-motion: reduce) { .tc-attn-card, .tc-attn-track i, .tc-attn-toggle button i { animation: none; transition: none; } }

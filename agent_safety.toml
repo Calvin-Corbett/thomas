@@ -27,6 +27,10 @@ test_dirs = ["tests/"]
 max_uncommitted_changed_lines = 800
 change_budget_ignore_prefixes = [
     "output/",
+    # Prefix match only (startswith), so this cannot be narrowed to messages-[0-9][0-9][0-9][0-9]-[0-1][0-9].txt. It also
+    # matches anything deeper whose path starts this way; scripts/praxis/archive_append_only.py is the
+    # check that nothing but append-only messages-YYYY-MM.txt files lives there.
+    "plans/thomas/archive/messages-",
     "runtime/",
     "artifacts/",
     "tmp/",
@@ -95,6 +99,11 @@ enforcement_files = [
     "scripts/forge/gates/enforcement_manifest.json",
     "docs/ops/graveyard.json",
     "docs/ops/accepted_risks.json",
+    # ── Tool-group registration (review 2026-10-04) ──
+    # The pinned tool names and the manifest folder that may only enable a pinned group. An agent that can edit
+    # either can swap which register_* function runs without a change you review.
+    "thomas/server/tool_groups.py",
+    "thomas/server/tool_manifests/",
 ]
 
 # Scripts that enforce the rules — also protected.
@@ -109,6 +118,10 @@ enforcement_scripts = [
     "scripts/commit_breakglass_guard.py",
     "scripts/breakglass_auth.py",
     "scripts/breakglass_context.py",
+    # Part 4 (2026-10-14): whose sign-in it was, and the break-glass window the sign-in mints; the promoter loads both
+    # at every Windows sign-in, the one that opens your window included.
+    "scripts/breakglass_account.py",
+    "scripts/breakglass_window_core.py",
     "scripts/commit_guarded.py",
     "scripts/forge/gates/enforcement_integrity.py",
     "scripts/forge/gates/_runtime_guard.py",
@@ -134,15 +147,34 @@ enforcement_scripts = [
     "scripts/forge/gates/type_safety_gate.py",
     "scripts/post_commit_audit.py",
     "scripts/crew/brief/safety_config.py",
+    # The list of gates the scoped commit path runs (HOOK_PARITY_GATES) and the hooks left off it: an agent that can
+    # empty it silently stops ruff and the integrity check on every agent commit, so it is hashed like the gates.
+    "scripts/crew/brief/gate_parity.py",
+    # How the scoped commit path runs the gates and decides what to run again: a module that picked which gates run,
+    # or how their verdicts combine, would be an unreviewed bypass of every gate above it, so each is hashed.
+    "scripts/crew/brief/gate_runner.py",
+    "scripts/crew/brief/gate_plan.py",
+    "scripts/crew/brief/gate_phase.py",
+    "scripts/crew/brief/gate_skips.py",
+    "scripts/crew/brief/gate_reuse.py",
+    "scripts/crew/brief/gate_slots.py",
+    "scripts/crew/brief/git_reads.py",
+    "scripts/crew/brief/commit_attempts.py",
+    "scripts/crew/brief/slot_check.py",
     # ── Workboard & scope enforcement (Audit Finding 1) ──
     "scripts/forge/gates/workboard_claims.py",
     "scripts/forge/gates/workboard_inbox.py",
     "scripts/forge/gates/workboard_inbox_hook.py",
+    # Which board the inbox gate, its hook and the commit barrier judge: a rewrite that pointed them at an empty board
+    # would pass every agent with unread mail, so the resolver is hashed like the gates that read it.
+    "scripts/crew/workboard/coordination_root.py",
     "scripts/forge/gates/workboard_task_problems.py",
     "scripts/forge/gates/workboard_changed_files.py",
     "scripts/forge/gates/workboard_agent_claim.py",
+    "scripts/forge/gates/_commit_base.py",
     "scripts/forge/gates/commit_scope_gate.py",
     "scripts/crew/workboard/issue.py",
+    "scripts/crew/workboard/issue_up_for_grabs.py",  # the mover issue.py forwards to; split out to keep issue.py editable
     "scripts/crew/workboard/problem_record.py",
     # ── Repo & build integrity (Audit Finding 1) ──
     "scripts/forge/gates/monolith_filename_guard.py",
@@ -177,6 +209,9 @@ enforcement_scripts = [
     # that block secret/credential leaks and competitor-name drift before a push.
     # Integrity-checked so they cannot be silently neutered.
     "scripts/forge/publish/preflight.py",
+    # The public-release content check (CI publish.yml and public-content.yml run it on the source tree and the
+    # built distributions): a rewrite that passed everything would empty that check, so it is hashed like preflight.
+    "scripts/forge/publish/content_check.py",
     "scripts/forge/gates/public_repo_leak_guard.py",
     # ── QuickBuilder mode (human-activated build-fast mode) ──
     # The signed-flag verifier defines which gates are suppressible, and the
@@ -187,6 +222,12 @@ enforcement_scripts = [
     "scripts/forge/gates/merge_resurrection_gate.py",
     "scripts/forge/gates/dead_ref_gate.py",
 ]
+
+# ── Landing queue ───────────────────────────────────────────────────────────
+# true makes the scoped commit tool refuse to land unless the caller holds the landing queue's slot (an open ticket in
+# state `holding`), the same as passing --require-slot. A dry run never needs a slot. Off until the queue is in use.
+[landing_queue]
+require_slot = false
 
 # ── Placeholder / Stub Files ────────────────────────────────────────────────
 # Files that are intentional stubs and must NOT be "completed" by agents.
@@ -342,6 +383,17 @@ protected_hooks = [
     "thomas-problem-closure-gate",
     "thomas-dead-ref-gate",
     "thomas-branch-claim-gate",
+    # Added 2026-09-08, the same story a second time: this gate has run in
+    # .pre-commit-config.yaml since 2026-09-07 and was never listed here, so a
+    # skip of the one check that stops a commit whose imports would ImportError
+    # on a clean clone left no record. Found the same way as the three above --
+    # test_all_local_hooks_are_skip_protected was failing on exactly this.
+    "thomas-untracked-import-gate",
+    # Added 2026-11-04, the same story a third time: this snapshot hook has run in .pre-commit-config.yaml since
+    # 899a2c255 and was never listed here, so a skip of it left no record. It never fails a commit, but a skip
+    # that is not audited is how the photograph of the tree before the gates run would quietly stop being taken.
+    # Found the same way -- test_all_local_hooks_are_skip_protected was failing on exactly this.
+    "thomas-worktree-safety",
 ]
 max_skip_hooks = 4
 max_staged_files_with_skip = 200

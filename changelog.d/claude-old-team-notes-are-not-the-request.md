@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Thomas project started before the notes were marked is no longer held to its own team notes.** The Thomas projects running on 2026-09-27 began before Thomas's notes to a team were marked, so every Autopilot round quoted those notes as part of your request. The checklist then made `python -m pytest` over the whole suite a command that had to pass. It also made every key of the size rule's baseline file a field to account for, and turned the notes' own sentences into requirements. The old notes are now recognised by their fixed opening sentence and left out, up to the end of that message.

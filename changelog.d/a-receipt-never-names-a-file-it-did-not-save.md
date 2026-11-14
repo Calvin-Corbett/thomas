@@ -1,0 +1,4 @@
+### Fixed
+
+- Your self-fix's private copy is no longer deleted when its receipt would list files the saved patch does not hold. Git on Windows skips a name Windows reserves with just a warning; a file whose name ends in a space or a dot cannot be reached through a normal Windows path, so the capture took it for deleted. The receipt still listed those files. Thomas now keeps the copy and names them instead. Files git never lists, such as a file named .git below the top or anything in a folder whose name ends in a dot, are still not saved; a separate change will look for them.
+- A removal lock left by an ended process no longer keeps your copy for good when Windows gives its process number to another program. The lock now records when its process started; a lock less than an hour old still holds the copy. A lock written before this change still holds the copy while its process number is in use.

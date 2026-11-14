@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from thomas.core.board_fence import board_fenced_paths
 from thomas.forge.anvil import forge_code_store
 from thomas.server.routes import ui_redesign_runtime as rt
 from thomas.server.routes import work_dashboard_runtime as dash
@@ -38,18 +39,18 @@ BOARD = """# Board
 
 
 def test_every_other_agents_scope_is_fenced_and_an_exempt_agent_is_not() -> None:
-    fenced = rt.board_fenced_paths(BOARD, exempt_agents={"claude"})
+    fenced = board_fenced_paths(BOARD, exempt_agents={"claude"})
     assert fenced == [
         "plans/thomas/problems/GENERATED-MODULE-DELETION-20260902",
         "thomas/server/chat_delegation.py",
         "thomas/server/web/chat.html",
     ]
-    assert "thomas/tools/web_preflight.py" in rt.board_fenced_paths(BOARD, exempt_agents=set())
+    assert "thomas/tools/web_preflight.py" in board_fenced_paths(BOARD, exempt_agents=set())
 
 
 def test_a_board_without_claims_fences_nothing() -> None:
-    assert rt.board_fenced_paths("# Board\n\n## Active Tasks\n", exempt_agents=set()) == []
-    assert rt.board_fenced_paths("", exempt_agents=set()) == []
+    assert board_fenced_paths("# Board\n\n## Active Tasks\n", exempt_agents=set()) == []
+    assert board_fenced_paths("", exempt_agents=set()) == []
 
 
 def test_the_brief_names_the_fence_so_the_model_can_decline() -> None:

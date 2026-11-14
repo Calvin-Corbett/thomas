@@ -247,6 +247,7 @@ def reconcile_stale_runs(
     idle_seconds: int = 10 * 60,
     now_iso: str | None = None,
     reason: str = "stale run reconciliation",
+    active_run_ids: frozenset[str] = frozenset(),
 ) -> int:
     db = _require_db()
     now_txt = str(now_iso or _utcnow_iso()).strip() or _utcnow_iso()
@@ -263,7 +264,7 @@ def reconcile_stale_runs(
         stale_run_ids: list[str] = []
         for row in rows:
             run_id = str(row["run_id"] or "").strip()
-            if not run_id:
+            if not run_id or run_id in active_run_ids:
                 continue
             started_at = str(row["started_at"] or "").strip()
             activity_epoch = _latest_activity_epoch(conn, run_id, started_at)

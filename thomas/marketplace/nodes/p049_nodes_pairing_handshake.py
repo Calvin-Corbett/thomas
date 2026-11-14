@@ -100,59 +100,17 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def _maybe_resolve_state_dir_from_parity_compat() -> Path | None:
-    """
-    Best-effort integration point:
-
-    If thomas.cli.parity_compat provides a canonical state-dir resolver, use it.
-    This avoids hard coupling to internal helper names.
-    """
-    try:
-        from thomas.cli import parity_compat as _pc  # type: ignore
-    except (ImportError, AttributeError, RuntimeError):
-        return None
-
-    candidates = (
-        "resolve_state_dir",
-        "get_state_dir",
-        "state_dir",
-        "state_dir_path",
-        "get_state_path",
-        "default_state_dir",
-    )
-
-    for attr in candidates:
-        fn = getattr(_pc, attr, None)
-        if not callable(fn):
-            continue
-        try:
-            value = fn()
-        except TypeError:
-            # helper might require args
-            continue
-        except (ImportError, AttributeError, RuntimeError):
-            continue
-        if isinstance(value, (str, os.PathLike)):
-            return Path(value)
-    return None
-
-
 def resolve_state_dir(state_dir: Path | None = None) -> Path:
     """
     Resolve the Thomas state directory.
 
     Order:
     1) explicit argument
-    2) thomas.cli.parity_compat helper (if present)
-    3) THOMAS_STATE_DIR env var
-    4) ~/.thomas
+    2) THOMAS_STATE_DIR env var
+    3) ~/.thomas
     """
     if state_dir is not None:
         return Path(state_dir)
-
-    resolved = _maybe_resolve_state_dir_from_parity_compat()
-    if resolved is not None:
-        return resolved
 
     env = os.environ.get("THOMAS_STATE_DIR")
     if env:

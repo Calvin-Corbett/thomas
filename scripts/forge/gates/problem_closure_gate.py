@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The closure gate: an incident may end in a practice or an owned risk, never a shrug.
 
-WHY THIS GATE EXISTS (phase 1.5): nothing in this repo stopped a Task Problems
+WHY THIS GATE EXISTS (phase 1.5, spec docs/superpowers/specs/2026-08-24-
+praxis-first-design.md §1.5): nothing in this repo stopped a Task Problems
 entry or a PROBLEM.md header from flipping to ``status=resolved`` with
 nothing behind it -- no landed fix, no tombstone, no owner sign-off. That
 "resolved" then reads as done forever, because closure is never re-checked.

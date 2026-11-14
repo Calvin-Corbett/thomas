@@ -1,0 +1,3 @@
+### Added
+
+- **Settings has a Publish to GitHub section, and a row of the same name on the Plugins page that turns it off.** Nothing is asked of the server until you press Look at what would go public. The section then shows the version, how many files would go public, each kind of private file left out with its reason, and every check with a green tick or a red reason. Publish a review copy to GitHub asks you to sign in with Windows for exactly that preview, where it goes included, and then shows the branch it wrote or why it refused. It writes only a new review branch and never the main branch.

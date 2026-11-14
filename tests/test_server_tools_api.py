@@ -1,3 +1,10 @@
+"""The tools list through a real app.
+
+``thomas.server.rows.server_diagnostics`` registers it, with the engines list and the landing heartbeat, through
+``thomas.server.server_diagnostics_routes``, so a change to either runs this file. ``thomas.server.app_routes_task_ledger``
+still builds the handlers.
+"""
+
 import tempfile
 
 from aiohttp.test_utils import AioHTTPTestCase

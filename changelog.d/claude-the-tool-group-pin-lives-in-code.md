@@ -1,0 +1,3 @@
+### Changed
+
+- **A tool group's expected registration is now pinned in code, and the manifest can only enable it.** `thomas/server/tool_groups.py` holds `PINNED_GROUPS`: for each group the exact register function, host values and tool names. A manifest that names another `register_*` function, other host values, a different tool set, another id, or a group the code does not pin is refused, a warning is logged, and the built-in registration runs. Before, the manifest also declared the tool names that its own result was checked against, so whoever could write the manifest folder could swap which function registers. `thomas/server/tool_manifests/` and `tool_groups.py` are candidates for the protected list (an owner decision, not made here).

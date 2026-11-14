@@ -108,6 +108,16 @@ def test_cancellation_during_background_lease_acquisition_cannot_orphan_lease() 
     asyncio.run(_run())
 
 
+async def _reached(event: asyncio.Event, task: asyncio.Task[Any]) -> None:
+    """Wait for *event*, but let the handler's own failure fail the test instead of hanging it."""
+    waiter = asyncio.ensure_future(event.wait())
+    await asyncio.wait({waiter, task}, return_when=asyncio.FIRST_COMPLETED)
+    if not event.is_set():
+        waiter.cancel()
+        task.result()
+        raise AssertionError("the send handler finished without reaching the point this test waits for")
+
+
 def test_cancelled_start_gate_terminates_child_and_rolls_back_receipt(
     tmp_path: Path,
     monkeypatch: Any,
@@ -149,6 +159,10 @@ def test_cancelled_start_gate_terminates_child_and_rolls_back_receipt(
             self.ended.append(token)
 
     class _Request:
+        # Since 75729831 the send route reads the listening port off the request.
+        transport = None
+        url = SimpleNamespace(port=0)
+
         async def json(self) -> dict[str, str]:
             return {"message": "Build a game", "request_id": "cancelled-gate", "model": "claude:sonnet"}
 
@@ -166,7 +180,7 @@ def test_cancelled_start_gate_terminates_child_and_rolls_back_receipt(
         monkeypatch.setattr(evolve_agent_runtime, "_kill_tree", _kill)
 
         request_task = asyncio.create_task(handler(_Request()))
-        await gate_entered.wait()
+        await _reached(gate_entered, request_task)
         request_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await request_task
@@ -210,7 +224,7 @@ def test_cancelled_start_gate_after_payload_write_keeps_nonretryable_state(
         def __init__(self) -> None:
             self.payload_written = False
             self.stdin = _GateWriter(self)
-            self.stdout = SimpleNamespace(readline=self._readline)
+            self.stdout = SimpleNamespace(readline=self._readline, read=lambda _n=-1: self._readline())
 
         async def _readline(self) -> bytes:
             return b""
@@ -241,6 +255,10 @@ def test_cancelled_start_gate_after_payload_write_keeps_nonretryable_state(
             self.ended.append(token)
 
     class _Request:
+        # Since 75729831 the send route reads the listening port off the request.
+        transport = None
+        url = SimpleNamespace(port=0)
+
         async def json(self) -> dict[str, str]:
             return {"message": "Perform once", "request_id": "cancel-after-write", "model": "claude:sonnet"}
 
@@ -257,7 +275,7 @@ def test_cancelled_start_gate_after_payload_write_keeps_nonretryable_state(
         monkeypatch.setattr(evolve_agent_runtime, "_kill_tree", _kill)
 
         request_task = asyncio.create_task(handler(_Request()))
-        await drain_entered.wait()
+        await _reached(drain_entered, request_task)
         request_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await request_task
@@ -317,6 +335,9 @@ def test_parent_death_before_receipt_release_cannot_execute_first_child(
         async def readline(self) -> bytes:
             return b""
 
+        async def read(self, _n: int = -1) -> bytes:
+            return b""
+
     class _GateWriter:
         def __init__(self, child: Any, token: str) -> None:
             self.child = child
@@ -353,13 +374,22 @@ def test_parent_death_before_receipt_release_cannot_execute_first_child(
         return child
 
     class _Request:
+        # Since 75729831 the send route reads the listening port off the request.
+        transport = None
+        url = SimpleNamespace(port=0)
+
         def __init__(
             self,
             message: str = "Build once",
             request_id: str = "hard-death-request",
             conversation_id: str = "",
         ) -> None:
-            self.body = {"message": message, "request_id": request_id, "conversation_id": conversation_id, "model": "claude:sonnet"}
+            self.body = {
+                "message": message,
+                "request_id": request_id,
+                "conversation_id": conversation_id,
+                "model": "claude:sonnet",
+            }
 
         async def json(self) -> dict[str, str]:
             return self.body
@@ -455,6 +485,9 @@ def test_unconfirmed_process_exit_is_persisted_as_failed_not_success(
         async def readline(self) -> bytes:
             return b""
 
+        async def read(self, _n: int = -1) -> bytes:
+            return b""
+
     class _UnknownExitProcess:
         returncode = None
         stdout = _EmptyStdout()
@@ -500,6 +533,9 @@ def test_recorder_does_not_count_conversation_bookkeeping_as_project_work(tmp_pa
         async def readline(self) -> bytes:
             return b""
 
+        async def read(self, _n: int = -1) -> bytes:
+            return b""
+
     class _FinishedProcess:
         returncode = 0
         stdout = _EmptyStdout()
@@ -536,6 +572,9 @@ def test_recorder_preserves_a_confirmed_conversational_outcome(tmp_path: Path) -
 
     class _EmptyStdout:
         async def readline(self) -> bytes:
+            return b""
+
+        async def read(self, _n: int = -1) -> bytes:
             return b""
 
     class _FinishedProcess:
@@ -614,7 +653,12 @@ def test_recorder_store_failure_is_reported_by_status_stop_and_sse(
         }
 
     async def _body(client: TestClient) -> None:
-        await asyncio.sleep(0)
+        # Wait for the recorder itself, not for a tick of the loop. Recording
+        # reads the transcript in a worker thread now (it is disk work at the
+        # scale of a whole run), so "one tick has passed" no longer means "the
+        # recorder is done" -- and what this test is about is what status says
+        # AFTER a store failure, not how many ticks it took to get there.
+        await evolve_agent_runtime._await_recording(client.app[APP_EVOLVE_AGENT_DRAIN])
         status = await (await client.get("/api/evolve/agent/status")).json()
         assert status["persistence_confirmed"] is False
         assert status["persistence_state"] == "failed"
@@ -688,6 +732,9 @@ def test_a_store_that_claims_a_write_it_did_not_make_is_not_confirmed(
         async def readline(self) -> bytes:
             return b""
 
+        async def read(self, _n: int = -1) -> bytes:
+            return b""
+
     class _FinishedProcess:
         returncode = 0
         stdout = _EmptyStdout()
@@ -706,9 +753,7 @@ def test_a_store_that_claims_a_write_it_did_not_make_is_not_confirmed(
             web.Application(),
             run_id="run-phantom",
         )
-        assert result["persistence_confirmed"] is False, (
-            "a turn that never reached the store was reported as saved"
-        )
+        assert result["persistence_confirmed"] is False, "a turn that never reached the store was reported as saved"
         # And the run is reported as failed rather than quietly succeeding.
         assert result["ok"] is False
 

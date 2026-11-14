@@ -1,4 +1,8 @@
-"""Tests for thomas.server.routes.spend (cost tracking endpoints)."""
+"""Tests for thomas.server.routes.spend (cost tracking endpoints).
+
+These routes reach the server through the row in thomas.server.rows.spend. The name is written here because a check
+finds tests by following imports and dotted names, so without it a change to the row would not run this file.
+"""
 
 import tempfile
 import unittest

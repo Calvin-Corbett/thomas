@@ -307,7 +307,6 @@ def _try_resolve_artifacts_dir_from_thomas_config() -> str | None:
         "thomas.config",
         "thomas.settings",
         "thomas.runtime.config",
-        "thomas.cli.main",
     )
     candidate_attrs = (
         "ARTIFACTS_DIR",

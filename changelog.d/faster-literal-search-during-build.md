@@ -1,0 +1,3 @@
+### Changed
+
+- Literal `code.search` scans now skip splitting nonmatching files into lines when ripgrep is unavailable. Nonliteral regex searches, match formatting, file coverage, and scan budgets remain unchanged. On October 22, the project list reported building as the slowest measured stage (37,338 seconds across today's recorded projects). A five-run warm comparison of an absent literal across 125 Python files measured 68.7 ms median before this fast path and 43.8 ms after, with identical results and file counts; this measures one operation within building, not a change in total project build time.

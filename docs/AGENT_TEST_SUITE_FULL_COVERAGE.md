@@ -236,8 +236,8 @@ This document is the full test-suite contract for Thomas.
 
 ### browser_and_operator_ux
 
-- `core.061` [implemented] Browser workflow corpus validity tests.
-- `core.062` [implemented] Browser workflow runtime execution tests.
+- `core.061` [implemented] Browser action execution tests.
+- `core.062` [implemented] Browser artifact capture tests.
 - `core.063` [implemented] Browser profile coverage tests.
 - `core.064` [implemented] Browser extension interaction tests.
 - `core.065` [implemented] DOM-selector drift resilience tests.

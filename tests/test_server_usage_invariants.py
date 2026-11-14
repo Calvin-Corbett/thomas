@@ -68,7 +68,7 @@ class TestServerUsageInvariants(AioHTTPTestCase):
     async def test_done_usage_is_normalized_for_malformed_values(self):
         sid = await self._new_session_id()
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_bad_usage):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", _fake_process_bad_usage):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -96,7 +96,7 @@ class TestServerUsageInvariants(AioHTTPTestCase):
     async def test_done_usage_defaults_to_zero_when_missing(self):
         sid = await self._new_session_id()
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_no_usage):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", _fake_process_no_usage):
             resp = await self.client.post(
                 "/api/chat",
                 json={

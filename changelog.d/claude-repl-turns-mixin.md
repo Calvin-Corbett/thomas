@@ -1,0 +1,3 @@
+### Changed
+
+- **The REPL class is split along the seam finder's method groups.** `ThomasREPL` was one 1,101-line class in a 1,330-line file, over the monolith guard's hard limit with an expired waiver. The finder read it by its methods and found two groups with five cross-calls and three shared helpers; the second group, the shared helpers, the panel labels and the version helper they use are now `ThomasREPLTurnsMixin` in `repl_turns.py`, one more base on a class that already stacked four mixins, so every cross-call resolves through `self` and the REPL behaves exactly as before. 626 and 786 lines; the 115 REPL tests pass as before.

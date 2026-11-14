@@ -4,7 +4,7 @@
     const BREAKGLASS_OPT_IN_API = '/api/security/breakglass-opt-in';
     const CHAT_THEME_STORAGE_KEY = 'thomas_chat_theme';
     const CHAT_THEME_NAMES = Object.freeze({
-      nebula: 'Nebula Core',
+      nebula: 'Dark',
       dark: 'Dark',
       light: 'Light',
       aurora: 'Aurora',
@@ -65,8 +65,6 @@
         soundAlerts: false,
         debugMode: false,
         logLevel: 'info',
-        pluginDirectory: '',
-        autoLoadPlugins: true,
         toolPaths: [],
         dbConnection: '',
         poolSize: 10,
@@ -76,7 +74,7 @@
     // Overlay themes (thomas/server/overlay) are known names too; their labels come from the view the server put in the page.
     const overlayThemeNames = () => { const v = window.ThomasWorkspaceShell && window.ThomasWorkspaceShell.overlayView ? window.ThomasWorkspaceShell.overlayView() : null; const out = {}; Object.entries((v && v.themes) || {}).forEach(([k, s]) => { out[k] = String((s && s.label) || k); }); return out; };
     function normalizeChatTheme(theme, fallback = 'nebula') {
-      const normalized = String(theme || '').trim().toLowerCase();
+      const raw = String(theme || '').trim().toLowerCase(), normalized = ({ dark: 'nebula', aurora: 'nebula', sandstone: 'light' })[raw] || raw;  // two looks; Dark is stored as nebula
       return Object.prototype.hasOwnProperty.call(CHAT_THEME_NAMES, normalized) || overlayThemeNames()[normalized] ? normalized : fallback;
     }
 
@@ -89,9 +87,12 @@
       }
     }
 
-    function toUiTheme(theme) {
+    function toUiTheme(theme, exact) {
       const stored = readStoredChatTheme();
       if (stored) return stored;
+      // The API keeps only light or dark, so the exact name is saved beside it: keep it while it still means the same one.
+      const saved = normalizeChatTheme(exact, '');
+      if (saved && (theme === 'light' || theme === 'dark') && toApiTheme(saved) === theme) return saved;
       return theme === 'light' ? 'light' : (theme === 'dark' ? 'dark' : 'nebula');
     }
 
@@ -218,7 +219,7 @@
         agentName: (preferences && preferences.profile && preferences.profile.display_name) || storedLegacy.agentName || defaults.agentName,
         defaultModel: model.model_id || storedLegacy.defaultModel || defaults.defaultModel,
         defaultProvider: toUiProvider(model.active_profile || storedLegacy.defaultProvider || defaults.defaultProvider),
-        theme: toUiTheme((preferences && preferences.appearance && preferences.appearance.theme) || storedLegacy.theme || defaults.theme),
+        theme: toUiTheme((preferences && preferences.appearance && preferences.appearance.theme) || storedLegacy.theme || defaults.theme, storedLegacy.theme),
         workflowMode: (preferences && preferences.advanced && preferences.advanced.interface && preferences.advanced.interface.workflow_mode) || storedLegacy.workflowMode || defaults.workflowMode,
         openaiKey: preferences && preferences.api_keys ? (preferences.api_keys.openai ?? storedLegacy.openaiKey ?? defaults.openaiKey) : (storedLegacy.openaiKey ?? defaults.openaiKey),
         anthropicKey: preferences && preferences.api_keys ? (preferences.api_keys.anthropic ?? storedLegacy.anthropicKey ?? defaults.anthropicKey) : (storedLegacy.anthropicKey ?? defaults.anthropicKey),
@@ -435,8 +436,6 @@
       // Advanced
       setToggle('debugMode', settings.debugMode);
       setSelectValue('logLevel', settings.logLevel || 'info');
-      setInputValue('pluginDirectory', settings.pluginDirectory || '');
-      setToggle('autoLoadPlugins', settings.autoLoadPlugins !== false);
       setInputValue('toolPaths', (settings.toolPaths || []).join('\n'));
       setInputValue('dbConnection', settings.dbConnection || '');
       setInputValue('poolSize', settings.poolSize || 10);
@@ -556,7 +555,7 @@
           'bubble': 'appearance',
           'notification': 'appearance',
           'debug': 'advanced',
-          'plugin': 'advanced',
+          'plugin': 'plugins',
           'database': 'advanced',
           'log': 'advanced',
         };
@@ -723,8 +722,6 @@
         case 'advanced':
           data.debugMode = document.getElementById('debugMode').classList.contains('on');
           data.logLevel = document.getElementById('logLevel').value;
-          data.pluginDirectory = document.getElementById('pluginDirectory').value;
-          data.autoLoadPlugins = document.getElementById('autoLoadPlugins').classList.contains('on');
           data.toolPaths = document.getElementById('toolPaths').value.split('\n').filter(p => p.trim());
           data.dbConnection = document.getElementById('dbConnection').value;
           data.poolSize = parseInt(document.getElementById('poolSize').value);

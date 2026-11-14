@@ -38,7 +38,37 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+_STAGED_CACHE: dict[str, str | None] = {}
+
+
+def _prefetch_staged(paths: list[str]) -> None:
+    """Read every plan from the index with ONE `git cat-file --batch` (one `git show` process each cost ~1.2 s a commit).
+
+    Text comes out as `git show` in text mode gave it (universal newlines), so the checks below see the same strings.
+    If the batch cannot be had the cache stays empty and each plan is read the old way.
+    """
+    wanted = [p for p in dict.fromkeys(paths) if p and p not in _STAGED_CACHE]
+    if not wanted:
+        return
+    try:
+        from scripts.crew.brief import git_reads
+
+        blobs = git_reads.cat_file_batch(ROOT, [f":{p}" for p in wanted])
+    except (ImportError, OSError, RuntimeError):
+        return
+    for path in wanted:
+        blob = blobs.get(f":{path}")
+        text = None if blob is None else blob.decode("utf-8", "replace")
+        _STAGED_CACHE[path] = None if text is None else text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _plan_path(path: str) -> str:
+    return str(path or "").strip().replace("\\", "/").lstrip("./")
+
+
 def _staged_text(path: str) -> str | None:
+    if path in _STAGED_CACHE:
+        return _STAGED_CACHE[path]
     proc = _git("show", f":{path}")
     return proc.stdout if proc.returncode == 0 else None
 
@@ -82,7 +112,7 @@ def _plan_rows(text: str) -> tuple[list[dict[str, str]], list[str]]:
 
 
 def _read_plan(path: str, staged: bool) -> tuple[str | None, str | None]:
-    normalized = str(path or "").strip().replace("\\", "/").lstrip("./")
+    normalized = _plan_path(path)
     if not normalized or Path(normalized).is_absolute() or ".." in Path(normalized).parts:
         return None, f"invalid repo-relative PLAN path `{path}`"
     if staged:
@@ -118,6 +148,7 @@ def evaluate_scoped(
     the committer's, exactly what the problems gate had already stopped doing."""
     warnings: list[str] = []
     agent_key = _norm(agent)
+    _STAGED_CACHE.clear()  # one evaluation reads one index; nothing may carry over to the next
     try:
         text = _board_text(workboard, staged)
     except (OSError, UnicodeError, ValueError) as exc:
@@ -125,6 +156,8 @@ def evaluate_scoped(
     violations, claims, active_tasks, queued_tasks = _evaluate_claims_text(text)
     rows, row_errors = _plan_rows(text)
     violations.extend(row_errors)
+    if staged:
+        _prefetch_staged([_plan_path(row["plan"]) for row in rows])
 
     row_by_id: dict[str, list[dict[str, str]]] = {}
     for row in rows:

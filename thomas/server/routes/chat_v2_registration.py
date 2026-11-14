@@ -9,7 +9,7 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.chat.session_store import SessionStore
+from thomas.chat.session_slot import sessions
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 from thomas.marketplace.specialists.coding import CodingSpecialist
 from thomas.marketplace.specialists.reasoning import ReasoningSpecialist
@@ -17,6 +17,7 @@ from thomas.marketplace.specialists.research import ResearchSpecialist
 from thomas.marketplace.specialists.synthesis import SynthesisSpecialist
 from thomas.marketplace.specialists.tools import ToolSpecialist
 from thomas.server.chat_budget_ledger import get_chat_budget_ledger
+from thomas.server.routes.chat_document_upload import handle_document_extract
 from thomas.server.routes.chat_v2_announcements import handle_announce_delegation
 from thomas.server.routes.chat_v2_keys import (
     APP_ANNOUNCE_LOCKS,
@@ -62,8 +63,10 @@ def register_chat_v2_route_set(
     """Create Chat V2 state and register every endpoint behind its proper guard."""
     if not callable(require_api_access):
         raise TypeError("require_api_access must be callable")
-    store_dir = chat_store_dir or Path(".thomas") / "sessions_v2"
-    app[APP_SESSION_STORE] = SessionStore(store_dir)
+    if chat_store_dir is None:
+        raise RuntimeError("chat needs the folder to keep sessions in; none was given")
+    store_dir = Path(chat_store_dir)
+    app[APP_SESSION_STORE] = sessions().store_at(store_dir)
     app[APP_CHAT_BUDGET_LEDGER] = get_chat_budget_ledger(store_dir.parent / "chat_budget.json")
     app[APP_SESSION_LLM_CACHE] = {}
     app[APP_ANNOUNCE_LOCKS] = {}
@@ -86,6 +89,9 @@ def register_chat_v2_route_set(
 
     app.router.add_post("/api/chat", chat_handler)
     app.router.add_post("/api/v2/chat", chat_handler)
+    app.router.add_post(
+        "/api/v2/chat/documents/extract", guard_chat_v2_read(handle_document_extract, require_api_access)
+    )
     app.router.add_post("/api/v2/chat/transcribe", handle_chat_transcribe)
     app.router.add_post("/api/v2/chat/speak", handle_chat_speak)
     app.router.add_get("/api/v2/chat/voice/status", guard_chat_v2_read(handle_chat_voice_status, require_api_access))

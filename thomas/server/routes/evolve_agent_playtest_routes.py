@@ -49,7 +49,7 @@ def build_evolve_agent_playtest_handlers(
         require_api_access(request)
         from thomas.core.config import load_config
         from thomas.core.llm import LLMError
-        from thomas.core.llm_client import LLMClient
+        from thomas.core.llm_slot import models
         from thomas.server.app_keys import APP_SECRETS
         from thomas.server.game_playtest import CdpError, PlaytestEvent, playtest_game
         from thomas.server.openai_codex_oauth import ensure_openai_codex_access_token
@@ -105,7 +105,7 @@ def build_evolve_agent_playtest_handlers(
                 # (measured 5.6s -> ~2.7s). The final report is a separate call
                 # that keeps the model's default effort.
                 model_cfg.reasoning_effort = "low"
-                llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
+                llm = models().open(model_cfg, fallback_configs=[], failover_enabled=False)
                 title = game_path.stem.replace("_", " ").replace("-", " ").title()
                 await playtest_game(game_url=game_path.as_uri(), llm=llm, game_title=title, on_event=sink, max_moves=10)
             except _PLAYTEST_FAULTS as exc:

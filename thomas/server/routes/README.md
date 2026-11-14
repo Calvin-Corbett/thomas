@@ -46,14 +46,15 @@ Streams response back as JSON/SSE
 | `codex_aiohttp.py` | `/codex/*` | Code search and navigation |
 | `channels_api.py` | `/channels/*` | Channel/workspace API |
 | `local_projects_aiohttp.py` | `/projects/*` | Local project management |
-| `marketplace_catalog_aiohttp.py` | `/marketplace/*` | Plugin marketplace |
+| `marketplace_catalog_aiohttp.py` | `/marketplace/*` | Plugin marketplace (handlers only; `marketplace_catalog_fields.py`, `_rows.py`, `_packs.py` and `_sync.py` hold the layers beneath it, in that order) |
 | `engine_actions_aiohttp.py` | `/engine/*` | Engine control actions |
 | `life_manager_aiohttp.py` | `/life/*` | Personal life management |
 | `search.py` | `/search/*` | Search operations |
 | `secrets_aiohttp.py` | `/secrets/*` | Secret management |
 | `preferences_aiohttp.py` | `/preferences/*` | User preferences |
 | `webhooks.py`, `webhooks_aiohttp.py` | `/webhooks/*` | Webhook management |
-| `onboarding_aiohttp.py` | `/onboarding/*` | Onboarding flow |
+| `onboarding_aiohttp.py` | `/onboarding/telemetry`, `/onboarding/outcomes*` | First-run measurements |
+| `desktop_aiohttp.py` | `/onboarding/desktop/*` | Isolated desktop setup |
 | `spend.py` | `/spend/*` | Cost tracking |
 | `audit.py` | `/audit/*` | Audit logging |
 

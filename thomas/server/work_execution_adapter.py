@@ -9,16 +9,15 @@ from typing import Any
 
 from thomas.core import task_bot_runtime
 from thomas.core.file_access import READ_ONLY, parse_file_access_level
+from thomas.core.kernel import late, seams
 from thomas.core.project_root import coordination_root
 from thomas.marketplace.autonomy.adapters import ChatAdapter
 from thomas.marketplace.autonomy.execution_cancellation import CancellationUnconfirmed, drain_task
-from thomas.server.app_keys import APP_CONFIG, APP_SELF_BASE_URL
-from thomas.server.chat_delegation import start_background_delegation
-from thomas.server.chat_delegation_session import _normalize_record
+from thomas.server.app_keys import APP_CONFIG, APP_SELF_BASE_URL, APP_WORK_STORE
 from thomas.server.chat_runtime_policy import resolve_chat_runtime_policy
 from thomas.server.delegation_lifecycle import has_live_delegation, wait_for_delegation_stop
+from thomas.server.dial_elevation import cap_payload
 from thomas.server.routes.chat_v2_work_context import resolve_work_private_context
-from thomas.server.routes.work import APP_WORK_STORE
 
 log = logging.getLogger(__name__)
 
@@ -44,13 +43,18 @@ class WorkExecutionAdapter(ChatAdapter):
             raise ValueError("Work execution requires an active job and app")
         # The stored job owns permissions and model selection. A decomposed
         # worker's suggested profile or client-provided context cannot raise them.
-        settings = dict(job.get("settings") or {})
+        # Saved levels are held to the same rule as live ones: file access and
+        # internet reach above the line need a Hello approval in this process.
+        settings = cap_payload(dict(job.get("settings") or {}))
         session_id = str(job["history"]["session_id"])
-        payload = {
-            **settings,
-            "autonomy_level": settings.get("autonomy", 1),
-            "thomas_guardrails": settings.get("guardrails", "guarded"),
-        }
+        # Work stores the level as "autonomy", so cap what is actually sent too.
+        payload = cap_payload(
+            {
+                **settings,
+                "autonomy_level": settings.get("autonomy", 1),
+                "thomas_guardrails": settings.get("guardrails", "guarded"),
+            }
+        )
         policy = resolve_chat_runtime_policy(
             payload=payload, session_meta=None, saved_meta=None, config=self._app[APP_CONFIG], session_id=session_id
         )
@@ -76,7 +80,8 @@ class WorkExecutionAdapter(ChatAdapter):
         try:
             async with asyncio.timeout(1800):
                 dispatch = asyncio.create_task(
-                    start_background_delegation(
+                    late.call(
+                        seams.START_DELEGATION,
                         self._app,
                         session_id=session_id,
                         prompt=prompt,
@@ -112,7 +117,7 @@ class WorkExecutionAdapter(ChatAdapter):
                     state = str(record.get("state") or "")
                     if state in {"completed", "failed", "cancelled", "abandoned", "awaiting_proof", "blocked"}:
                         await wait_for_delegation_stop(self._app, execution_id)
-                        normalized = await asyncio.to_thread(_normalize_record, record)
+                        normalized = await asyncio.to_thread(late.call, seams.DELEGATION_RECORD, record)
                         return self._result(normalized)
                     await asyncio.sleep(0.5)
         except (asyncio.CancelledError, TimeoutError, OSError, RuntimeError, TypeError, ValueError, KeyError):

@@ -57,6 +57,23 @@ except Exception:  # pragma: no cover
     except Exception as e:  # pragma: no cover
         raise ImportError("Could not import Tool/ToolResult. Expected thomas.tools.base or thomas.tools.tool.") from e
 
+from thomas.tools.browser_page import (
+    _clean_text,
+    _fmt_action_error,
+    _fmt_nav_error,
+    _looks_like_css_or_xpath,
+    _normalize_selector,
+    _normalize_url,
+    _resolve_screenshot_path,
+    _temp_screenshot_name,
+    workspace_file_url,
+)
+from thomas.tools.browser_reading import (
+    _extract_best_text,
+    _resolve_locator_for_click,
+    _resolve_locator_for_type,
+)
+
 # --- Playwright ---
 _PLAYWRIGHT_AVAILABLE = True
 _PLAYWRIGHT_IMPORT_ERROR: str | None = None
@@ -85,43 +102,7 @@ except Exception as e:  # pragma: no cover
 
 _NAV_TIMEOUT_MS = 30_000
 _ACTION_TIMEOUT_MS = 5_000
-_MAX_TEXT_CHARS = 8000
 _EXTRACT_MAX_ITEMS = 2000
-
-# Prefer these containers in order, but we still score candidates for "best" content.
-_CONTENT_CANDIDATES = [
-    "main",
-    "article",
-    "[role=main]",
-    "#content",
-    "#main",
-    ".content",
-    ".main",
-    ".article",
-    ".post",
-    ".entry-content",
-    "body",
-]
-
-# Strip obvious chrome/noise inside the candidate clone (keeps extraction clean).
-_STRIP_SELECTORS = [
-    "nav",
-    "header",
-    "footer",
-    "aside",
-    "script",
-    "style",
-    "noscript",
-    # cookie/consent patterns
-    '[id*="cookie" i]',
-    '[class*="cookie" i]',
-    '[id*="consent" i]',
-    '[class*="consent" i]',
-    '[aria-label*="cookie" i]',
-    '[aria-label*="consent" i]',
-    '[role="dialog"]',
-    '[class*="modal" i]',
-]
 
 
 # ----------------------------
@@ -144,6 +125,8 @@ class _BrowserState:
     headless: bool | None = None
     sessions: dict[str, _SessionState] = field(default_factory=dict)
     active_session: str = "default"
+    # True from stop_browser until start_browser: no call may launch Playwright again in between.
+    stopped: bool = False
 
 
 _STATE = _BrowserState()
@@ -166,117 +149,6 @@ def _require_playwright() -> None:
             "  playwright install chromium\n"
             f"Import error: {msg}"
         )
-
-
-def _normalize_url(url: str) -> str:
-    u = (url or "").strip()
-    if not u:
-        return u
-    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", u):
-        return u
-    return "https://" + u.lstrip("/")
-
-
-def _looks_like_css_or_xpath(selector: str) -> bool:
-    s = (selector or "").strip()
-    if not s:
-        return False
-    # Playwright engine prefixes
-    if re.match(r"^(css|xpath|text|id|data-test|data-testid)=", s):
-        return True
-    # XPath patterns
-    if s.startswith("//") or s.startswith("(//"):
-        return True
-    # CSS-ish characters that usually indicate an actual selector
-    if any(ch in s for ch in ("#", ".", "[", "]", ">", "+", "~", ":", "=", "*", "(", ")", ",")):
-        return True
-    # If it has spaces, could still be CSS, but in consumer flows it's often a label.
-    # We'll treat plain words/phrases as "human" unless it clearly looks like CSS above.
-    return False
-
-
-def _normalize_selector(selector: str) -> str:
-    s = (selector or "").strip()
-    if not s:
-        return s
-    if re.match(r"^(css|xpath|text|id|data-test|data-testid)=", s):
-        return s
-    if s.startswith("//") or s.startswith("(//"):
-        return f"xpath={s}"
-    return s  # CSS
-
-
-def _clean_text(text: str) -> str:
-    if not text:
-        return ""
-    t = text.replace("\r\n", "\n").replace("\r", "\n")
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    t = re.sub(r"[ \t]{2,}", " ", t)
-    t = "\n".join(line.rstrip() for line in t.split("\n"))
-    t = t.strip()
-    if len(t) > _MAX_TEXT_CHARS:
-        t = t[:_MAX_TEXT_CHARS].rstrip() + "…"
-    return t
-
-
-def _temp_screenshot_name() -> str:
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    suffix = f"{int(time.time() * 1000) % 1_000_000:06d}"
-    return f"thomas_screenshot_{ts}_{suffix}.png"
-
-
-def _resolve_screenshot_path(path_in: str | None) -> str:
-    if not path_in:
-        p = Path(tempfile.gettempdir()) / _temp_screenshot_name()
-        return str(p)
-
-    p = Path(path_in).expanduser()
-    try:
-        p = p.resolve()
-    except Exception:
-        p = Path(str(p))
-
-    if p.exists() and p.is_dir():
-        p = p / _temp_screenshot_name()
-
-    if p.suffix == "":
-        p = p.with_suffix(".png")
-
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return str(p)
-
-
-def _fmt_action_error(action: str, exc: Exception, selector: str | None = None) -> str:
-    msg = str(exc).strip() if exc else ""
-    if isinstance(exc, PlaywrightTimeoutError):
-        return f"{action} timed out{f' for selector {selector!r}' if selector else ''}."
-    return f"{action} failed{f' for selector {selector!r}' if selector else ''}: {msg or exc.__class__.__name__}"
-
-
-def _fmt_nav_error(url: str, exc: Exception, timeout_ms: int) -> str:
-    msg = str(exc).strip() if exc else ""
-    upper = msg.upper()
-
-    if isinstance(exc, PlaywrightTimeoutError):
-        return f"Navigation timed out after {timeout_ms}ms: {url}"
-
-    if "ERR_NAME_NOT_RESOLVED" in upper:
-        return f"DNS error (domain not resolved) while navigating to {url}: {msg}"
-    if "ERR_CONNECTION_REFUSED" in upper:
-        return f"Connection refused while navigating to {url}: {msg}"
-    if "ERR_CONNECTION_TIMED_OUT" in upper:
-        return f"Connection timed out while navigating to {url}: {msg}"
-    if "ERR_INTERNET_DISCONNECTED" in upper:
-        return f"Internet disconnected while navigating to {url}: {msg}"
-    if "ERR_TOO_MANY_REDIRECTS" in upper:
-        return f"Too many redirects while navigating to {url}: {msg}"
-    if "ERR_ABORTED" in upper:
-        return f"Navigation aborted while navigating to {url}: {msg}"
-
-    if "ERR_CERT" in upper or "CERTIFICATE" in upper or "SSL" in upper:
-        return f"SSL/certificate error while navigating to {url}: {msg}"
-
-    return f"Navigation error while navigating to {url}: {msg or exc.__class__.__name__}"
 
 
 async def _best_effort_stabilize(page: Page, *, max_ms: int = 3000) -> None:
@@ -336,8 +208,12 @@ async def _cleanup_locked() -> None:
 async def get_browser(*, headless: bool = True) -> Browser:
     """Get or create the shared Chromium browser (singleton)."""
     _require_playwright()
+    if _STATE.stopped:
+        raise RuntimeError("The browser is turned off, so it cannot be opened.")
 
     async with _init_lock:
+        if _STATE.stopped:  # a stop came while this call waited its turn
+            raise RuntimeError("The browser is turned off, so it cannot be opened.")
         relaunch = False
         if _STATE.browser is None:
             relaunch = True
@@ -358,6 +234,22 @@ async def get_browser(*, headless: bool = True) -> Browser:
             _STATE.headless = headless
 
         return _STATE.browser  # type: ignore[return-value]
+
+
+async def stop_browser() -> None:
+    """Close every session, the browser and Playwright, and refuse to launch another until ``start_browser``.
+
+    Unlike ``browser.close`` this does not wait for a session that is partway through a call: that call fails, because
+    its page is gone, and a call that begins later is refused.
+    """
+    _STATE.stopped = True
+    async with _init_lock:
+        await _cleanup_locked()
+
+
+def start_browser() -> None:
+    """Let calls launch the browser again after ``stop_browser``. Nothing is launched until one is made."""
+    _STATE.stopped = False
 
 
 def _get_session_name(args: dict[str, Any]) -> str:
@@ -445,140 +337,24 @@ def _ensure_navigated(page: Page) -> str | None:
 # ----------------------------
 
 
-async def _resolve_locator_for_click(page: Page, selector: str) -> Locator:
-    """
-    If selector looks like CSS/XPath/engine, use page.locator.
-    Else treat as human label: button/link role -> get_by_text fallback.
-    """
-    s = (selector or "").strip()
-    if _looks_like_css_or_xpath(s):
-        return page.locator(_normalize_selector(s)).first
-
-    # Human label path: prefer roles consumers expect.
-    # Note: get_by_role matches accessible name; very robust on modern sites.
-    try:
-        return page.get_by_role("button", name=s).first
-    except Exception:
-        pass
-    try:
-        return page.get_by_role("link", name=s).first
-    except Exception:
-        pass
-    # broader fallback: partial text
-    return page.get_by_text(s, exact=False).first
-
-
-async def _resolve_locator_for_type(page: Page, selector: str) -> Locator:
-    """
-    If selector looks like CSS/XPath/engine, use page.locator.
-    Else treat as human label/placeholder.
-    """
-    s = (selector or "").strip()
-    if _looks_like_css_or_xpath(s):
-        return page.locator(_normalize_selector(s)).first
-
-    # Human label path: label is the most consumer-friendly.
-    try:
-        return page.get_by_label(s, exact=False).first
-    except Exception:
-        pass
-    try:
-        return page.get_by_placeholder(s, exact=False).first
-    except Exception:
-        pass
-    # fallback: a direct text match (less ideal for inputs, but better than nothing)
-    return page.get_by_text(s, exact=False).first
-
-
-# ----------------------------
-# Better text extraction
-# ----------------------------
-
-
-async def _extract_best_text(page: Page) -> str:
-    """
-    Picks best content container by scoring candidates:
-    score = textLen - 0.6 * linkTextLen
-    after stripping common chrome/noise from a cloned node.
-
-    Returns innerText-like visible text.
-    """
-    js = r"""
-    (candidates, stripSelectors) => {
-      const strip = (root) => {
-        try {
-          for (const sel of stripSelectors) {
-            const nodes = root.querySelectorAll(sel);
-            for (const n of nodes) n.remove();
-          }
-        } catch (e) {}
-      };
-
-      const scoreNode = (node) => {
-        if (!node) return {score: 0, text: ""};
-        const clone = node.cloneNode(true);
-        strip(clone);
-
-        const text = (clone.innerText || "").trim();
-        if (!text) return {score: 0, text: ""};
-
-        // link density penalty
-        let linkTextLen = 0;
-        try {
-          const links = clone.querySelectorAll("a");
-          for (const a of links) linkTextLen += ((a.innerText || "").trim().length);
-        } catch (e) {}
-
-        const score = text.length - 0.6 * linkTextLen;
-        return {score, text};
-      };
-
-      const seen = new Set();
-      const nodes = [];
-      for (const sel of candidates) {
-        const el = document.querySelector(sel);
-        if (el && !seen.has(el)) {
-          seen.add(el);
-          nodes.push(el);
-        }
-      }
-      if (!nodes.length && document.body) nodes.push(document.body);
-
-      let best = {score: 0, text: ""};
-      for (const n of nodes) {
-        const r = scoreNode(n);
-        if (r.score > best.score) best = r;
-      }
-
-      // final fallback
-      if (!best.text && document.body) best.text = (document.body.innerText || document.body.textContent || "");
-      return best.text || "";
-    }
-    """
-    try:
-        txt = await page.evaluate(js, _CONTENT_CANDIDATES, _STRIP_SELECTORS)
-        return txt if isinstance(txt, str) else ""
-    except Exception:
-        try:
-            txt = await page.evaluate("() => document.body ? document.body.innerText : ''")
-            return txt if isinstance(txt, str) else ""
-        except Exception:
-            try:
-                txt = await page.evaluate("() => document.body ? document.body.textContent : ''")
-                return txt if isinstance(txt, str) else ""
-            except Exception:
-                return ""
-
-
-# ----------------------------
-# Tools
-# ----------------------------
-
-
 class BrowserOpenTool(Tool):
     name = "browser.open"
     category = "browser"
-    description = "Navigate to a URL and return page title + cleaned text (max 8000 chars)."
+    description = (
+        "Navigate to a URL and return page title + cleaned text (max 8000 chars). "
+        "A file:// path inside your own workspace is allowed, so you can open a page "
+        "you just wrote without serving it yourself."
+    )
+
+    def __init__(self, workspace: str | Path | None = None) -> None:
+        # Where this run's own output lives. None means no file:// access at
+        # all -- the allowance is opt-in per run, never the default.
+        self._workspace = workspace
+
+    def for_workspace(self, workspace: str | Path | None) -> BrowserOpenTool:
+        """The same tool for another run's folder, which is the only place ``file://`` is allowed."""
+        return BrowserOpenTool(workspace)
+
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -601,12 +377,18 @@ class BrowserOpenTool(Tool):
                 return ToolResult(ok=False, data=None, error="Missing required param: url")
 
             url = _normalize_url(raw_url)
+            # An agent looking at what it just wrote. Confined to this run's own
+            # workspace and resolved through symlinks (browser_page), so it is a
+            # separate narrow allowance rather than a hole in the guard below.
+            own_output = workspace_file_url(raw_url, self._workspace)
+            if own_output is not None:
+                url = own_output.as_uri()
             # SSRF guard before opening a browser session or navigating. Blocks
             # cloud-metadata/link-local always and honors the operator host
             # policy, matching web.fetch / eng.web_extract.
             from thomas.tools.web_search_providers import check_outbound_url
 
-            policy_err = check_outbound_url(url)
+            policy_err = None if own_output is not None else check_outbound_url(url)
             if policy_err:
                 return ToolResult(ok=False, data=None, error=policy_err)
             wait_for = (args.get("wait_for") or "").strip() or None
@@ -982,13 +764,18 @@ TOOLS: list[Tool] = [
 ]
 
 
-def register_browser_tools(registry: Any) -> int:
+def register_browser_tools(registry: Any, workspace: str | Path | None = None) -> int:
     """Register the Playwright browser tools into a ToolRegistry.
 
     Gated on Playwright being importable: if the ``playwright`` package is not
     installed the tools would only fail at call time with a RuntimeError, so we
     skip registration entirely and return 0 rather than advertising tools that
     cannot run. Returns the number of tools registered.
+
+    ``workspace`` is this run's own output directory. Passing it lets
+    ``browser.open`` read a ``file://`` path inside it and nothing else; leaving
+    it out means no file access, which is what every caller that does not know
+    its workspace should do.
     """
     import importlib.util
 
@@ -996,6 +783,8 @@ def register_browser_tools(registry: Any) -> int:
         return 0
     count = 0
     for tool in TOOLS:
-        registry.register(tool)
+        # The open tool is rebuilt per registration so one process serving
+        # several runs never shares one run's workspace with another.
+        registry.register(BrowserOpenTool(workspace) if isinstance(tool, BrowserOpenTool) else tool)
         count += 1
     return count

@@ -1,3 +1,9 @@
+"""Tests for max-autonomy worker self-recovery.
+
+Calvin's requirement: "if given a task he can't do he should be able to figure
+it out when on max autonomy." At L4 a failed worker attempt feeds its failure
+into a fresh attempt (bounded); below L4 it does a single pass and reports.
+"""
 
 import tempfile
 import types
@@ -108,8 +114,11 @@ class TestSelfRecovery(unittest.IsolatedAsyncioTestCase):
             # confirms a run: a worker replying "Created game.html" having written
             # nothing and run no tool used to terminate as a green VERIFIED card
             # with zero artifacts.
-            [{"type": "tool_output", "name": "read_file", "ok": True},
-             {"type": "text", "text": "made it"}, {"type": "done"}],
+            [
+                {"type": "tool_output", "name": "read_file", "ok": True},
+                {"type": "text", "text": "made it"},
+                {"type": "done"},
+            ],
         ]
         emitter, state = await self._run(scripts, autonomy_level=4)
         self.assertEqual(state["calls"], 2)  # retried exactly once

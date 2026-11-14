@@ -9,11 +9,13 @@ Public integration: call setup(app, config) from create_app().
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
 import logging
 import re
+import sqlite3
 from collections.abc import Callable
 
 from aiohttp import web
@@ -362,24 +364,56 @@ async def h_revoke_member(request: web.Request) -> web.Response:
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
 
-def setup(app: web.Application, config, *, require_api_access: RequireAccessFn | None = None) -> None:
-    """Register workspace routes and open the DB connection."""
-    db_path = get_db_path(config)
+def _open_database(db_path) -> sqlite3.Connection:
+    """Open the database and make sure its tables exist. Blocks on the disk, so it runs in a worker thread."""
     con = connect(db_path)
     ensure_schema(con)
-    app[APP_WORKSPACE_CON] = con
+    return con
+
+
+async def _close_when_opened(opening: asyncio.Future) -> None:
+    """Close the connection a worker thread is still opening, once it has. A second cancel only stops the waiting."""
+
+    def close_it(done: asyncio.Future) -> None:
+        if done.cancelled() or done.exception() is not None:
+            return
+        try:
+            done.result().close()
+        except sqlite3.Error as e:
+            log.debug("workspace db close failed: %s", e)
+
+    opening.add_done_callback(close_it)
+    await asyncio.wait({opening})
+
+
+def setup(app: web.Application, config, *, require_api_access: RequireAccessFn | None = None) -> None:
+    """Register workspace routes. The database opens in a worker thread when ``app`` starts, so a server that is
+    already running does not stop answering while the file is opened. The routes join once it is open."""
     app[APP_WORKSPACE_REQUIRE_API_ACCESS] = require_api_access or _require_default_api_access
-    log.info("workspace.rbac_multi_tenant: DB at %s", db_path)
+
+    async def _open_workspace_connection(app_: web.Application) -> None:
+        db_path = get_db_path(config)
+        opening = asyncio.ensure_future(asyncio.to_thread(_open_database, db_path))
+        try:
+            con_ = await asyncio.shield(opening)
+        except asyncio.CancelledError:
+            # A stop that comes while the file is opening cannot end the worker thread, which would hand its connection
+            # to no one. Wait for it, and close what it opened, so the file is free when the stop returns.
+            await _close_when_opened(opening)
+            raise
+        app_[APP_WORKSPACE_CON] = con_
+        log.info("workspace.rbac_multi_tenant: DB at %s", db_path)
 
     async def _close_workspace_connection(app_: web.Application) -> None:
         con_ = app_.get(APP_WORKSPACE_CON)
         if con_ is None:
             return
         try:
-            con_.close()
+            await asyncio.to_thread(con_.close)
         except Exception as e:
             log.debug("workspace db close failed: %s", e)
 
+    app.on_startup.append(_open_workspace_connection)
     app.on_cleanup.append(_close_workspace_connection)
 
     r = app.router

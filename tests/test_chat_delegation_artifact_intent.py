@@ -1,3 +1,10 @@
+"""The artifact-intent floor: does the deliverable relate to the request at all?
+
+These cases are drawn from real incidents on this machine. The graph/arcade-game
+pair is the one Calvin reported twice; the Teal Tapper pair is the false
+rejection the first version of this gate produced, kept here because a verifier
+that rejects good work is not an improvement on one that accepts bad work.
+"""
 
 from __future__ import annotations
 
@@ -50,18 +57,14 @@ class ArtifactIntentTests(unittest.TestCase):
         """The reported incident: 'make me a graph of current trends' -> a game."""
         with TemporaryDirectory() as tmp:
             root = self._write(tmp, "index.html", ARCADE_GAME)
-            issues = artifact_intent_issues(
-                "make me a graph of current technology trends", root, ["index.html"]
-            )
+            issues = artifact_intent_issues("make me a graph of current technology trends", root, ["index.html"])
         self.assertTrue(issues)
         self.assertIn("index.html", issues[0])
 
     def test_accepts_an_artifact_that_matches_the_request(self):
         with TemporaryDirectory() as tmp:
             root = self._write(tmp, "snake.html", SNAKE_GAME)
-            issues = artifact_intent_issues(
-                "Make a small snake game i can play with arrow keys", root, ["snake.html"]
-            )
+            issues = artifact_intent_issues("Make a small snake game i can play with arrow keys", root, ["snake.html"])
         self.assertEqual(issues, [])
 
     def test_accepts_a_synonym_when_the_requested_filename_was_delivered(self):
@@ -93,9 +96,7 @@ class ArtifactIntentTests(unittest.TestCase):
         page += "</head><body><p>Nothing here.</p></body></html>"
         with TemporaryDirectory() as tmp:
             root = self._write(tmp, "out.html", page)
-            issues = artifact_intent_issues(
-                "build a grid showing quarterly revenue figures", root, ["out.html"]
-            )
+            issues = artifact_intent_issues("build a grid showing quarterly revenue figures", root, ["out.html"])
         self.assertTrue(issues)
 
     def test_silent_when_the_request_is_too_vague_to_judge(self):
@@ -105,9 +106,7 @@ class ArtifactIntentTests(unittest.TestCase):
 
     def test_silent_when_there_are_no_artifacts(self):
         with TemporaryDirectory() as tmp:
-            self.assertEqual(
-                artifact_intent_issues("make me a graph of current trends", Path(tmp), []), []
-            )
+            self.assertEqual(artifact_intent_issues("make me a graph of current trends", Path(tmp), []), [])
 
     def test_silent_for_files_it_cannot_read(self):
         """A PDF cannot be token-checked; guessing about one is worse than
@@ -151,9 +150,7 @@ class ArtifactIntentTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = self._write(tmp, "index.html", ARCADE_GAME)
             self.assertEqual(
-                artifact_intent_issues(
-                    "make me a graph of technology trends", root, ["../../etc/passwd"]
-                ),
+                artifact_intent_issues("make me a graph of technology trends", root, ["../../etc/passwd"]),
                 [],
             )
 

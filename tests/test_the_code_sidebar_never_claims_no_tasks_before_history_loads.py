@@ -21,9 +21,24 @@ CODE_JS = WEB_JS / "unified_code_mode.js"
 HARNESS = REPO_ROOT / "tests" / "web_node" / "code_queue_affinity.mjs"
 SIBLINGS = (
     WEB_JS / "unified_code_lifecycle.js",
+    WEB_JS / "unified_code_artifacts.js",
     WEB_JS / "unified_code_results.js",
     WEB_JS / "unified_code_projects.js",
+    WEB_JS / "unified_code_roster.js",
+    WEB_JS / "unified_code_drawer.js",
+    WEB_JS / "unified_code_agent_chat.js",
+    WEB_JS / "unified_code_cards.js",
+    WEB_JS / "unified_code_live_diff.js",
+    WEB_JS / "unified_code_composer.js",
     WEB_JS / "unified_code_events.js",
+    WEB_JS / "unified_code_live_view.js",
+    WEB_JS / "unified_code_surface.js",
+    WEB_JS / "unified_code_run_stream.js",
+    WEB_JS / "unified_code_questions.js",
+    WEB_JS / "unified_code_controls.js",
+    WEB_JS / "unified_code_history_rows.js",
+    WEB_JS / "unified_code_loading.js",
+    WEB_JS / "unified_code_view_state.js",
 )
 
 
@@ -63,10 +78,7 @@ def test_refresh_marks_the_history_loaded_on_success_and_error_on_failure() -> N
     seen = _drive()["sidebar"]
     assert seen["refreshOk"] is True
     assert seen["stateAfterSuccess"] == "loaded", (
-        "a successful fetch never confirmed the history, so the loading state "
-        "can never end"
+        "a successful fetch never confirmed the history, so the loading state can never end"
     )
     assert seen["refreshFailed"] is False
-    assert seen["stateAfterFailure"] == "error", (
-        "a failed first fetch was left looking like it is still loading"
-    )
+    assert seen["stateAfterFailure"] == "error", "a failed first fetch was left looking like it is still loading"

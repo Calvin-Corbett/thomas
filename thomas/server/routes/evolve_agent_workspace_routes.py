@@ -25,7 +25,9 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core.event_loop_offload import off_loop
 from thomas.forge.anvil import forge_code_deliverables, forge_code_git, forge_code_projects, forge_code_store
+from thomas.server import change_evidence_cache
 
 from .evolve_agent_http_support import git_status_unavailable_response
 from .evolve_agent_run_state import APP_EVOLVE_AGENT_APPROVALS, APP_EVOLVE_AGENT_CONVO, APP_EVOLVE_AGENT_PROJECT
@@ -71,15 +73,30 @@ def build_evolve_agent_workspace_handlers(
         """
         require_api_access(request)
         root = catalog_root()
-        return web.json_response(
-            {
-                "ok": True,
-                "deliverables": forge_code_deliverables.list_deliverables_across(
-                    root,
-                    forge_code_projects.conversation_roots(root),
-                ),
-            }
-        )
+
+        def _walk() -> list[dict[str, Any]]:
+            return forge_code_deliverables.list_deliverables_across(
+                root,
+                forge_code_projects.conversation_roots(root),
+            )
+
+        # Walking every project root for its outputs is filesystem work, and on a
+        # library this size it is seconds of it.
+        return web.json_response({"ok": True, "deliverables": await off_loop("code_deliverables.list", _walk)})
+
+    def _changed_evidence(root: Path, cid: str) -> list[dict[str, object]]:
+        """Read the run's changed files and their diffs. Blocking, by nature.
+
+        Every line of this is git and disk: a status read, then a diff per file.
+        Measured on real projects: 5 files 0.60 s, 12 files 2.2-2.9 s, 50 files
+        9.7-13.3 s. It is one function so the handler makes ONE hop to a worker
+        thread instead of three, and so nothing in here can drift back onto the
+        event loop without moving this call with it.
+        """
+        conv = forge_code_store.load_conversation(root, str(cid)) if cid else None
+        # A build nobody has touched since the last look answers from memory (it cost 15 to 40 s on every open);
+        # anything git could see differently goes to git, as before.
+        return change_evidence_cache.scoped_evidence(root, _conversation_changed_files(conv))
 
     async def changes(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -96,18 +113,8 @@ def build_evolve_agent_workspace_handlers(
             )
         except forge_code_projects.ForgeCodeProjectError as exc:
             return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        conv = forge_code_store.load_conversation(root, str(cid)) if cid else None
-        scoped = _conversation_changed_files(conv)
         try:
-            dirty = forge_code_git.changed_files(root)
-        except forge_code_git.ForgeCodeGitError as exc:
-            return git_status_unavailable_response(exc)
-        if scoped is not None:
-            files = [f for f in dirty if f in scoped]
-        else:
-            files = dirty
-        try:
-            out = forge_code_git.change_evidence(root, files)
+            out = await off_loop("code_changes.evidence", _changed_evidence, root, str(cid))
         except forge_code_git.ForgeCodeGitError as exc:
             return git_status_unavailable_response(exc)
         return web.json_response({"ok": True, "changed": out})
@@ -148,7 +155,11 @@ def build_evolve_agent_workspace_handlers(
         approval = approvals.get(approval_id)
         if isinstance(approval, dict) and approval.get("state") == "consumed" and approval.get("operation") == scope:
             return web.json_response({**(approval.get("result") or {}), "replayed": True})
-        file, error, status_code = _authorize_conversation_revert(
+        # Binding the approval hashes the file and reads git for its diff, so the
+        # authorization itself is blocking work, not just the revert that follows.
+        file, error, status_code = await off_loop(
+            "code_revert.authorize",
+            _authorize_conversation_revert,
             root=root,
             conversation_id=cid,
             file=file,
@@ -161,7 +172,7 @@ def build_evolve_agent_workspace_handlers(
             return web.json_response(error, status=status_code)
         result = None
         try:
-            result = forge_code_git.revert_file(root, file)
+            result = await off_loop("code_revert.file", forge_code_git.revert_file, root, file)
             scope["file"] = file
             approval = approvals.get(approval_id)
             if isinstance(approval, dict):
@@ -208,10 +219,16 @@ def build_evolve_agent_workspace_handlers(
             project_root = project_for_conversation(cid)
         except forge_code_projects.ForgeCodeProjectError as exc:
             return web.json_response({"ok": False, "error": str(exc), "code": "project_unavailable"}, status=409)
-        # The user's work only — never Thomas's internal conversation metadata.
-        files = [f for f in forge_code_git.changed_files(project_root) if not f.startswith(".thomas/")]
+
+        def _commit() -> tuple[list[str], dict[str, str]]:
+            # The user's work only — never Thomas's internal conversation metadata.
+            files = [f for f in forge_code_git.changed_files(project_root) if not f.startswith(".thomas/")]
+            return files, forge_code_git.checkpoint(project_root, files, message)
+
+        # A branch, a staging pass and a commit: the slowest git sequence in the
+        # Code surface, and the one most likely to contend with another worktree.
         try:
-            result = forge_code_git.checkpoint(project_root, files, message)
+            files, result = await off_loop("code_checkpoint.commit", _commit)
         except forge_code_git.ForgeCodeGitError as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=409)
         return web.json_response({"ok": True, **result, "files": files})

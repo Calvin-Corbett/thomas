@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scripts.crew.workboard import board_io as _board_io
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -52,7 +54,9 @@ except Exception:  # pragma: no cover
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 COORDINATION_DIR = ROOT / "runtime" / "coordination"
-LOCK_FILE = COORDINATION_DIR / "workboard_claim.lock"
+# ONE board, ONE lock -- see message.py. A claim write and a message send
+# on different lock files could each revert the other.
+LOCK_FILE = _board_io.LOCK_FILE
 RELEASE_OVERRIDE_AUDIT_LOG = COORDINATION_DIR / "workboard_release_override_audit.jsonl"
 LOCK_TIMEOUT_SECONDS = 10.0
 LOCK_STALE_SECONDS = 60.0
@@ -961,37 +965,9 @@ def _cleanup_auto_inactive_issues_for_tasks(
 
 @contextmanager
 def _file_lock(lock_file: Path, timeout: float = LOCK_TIMEOUT_SECONDS):
-    from contextlib import suppress
-
-    lock_file.parent.mkdir(parents=True, exist_ok=True)
-    fd: int | None = None
-    deadline = time.time() + timeout
-    while True:
-        try:
-            fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            break
-        except FileExistsError:
-            try:
-                age = time.time() - lock_file.stat().st_mtime
-            except FileNotFoundError:
-                age = 0.0
-            if age > LOCK_STALE_SECONDS:
-                with suppress(FileNotFoundError):
-                    lock_file.unlink()
-                continue
-            if time.time() >= deadline:
-                msg = f"timed out waiting for lock: {lock_file}"
-                raise TimeoutError(msg) from None
-            time.sleep(0.1)
-
-    try:
+    """Delegate to board_io's reentrant lock so nested board writes do not deadlock."""
+    with _board_io.file_lock(lock_file, timeout):
         yield
-    finally:
-        if fd is not None:
-            os.close(fd)
-        with suppress(FileNotFoundError):
-            lock_file.unlink()
-
 
 def _atomic_write(path: Path, text: str) -> None:
     # board_publish: replace-with-retry, then in-place when the rename is denied (2026-09-05)

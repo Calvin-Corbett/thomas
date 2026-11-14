@@ -31,12 +31,29 @@ DEFAULT_TASK_MANAGER_AGENT = "thomas"
 DEFAULT_ORCHESTRATOR_AGENTS = ("thomas", "task-manager-agent", "task-manager")
 DEFAULT_ORCHESTRATOR_ERROR = "auto-start is disabled for orchestrator agents"
 MODEL_ALIAS_OWNER_SUFFIX_RE = re.compile(r"^[\s_-]+\d+$")
-DEFAULT_MAX_IDLE_MINUTES = 1.0
+# How long an agent may be quiet before the sweep calls its work abandoned and
+# hands the task to somebody else.
+#
+# This was 1.0. An agent that pauses to think, runs a test suite, or waits on the
+# gate ladder is quiet for longer than a minute as a matter of course, so the sweep
+# declared live agents dead and reassigned work they were holding. Measured on
+# 2026-09-09: two agents swept in one pass, one of them at 1.01 minutes idle while
+# actively committing. The damage is not just the reassignment -- the task lands in
+# Up For Grabs while still in Active Tasks, the board is then self-inconsistent, and
+# every claim gate refuses that agent until a human untangles it. An agent thinking
+# for a minute could put itself in a state it could not commit its way out of.
+#
+# Abandonment and liveness are different questions and cannot share a number.
+# 30 minutes matches the repo's existing notion of recent activity
+# (agent_presence.DEFAULT_RECENT_ACTIVITY_SECONDS = 1800) and the scope-hold window,
+# so a silent agent stops holding scope and stops holding tasks at the same moment
+# rather than at two thresholds that disagree.
+DEFAULT_MAX_IDLE_MINUTES = 30.0
 DEFAULT_MONITOR_INTERVAL_SECONDS = 30.0
 DEFAULT_MONITOR_CYCLES = 1
-DEFAULT_MAX_AGENT_SILENCE_MINUTES = 5.0
+DEFAULT_MAX_AGENT_SILENCE_MINUTES = 30.0
 DEFAULT_MAX_DISPATCH_PER_CYCLE = 2
-DEFAULT_SESSION_LEASE_MINUTES = 5.0
+DEFAULT_SESSION_LEASE_MINUTES = 30.0
 DEFAULT_INFERRED_EXPIRY_MINUTES = 10.0
 TASK_PLANS_HEADING = "Task Plans"
 TASK_PROBLEMS_HEADING = "Task Problems"

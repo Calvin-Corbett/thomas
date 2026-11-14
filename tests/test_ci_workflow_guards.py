@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+import yaml
 
 
 def test_nightly_reliability_uses_strict_security_check() -> None:
@@ -41,3 +44,44 @@ def test_robustness_gates_publish_core_python_quality_signals() -> None:
     assert "thomas/core/config.py \\" in text
     assert "output/ci/python-bandit-core.json" in text
     assert "actions/upload-artifact@v4" in text
+
+
+_REPO = Path(__file__).resolve().parents[1]
+_WORKFLOWS = _REPO / ".github" / "workflows"
+
+
+def _steps(workflow: str) -> list[tuple[str, dict]]:
+    doc = yaml.safe_load((_WORKFLOWS / workflow).read_text(encoding="utf-8-sig"))
+    return [(job_id, step) for job_id, job in doc["jobs"].items() for step in job.get("steps") or []]
+
+
+def _missing_test_files(workflow: str, step_name: str) -> list[str]:
+    runs = [str(step.get("run") or "") for _, step in _steps(workflow) if step.get("name") == step_name]
+    assert runs, f"{workflow} has no step named {step_name!r}"
+    missing = []
+    for run in runs:
+        for line in run.splitlines():
+            if line.strip().startswith("#"):
+                continue
+            missing.extend(name for name in re.findall(r"\btests/[\w./-]+\.py", line) if not (_REPO / name).is_file())
+    return missing
+
+
+def test_protocol_safety_step_names_only_test_files_that_exist() -> None:
+    # pytest stops on "file or directory not found", so one stale name aborts the
+    # step before it runs the tests that do exist. This step named two deleted
+    # files and never reached its real tests.
+    assert _missing_test_files("robustness-gates.yml", "Protocol safety tests") == []
+
+
+def test_board_and_ledger_gates_are_scoped_off_main_not_removed() -> None:
+    # The public main branch publishes an empty board and an empty module audit
+    # ledger, so these gates can never pass there. They stay on everywhere else.
+    steps = ("Workboard changed-file ownership gate", "Workboard audit backstop gate", "Module audit gate")
+    gates_doc = yaml.safe_load((_WORKFLOWS / "gates.yml").read_text(encoding="utf-8-sig"))
+    found = {"workboard-changed-files-gate": gates_doc["jobs"]["workboard-changed-files-gate"].get("if")}
+    found.update(
+        {step["name"]: step.get("if") for _, step in _steps("robustness-gates.yml") if step.get("name") in steps}
+    )
+    off_main = "github.ref_name != 'main'"
+    assert found == {name: off_main for name in ("workboard-changed-files-gate", *steps)}

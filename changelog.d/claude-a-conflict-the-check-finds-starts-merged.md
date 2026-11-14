@@ -1,0 +1,3 @@
+### Fixed
+
+- **A change the check before your card cannot apply to dev comes back with dev merged in.** When the check found that a finished Thomas project no longer applied to dev, it sent the change back as an ordinary finding that told the team to run `git merge dev`, so the round never got the merge the server does for a promoter's own dev-moved refusal. It now takes that dev-moved round: dev is merged into the team's copy first, and the round's message names the files still holding conflict markers. The same happens when a refused change is handed in again. The dev-moved message no longer says the promoter refused the change, because when the check finds the conflict, the promoter never saw it.

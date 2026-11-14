@@ -40,7 +40,14 @@ def test_claude_cmd_requests_partial_messages(tmp_path):
         captured["cmd"] = cmd
         return 0, ""
 
-    dispatch_via_claude_cli("do x", cwd=str(tmp_path), dry_run=False, runner=runner, claude_bin="claude")
+    dispatch_via_claude_cli(
+        "do x",
+        cwd=str(tmp_path),
+        definition="Test the streaming CLI arguments in this temporary repository.",
+        dry_run=False,
+        runner=runner,
+        claude_bin="claude",
+    )
     assert "cmd" in captured, "the runner was never reached; dispatch refused before invoking claude"
     cmd = captured["cmd"]
     assert "--include-partial-messages" in cmd
@@ -64,7 +71,7 @@ def test_stream_event_text_delta_becomes_progressive_say():
             }
         )
     )
-    assert out == [{"fc": "say", "text": "Hello", "delta": True}]
+    assert out == [{"fc": "say", "text": "Hello", "delta": True, "source": "model"}]
 
 
 def test_text_delta_preserves_inter_token_spaces():
@@ -79,7 +86,7 @@ def test_text_delta_preserves_inter_token_spaces():
             }
         )
     )
-    assert out == [{"fc": "say", "text": " world", "delta": True}]
+    assert out == [{"fc": "say", "text": " world", "delta": True, "source": "model"}]
 
 
 def test_non_text_block_deltas_are_ignored():
@@ -130,8 +137,8 @@ def test_partial_deltas_suppress_the_duplicate_complete_block():
     # the complete block for the SAME text arrives right after the deltas
     whole = tr(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "I'll edit it."}]}}))
 
-    assert d1 == [{"fc": "say", "text": "I'll ", "delta": True}]
-    assert d2 == [{"fc": "say", "text": "edit it.", "delta": True}]
+    assert d1 == [{"fc": "say", "text": "I'll ", "delta": True, "source": "model", "text_block": 0}]
+    assert d2 == [{"fc": "say", "text": "edit it.", "delta": True, "source": "model", "text_block": 0}]
     assert whole == []  # suppressed — the deltas already carried it
 
 
@@ -145,7 +152,7 @@ def test_complete_block_emitted_when_no_deltas_preceded_it():
 
     tr = ClaudeStreamTranslator()
     whole = tr(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Done."}]}}))
-    assert whole == [{"fc": "say", "text": "Done."}]
+    assert whole == [{"fc": "say", "text": "Done.", "source": "model"}]
 
 
 def test_gpt_path_streams_progressive_say_deltas_then_does_not_duplicate():
@@ -165,8 +172,8 @@ def test_gpt_path_streams_progressive_say_deltas_then_does_not_duplicate():
     # the deltas surfaced IMMEDIATELY, before any boundary
     says = [e for e in events if e.get("fc") == "say"]
     assert says == [
-        {"fc": "say", "text": "Editing ", "delta": True},
-        {"fc": "say", "text": "now.", "delta": True},
+        {"fc": "say", "text": "Editing ", "delta": True, "source": "model"},
+        {"fc": "say", "text": "now.", "delta": True, "source": "model"},
     ]
     # a tool boundary flushes — but must NOT re-emit the streamed prose as a block
     tr.feed(EventType.TOOL_START.value, {"tool_name": "fs.write_file", "args": {"file_path": "a.py"}})

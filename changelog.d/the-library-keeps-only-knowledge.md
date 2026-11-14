@@ -1,0 +1,2 @@
+### Fixed
+- Your library now keeps only finished answers to questions you asked. Thomas used to save the answer of every run, including runs its own checks then failed, its own retry messages, Autopilot rounds and steering updates, and replies that only said it could not do the work. Since your library goes to the model again, those replies reached it as if they were knowledge. Tests no longer write into the library of the checkout they run in, and the first message of a run carries your library once instead of twice. Entries already in your library are left as they are.

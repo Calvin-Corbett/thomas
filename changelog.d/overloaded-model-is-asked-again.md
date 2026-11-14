@@ -1,0 +1,2 @@
+### Fixed
+- When ChatGPT answers that it is overloaded before any part of its answer arrives, Thomas now asks again after 15 seconds, then after 30, instead of ending the run. On 2026-10-26 eight Build runs ended on "Our servers are currently overloaded. Please try again later." by mid-morning, and each team then started its next run from scratch, reading its way back in. A failure after part of the answer has arrived, a rate limit, a sign-in problem, or anything else that is not an overload or a server error still ends the call at once.

@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Thomas project is no longer asked to create the files other projects changed.** Every project's first message is your request followed by Thomas's own notes, including the list of files other running projects have changed. The completion gate read the notes as part of the request, so those files became required outputs of this project ("`tests/test_build_revoked_login_ends.py` exists and is non-empty when the work is done"), and no project could finish. The notes now sit between markers the gate reads past, also where Autopilot quotes the message back; a project started before the markers still has its list of other projects' files left out.

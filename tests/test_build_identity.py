@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from tests.web_fixtures.chat_sources import read_chat_sources
 from thomas.core import build_info as build_info_module
 from thomas.core.build_info import build_info, build_label
+from thomas.core.git_process import TIMED_OUT_RETURNCODE, GitResult
+
+# The seam is run_git (thomas/core/git_process.py). build_info used to call
+# subprocess.run directly, and these tests patched that; it does not any more,
+# because subprocess.run's timeout is not an upper bound on a git reached
+# through a launcher. run_git never raises -- a missing git and a git that hangs
+# both come back as a GitResult -- so the fakes below return, they do not throw.
 
 WEB = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web"
 CHAT_HTML = WEB / "chat.html"
@@ -42,19 +49,15 @@ def test_build_info_names_the_commit_not_just_the_version() -> None:
     assert info["root"]
 
 
-def test_identity_survives_a_missing_git() -> None:
+def test_identity_survives_a_missing_git(monkeypatch: pytest.MonkeyPatch) -> None:
     """An installed copy has no repository. It still knows its version, and
     reporting that must never raise -- health depends on this call."""
 
-    def no_git(*_args: object, **_kwargs: object) -> object:
-        raise FileNotFoundError("git is not installed")
+    def no_git(*_args: object, **_kwargs: object) -> GitResult:
+        return GitResult(1, "", "FileNotFoundError: git is not installed", False, 0.0, spawn_failed=True)
 
-    original = subprocess.run
-    subprocess.run = no_git  # type: ignore[assignment]
-    try:
-        info = build_info()
-    finally:
-        subprocess.run = original  # type: ignore[assignment]
+    monkeypatch.setattr(build_info_module, "run_git", no_git)
+    info = build_info()
 
     assert info["version"]
     assert info["commit"] == ""
@@ -66,10 +69,10 @@ def test_identity_survives_a_git_that_hangs(monkeypatch: pytest.MonkeyPatch) -> 
     """Identity is a display nicety. It must never be why the server is slow to
     answer that it is alive."""
 
-    def timed_out(*_args: object, **_kwargs: object) -> object:
-        raise subprocess.TimeoutExpired(cmd="git", timeout=2.0)
+    def timed_out(*_args: object, **_kwargs: object) -> GitResult:
+        return GitResult(TIMED_OUT_RETURNCODE, "", "git did not finish within 2.0s and was abandoned", True, 2.0)
 
-    monkeypatch.setattr(build_info_module.subprocess, "run", timed_out)
+    monkeypatch.setattr(build_info_module, "run_git", timed_out)
     info = build_info()
 
     assert info["version"]
@@ -77,16 +80,15 @@ def test_identity_survives_a_git_that_hangs(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_build_info_is_resolved_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Boot-time identity cannot change while the process runs, and no health
-    check should be paying for a subprocess."""
+    """The cached boot identity cannot change while the process runs."""
     calls = {"n": 0}
-    original = build_info_module.subprocess.run
+    original = build_info_module.run_git
 
-    def counted(*args: object, **kwargs: object) -> object:
+    def counted(*args: object, **kwargs: object) -> GitResult:
         calls["n"] += 1
         return original(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(build_info_module.subprocess, "run", counted)
+    monkeypatch.setattr(build_info_module, "run_git", counted)
     build_info()
     after_first = calls["n"]
     for _ in range(5):
@@ -125,9 +127,12 @@ def test_the_badge_is_not_styled_inline() -> None:
 def test_the_badge_reports_the_commit_and_the_port() -> None:
     """The port is how someone refers to an instance ("I'm on 8899"); the commit
     is what makes two instances on the same version distinguishable."""
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     assert "mountBuildBadge" in text
     assert "location.port" in text
     assert "build.commit" in text
     assert "uncommitted" in text
+    assert "build.stale === true" in text
+    assert "Restart Thomas" in text
+    assert "setInterval(refreshBuildBadge, 30000)" in text

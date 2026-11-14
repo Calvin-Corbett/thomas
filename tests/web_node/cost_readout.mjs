@@ -74,4 +74,44 @@ const report = {
     session_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   }), table),
 };
+// Exercise the shipped stream wrapper and page readout while navigation races
+// an old reply. A receipt belongs to its conversation, never the visible mode.
+let readout = null;
+const composerParent = { parentElement: { insertBefore(element) { readout = element; } }, nextSibling: null };
+const composer = { closest() { return null; }, parentElement: composerParent };
+const streams = [];
+const page = {
+  window: { ThomasChatStreamConsumer: { consume(_res, callback) { streams.push(callback); } } },
+  document: {
+    readyState: 'complete',
+    getElementById(id) { return id === 'tc-input' ? composer : id === 'thomas-cost-readout' ? readout : null; },
+    // The composer still has Build's placeholder during the mode transition.
+    querySelector() { return null; },
+    createElement() { return { textContent: '', hidden: true, style: {}, setAttribute() {}, addEventListener() {} }; },
+  },
+  console,
+};
+vm.createContext(page);
+vm.runInContext(source, page);
+const pageCost = page.window.ThomasCostReadout;
+const consumer = page.window.ThomasChatStreamConsumer;
+pageCost.setContext({ sessionId: 'chat-a', surfaceMode: 'chat' });
+consumer.consume(null, () => {});
+pageCost.setContext({ sessionId: 'chat-b', surfaceMode: 'chat' });
+streams[0]({ type: 'done', session_id: 'chat-a', run_usage: { prompt_tokens: 10, completion_tokens: 2 } });
+report.background_reply_hidden = readout.hidden && readout.textContent === '';
+pageCost.setContext({ sessionId: 'chat-a', surfaceMode: 'chat' });
+report.return_to_original_cost = readout.textContent;
+pageCost.setContext({ sessionId: 'chat-a', surfaceMode: 'code' });
+report.build_hides_chat_cost = readout.hidden && readout.textContent === '';
+pageCost.setContext({ sessionId: 'chat-a', surfaceMode: 'work' });
+report.work_hides_chat_cost = readout.hidden;
+pageCost.setContext({ sessionId: 'chat-b', surfaceMode: 'chat' });
+consumer.consume(null, () => {});
+streams[1]({ type: 'done', run_usage: { prompt_tokens: 30, completion_tokens: 4 } });
+report.second_chat_cost = readout.textContent;
+pageCost.setContext({ sessionId: '', surfaceMode: 'chat' });
+report.new_chat_hides_old_cost = readout.hidden && readout.textContent === '';
+pageCost.setContext({ sessionId: 'chat-a', surfaceMode: 'chat' });
+report.original_receipt_preserved = readout.textContent === report.return_to_original_cost;
 console.log(JSON.stringify(report));

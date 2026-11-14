@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, quote, urljoin, urlparse
 import httpx
 
 from thomas.core.config import AppConfig
+from thomas.core.plugin_data import data_dir_beside, keep_plugin_data
 from thomas.server.desktop_plugins_manifest import (
     _DEFAULT_PLUGIN_STORE_API_KEY,
     _LEFT_NAV_BEHAVIORS,
@@ -35,6 +36,7 @@ from thomas.server.desktop_plugins_manifest import (
     load_bundled_desktop_plugin_manifest,
     load_desktop_plugin_manifest_from_data,
 )
+from thomas.server.install_transaction import install_transaction
 from thomas.server.net_safety import request_validated
 
 
@@ -119,6 +121,8 @@ def _delete_installed_plugin_payload(config: AppConfig, plugin_id: str) -> bool:
     destination_dir = _installed_plugin_dir(config, plugin_id)
     existed = destination_dir.exists()
     if destination_dir.exists():
+        # What you made with the plugin is moved out first. If that fails this raises, and nothing is deleted.
+        keep_plugin_data(destination_dir, data_dir_beside(destination_dir))
         shutil.rmtree(destination_dir, ignore_errors=True)
     _remove_installed_record(config, plugin_id)
     return existed
@@ -198,9 +202,7 @@ def _normalize_installed_record(record: dict[str, Any]) -> dict[str, Any]:
         # Signed installs predate the verified flag, so only an explicit False
         # (the unverified community tier) reads as unverified.
         "verified": record.get("verified") is not False,
-        "agent_plugin": record.get("agent_plugin")
-        if isinstance(record.get("agent_plugin"), dict)
-        else None,
+        "agent_plugin": record.get("agent_plugin") if isinstance(record.get("agent_plugin"), dict) else None,
         "version": _safe_text(record.get("version")) or "0.0.0",
         "publisher_id": _safe_text(record.get("publisher_id")),
         "publisher_name": _safe_text(record.get("publisher_name")),
@@ -248,6 +250,7 @@ def is_plugin_enabled(config: AppConfig, plugin_id: str) -> bool:
 
 def _copy_plugin_tree(source_dir: Path, destination_dir: Path) -> None:
     if destination_dir.exists():
+        keep_plugin_data(destination_dir, data_dir_beside(destination_dir))  # an update replaces the folder too
         shutil.rmtree(destination_dir)
     destination_dir.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source_dir, destination_dir)
@@ -353,15 +356,22 @@ def install_bundled_plugin(
     if manifest.sha256 and manifest.sha256 != actual_sha256:
         raise ValueError(f"Bundled plugin '{plugin_id}' failed checksum verification")
     destination_dir = _installed_plugin_dir(config, manifest.plugin_id)
-    _copy_plugin_tree(source_dir, destination_dir)
-    manifest_payload = _manifest_with_runtime_hash(manifest, actual_sha256)
-    _write_json_file(destination_dir / "manifest.json", manifest_payload)
-    record = _build_installed_record(
-        manifest,
-        actual_sha256=actual_sha256,
-        source={"type": "bundled", "directory": str(source_dir)},
-    )
-    _replace_installed_record(config, record)
+    # The installed record is written last, and it is the only handle anything
+    # has on this plugin: uninstall_plugin needs an id it can only get from the
+    # record, and _prune_orphan_dependency_plugins iterates records rather than
+    # the filesystem. So a failure between the copy and the record left a full
+    # plugin tree that nothing could see or remove (phase 3.4).
+    with install_transaction(f"bundled-plugin:{manifest.plugin_id}") as tx:
+        _copy_plugin_tree(source_dir, destination_dir)
+        tx.undo(lambda: shutil.rmtree(destination_dir, ignore_errors=True))
+        manifest_payload = _manifest_with_runtime_hash(manifest, actual_sha256)
+        _write_json_file(destination_dir / "manifest.json", manifest_payload)
+        record = _build_installed_record(
+            manifest,
+            actual_sha256=actual_sha256,
+            source={"type": "bundled", "directory": str(source_dir)},
+        )
+        _replace_installed_record(config, record)
     return _normalize_installed_record(record)
 
 
@@ -445,10 +455,18 @@ def install_plugin_bundle_bytes(
         )
 
         destination_dir = _installed_plugin_dir(config, manifest.plugin_id)
-        _copy_plugin_tree(plugin_root, destination_dir)
-        _write_json_file(destination_dir / "manifest.json", _manifest_with_runtime_hash(manifest, actual_sha256))
-        record = _build_installed_record(manifest, actual_sha256=actual_sha256, source=source)
-        _replace_installed_record(config, record)
+        # Same reason as install_bundled_plugin: without the record nothing can
+        # name this plugin again, so the copy must come back out if the record
+        # never lands. Dependencies installed above are deliberately NOT rolled
+        # back — each wrote its own record, so they remain uninstallable-by-name
+        # rather than invisible, and _prune_orphan_dependency_plugins collects
+        # any the failed dependent was the only one requiring.
+        with install_transaction(f"desktop-plugin:{manifest.plugin_id}") as tx:
+            _copy_plugin_tree(plugin_root, destination_dir)
+            tx.undo(lambda: shutil.rmtree(destination_dir, ignore_errors=True))
+            _write_json_file(destination_dir / "manifest.json", _manifest_with_runtime_hash(manifest, actual_sha256))
+            record = _build_installed_record(manifest, actual_sha256=actual_sha256, source=source)
+            _replace_installed_record(config, record)
         return _normalize_installed_record(record)
 
 

@@ -1,12 +1,20 @@
 import asyncio
 import json
 
+import pytest
+
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.registry import ToolRegistry
+
+
+@pytest.fixture(autouse=True)
+def _run_from_an_empty_folder(tmp_path, monkeypatch):
+    """A run's finish check walks the working directory; run from a copy of the repo, that is the whole repo."""
+    monkeypatch.chdir(tmp_path)
 
 
 class _SlowEchoTool(Tool):

@@ -11,19 +11,19 @@ from thomas.agent.chat_dispatcher import dispatch_async
 from thomas.agent.instruction_contract import apply_root_instructions
 from thomas.core import task_bot_runtime, task_checklist
 from thomas.core.file_access import PROJECT, READ_ONLY, clamp_file_access_level
+from thomas.core.file_access import configured_file_access_level as _configured_level
 from thomas.core.task_titling import derive_task_title
 from thomas.marketplace.orchestrator.bot_roster import pick_bot_for_specialist
 from thomas.server import chat_delegation_live_repo as _live_repo_module
 from thomas.server import chat_delegation_runner as _runner_module
+from thomas.server.chat_delegation_build_transcript import tee_to_build_session
 from thomas.server.chat_delegation_canvas import (
     canvas_finish,
     canvas_start,
     run_canvas_worker,
 )
 from thomas.server.chat_delegation_canvas_completion import complete_canvas_delivery
-from thomas.server.chat_delegation_checklist import (
-    TASK_TYPE_INSTRUCTION,
-)
+from thomas.server.chat_delegation_checklist import TASK_TYPE_INSTRUCTION
 from thomas.server.chat_delegation_checklist import (  # re-exported for the checklist gate
     extract_read_paths as _extract_read_paths,
 )
@@ -51,9 +51,7 @@ from thomas.server.chat_delegation_live_repo import (  # noqa: F401
     _live_repo_workspace_mtimes,
     _with_live_repo_change_requirement,
 )
-from thomas.server.chat_delegation_runner import (  # noqa: F401
-    _next_worker_event,
-)
+from thomas.server.chat_delegation_runner import _next_worker_event  # noqa: F401
 from thomas.server.chat_delegation_session import (  # noqa: F401
     _TERMINAL_TASK_STATES,
     _heartbeat_age_s,
@@ -101,7 +99,7 @@ _POLICY_REFUSAL_CLAUSE = (
 
 def _sync_runner_legacy_globals() -> None:
     """Keep old chat_delegation monkeypatch surfaces effective after the module split."""
-    _runner_module.run_agent_worker_events = run_agent_worker_events
+    _runner_module.run_agent_worker_events = tee_to_build_session(run_agent_worker_events)
     _runner_module._WORKER_FIRST_EVENT_TIMEOUT_S = _WORKER_FIRST_EVENT_TIMEOUT_S
     _runner_module._WORKER_IDLE_EVENT_TIMEOUT_S = _WORKER_IDLE_EVENT_TIMEOUT_S
     _runner_module._replan_prompt = _replan_prompt
@@ -149,14 +147,14 @@ def apply_task_update(
         return {"ok": False, "error": f"No running task matches reference '{task_ref}'."}
     root = repo_root
     try:
+        from thomas.server.chat_self_project import steer, stop  # a Thomas project's own steer and Stop
+
         if cancel:
-            task_bot_runtime.request_cancel(eid, actor="user", repo_root=root)
-            return {"ok": True, "execution_id": eid, "action": "cancel"}
+            return stop(eid, root)
         text = str(update or "").strip()
         if not text:
             return {"ok": False, "error": "No update instruction was provided."}
-        task_bot_runtime.steer_execution(eid, text, actor="user", repo_root=root)
-        return {"ok": True, "execution_id": eid, "action": "steer"}
+        return steer(eid, text, root)
     except ValueError as exc:
         return {"ok": False, "execution_id": eid, "error": str(exc)}
     except FileNotFoundError as exc:
@@ -226,6 +224,7 @@ async def start_background_delegation(
                 file_access=file_access,
                 runtime_policy=runtime_policy,
                 recent_messages=recent_messages,
+                autonomy_level=autonomy_level,
             )
         except (RuntimeError, OSError, ValueError, TypeError) as exc:
             log.warning("Canvas worker failed, falling back to agent worker: %s", exc, exc_info=True)
@@ -366,6 +365,7 @@ async def _start_canvas_worker_delegation(
     file_access: int | None = None,
     runtime_policy: dict[str, Any] | None = None,
     recent_messages: list[dict[str, Any]] | None = None,
+    autonomy_level: int = 4,
 ) -> dict[str, Any]:
     """Stream a reviewed HTML document to Canvas, then persist its deliverable."""
     from thomas.server.chat_runtime_policy import tool_policy_from_payload
@@ -373,7 +373,7 @@ async def _start_canvas_worker_delegation(
     tool_policy = tool_policy_from_payload((runtime_policy or {}).get("tools"))
     if tool_policy is not None and not tool_policy.allow_file_write:
         raise PermissionError("allow_file_write policy denied Canvas artifact delivery")
-    effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
+    effective_file_access = clamp_file_access_level(file_access if file_access is not None else _configured_level())
     if effective_file_access == READ_ONLY:
         raise PermissionError("read_only file access denied Canvas artifact delivery")
     root = _resolve_repo_root(repo_root)
@@ -398,6 +398,7 @@ async def _start_canvas_worker_delegation(
             "requested_profile": str(profile or ""),
             "requested_model_id": str(model_id or ""),
             "file_access": effective_file_access,
+            "autonomy_level": autonomy_level,
         },
         repo_root=root,
     )
@@ -559,7 +560,7 @@ async def _start_agent_worker_delegation(
 ) -> dict[str, Any]:
     root = _resolve_repo_root(repo_root)
     targets_live_repo = str(workspace or "isolated").strip().lower() == "project"
-    effective_file_access = clamp_file_access_level(file_access if file_access is not None else 1)
+    effective_file_access = clamp_file_access_level(file_access if file_access is not None else _configured_level())
     runtime_profile = _agent_worker_runtime_profile(
         autonomy_level=autonomy_level,
         file_access=file_access,
@@ -592,7 +593,13 @@ async def _start_agent_worker_delegation(
 
     if targets_live_repo and effective_file_access < PROJECT:
         blocker = "project_file_access_required"
-        summary = "This task targets the project workspace, but project file access is not enabled."
+        # Names what it would change, whose setting stopped it, and both ways
+        # forward. The old wording named an internal control and offered nothing.
+        summary = (
+            "This task would change Thomas's own source code, and Thomas's file access is set "
+            "below the level that allows that. Raise the file-access level to 'Project' to let it, "
+            "or ask for this as a new project and Thomas will build it in one instead."
+        )
         task_bot_runtime.fail_execution(
             execution_id,
             actor=bot.name,
@@ -635,8 +642,28 @@ async def _start_agent_worker_delegation(
     await emitter.started(record, specialist_id=specialist_id, bot=bot)
 
     # Normal deliverables run in a clean per-task workspace; self-development uses the
-    # live checkout directly and is gated later on actual source-file changes.
-    work_dir = root if targets_live_repo else _ensure_task_workspace(execution_id)
+    # green clone (never the live checkout) and is gated on changes made there. A code
+    # task instead gets a real project, because Build only lists conversations under a
+    # project root -- run in a bare workspace it sat empty for the whole life of a run.
+    from thomas.server.chat_delegation_build_session import prepare_workspace_async
+
+    workspace_plan = await prepare_workspace_async(
+        app=app,
+        specialist_id=specialist_id,
+        targets_live_repo=targets_live_repo,
+        title=derive_task_title(display_title or prompt),
+        repo_root=root,
+        execution_id=execution_id,
+        task_workspace=_ensure_task_workspace,
+    )
+    work_dir = workspace_plan.work_dir
+    if workspace_plan.refusal:  # a self-fix with no private copy fails; it never runs in the live checkout
+        task_bot_runtime.fail_execution(
+            execution_id, actor=bot.name, summary=workspace_plan.refusal, blocker="green_unavailable", repo_root=root
+        )
+        record = _normalize_record(task_bot_runtime.get_execution(execution_id, root))
+        await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=workspace_plan.refusal)
+        return record
     _os_name = _platform.system() or "this"
     _shell_hint = (
         "Windows (shell commands run in cmd.exe / PowerShell — do NOT use Unix-only "
@@ -654,9 +681,9 @@ async def _start_agent_worker_delegation(
         "research, do not inspect the empty workspace and do not create files; return "
         "the complete substantive answer as text. "
         f"You are running on {_shell_hint}. "
-        "HARD RULE — creating or editing files: you MUST use the `fs.write_file` "
-        "tool (pass `path` and `content`); writing to a nested path creates the "
-        "folders for you. Use `fs.list_dir` to inspect and `fs.read_file` to read. "
+        "HARD RULE - editing files: patch an EXISTING file with `diff.create`; use `fs.write_file` "
+        "(pass `path`/`content`; nested paths make folders) only for a NEW file, or with "
+        "`replace_whole_file: true` for a full rewrite. Use `fs.list_dir` to inspect and `fs.read_file` to read. "
         "WEB CAPABILITY - browser tools are available for web tasks. Use "
         "`browser.open` with an http(s) URL, then `browser.extract` with a CSS "
         "selector to read specific page content. Use `browser.click`, "
@@ -696,31 +723,25 @@ async def _start_agent_worker_delegation(
     )
     if targets_live_repo:
         instructions = (
-            "You are a background worker doing Thomas self-development in the live "
-            f"Thomas repo: {work_dir}. This IS a source repository. Inspect the live "
-            "code before changing it, keep edits tightly scoped, and do not claim "
-            "success unless live repo files were actually changed and verified. "
-            f"You are running on {_shell_hint}. "
-            "HARD RULE - creating or editing files: use `fs.write_file` for ordinary "
-            "project files. For protected Thomas runtime paths, use "
-            "`fs.write_protected_file` with a clear reason; if native authorization is "
-            "unavailable or denied, report that blocker honestly instead of writing a "
-            "sandbox substitute. NEVER use shell commands such as printf, echo, touch, "
-            "cat, tee, redirection, or heredocs to create or edit files. Reserve "
-            "`shell.exec` ONLY for read-only inspection commands and tests/builds. "
-            "Browser tools are available for web research: use `browser.open` with "
-            "an http(s) URL and `browser.extract` with a CSS selector instead of "
-            "claiming that browsing is outside your capabilities. "
-            "Follow explicitly ordered tool steps and exact filenames; use real tool "
-            "results rather than placeholders, then read back and correct the exact "
-            "requested artifact before finishing. "
-            "If you cannot modify the live repo, create "
-            f"`runtime/self_development/{execution_id}/SELF_DEVELOPMENT_REPORT.md` "
-            "explaining the blocker, but do not say the requested fix is done. "
+            "You are a background worker doing Thomas self-development in green, a private copy of the "
+            f"Thomas repo at its last commit: {work_dir}. This IS a source repository. The running Thomas "
+            "is not touched: when you finish, your change is sent to the owner for approval. Inspect the "
+            "code before changing it, keep edits tightly scoped, and do not claim success unless files "
+            f"in this copy were actually changed and verified. You are running on {_shell_hint}. "
+            "HARD RULE - editing files: patch an EXISTING file with `diff.create` (Thomas's own code included); "
+            "create a brand-new file with `fs.write_file`; pass `replace_whole_file: true` only for a full rewrite. "
+            "NEVER use shell commands such as printf, echo, touch, cat, tee, "
+            "redirection, or heredocs to create or edit files. Reserve `shell.exec` ONLY for read-only "
+            "inspection commands and tests/builds. Browser tools are available for web research: use "
+            "`browser.open` with an http(s) URL and `browser.extract` with a CSS selector instead of "
+            "claiming that browsing is outside your capabilities. Follow explicitly ordered tool steps "
+            "and exact filenames; use real tool results rather than placeholders, then read back and "
+            "correct the exact requested artifact before finishing. If you cannot make the change, "
+            f"create `runtime/self_development/{execution_id}/SELF_DEVELOPMENT_REPORT.md` explaining "
+            "the blocker, but do not say the requested fix is done. "
             + _POLICY_REFUSAL_CLAUSE
-            + "Do not address the user conversationally. End with a one-line summary of "
-            "the live files changed and verification run, or the blocker encountered. "
-            + quality_tier_clause(effort, autonomy_level)
+            + "Do not address the user conversationally. End with a one-line summary of the files "
+            "changed and verification run, or the blocker encountered. " + quality_tier_clause(effort, autonomy_level)
         )
 
     # A bounded transcript is evidence for the model-authored task contract. No
@@ -734,7 +755,9 @@ async def _start_agent_worker_delegation(
     # fold them into its system prompt. Empty workspaces degrade cleanly (no-op).
     if task_checklist.checklists_enabled():  # the worker labels its own task type; no extra model call
         instructions += TASK_TYPE_INSTRUCTION
-    contract_block = task_bot_runtime.task_checklist_runtime.attach_contract(execution_id, prompt, work_dir, repo_root=root)
+    contract_block = task_bot_runtime.task_checklist_runtime.attach_contract(
+        execution_id, prompt, work_dir, repo_root=root
+    )
     if contract_block:  # what "done" means, fixed before the worker starts (see acceptance_contract)
         instructions = f"{instructions}\n\n{contract_block}"
     instructions = apply_root_instructions(instructions, cwd=work_dir)

@@ -1,0 +1,3 @@
+### Added
+- The existing Marketplace now displays live kernel seams, plugin-system providers, mounted plugins, supervised plugin states, and plugins contributing no hooks.
+- Installed supervised plugins have Unplug, Replug, and Reload controls that refresh live status and report route errors without restarting Thomas. Action results and errors survive Marketplace redraws, while a failed status refresh retains the last status and restores the controls. Sync installed plugins reconciles installation changes without restarting. When none are supervised, Marketplace names the kernel-plugin installer and distinguishes it from the existing bundle import controls.

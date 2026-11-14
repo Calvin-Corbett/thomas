@@ -18,7 +18,6 @@ import asyncio
 import json
 import logging
 import re
-import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -29,6 +28,27 @@ from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.memory_layers import MemoryContext, MemoryCoordinator
 from thomas.chat.thinking import ThinkingTracker
 from thomas.core.autonomy import chat_delegation_directive
+from thomas.marketplace.orchestrator.background_completions import (  # noqa: F401
+    _COMPLETED_STATES,
+    _FAILED_STATES,
+    _FINISHED_STATES,
+    _GENERIC_PROGRESS,
+    _STATUS_ACTIVE_STATES,
+    _STATUS_BUCKET_CAP,
+    _STATUS_COMPLETED_STATES,
+    _STATUS_FAILED_STATES,
+    _bucket_background_rows,
+    _build_completion_note,
+    _collect_unreported_completions,
+    _completion_delivery_line,
+    _completion_detail,
+    _displayed_completion_ids,
+    _mark_completion_reported,
+    _mark_completions_reported,
+    _reported_completions,
+    _summarize_background_status,
+)
+from thomas.marketplace.orchestrator.conversation_memory import memory_callbacks
 from thomas.marketplace.orchestrator.protocol import (
     CapabilityToken,
     DelegationContract,
@@ -37,310 +57,16 @@ from thomas.marketplace.orchestrator.protocol import (
     SpecialistStatus,
 )
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
+from thomas.marketplace.orchestrator.response_failures import (
+    _chat_failure_message,
+    deliver_failure_text,
+    egress_proxy_down,
+    failing_target,
+    ready_elsewhere,
+)
+from thomas.marketplace.specialists import final_pass as _final_pass
 
 log = logging.getLogger(__name__)
-
-
-def _chat_failure_message(
-    error: str | None,
-    *,
-    attempts: int = 1,
-    partial_output: bool = False,
-) -> str:
-    """Turn provider failures into useful guidance without leaking internals."""
-    detail = str(error or "").strip().lower()
-    retry_note = " I retried once, but it still failed." if attempts > 1 else ""
-    partial_note = " The text above was preserved." if partial_output else ""
-    # Remember a rejected credential so /api/health can report that chat is
-    # broken, instead of every message rediscovering it independently.
-    try:
-        from thomas.core.model_auth_health import looks_like_auth_failure, record_auth_failure
-
-        if looks_like_auth_failure(detail):
-            record_auth_failure(detail=str(error or ""))
-    except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError):  # pragma: no cover
-        pass
-    if "oauth" in detail and ("not connected" in detail or "sign in" in detail):
-        return "The ChatGPT model isn't connected yet. Choose the Local model or sign in through Easy Setup."
-    # An expired or revoked sign-in kills EVERY model, so the generic
-    # "choose another model" advice below sends people hunting through the model
-    # list for a problem no model can solve. Say what actually happened.
-    if any(
-        token in detail
-        for token in (
-            "token refresh failed",
-            "invalid_grant",
-            "http 401",
-            "status 401",
-            "unauthorized",
-        )
-    ):
-        return (
-            "Your ChatGPT sign-in has expired, so the ChatGPT-backed models can't be reached. "
-            "Run `codex login` in a terminal to sign in again — or switch to the Local model, "
-            "which doesn't need that sign-in."
-        )
-    if "rate-limit" in detail or "rate limit" in detail or "status 429" in detail:
-        return "The selected model is temporarily rate-limited. Please wait a moment or choose another model."
-    if any(token in detail for token in ("timed out", "timeout")):
-        return f"The selected model timed out before it could finish.{retry_note}{partial_note} Please try again."
-    if any(token in detail for token in ("connection", "connecterror")):
-        return f"I couldn't reach the selected model.{retry_note}{partial_note} Please check that it is running and try again."
-    answer_kind = "a complete answer" if partial_output else "an answer"
-    return f"I couldn't get {answer_kind} from the selected model.{retry_note}{partial_note} Please try again or choose another model."
-
-
-_STATUS_ACTIVE_STATES = {"queued", "requested", "classified", "claimed", "executing", "running", "in_progress"}
-_STATUS_COMPLETED_STATES = {"completed", "verified"}
-_STATUS_FAILED_STATES = {"failed", "abandoned", "cancelled"}
-# How many rows of each terminal bucket the status summary shows. The status branch
-# marks reported only the completions WITHIN this window (see _displayed_completion_ids),
-# so a fresh completion crowded past it is never marked-but-not-shown.
-_STATUS_BUCKET_CAP = 5
-
-
-def _bucket_background_rows(
-    active_tasks: list[dict[str, Any]] | None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Split rows into (active, completed, failed, other) buckets, preserving input
-    order. Shared by the status summary and the displayed-id computation so the set of
-    completions we MARK reported can never drift from the set we actually SHOW."""
-    rows = [dict(row or {}) for row in list(active_tasks or []) if isinstance(row, dict)]
-    active_rows: list[dict[str, Any]] = []
-    completed_rows: list[dict[str, Any]] = []
-    failed_rows: list[dict[str, Any]] = []
-    other_rows: list[dict[str, Any]] = []
-    for row in rows:
-        state = str(row.get("state") or "").strip().lower()
-        if state in _STATUS_ACTIVE_STATES:
-            active_rows.append(row)
-        elif state in _STATUS_COMPLETED_STATES:
-            completed_rows.append(row)
-        elif state in _STATUS_FAILED_STATES:
-            failed_rows.append(row)
-        else:
-            other_rows.append(row)
-    return active_rows, completed_rows, failed_rows, other_rows
-
-
-def _summarize_background_status(active_tasks: list[dict[str, Any]] | None) -> str:
-    rows = [row for row in list(active_tasks or []) if isinstance(row, dict)]
-    if not rows:
-        return "No background work is running in this thread."
-
-    active_rows, completed_rows, failed_rows, other_rows = _bucket_background_rows(active_tasks)
-
-    def _detail(row: dict[str, Any]) -> str:
-        summary = str(row.get("summary") or "").strip()
-        progress = str(row.get("last_progress") or "").strip()
-        state = str(row.get("state") or "unknown").replace("_", " ").strip()
-        if summary and progress and progress != summary:
-            return f"{summary} ({state}: {progress})"
-        if summary:
-            return f"{summary} ({state})"
-        if progress:
-            return f"{progress} ({state})"
-        return state
-
-    # Report EVERY relevant bucket, not just the first one — a finished task must still
-    # be surfaced even while another task is running, and a blocked/awaiting-proof row
-    # must not be dropped just because completed/failed rows coexist (the old early
-    # `return` swallowed both classes).
-    lines: list[str] = []
-    if active_rows:
-        lines.append("Background work is still running in this thread.")
-        for row in active_rows[:2]:
-            lines.append(f"- {_detail(row)}")
-    if completed_rows:
-        lines.append("Finished:" if active_rows else "Background work has completed in this thread.")
-        for row in completed_rows[:_STATUS_BUCKET_CAP]:
-            lines.append(f"- {_detail(row)}")
-    if failed_rows:
-        lines.append(
-            "Finished with issues:"
-            if (active_rows or completed_rows)
-            else "Background work finished with issues in this thread."
-        )
-        for row in failed_rows[:_STATUS_BUCKET_CAP]:
-            lines.append(f"- {_detail(row)}")
-    if other_rows:
-        # Blocked / awaiting-proof / paused work. Label it "Needs attention:" when it
-        # sits alongside other buckets, else fall back to the mixed-outcomes line.
-        lines.append(
-            "Needs attention:"
-            if (active_rows or completed_rows or failed_rows)
-            else "Background work in this thread has mixed outcomes."
-        )
-        for row in other_rows[:_STATUS_BUCKET_CAP]:
-            lines.append(f"- {_detail(row)}")
-    # `rows` is non-empty (guarded above) so at least one bucket produced lines.
-    return "\n".join(lines)
-
-
-def _displayed_completion_ids(active_tasks: list[dict[str, Any]] | None) -> set[str]:
-    """Execution-ids of the completed/verified rows the status summary ACTUALLY shows
-    (its completed-bucket window). The status branch marks a fresh completion reported
-    only if it is in this set, so a completion crowded past the window stays unreported
-    and is delivered on a later turn instead of being silently lost."""
-    _, completed_rows, _, _ = _bucket_background_rows(active_tasks)
-    out: set[str] = set()
-    for row in completed_rows[:_STATUS_BUCKET_CAP]:
-        eid = str(row.get("execution_id") or "").strip()
-        if eid:
-            out.add(eid)
-    return out
-
-
-# Per-session record of which finished background tasks Thomas has already told the
-# user about, so he reports each completion exactly once ("comes back with it when
-# it's done") instead of repeating it every turn. Process-local; resets on restart,
-# which is fine — completions are only interesting right after they land.
-_reported_completions: dict[str, set[str]] = {}
-
-_COMPLETED_STATES = {"completed", "verified"}
-# Failures flow through the SAME report-once machinery as completions so Thomas
-
-# just fails" — nothing reached the chat layer). cancelled is user-initiated, so it
-# is intentionally excluded (the user already knows).
-_FAILED_STATES = {"failed", "abandoned"}
-_FINISHED_STATES = _COMPLETED_STATES | _FAILED_STATES
-
-
-def _mark_completion_reported(execution_id: str) -> None:
-    """Persist that a completion was announced in chat, so it is not re-announced
-    after a server restart. Best-effort: a persistence failure must never break the
-    chat turn — the in-memory set still dedups within this process."""
-    try:
-        from thomas.core import task_bot_runtime
-
-        task_bot_runtime.update_execution(
-            execution_id,
-            reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        )
-    # The runtime ledger is a JSON file: a missing execution record raises
-    # FileNotFoundError and a read/write fault raises OSError; a rejected state
-    # transition, an unparseable ledger, or a bad row shape raise
-    # ValueError/LookupError/TypeError; the lazy import can raise ImportError.
-    # Dedup is still correct without the flag -- the in-memory set holds for this
-    # process -- so none of these may break the chat turn.
-    except (ImportError, OSError, ValueError, LookupError, TypeError, AttributeError):
-        log.debug("Could not persist reported_to_chat flag for %s", execution_id, exc_info=True)
-
-
-def _collect_unreported_completions(session_id: str, active_tasks: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """Return rows for background tasks that JUST finished and have NOT yet been
-    reported to chat — WITHOUT marking them reported.
-
-    Marking is deferred to _mark_completions_reported, called only AFTER a handler
-    has actually delivered the note. This is the fix for the "mark before deliver"
-    loss: previously the note was marked reported at compute time, so any branch
-    that didn't deliver (e.g. the status branch) silently dropped the completion
-    forever. A pure query here makes that class of bug structurally impossible.
-    """
-    rows = [dict(r or {}) for r in list(active_tasks or []) if isinstance(r, dict)]
-    if not rows:
-        return []
-    seen = _reported_completions.setdefault(str(session_id or ""), set())
-    fresh: list[dict[str, Any]] = []
-    for row in rows:
-        state = str(row.get("state") or "").strip().lower()
-        exec_id = str(row.get("execution_id") or "").strip()
-        if not exec_id or state not in _FINISHED_STATES:
-            continue
-        # Dedup is durable: skip if already announced in THIS process (in-memory set)
-        # OR persisted as reported in the ledger (survives a restart between the
-        # worker finishing and the user's next message).
-        if exec_id in seen or str(row.get("reported_to_chat_at") or "").strip():
-            continue
-        fresh.append(row)
-    # Cap per turn so the note/summary can show EVERY completion we then mark reported —
-    # marking more than we display would re-introduce the "marked-but-not-delivered" loss.
-    # Any overflow stays unreported and surfaces on the next turn.
-    return fresh[:5]
-
-
-def _build_completion_note(fresh: list[dict[str, Any]]) -> str:
-    """Build the one-time context note for freshly-finished tasks (or '' if none).
-
-    Covers BOTH outcomes: a completed task (share the result) and a FAILED one (say
-    honestly, in your own voice, that it didn't work and why — never pretend it
-    succeeded). The worker did the work, not you."""
-    if not fresh:
-        return ""
-    any_failed = any(str(r.get("state") or "").strip().lower() in _FAILED_STATES for r in fresh)
-    header = (
-        "[Background work just finished — tell the user about it in your own natural "
-        "voice. For anything that COMPLETED, share the result. For anything that FAILED, "
-        "say plainly that it didn't work (and why, if the reason is given) — do NOT "
-        "pretend it succeeded. A worker handled it, so don't claim you did it yourself.]"
-        if any_failed
-        else "[Background work just finished — tell the user, in your own natural voice, "
-        "that it's done and share the result. Do not say you did it yourself; a "
-        "worker handled it.]"
-    )
-    lines = [header]
-    for row in fresh:  # already capped in _collect_unreported_completions
-        lines.append(f"- {_completion_detail(row)}")
-    return "\n".join(lines)
-
-
-def _mark_completions_reported(session_id: str, fresh: list[dict[str, Any]]) -> None:
-    """Mark the given completions reported — in-memory (this process) AND durably
-    in the ledger (survives restart). Called only AFTER a handler has delivered the
-    note, so the 'mark before deliver' loss cannot happen."""
-    if not fresh:
-        return
-    seen = _reported_completions.setdefault(str(session_id or ""), set())
-    for row in fresh:
-        exec_id = str(row.get("execution_id") or "").strip()
-        if not exec_id:
-            continue
-        seen.add(exec_id)
-        _mark_completion_reported(exec_id)
-
-
-# Generic/placeholder progress lines that are NOT a real deliverable — never shown as
-# a "Result:" (MR4: the multi-delegate/task-manager path leaves a "Queued…" sentinel).
-_GENERIC_PROGRESS = {
-    "background execution completed.",
-    "queued for background execution.",
-    "queued on the provider-native worker.",
-    "task queued for task-bot execution.",
-    "provider-native worker is running.",
-}
-
-
-def _completion_detail(row: dict[str, Any]) -> str:
-    """Render one finished task. Completed -> 'Bot finished: "ask". Result: ...';
-    failed -> 'Bot's task "ask" FAILED. Reason: ...' so the model reports it honestly."""
-    bot = str(row.get("bot_name") or row.get("bot_id") or "A worker").strip() or "A worker"
-    ask = str(row.get("summary") or "").strip()
-    receipt = row.get("receipt") if isinstance(row.get("receipt"), dict) else {}
-    evidence = receipt.get("evidence") if isinstance(receipt.get("evidence"), dict) else {}
-    proof = evidence.get("proof") if isinstance(evidence.get("proof"), dict) else {}
-    result = str(proof.get("summary") or evidence.get("last_progress") or row.get("last_progress") or "").strip()
-    state = str(row.get("state") or "").strip().lower()
-    if state in _FAILED_STATES:
-        reason = str(receipt.get("error") or result or row.get("blocker") or "").strip()
-        detail = f'{bot}’s task "{ask}" FAILED.' if ask else f"{bot}’s task FAILED."
-        if reason and reason.lower() not in _GENERIC_PROGRESS:
-            detail += f" Reason: {reason}"
-        return detail
-    detail = f'{bot} finished: "{ask}".' if ask else f"{bot} finished a task."
-    if result and result.lower() not in _GENERIC_PROGRESS:
-        detail += f" Result: {result}"
-    return detail
-
-
-def _completion_delivery_line(note: str) -> str:
-    """Turn a completion note into a plain user-facing line for non-LLM reply paths."""
-    bullets = [ln[2:].strip() for ln in str(note or "").splitlines() if ln.strip().startswith("- ")]
-    bullets = [b for b in bullets if b]
-    if not bullets:
-        return ""
-    if len(bullets) == 1:
-        return f"Quick update — {bullets[0]}"
-    return "Quick update — " + " ".join(bullets)
 
 
 # Default token budgets by mode
@@ -365,6 +91,10 @@ class OrchestratorBrain:
         Thomas's MemoryEngine instance.
     registry:
         SpecialistRegistry with all available specialists.
+    ready_models:
+        Reads the models that answered last check, for a failure that must name
+        what to use instead (thomas/models/ready_elsewhere.py, passed in because
+        the orchestrator may not import thomas.models). Without it nothing is named.
     """
 
     def __init__(
@@ -374,12 +104,14 @@ class OrchestratorBrain:
         memory_engine: Any,
         registry: SpecialistRegistry,
         runtime_policy: Any = None,
+        ready_models: Any = None,
     ) -> None:
         self.config = config
         self.llm = llm
         self.memory_engine = memory_engine
         self.registry = registry
         self.runtime_policy = runtime_policy
+        self.ready_models = ready_models
 
     async def process_message(
         self,
@@ -510,7 +242,7 @@ class OrchestratorBrain:
         # the result back" — the exact bug from when the note was shown only to the
         # user, never to the model). The note text itself tells the model to relay the
         # worker's result without taking credit. Every visible reply stays model-authored
-
+        # (your no-canned-replies rule); the deterministic line is reserved for the
         # non-model paths below (memory recall / model failure) where no model runs.
         if completion_note:
             memory_ctx.working = f"{memory_ctx.working}\n\n{completion_note}".strip()
@@ -554,22 +286,20 @@ class OrchestratorBrain:
             # The model failed, so fall back to delivering any finished-work note
             # deterministically — a completed task must never be silently lost on an
             # error turn.
+            turn_deadline_s = _final_pass.resolve_turn_deadline_s(getattr(self.runtime_policy, "tools", None))
             failure_text = _chat_failure_message(
                 result.error,
                 attempts=result_attempts,
                 partial_output=bool(partial_text),
+                autonomy_level=autonomy_level,
+                turn_timeout_s=turn_deadline_s,
+                proxy_down=await egress_proxy_down(result.error, target=failing_target(self.llm)),
+                # A usage limit has to name what you can use instead, and only the catalog knows what answered.
+                alternatives=await ready_elsewhere(self.ready_models, self.config, self.llm),
             )
-            suffix = "\n\n".join(part for part in (delivered_prefix, failure_text) if part)
-            if partial_text:
-                # Text events have already reached the wire. Append only the honest
-                # terminal explanation, then persist the same combined transcript.
-                await dispatcher.emit_text("\n\n" + suffix)
-                saved_text = f"{partial_text.rstrip()}\n\n{suffix}"
-            else:
-                chunk_size = 80
-                for i in range(0, len(suffix), chunk_size):
-                    await dispatcher.emit_text(suffix[i : i + chunk_size])
-                saved_text = suffix
+            saved_text = await deliver_failure_text(
+                dispatcher, delivered_prefix=delivered_prefix, failure_text=failure_text, partial_text=partial_text
+            )
         conversation = conversation.append_message(
             "assistant",
             saved_text,
@@ -632,100 +362,27 @@ class OrchestratorBrain:
                 error=f"Specialist '{specialist_id}' not found",
             )
 
-        # Memory is THOMAS'S OWN capability — he stores/recalls inline, never via a task
-
-        #
-        # Explicit "remember X" facts MUST survive into future conversations, so they go to a
-        # STABLE durable thread (not the ephemeral per-conversation session, which a new chat
-        # never queries) with etype "user_fact" → role "user" — which makes them eligible for
-        # profile extraction + global fact promotion. Recall then searches the current session,
-        # this durable store, and the global/profile layer. Without this a remembered fact was
-        # a session-scoped "system note" that vanished on the next chat (cross-session loss).
-        runtime_memory = getattr(self.runtime_policy, "memory", None)
-        _mem = self.memory_engine if bool(getattr(runtime_memory, "enabled", True)) else None
-        _mem_thread = str(session_id or "default")
-        _user_mem_thread = "user_memory"
-
-        async def _remember_cb(*, text: str) -> bool:
-            """Store a user-dictated fact durably. Returns True ONLY if actually saved."""
-            if _mem is None:
-                return False
-            payload = str(text or "").strip()
-            if not payload:
-                return False
-            include_thread = bool(getattr(runtime_memory, "include_thread", True))
-            include_global = bool(getattr(runtime_memory, "include_global", True))
-            include_profile = bool(getattr(runtime_memory, "include_profile", True))
-            if not any((include_thread, include_global, include_profile)):
-                return False
-            target_thread = _user_mem_thread if include_global or include_profile else _mem_thread
-            try:
-                eid = _mem.add_event(
-                    thread=target_thread,
-                    etype="user_fact",
-                    text=payload,
-                    metadata={"source": "user_remember", "origin_session": _mem_thread},
-                )
-                if include_global:
-                    try:
-                        _mem.auto_promote_event_memory(
-                            thread_id=target_thread,
-                            etype="user_fact",
-                            text=payload,
-                            source_episode_id=int(eid) if eid else None,
-                        )
-                    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                        log.debug("remember promotion failed", exc_info=True)
-                return True
-            # Same memory-store surface the promotion catch above names, plus
-            # AttributeError for an engine missing add_event. Returning False is
-            # load-bearing: reasoning.py only claims "Saved to your memory" when
-            # this returns True, so a failure here must stay a False, not a raise.
-            except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                log.debug("remember failed", exc_info=True)
-                return False
-
-        async def _recall_cb(*, query: str) -> str:
-            if _mem is None:
-                return ""
-            try:
-                include_thread = bool(getattr(runtime_memory, "include_thread", True))
-                include_global = bool(getattr(runtime_memory, "include_global", True))
-                include_profile = bool(getattr(runtime_memory, "include_profile", True))
-                if not any((include_thread, include_global, include_profile)):
-                    return ""
-                setter = getattr(_mem, "set_thread_memory_policy", None)
-                if callable(setter):
-                    setter(
-                        _mem_thread,
-                        include_thread=include_thread,
-                        include_global=include_global,
-                        include_profile=include_profile,
-                        pins_only=bool(getattr(runtime_memory, "pins_only", False)),
-                        max_results=int(getattr(runtime_memory, "retrieval_top_k", 5) or 5),
-                        max_pack_tokens=int(getattr(runtime_memory, "context_budget", 1200) or 1200),
-                    )
-                res = _mem.retrieve(query=str(query or ""), thread=_mem_thread)
-                return str(getattr(res, "text", None) or res or "").strip()
-            # Retrieval hits the same store as the write path above (OSError,
-            # sqlite3.Error, RuntimeError), plus the int() coercions of the
-            # runtime memory policy (TypeError/ValueError), a policy setter or
-            # retrieve() the engine does not implement (AttributeError), and a
-            # missing key in whatever it returns (LookupError). An empty string
-            # is the honest answer for all of them.
-            except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                log.debug("recall failed", exc_info=True)
-                return ""
+        _remember_cb, _recall_cb = memory_callbacks(
+            self.memory_engine, getattr(self.runtime_policy, "memory", None), session_id
+        )
 
         # Create contract
         runtime_tools = getattr(self.runtime_policy, "tools", None)
         runtime_quality = getattr(self.runtime_policy, "quality", None)
         max_iterations = int(getattr(runtime_quality, "max_agent_iterations", 0) or 10)
+        # Chat's reasoning specialist gets its own turn deadline, separate from
+        # tool_timeout_s, leaving the final pass below its own reserve (I2).
+        if specialist_id == "reasoning":
+            turn_deadline_s = _final_pass.resolve_turn_deadline_s(runtime_tools)
+            primary_timeout_s = _final_pass.primary_pass_timeout_s(turn_deadline_s)
+        else:
+            turn_deadline_s = None
+            primary_timeout_s = float(getattr(runtime_tools, "tool_timeout_s", 120) or 120)
         contract = DelegationContract(
             specialist_id=specialist_id,
             task_description=prompt[:500],
             allowed_tools=specialist.capabilities,
-            timeout_seconds=float(getattr(runtime_tools, "tool_timeout_s", 120) or 120),
+            timeout_seconds=primary_timeout_s,
             max_iterations=max_iterations,
             input_context={
                 "memory": memory_ctx.to_system_injection(),
@@ -781,6 +438,10 @@ class OrchestratorBrain:
             }
         else:
             allowed_tools = set(specialist.capabilities)
+        if _remember_cb is None:
+            allowed_tools.discard("remember")
+        if _recall_cb is None:
+            allowed_tools.discard("recall")
         token = CapabilityToken(
             specialist_id=specialist_id,
             session_id=session_id,
@@ -854,13 +515,19 @@ class OrchestratorBrain:
                         await dispatcher.emit(event)
                         if event_type == "tool_result":
                             tool_calls.append(event)
+                    elif event_type in ("task_request", "task_update"):
+                        # The real specialist's own send_task/update_task hand-off
+                        # shape (never a tool_result) -- final_pass.already_acted
+                        # needs to see it too, so it never repeats a hand-off (I4).
+                        retry_safe = False
+                        _final_pass.record_action_event(tool_calls, event)
                     elif event_type == "done":
                         iterations = event.get("iterations", 0)
                     elif event_type == "error":
                         result.error = event.get("error", "Unknown specialist error")
                     else:
-                        # Unknown specialist events may represent a real side effect
-                        # (task_request/task_update), so never replay after one.
+                        # Any other unknown specialist event may represent a real
+                        # side effect, so never replay after one.
                         retry_safe = False
 
                 if result.error is not None and retry_safe and attempt == 0:
@@ -898,6 +565,26 @@ class OrchestratorBrain:
                 result.status = SpecialistStatus.TIMEOUT
             else:
                 result.status = SpecialistStatus.FAILED
+
+            # final_pass.py: a timed-out pass gets exactly one more, with NO read
+            # tools offered -- only send_task (level 3+, nothing effectful yet) or
+            # nothing -- never "The selected model timed out ... try again."
+            if result.status == SpecialistStatus.TIMEOUT and specialist_id == "reasoning":
+                await _final_pass.run_final_pass(
+                    result,
+                    specialist=specialist,
+                    contract=contract,
+                    token=token,
+                    prompt=prompt,
+                    conversation=conversation,
+                    memory_ctx=memory_ctx,
+                    dispatcher=dispatcher,
+                    stream_text_events=stream_text_events,
+                    autonomy_level=autonomy_level,
+                    start=start,
+                    turn_deadline_s=turn_deadline_s,
+                )
+                elapsed = result.elapsed_ms
 
             # Validate output against contract
             thinking.start(DelegationPhase.VALIDATING.value)

@@ -245,6 +245,47 @@
   display: block;
 }
 
+/* The list scrolls when its rows outgrow it. `contain` keeps the wheel on the
+   list instead of passing it to the page behind, and `min-height: 0` lets the
+   box shrink inside the sidebar so it can overflow at all. */
+#tc-workspaces {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+/* Arranging: the row being dragged, the line where it will land, the inline
+   rename box, and the row that brings hidden workspaces back. */
+#tc-workspaces button[data-mode] { cursor: grab; }
+#tc-workspaces button.is-dragging { opacity: 0.45; }
+#tc-workspaces button.is-drop-before { box-shadow: 0 -2px 0 0 var(--c-accent, currentColor); }
+#tc-workspaces button.is-drop-after { box-shadow: 0 2px 0 0 var(--c-accent, currentColor); }
+#tc-workspaces .tc-ws-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--c-text);
+  background: var(--c-hover);
+  border: 1px solid var(--c-border-2);
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: none;
+}
+#tc-workspaces .tc-ws-restore {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 11px;
+  border: 1px dashed var(--c-border-2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--c-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+#tc-workspaces .tc-ws-restore:hover { color: var(--c-text); }
+
 #tc-workspaces button > span {
   min-width: 0;
   overflow: hidden;
@@ -252,14 +293,52 @@
   white-space: nowrap;
 }
 
-#tc-history-collapse:hover,
 #tc-history-filter:hover {
   color: var(--c-text);
   background: var(--c-hover);
 }
+
+/* ---- Build (design handoff, screen 3a) -------------------------------------
+   The list head and the workspace rows in the design's measure. Labels are
+   JetBrains Mono, as every label in Build is. `!important` only where
+   chat.html or chat_workspace_navigation.js sets the value inline. */
+#tc-shell[data-surface-mode="code"] .tc-history-head { padding: 8px 2px 6px !important; }
+#tc-shell[data-surface-mode="code"] #tc-history-label,
+#tc-shell[data-surface-mode="code"] .tc-workspaces-head {
+  font: 600 10.5px/1.2 var(--font-mono) !important;
+  letter-spacing: 0.08em !important;
+}
+#tc-shell[data-surface-mode="code"] .tc-history-day { font: 600 9.5px/1.2 var(--font-mono); letter-spacing: 0.08em; }
+#tc-shell[data-surface-mode="code"] #tc-history-filter { font-family: var(--font-mono) !important; font-weight: 600 !important; }
+#tc-shell[data-surface-mode="code"] .tc-workspaces-head { padding: 12px 6px 6px !important; }
+#tc-shell[data-surface-mode="code"] #tc-workspaces > button {
+  padding: 6px 10px !important;
+  border-radius: 7px !important;
+  font-size: 13px !important;
+}
+#tc-shell[data-surface-mode="code"] #tc-workspaces > button > svg { width: 16px; height: 16px; }
+
+/* A task row: the title, then its sub-label ("Step 4 of 5 · 3 agents",
+   "Verified · 2h ago") brighter on the open task than on the rest. */
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row .tc-history-name { font-size: 13px; font-weight: inherit; }
+/* A Build row is a block, not Chat's flex column, so the sub-label box has to
+   be made a block itself or its 16px collapses to an empty inline line. */
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row .tc-history-sub { display: block; }
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row .tc-history-preview,
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row .tc-history-meta { font-size: 11px; font-weight: 500; }
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row.is-active .tc-history-preview { color: var(--c-dim); }
 
 @media (prefers-reduced-motion: reduce) {
   .tc-history-dot {
     animation: none;
   }
 }
+
+/* New chat and Search share one row: Search is an icon until you press it, then the row is the search box. */
+#tc-newrow { display: flex; align-items: center; gap: 8px; }
+#tc-search-open { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px;
+  border: 1px solid var(--c-border); background: transparent; color: var(--c-dim); cursor: pointer; }
+#tc-search-open:hover { color: var(--c-text); background: var(--c-hover); }
+#tc-newrow .tc-search-field { display: none; flex: 1; min-width: 0; height: 30px; }
+#tc-newrow.is-searching .tc-search-field { display: flex; }
+#tc-newrow.is-searching #tc-newchat, #tc-newrow.is-searching #tc-search-open { display: none !important; }

@@ -1,29 +1,12 @@
-import fs from 'node:fs';
-import vm from 'node:vm';
+import { installFeature, installInlineCore } from './chat_feature_fixture.mjs';
 
 const htmlPath = process.argv[2];
 if (!htmlPath) throw new Error('usage: node chat_markdown_renderer.mjs <chat.html>');
-const html = fs.readFileSync(htmlPath, 'utf8');
-
-function functionSource(name, nextName) {
-  const start = html.indexOf(`function ${name}(`);
-  let end = html.indexOf(`\n    function ${nextName}(`, start);
-  if (end < 0) end = html.indexOf(`\n    async function ${nextName}(`, start);
-  if (start < 0 || end < 0) throw new Error(`could not extract ${name}`);
-  return html.slice(start, end);
-}
 
 const context = {};
-vm.createContext(context);
-vm.runInContext(
-  [
-    functionSource('esc', 'botHTML'),
-    functionSource('bubbleInner', 'copyMessageText'),
-    functionSource('_mdInline', 'mdToHtml'),
-    functionSource('mdToHtml', 'renderCanvas'),
-  ].join('\n'),
-  context,
-);
+installInlineCore(context, htmlPath);
+installFeature(context, htmlPath, 'markdown', ['mdToHtml']);
+installFeature(context, htmlPath, 'message_view', ['bubbleInner']);
 
 const qaAnswer = [
   '## Eight-Step Product QA Plan',

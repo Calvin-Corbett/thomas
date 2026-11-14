@@ -1,3 +1,13 @@
+"""A sidebar row opens a tab the way Chrome opens one, and a conversation exists once.
+
+Calvin's direction (2026-08-25): when I click on the left it actually opens up a
+tab up top like Chrome, and a conversation exists once. So a row whose
+conversation is already held by a tab focuses that tab; a row clicked on a
+blank, idle surface navigates that surface in place, the way Chrome's new-tab
+page does; anything else opens a new tab. Ctrl-click and middle-click always
+open one. These are pure decisions, so they are driven through the real module
+in a vm context by ``tests/web_node/browser_shell_docs_policy.mjs``.
+"""
 
 from __future__ import annotations
 
@@ -45,7 +55,9 @@ def test_a_draft_or_a_running_turn_is_never_navigated_away_from(report) -> None:
     assert report["row_on_busy_surface"] == "open"
     assert report["blank_idle_with_content"] is False
     assert report["blank_idle_when_holding"] is False
-    assert report["row_on_holding_surface"] == "open"
+    # A tab that is only showing another conversation loses nothing by showing this one instead (2026-11-10: one tab
+    # per mode, "we're gonna get way too many tabs if ... every single conversation ... has its own tab").
+    assert report["row_on_holding_surface"] == "adopt"
 
 
 def test_a_row_of_another_mode_never_adopts_this_surface(report) -> None:
@@ -64,7 +76,7 @@ def test_new_chat_reuses_a_blank_surface_and_spares_a_busy_one(report) -> None:
     assert report["new_chat_on_busy_keeps_mode"] == "code"
 
 
-def test_a_tab_document_address_never_attaches_the_chrome_and_only_code_deep_links(report) -> None:
-    assert report["url_chat"] == "/?embed=1&browser=0"
-    assert report["url_code"] == "/?embed=1&browser=0&forge_code=c%2F1"
-    assert report["url_work"] == "/?embed=1&browser=0"
+def test_a_tab_document_address_names_its_surface_and_conversation_without_browser_chrome(report) -> None:
+    assert report["url_chat"] == "/?embed=1&browser=0&tab_mode=chat&tab_chat=a%20b"
+    assert report["url_code"] == "/?embed=1&browser=0&tab_mode=code&forge_code=c%2F1"
+    assert report["url_work"] == "/?embed=1&browser=0&tab_mode=work"

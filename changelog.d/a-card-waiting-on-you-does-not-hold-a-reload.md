@@ -1,0 +1,2 @@
+### Fixed
+- A card waiting for you no longer holds Thomas's reload of landed code. The reload waited until the promoter's inbox was empty, and a hand-in whose card is asking you stays in that inbox until you answer. On 2026-10-26 that held a reload for half an hour: every Build run that had stopped for it, and every team waiting to start its done check, sat idle until the server was restarted by hand. A hand-in still holds the reload once every card is answered, when it may be landing.

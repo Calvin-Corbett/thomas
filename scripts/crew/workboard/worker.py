@@ -44,6 +44,8 @@ _send_message_safe, _release_claim_safe = worker_dispatch._send_message_safe, wo
 _set_task_status_safe, _git_head_sha = worker_dispatch._set_task_status_safe, worker_dispatch._git_head_sha
 _runtime_execution_id, _inbox_interrupt = worker_dispatch._runtime_execution_id, worker_dispatch._inbox_interrupt
 _request_immediate_dispatch = worker_dispatch._request_immediate_dispatch
+_presence_heartbeat_safe = worker_dispatch._presence_heartbeat_safe
+_archive_board_safe = worker_dispatch._archive_board_safe
 _finalize_landed_done = worker_dispatch._finalize_landed_done
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -52,6 +54,8 @@ DEFAULT_COMMAND_CATALOG = ROOT / "plans" / "thomas" / "worker_command_catalog.js
 DEFAULT_TASK_MANAGER_AGENT = "thomas"
 DEFAULT_POLL_SECONDS = 15.0
 DEFAULT_IDLE_HEARTBEAT_SECONDS = 300.0
+DEFAULT_ARCHIVE_BOARD_BYTES = 256 * 1024  # an idle worker archives old mail once the board passes this (0 = never)
+ARCHIVE_CHECK_SECONDS = 300.0
 DEFAULT_LOG_DIR = ROOT / "runtime" / "workers"
 
 
@@ -118,6 +122,7 @@ def _worker_loop(
     cycles: int,
     max_completions: int,
     log_dir: Path,
+    archive_board_bytes: int = 0,
 ) -> tuple[bool, dict[str, object]]:
     cycle_count = 0
     completion_count = 0
@@ -137,6 +142,7 @@ def _worker_loop(
     idle_heartbeat_interval = max(0.0, float(idle_heartbeat_seconds))
     poll_interval = max(0.0, float(poll_seconds))
     last_heartbeat_at = 0.0
+    last_archive_check_at: float | None = None
     online_notified = False
     inbox_pause_notified = False
 
@@ -220,22 +226,22 @@ def _worker_loop(
             elif idle_heartbeat_interval > 0:
                 now_tick = time.monotonic()
                 if now_tick - last_heartbeat_at >= idle_heartbeat_interval:
-                    ok_msg, err_msg = _send_message_safe(
-                        workboard_path=workboard_path,
-                        sender=agent,
-                        recipient=task_manager_agent,
-                        task_id="none",
-                        summary="worker heartbeat: waiting for assignment",
-                        kind="ping",
-                        priority="p1",
-                        requested_action="none",
-                        decision="pending",
-                    )
-                    if ok_msg:
+                    # the worker's own liveness file: no board row, no agent session
+                    beat_ok, err_beat = _presence_heartbeat_safe(agent=agent, state_dir=log_dir)
+                    if beat_ok:
                         heartbeat_count += 1
-                    elif err_msg:
-                        errors.append(err_msg)
+                    elif err_beat:
+                        errors.append(err_beat)
                     last_heartbeat_at = now_tick
+            if archive_board_bytes > 0 and (
+                last_archive_check_at is None or time.monotonic() - last_archive_check_at >= ARCHIVE_CHECK_SECONDS
+            ):
+                last_archive_check_at = time.monotonic()
+                _archived, err_archive = _archive_board_safe(
+                    workboard_path=workboard_path, min_board_bytes=archive_board_bytes
+                )
+                if err_archive:
+                    errors.append(err_archive)
             if poll_interval > 0:
                 time.sleep(poll_interval)
             continue
@@ -559,6 +565,12 @@ def run(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--poll-seconds", type=float, default=DEFAULT_POLL_SECONDS)
     parser.add_argument("--idle-heartbeat-seconds", type=float, default=DEFAULT_IDLE_HEARTBEAT_SECONDS)
     parser.add_argument(
+        "--archive-board-bytes",
+        type=int,
+        default=DEFAULT_ARCHIVE_BOARD_BYTES,
+        help="While idle, archive old messages once the board is this big (0 = never; default 262144).",
+    )
+    parser.add_argument(
         "--command-timeout-seconds",
         type=float,
         default=0.0,
@@ -606,7 +618,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         "--send-online-message",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Send one online status + periodic idle heartbeat messages (default: true).",
+        help="Send one online status message; idle heartbeats go to the presence file (default: true).",
     )
     parser.add_argument(
         "--send-start-message",
@@ -744,6 +756,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         cycles=int(args.cycles),
         max_completions=int(args.max_completions),
         log_dir=log_dir,
+        archive_board_bytes=int(args.archive_board_bytes),
     )
     payload = {
         "action": "workboard_worker",

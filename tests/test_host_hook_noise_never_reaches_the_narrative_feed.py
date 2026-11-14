@@ -58,6 +58,8 @@ NARRATIVE_EVENT_KINDS = {
     "insight",
     "planning",
     "say",
+    # Added to the JS set when a blocked execution setting began to show its own message as story text.
+    "settings",
     "steering",
     "stopped",
     "stopping",
@@ -74,17 +76,14 @@ def test_hook_failure_lines_are_filed_as_technical_not_update() -> None:
             "as narrative text — host plugin noise reached the owner's feed as an UPDATE"
         )
         assert event["text"] == line, (
-            "the raw line must stay visible verbatim under Show details — "
-            "filtered from the narrative, not destroyed"
+            "the raw line must stay visible verbatim under Show details — filtered from the narrative, not destroyed"
         )
 
 
 def test_the_narrative_kind_mirror_matches_the_ui() -> None:
     """The set above is a copy of a JS constant; hold the two in lockstep."""
 
-    source = (
-        REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
-    ).read_text(encoding="utf-8")
+    source = (REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_mode.js").read_text(encoding="utf-8")
     match = re.search(r"NARRATIVE_EVENT_KINDS = new Set\(\[([^\]]+)\]\)", source)
     assert match, "unified_code_mode.js no longer declares NARRATIVE_EVENT_KINDS"
     js_kinds = set(re.findall(r"'([a-z_]+)'", match.group(1)))
@@ -97,7 +96,7 @@ def test_ordinary_non_json_lines_still_become_say() -> None:
     """The defensive fallback must survive: only hook plumbing is rerouted."""
 
     events = translate_claude_event("Compiling 3 modules...")
-    assert events == [{FORGE_EVENT_KEY: "say", "text": "Compiling 3 modules..."}]
+    assert events == [{FORGE_EVENT_KEY: "say", "text": "Compiling 3 modules...", "source": "process_output"}]
 
 
 def test_a_sentence_merely_mentioning_a_hook_is_not_rerouted() -> None:
@@ -108,14 +107,12 @@ def test_a_sentence_merely_mentioning_a_hook_is_not_rerouted() -> None:
 
     line = "Added a pre-commit hook that runs ruff before every commit."
     events = translate_claude_event(line)
-    assert events == [{FORGE_EVENT_KEY: "say", "text": line}]
+    assert events == [{FORGE_EVENT_KEY: "say", "text": line, "source": "process_output"}]
 
 
 def test_not_logged_in_result_becomes_a_thomas_actionable_error() -> None:
     raw = "Not logged in — Please run /login"
-    events = translate_claude_event(
-        json.dumps({"type": "result", "is_error": True, "result": raw})
-    )
+    events = translate_claude_event(json.dumps({"type": "result", "is_error": True, "result": raw}))
     assert len(events) == 1 and events[0][FORGE_EVENT_KEY] == "error"
     text = events[0]["text"]
     assert "signed in" in text and "Anthropic key" in text and "OpenAI" in text, (
@@ -125,6 +122,34 @@ def test_not_logged_in_result_becomes_a_thomas_actionable_error() -> None:
     assert raw in text, "the CLI's own words must remain attached as the detail"
 
 
+def test_streamed_usage_refusal_does_not_count_as_model_execution() -> None:
+    from thomas.server.routes.autopilot_continuation_history import actually_ran
+
+    refused = {
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": "You've hit your session limit"},
+        },
+    }
+    events = translate_claude_event(json.dumps(refused))
+    assert not actually_ran({"transcript": "\n".join(json.dumps(e) for e in events)})
+
+
+def test_ordinary_streamed_model_text_proves_execution() -> None:
+    from thomas.server.routes.autopilot_continuation_history import actually_ran
+
+    output = {
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": "I checked the implementation."},
+        },
+    }
+    events = translate_claude_event(json.dumps(output))
+    assert actually_ran({"transcript": "\n".join(json.dumps(e) for e in events)})
+
+
 def test_a_raw_not_logged_in_stderr_line_is_also_mapped() -> None:
     raw = "Not logged in - Please run /login"
     events = translate_claude_event(raw)
@@ -132,25 +157,23 @@ def test_a_raw_not_logged_in_stderr_line_is_also_mapped() -> None:
     assert "signed in" in events[0]["text"] and raw in events[0]["text"]
 
 
-def test_dispatch_reason_names_the_login_situation_not_the_exit_code(tmp_path) -> None:
+def test_dispatch_reason_names_the_login_situation_not_the_exit_code(tmp_path, monkeypatch) -> None:
     """``claude exited 1`` was the run's whole verdict. The dispatcher saw the
 
     login failure stream past; the recorded reason must carry it."""
 
     import subprocess as sp
 
+    from thomas.forge.anvil import dispatch_claude_cli
     from thomas.forge.anvil.dispatch_claude_cli import dispatch_via_claude_cli
 
+    monkeypatch.setattr(dispatch_claude_cli, "repo_context_for", lambda _goal: "isolated login-refusal test")
     sp.run(["git", "init", "-q", str(tmp_path)], check=True, capture_output=True)
 
     def runner(cmd, cwd, timeout):
-        return 1, json.dumps(
-            {"type": "result", "is_error": True, "result": "Not logged in — Please run /login"}
-        )
+        return 1, json.dumps({"type": "result", "is_error": True, "result": "Not logged in — Please run /login"})
 
-    result = dispatch_via_claude_cli(
-        "build x", cwd=str(tmp_path), dry_run=False, runner=runner, claude_bin="claude"
-    )
+    result = dispatch_via_claude_cli("build x", cwd=str(tmp_path), dry_run=False, runner=runner, claude_bin="claude")
     assert not result.ok
     assert "signed in" in result.reason and "Anthropic key" in result.reason, (
         f"reason {result.reason!r} still reports only the exit, not the situation"

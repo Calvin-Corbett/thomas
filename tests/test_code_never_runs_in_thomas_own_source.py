@@ -1,8 +1,30 @@
+"""Code must never run against Thomas's own source checkout.
+
+``send`` already calls this a HARD SAFETY NET and applies it twice: once for a
+conversation id with nothing behind it, once for a brand-new conversation. The
+third branch -- an id that DOES resolve, i.e. every "continue this task" -- takes
+its project root straight from the stored conversation and never checks it.
+
+That branch is reachable today, not hypothetically. Measured against the running
+server on this workspace: 20 Code conversations resolve to ``C:\\Users\\corbe\\Thomas``,
+three of them with real turns, and the changes endpoint offers one of them
+``notes.txt`` -- a file sitting in the repository root because a Code task wrote
+it there. Revert is ``git checkout -- <file>``, and for an untracked file it is a
+delete, so continuing one of those tasks edits the product source and the Revert
+button removes files from it.
+
+Refusing is the right answer rather than silently substituting a different
+folder: the handler immediately above already returns 409
+``project_change_requires_new_conversation`` because a conversation's project is
+not allowed to move underneath it. Quietly moving it here would contradict that
+rule while claiming to enforce a safety one.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -13,7 +35,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from thomas.forge.anvil import forge_code_projects, forge_code_store
 from thomas.forge.anvil.forge_code_git import _run_git
 from thomas.server.app_keys import APP_SECRETS
-from thomas.server.routes import evolve_agent_http_support
+from thomas.server.routes import evolve_agent_http_support, evolve_agent_routes
 from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes
 from thomas.server.routes.evolve_agent_routes import register_evolve_agent_routes
 
@@ -110,6 +132,101 @@ def test_continuing_a_conversation_bound_to_the_source_repo_never_launches(
     _drive(catalog, _body)
 
 
+def test_send_refuses_when_source_inspection_times_out_on_each_branch(tmp_path: Path, monkeypatch: Any) -> None:
+    catalog = tmp_path / "catalog"
+    catalog.mkdir()
+    _init_repo(catalog)
+    conv = forge_code_store.new_conversation(catalog, title="build")
+    forge_code_projects.bind_conversation(catalog, conv["id"], catalog)
+    other = tmp_path / "other"
+    other.mkdir()
+    _init_repo(other)
+    calls: list[int] = []
+
+    def unknown() -> Path:
+        calls.append(threading.get_ident())
+        raise forge_code_projects.ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", unknown)
+    monkeypatch.setattr(evolve_agent_routes, "_new_task_project_root", lambda _root, _message: other)
+    monkeypatch.setattr(evolve_agent_routes, "_chosen_project", lambda *_args, **_kwargs: other)
+
+    async def _body(client: TestClient) -> None:
+        loop_thread = threading.get_ident()
+        for conversation_id in ("", conv["id"], "missing-conversation"):
+            response = await client.post(
+                "/api/evolve/agent/send",
+                json={"conversation_id": conversation_id, "message": "build", "model": "codex:gpt"},
+            )
+            assert response.status == 400
+            assert (await response.json())["code"] == "invalid_project_root"
+        assert len(calls) == 3
+        assert all(thread != loop_thread for thread in calls)
+
+    _drive(catalog, _body)
+
+
+def test_installed_copy_can_set_up_history_on_new_conversation(tmp_path: Path, monkeypatch: Any) -> None:
+    catalog = tmp_path / "site-packages"
+    catalog.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", lambda: None)
+
+    async def _body(client: TestClient) -> None:
+        response = await client.post(
+            "/api/evolve/agent/conversations/new",
+            json={"project_root": str(project), "history_choice": "setup"},
+        )
+        assert response.status == 200, await response.text()
+        payload = await response.json()
+        assert payload["conversation"]["project_root"] == str(project.resolve())
+        assert (project / ".git").is_dir()
+        assert payload["conversation"]["id"]
+
+    _drive(catalog, _body)
+
+
+def test_send_sets_up_history_off_the_event_loop(tmp_path: Path, monkeypatch: Any) -> None:
+    catalog = tmp_path / "catalog"
+    catalog.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    loop_thread: list[int] = []
+    setup_threads: list[int] = []
+    finished_setup = False
+    original = forge_code_projects.initialize_history
+
+    def initialize(path: Path) -> Path:
+        nonlocal finished_setup
+        setup_threads.append(threading.get_ident())
+        result = original(path)
+        finished_setup = True
+        return result
+
+    def source_root() -> Path | None:
+        if finished_setup:
+            raise forge_code_projects.ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+        return None
+
+    monkeypatch.setattr(forge_code_projects, "initialize_history", initialize)
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", source_root)
+
+    async def _body(client: TestClient) -> None:
+        loop_thread.append(threading.get_ident())
+        response = await client.post(
+            "/api/evolve/agent/send",
+            json={"project_root": str(project), "history_choice": "setup", "message": "build"},
+        )
+        assert response.status == 400, await response.text()
+        assert (await response.json())["code"] == "invalid_project_root"
+
+    _drive(catalog, _body)
+    assert (project / ".git").is_dir()
+    assert len(setup_threads) == 1
+    assert setup_threads[0] != loop_thread[0]
+
+
 def test_a_normal_project_still_runs(tmp_path: Path, monkeypatch: Any) -> None:
     """The other direction: the guard must not refuse ordinary work.
 
@@ -130,6 +247,9 @@ def test_a_normal_project_still_runs(tmp_path: Path, monkeypatch: Any) -> None:
     launched: dict[str, Any] = {}
 
     class _EmptyStdout:
+        async def read(self, _n: int = -1) -> bytes:
+            return await self.readline()
+
         async def readline(self) -> bytes:
             return b""
 
@@ -216,12 +336,22 @@ def test_a_self_edit_thread_from_redesign_is_let_through_the_guard(tmp_path: Pat
 
     monkeypatch.setattr(evolve_agent_http_support, "ensure_openai_codex_access_token", _access_token)
 
-    conv = forge_code_store.new_conversation(catalog, title="Redesign: turn the plus into a menu", self_edit=True)
-    assert conv.get("self_edit") is True
-    cid = conv["id"]
-    forge_code_projects.bind_conversation(catalog, cid, catalog)
+    # Since 07bdda37 a self-edit names the exact files it may change and is checked
+    # against the source's own protected-file policy, so the source carries both.
+    (catalog / "thomas").mkdir()
+    (catalog / "thomas" / "menu.py").write_text("PLUS = True\n", encoding="utf-8")
+    (catalog / "agent_safety.toml").write_text('[protected]\npolicy_files=["agent_safety.toml"]\n', encoding="utf-8")
+    (catalog / "plans" / "thomas").mkdir(parents=True)
+    (catalog / "plans" / "thomas" / "WORKBOARD.md").write_text("## Agent Claims\n", encoding="utf-8")
 
     async def _body(client: TestClient) -> None:
+        created = await client.post(
+            "/api/evolve/agent/conversations/new",
+            json={"self_edit": True, "project_identity": "thomas-source", "self_edit_scope": ["thomas/menu.py"]},
+        )
+        conv = (await created.json())["conversation"]
+        assert conv.get("self_edit") is True
+        cid = conv["id"]
         response = await client.post(
             "/api/evolve/agent/send",
             json={

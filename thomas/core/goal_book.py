@@ -30,7 +30,9 @@ def _read(workspace: str | Path) -> list[dict[str, Any]]:
     except (OSError, ValueError):
         return []
     goals = data.get("goals") if isinstance(data, dict) else None
-    return [g for g in (goals or []) if isinstance(g, dict) and str(g.get("text") or "").strip()]
+    if not isinstance(goals, list):  # a file of the wrong shape holds no goals, as an unreadable one holds none
+        return []
+    return [g for g in goals if isinstance(g, dict) and str(g.get("text") or "").strip()]
 
 
 def _write(workspace: str | Path, goals: list[dict[str, Any]]) -> None:

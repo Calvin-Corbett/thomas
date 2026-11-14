@@ -75,7 +75,9 @@
     "plans/thomas/problems/",
     "plans/thomas/tasks/",
     "reports/",
-    "tests/browser_workflow_corpus/"
+    "tests/browser_workflow_corpus/",
+    "tests/test_secret_canaries.py",
+    "thomas/security/secret_canaries.py"
   ],
   "forbidden_untracked_prefixes": [
     "runtime/",

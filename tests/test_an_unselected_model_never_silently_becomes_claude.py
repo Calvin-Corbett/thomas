@@ -90,8 +90,7 @@ def test_an_empty_payload_resolves_the_configured_default(monkeypatch: pytest.Mo
 
     settings = ForgeCodeSettings.from_payload({})
     assert settings.family == "gpt", (
-        "the chip showed a GPT model, yet the empty request still dispatched to "
-        f"family {settings.family!r}"
+        f"the chip showed a GPT model, yet the empty request still dispatched to family {settings.family!r}"
     )
     assert settings.recorded_model() == "gpt-5.6-terra"
     support = settings.capability_report()["support"]["model"]
@@ -110,8 +109,7 @@ def test_an_unresolvable_model_fails_before_dispatch_with_a_real_sentence(
         ForgeCodeSettings.from_payload({})
     message = str(excinfo.value)
     assert "model" in message.lower() and "pick" in message.lower(), (
-        f"the refusal {message!r} does not tell the owner what the situation is or "
-        "what to do about it"
+        f"the refusal {message!r} does not tell the owner what the situation is or what to do about it"
     )
     assert "login" not in message.lower() and "claude" not in message.lower(), (
         f"the refusal {message!r} leaks executor internals; the real situation is "
@@ -119,23 +117,18 @@ def test_an_unresolvable_model_fails_before_dispatch_with_a_real_sentence(
     )
 
 
-def test_a_defaulted_non_runnable_model_is_reported_as_substituted(
+def test_a_defaulted_non_runnable_model_is_refused_before_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The configured default can itself be a model Code cannot run (local qwen).
 
-    Today's routing sends it to the Claude CLI; the capability report must mark
-    the model dial substituted on the empty-model path exactly as it does when
-    the model was named explicitly.
+    Build refuses unsupported defaults instead of substituting another model.
     """
 
     monkeypatch.setattr(forge_code_settings, "_configured_default_model", lambda: "qwen2.5-coder:7b")
 
-    settings = ForgeCodeSettings.from_payload({})
-    assert settings.family == "claude"
-    support = settings.capability_report()["support"]["model"]
-    assert support["status"] == "substituted"
-    assert "reason" in support and "Claude" in support["reason"]
+    with pytest.raises(ForgeCodeSettingsError, match="qwen2.5-coder:7b.*your configured default model"):
+        ForgeCodeSettings.from_payload({})
 
 
 def test_a_named_model_never_consults_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,6 +140,5 @@ def test_a_named_model_never_consults_the_default(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(forge_code_settings, "_configured_default_model", _boom)
 
     assert ForgeCodeSettings.from_payload({"model_id": "gpt-5.6-terra"}).family == "gpt"
-    assert (
-        ForgeCodeSettings.from_payload({"model": "claude:sonnet", "model_id": "qwen2.5-coder:7b"}).family == "claude"
-    )
+    with pytest.raises(ForgeCodeSettingsError, match="qwen2.5-coder:7b.*the selected model"):
+        ForgeCodeSettings.from_payload({"model": "claude:sonnet", "model_id": "qwen2.5-coder:7b"})

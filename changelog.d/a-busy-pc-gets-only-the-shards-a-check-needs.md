@@ -1,0 +1,3 @@
+### Changed
+
+- **When your PC is already at its load limit, a check starts only the test processes its files need.** You said the CPU was still capped at 100%. A check always spread its files over one test process per pool place (16 here), so 67 files went out as 16 processes of about 4 files, each paying about 4 CPU-seconds just to start. That helps when CPUs sit idle; when the PC is already at its limit, the extra starts only compete for the same CPUs. Now, with the CPU at or over the limit, the same 67 files go out as 6 processes of up to 12, every file still run; with room to spare, nothing changes.

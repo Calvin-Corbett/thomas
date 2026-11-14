@@ -9,11 +9,13 @@ plain factories so behavior is identical to the previous inline closures.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from thomas import __version__ as THOMAS_VERSION
+from thomas.server.asset_stamps import chrome_stamps, stamp_each_asset
 
 # The self-contained chat modules the chat page handler injects (frontier
 # parity, 2026-09-05): question panel, "/" palette, reply feedback, cost
@@ -22,7 +24,8 @@ from thomas import __version__ as THOMAS_VERSION
 # workspace_shell.js only, so a browser kept old copies of these after they
 # changed on disk (found on the verify server the same day).
 _CHAT_MODULES = (
-    "chat_session_id",  # first: the panels ask it which chat is open
+    "doc_activity",  # first: the panels ask it whether this tab is even on screen
+    "chat_session_id",  # then: the panels ask it which chat is open
     "rate_limit_banner",
     "ask_user_panel",
     "slash_palette",
@@ -30,6 +33,11 @@ _CHAT_MODULES = (
     "cost_readout",
     "fast_mode",
     "todo_panel",
+    # Cards beside the conversation. Dormant while the attention row is off: its route answers 404 and the page
+    # asks again once a minute. The view draws one card; the second file fetches, places and moves them.
+    "attention_widget_view",
+    "attention_card_view",
+    "attention_cards",
 )
 _SETTINGS_MODULES = ("settings_parity",)
 
@@ -79,17 +87,37 @@ def inject_settings_parity(html: str, *, web_dir: Path | None = None) -> str:
     return _inject_modules(html, _SETTINGS_MODULES, web_dir)
 
 
+# The overlay's splice, set by the overlay row while it is on. Nothing is set on a server started with the row off, and
+# the row takes it back when it stops, so a page leaves here unchanged while the row is off.
+_overlay_injector: Callable[[str, str], str] | None = None
+
+
+def use_overlay_injector(injector: Callable[[str, str], str]) -> Callable[[], None]:
+    """Make ``injector`` the splice every served page goes through, and return what takes it back."""
+    global _overlay_injector
+    _overlay_injector = injector
+
+    def take_back() -> None:
+        global _overlay_injector
+        if _overlay_injector is injector:
+            _overlay_injector = None
+
+    return take_back
+
+
 def inject_overlay(html: str, stamp_token: str) -> str:
     """Splice the user overlay into a served page; a broken overlay never takes the page down.
 
     thomas/server/overlay/render.py puts the overlay stylesheet, its JSON view
     and one runtime tag before </head>. The stamp token is the placeholder the
     calling handler rewrites next, so the runtime tag is cache-busted with it.
+    With the overlay row off nothing is installed, and the page is returned as it came.
     """
+    injector = _overlay_injector
+    if injector is None:
+        return html
     try:
-        from thomas.server.overlay.render import inject
-
-        return inject(html, stamp_token)
+        return injector(html, stamp_token)
     except (OSError, ValueError, RuntimeError) as exc:
         import logging
 
@@ -122,7 +150,9 @@ def build_page_handlers(
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
             html = inject_overlay(html, "__THOMAS_WEB_BUILD__")
             html = inject_ask_user_panel(html)
+            html = html.replace("__THOMAS_ASSET_STAMPS__", json.dumps(chrome_stamps(web_dir)))
             html = html.replace("__THOMAS_WEB_BUILD__", web_build)
+            html = stamp_each_asset(html, web_dir, web_build)
             return web.Response(
                 text=html,
                 content_type="text/html",

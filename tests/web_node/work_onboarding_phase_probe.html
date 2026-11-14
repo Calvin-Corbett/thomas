@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Work onboarding phase regression</title></head>
+<body>
+<h1>Work onboarding phase regression</h1>
+<button id="run">Check ordered saves and retry</button>
+<pre id="result" role="status">Ready.</pre>
+<script src="../../thomas/server/web/js/unified_work_support.js"></script>
+<script>
+'use strict';
+document.getElementById('run').addEventListener('click', async () => {
+  const result = document.getElementById('result');
+  const phases = [];
+  let rejectConfiguration = true;
+  const state = { activeApp: { id: 'browser-app', onboarding: { phase: 'goal_discovery' } } };
+  const support = window.ThomasWorkSupport.create({
+    state, esc: String, activeWorkflowFor: () => null, statusPill: () => '',
+    safeArtifactHref: () => '', onboardingBrief: () => '', appUrl: value => value,
+    jsonRequest: async (url, method, body) => {
+      const phase = body.phase;
+      phases.push(phase);
+      if (phase === 'workflow_configuration' && rejectConfiguration) {
+        rejectConfiguration = false;
+        throw new Error('Temporary save failure');
+      }
+      return {};
+    },
+  });
+  try {
+    const fields = { confirmed_goal: 'Plan dinner', workflow_drafts: [{ id: 'dinner', name: 'Dinner' }] };
+    let rejected = false;
+    try {
+      await support.persistOnboardingPhase('workflow_configuration', fields);
+    } catch (error) {
+      if (error.message !== 'Temporary save failure') throw error;
+      rejected = true;
+    }
+    if (!rejected || state.activeApp.onboarding.phase !== 'workflow_mapping') {
+      throw new Error('Failed save did not retain the last acknowledged phase');
+    }
+    await support.persistOnboardingPhase('workflow_configuration', fields);
+    if (phases.join(',') !== 'workflow_mapping,workflow_configuration,workflow_configuration') {
+      throw new Error('Unexpected phase sequence: ' + phases.join(', '));
+    }
+    if (state.activeApp.onboarding.phase !== 'workflow_configuration') throw new Error('Retry did not advance');
+    result.textContent = 'PASS: workflow_mapping → workflow_configuration; failed configuration retained mapping; retry saved configuration.';
+  } catch (error) {
+    result.textContent = 'FAIL: ' + error.message;
+    throw error;
+  }
+});
+</script>
+</body>
+</html>

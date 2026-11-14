@@ -335,7 +335,9 @@ def test_failed_delegation_cards_prefer_failure_progress_over_title() -> None:
 
 
 def test_model_setup_surface_uses_compact_centered_chip_and_themed_provider_dropdown() -> None:
-    index_html = _read(INDEX_HTML)
+    # The Model Setup markup is a template the page loads (moved out of index.html to keep it under the size limit).
+    assert 'src="/static/js/templates/tpl_model_setup.js' in _read(INDEX_HTML)
+    index_html = _read(INDEX_HTML.parent / "js" / "templates" / "tpl_model_setup.js")
     layout_css = _read(LAYOUT_CSS)
     components_css = _read(CHAT_CSS)
 

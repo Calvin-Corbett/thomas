@@ -20,11 +20,12 @@ from aiohttp.test_utils import TestClient, TestServer
 from thomas.server import chat_delegation_deliverable_postprocess as postprocess
 from thomas.server import deliverable_runtime_verify, deliverable_verify
 from thomas.server.routes import deliverable_aiohttp as da
+from thomas.server.routes import deliverable_listing
 
 
 def _make_workspace(monkeypatch: pytest.MonkeyPatch, base: Path, exec_id: str, files: dict[str, str]) -> str:
     """Create a fake workspace under a monkeypatched base and return the exec id."""
-    monkeypatch.setattr(da, "_WORKSPACES_BASE", base)
+    monkeypatch.setattr(deliverable_listing, "_WORKSPACES_BASE", base)
     wd = base / exec_id
     for rel, content in files.items():
         target = wd / rel
@@ -118,7 +119,7 @@ def test_kind_classifies_each_family(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_empty_workspace_has_no_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(da, "_WORKSPACES_BASE", tmp_path)
+    monkeypatch.setattr(deliverable_listing, "_WORKSPACES_BASE", tmp_path)
     (tmp_path / "exec-empty").mkdir(parents=True)
     assert da.deliverable_entry("exec-empty") is None
     assert da.deliverable_kind("exec-empty") == ""
@@ -241,7 +242,7 @@ async def test_download_returns_exact_pdf_bytes_and_attachment_filename(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = b"%PDF-1.4\nTHOMAS-PDF-PROOF\n%%EOF"
-    monkeypatch.setattr(da, "_WORKSPACES_BASE", tmp_path)
+    monkeypatch.setattr(deliverable_listing, "_WORKSPACES_BASE", tmp_path)
     workspace = tmp_path / "exec-download"
     workspace.mkdir(parents=True)
     (workspace / "quarterly-report.pdf").write_bytes(payload)
@@ -436,7 +437,7 @@ async def test_registered_download_requires_configured_api_access(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = b"private-thomas-result"
-    monkeypatch.setattr(da, "_WORKSPACES_BASE", tmp_path)
+    monkeypatch.setattr(deliverable_listing, "_WORKSPACES_BASE", tmp_path)
     workspace = tmp_path / "exec-private"
     workspace.mkdir(parents=True)
     (workspace / "secret.pdf").write_bytes(payload)

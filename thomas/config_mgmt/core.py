@@ -7,6 +7,7 @@ and task execution within the configuration management platform.
 
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -76,7 +77,7 @@ class ResourceAttribute:
     value: Any
     expected: Any
     required: bool = False
-    validator: callable | None = None
+    validator: Callable[[Any], bool] | None = None
 
     def is_compliant(self) -> bool:
         """Check if attribute matches expected value."""
@@ -107,7 +108,7 @@ class Resource:
     timestamp: datetime = field(default_factory=datetime.utcnow)
     tags: dict[str, str] = field(default_factory=dict)
     depends_on: list[str] = field(default_factory=list)
-    handlers: dict[str, callable] = field(default_factory=dict)
+    handlers: dict[str, Callable[..., Any]] = field(default_factory=dict)
 
     def add_attribute(
         self,
@@ -115,7 +116,7 @@ class Resource:
         value: Any,
         expected: Any,
         required: bool = False,
-        validator: callable | None = None,
+        validator: Callable[[Any], bool] | None = None,
     ) -> None:
         """Add or update a resource attribute."""
         self.attributes[name] = ResourceAttribute(

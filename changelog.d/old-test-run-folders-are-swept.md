@@ -1,0 +1,3 @@
+### Changed
+
+- **Test runs now clean up the data folders earlier runs left behind.** Every test session makes a `thomas-test-data-*` folder in the temp folder and removes it when it ends, but a session stopped for time never gets there, and a file Defender or Windows Search has open makes the removal give up without a word: one account's temp folder held 1,992 of them, and Windows Search spent about a core indexing test folders. Each session that ends now also removes up to 40 such folders older than six hours (no run lasts that long, so none belongs to a live run). On this PC the first two sessions took the count from 1,992 to 1,912.

@@ -1,0 +1,8 @@
+### Added
+
+- **An Agents workspace shows every task and the machine's load.** You asked for a place to see "every single task that's running", the stalled ones, suggestions and CPU usage, and to take control. Agents shows each task as a live card with the stalled ones lifted to the top, CPU and memory gauges with ten minutes of history, a pie of task states, suggestions drawn from what the page can see (stalled tasks, approvals waiting, a busy machine), and a drawer to stop, retry or run a task. Finished tasks show how long they ran, the CPU and memory gauges turn amber when the machine is busy, and the pie has a legend naming its colours. It opens from Agents in the sidebar and can be turned off on the plugins page (Agents page).
+- **A running task with no progress for ten minutes is marked stalled.** Every task in the control view now says whether it is stalled and how long it has been idle. Set `THOMAS_STALLED_AFTER_S` to change the ten minutes.
+
+### Removed
+
+- **The Mission Control, System Map and Agent Ops pages are gone.** You said "I don't really like the mission control" and the other two, and that one central place should replace them. Their sidebar entries and pages are removed, and their old addresses (`/mission`, `/system-map`, `/agent-ops`) now lead to Agents, so saved links keep working. The six panels that only lived on the Agent Ops page (steering a running agent, run telemetry, worktree progress, mention context, pull request review and inline annotations) no longer have a screen; the routes behind them still answer other programs. The older full page at `/classic` keeps its own Mission Control section.

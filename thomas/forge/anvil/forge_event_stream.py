@@ -10,7 +10,10 @@ stdout, flushed the instant it is produced. Each is ``{"fc": <kind>, ...}`` wher
   * ``tool``        — a tool/edit CALL: ``{"name": str, "text": <summary>}``
   * ``tool_result`` — a tool RESULT: ``{"text": str, "is_error": bool}``
   * ``error``       — an error surfaced by the agent / CLI
-  * ``meta``        — a MEANINGFUL build-status line from the engine itself
+  * ``meta``        — a MEANINGFUL build-status line from the engine itself; one
+                      with ``"receipt": "model"`` names the EXACT model the engine
+                      reported it ran, not the alias asked for
+                      (``build_model_receipt.py``)
   * ``engine_debug``— CLI-side infrastructure noise (host hook/plugin stderr):
                       kept verbatim under Show details, never narrative text
 """
@@ -25,8 +28,37 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from thomas.agent.loop_tool_protocol import tool_call_access
+from thomas.core.claude_plan import (  # noqa: F401  (three are re-exported for dispatch_claude_cli)
+    # The Claude CLI's own refusals -- not signed in, and your plan's usage limit --
+    # are worded in one place, because Chat meets both on the same CLI now
+    # (thomas/core/llm_streaming_claude_cli.py).
+    CLAUDE_CLI_LOGIN_GUIDANCE,
+    PLAN_LIMIT_PREFIX,
+    is_claude_cli_login_error,
+    plan_limit_text,
+    plan_limit_words,
+)
+from thomas.forge.anvil.build_model_receipt import engine_model_events
 
 FORGE_EVENT_KEY = "fc"
+
+
+_LOGIN_REFUSAL_RE = re.compile(
+    r"(?:not logged in(?:\s*[.·—–:-]?\s*please run /login)?|"
+    r"invalid api key(?:\s*[.·—–:-]?\s*please run /login)?|please run /login)[.!]?",
+    re.IGNORECASE,
+)
+
+
+def is_login_refusal(text: str) -> bool:
+    """Recognize a complete login diagnostic, not prose discussing login handling."""
+    words = str(text or "").strip()
+    return (
+        bool(_LOGIN_REFUSAL_RE.fullmatch(words))
+        or words == CLAUDE_CLI_LOGIN_GUIDANCE
+        or (words.startswith(CLAUDE_CLI_LOGIN_GUIDANCE + " (Claude CLI said: ") and words.endswith(")"))
+    )
+
 
 # Claude's own tool vocabulary, which is not Thomas's. Read-only names can never
 # change anything; mutation names always can; ``Bash`` is SHELL-LIKE — a shell
@@ -71,9 +103,15 @@ def _default_emit(event: dict[str, Any]) -> None:
     TEXT write of an em-dash encodes to the SINGLE cp1252 byte ``0x97`` — not UTF-8
     ``E2 80 94``. Writing to ``.buffer`` emits UTF-8 bytes regardless of the text
     layer's code page, so every glyph survives on every platform.
+
+    Every line carries ``ts`` (epoch milliseconds) unless its producer set one, so
+    durations can be read from the record of a live or a saved turn alike.
     """
     import sys
+    import time
 
+    if "ts" not in event:
+        event = {**event, "ts": int(time.time() * 1000)}
     line = json.dumps(event, ensure_ascii=False) + "\n"
     try:
         buffer = getattr(sys.stdout, "buffer", None)
@@ -258,6 +296,15 @@ class _StreamState:
     # assistant text block. It lets us SUPPRESS the duplicate COMPLETE text block
     # that arrives right after — the deltas already carried that text live.
     pending_text_delta: bool = False
+    text_block: int = 0
+    # A ``rate_limit_event`` said your plan refused this run, and when it resets
+    # (Unix seconds, or None). For the 429 result that follows (_plan_limit_text).
+    limit_rejected: bool = False
+    limit_resets_at: int | None = None
+    # Exact model ids the engine has reported for this run, first seen first.
+    # The list is what makes the ``model`` event fire once instead of on every
+    # assistant message that repeats the same id (build_model_receipt.py).
+    engine_models: list[str] = field(default_factory=list)
 
     def admit_insight(self, insight: str) -> bool:
         """True iff this distilled insight may surface NOW (post-observation, novel)."""
@@ -318,32 +365,25 @@ _CLI_HOOK_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# The Claude CLI's unauthenticated failure ("Not logged in — Please run /login",
-# exit 1). ``/login`` is a claude-CLI command a Thomas owner has no way to run
-# from the product, so surfacing the raw text verbatim was a dead end. The
-# translation names the real situation and both ways out, and keeps the CLI's
-# own words attached as the detail.
-_CLAUDE_CLI_LOGIN_RE = re.compile(r"not logged in|please run /login", re.IGNORECASE)
-
-CLAUDE_CLI_LOGIN_GUIDANCE = (
-    "The Claude engine isn't signed in on this machine — add an Anthropic key in "
-    "Settings, or pick one of the ready OpenAI models."
-)
-
-
-def is_claude_cli_login_error(text: str) -> bool:
-    """True iff ``text`` carries the Claude CLI's not-logged-in failure.
-
-    Matches the raw CLI wording, and therefore also the mapped guidance text,
-    which quotes the raw wording as its detail — so a dispatcher watching the
-    emitted stream can recognize the situation either way.
-    """
-
-    return bool(_CLAUDE_CLI_LOGIN_RE.search(str(text or "")))
-
 
 def _login_error_text(raw: str) -> str:
     return f"{CLAUDE_CLI_LOGIN_GUIDANCE} (Claude CLI said: {str(raw or '').strip()})"
+
+
+def _plan_limit_text(txt: str, state: _StreamState | None) -> str:
+    """The error for a 429 result, worded by ``thomas/core/claude_plan.py``.
+
+    Chat now meets the same refusal on the same CLI
+    (``thomas/core/llm_streaming_claude_cli.py``), so the wording, the reset
+    parsing and the "not your plan's limit" test moved down to core where both
+    read one copy. This keeps Build's own call shape, which carries the reset
+    from the ``rate_limit_event`` this run already saw.
+    """
+    return plan_limit_text(
+        txt,
+        rejected=state is not None and state.limit_rejected,
+        resets_at=state.limit_resets_at if state is not None else None,
+    )
 
 
 def translate_claude_event(line: str, state: _StreamState | None = None) -> list[dict[str, Any]]:
@@ -366,12 +406,35 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
         return _classify_raw_line(str(line))
 
     etype = obj.get("type")
-    events: list[dict[str, Any]] = []
+    # The exact model, wherever this line names it — the ``init`` header, an
+    # assistant message, or the terminal ``modelUsage``. Read FIRST so the
+    # ``model`` event precedes the text of the message that carried it, and so
+    # a line that names a model and nothing else still produces the receipt.
+    events: list[dict[str, Any]] = engine_model_events(obj, state.engine_models if state is not None else [])
     if etype == "system":
-        # Internal session/init/hook plumbing — noise to a human watching a build;
-        # dropped entirely and produces no forge event.
+        # The rest of the session/init/hook plumbing is noise to a human watching
+        # a build; dropped entirely and produces no further forge event.
         pass
+    elif etype == "rate_limit_event":  # no event: as an error it would be the run's first, and so its cause
+        info = obj.get("rate_limit_info") if isinstance(obj.get("rate_limit_info"), dict) else {}
+        if state is not None and info.get("status") == "rejected":
+            state.limit_rejected = True
+            reset = str(info.get("resetsAt") or "")
+            state.limit_resets_at = int(float(reset)) if reset.replace(".", "", 1).isdigit() else None
     elif etype == "assistant":
+        if obj.get("error") or obj.get("isApiErrorMessage") or obj.get("is_api_error_message"):
+            for block in (obj.get("message") or {}).get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "text" and str(block.get("text") or "").strip():
+                    text = str(block["text"])
+                    if obj.get("error") == "rate_limit":
+                        text = _plan_limit_text(text, state)
+                    event = {FORGE_EVENT_KEY: "error", "text": text, "provider_text": str(block["text"])}
+                    if state is not None:
+                        event["text_block"] = state.text_block
+                        state.text_block += 1
+                        state.pending_text_delta = False
+                    events.append(event)
+            return events
         for block in (obj.get("message") or {}).get("content") or []:
             if not isinstance(block, dict):
                 continue
@@ -381,10 +444,11 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
                     # The token-progressive deltas already carried this whole block
                     # live — re-emitting the complete text would double it.
                     state.pending_text_delta = False
+                    state.text_block += 1
                     continue
                 txt = str(block.get("text") or "").strip()
                 if txt:
-                    events.append({FORGE_EVENT_KEY: "say", "text": txt})
+                    events.append({FORGE_EVENT_KEY: "say", "text": txt, "source": "model"})
             elif btype == "thinking":
                 # SHARED with the GPT in-process path: one reasoning block ->
                 # optional distilled insight (structurally gated) ABOVE the full
@@ -432,9 +496,18 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
             if isinstance(delta, dict) and delta.get("type") == "text_delta":
                 piece = str(delta.get("text") or "")
                 if piece:
-                    events.append({FORGE_EVENT_KEY: "say", "text": piece, "delta": True})
+                    refused = plan_limit_words(piece) or is_login_refusal(piece)
+                    events.append(
+                        {
+                            FORGE_EVENT_KEY: "say",
+                            "text": piece,
+                            "delta": True,
+                            "source": "process" if refused else "model",
+                        }
+                    )
                     if state is not None:
                         state.pending_text_delta = True
+                        events[-1]["text_block"] = state.text_block
     elif etype == "user":
         for block in (obj.get("message") or {}).get("content") or []:
             if not isinstance(block, dict):
@@ -449,11 +522,7 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
                 # result carries the call's name, access stamps, and command
                 # excerpt — a result with no correlated call stays unnamed and
                 # unstamped, and downstream verdicts keep treating it strictly.
-                stamp = (
-                    state.tool_stamps.pop(str(block.get("tool_use_id") or ""), None)
-                    if state is not None
-                    else None
-                )
+                stamp = state.tool_stamps.pop(str(block.get("tool_use_id") or ""), None) if state is not None else None
                 if stamp:
                     if stamp.get("command"):
                         event["command"] = stamp["command"]
@@ -470,9 +539,20 @@ def translate_claude_event(line: str, state: _StreamState | None = None) -> list
         if is_err:
             # The CLI's own login prompt is a dead end in this product; name
             # the situation and the ways out, keeping the raw text as detail.
-            if is_claude_cli_login_error(txt):
+            if is_login_refusal(txt):
                 txt = _login_error_text(txt)
-            events.append({FORGE_EVENT_KEY: "error", "text": txt or "claude reported an error"})
+            elif obj.get("api_error_status") == 429 or plan_limit_words(txt) or (state and state.limit_rejected):
+                txt = _plan_limit_text(txt, state)  # a plan limit is not a crash
+            event = {
+                FORGE_EVENT_KEY: "error",
+                "text": txt or "claude reported an error",
+                "provider_text": str(obj.get("result") or ""),
+            }
+            if state is not None:
+                event["text_block"] = state.text_block
+                state.text_block += 1
+                state.pending_text_delta = False
+            events.append(event)
         elif txt:
             events.append({FORGE_EVENT_KEY: "final", "text": txt})
     return events
@@ -493,7 +573,7 @@ def _classify_raw_line(line: str) -> list[dict[str, Any]]:
         return [{FORGE_EVENT_KEY: "engine_debug", "name": "claude-code hook", "text": line}]
     if is_claude_cli_login_error(line):
         return [{FORGE_EVENT_KEY: "error", "text": _login_error_text(line)}]
-    return [{FORGE_EVENT_KEY: "say", "text": line}]
+    return [{FORGE_EVENT_KEY: "say", "text": line, "source": "process_output"}]
 
 
 class ClaudeStreamTranslator:
@@ -628,6 +708,23 @@ def _stream_cli(
         stderr=subprocess.STDOUT,
         env=env,
     )
+    job = None
+    if os.name == "nt":
+        from .windows_job import OwnedWindowsJob
+
+        try:
+            job = OwnedWindowsJob(proc)
+        except OSError:
+            proc.wait()
+            raise
+
+        # A descendant can inherit Claude's output pipe. Close the job as soon
+        # as Claude exits; waiting for pipe EOF first could otherwise hang here.
+        def _close_when_parent_exits() -> None:
+            proc.wait()
+            job.close()
+
+        threading.Thread(target=_close_when_parent_exits, daemon=True).start()
     if stdin_text is not None and proc.stdin is not None:
         # Feed the (possibly very large) prompt via STDIN on a background thread.
         # Passing the prompt on argv overflows the Windows command-line limit for
@@ -645,9 +742,14 @@ def _stream_cli(
     timed_out = {"v": False}
 
     def _kill() -> None:
+        if proc.poll() is not None:
+            return
         timed_out["v"] = True
         with contextlib.suppress(Exception):
-            proc.kill()
+            if job is not None:
+                job.close()
+            else:
+                proc.kill()
 
     timer = threading.Timer(max(1, int(timeout)), _kill)
     timer.start()
@@ -665,7 +767,7 @@ def _stream_cli(
             for ev in translate(line):
                 emit(ev)
         except (RuntimeError, ValueError, TypeError, KeyError, AttributeError, json.JSONDecodeError):
-            emit({FORGE_EVENT_KEY: "say", "text": line})
+            emit({FORGE_EVENT_KEY: "say", "text": line, "source": "process_output"})
 
     try:
         assert proc.stdout is not None
@@ -682,6 +784,11 @@ def _stream_cli(
         proc.wait()
     finally:
         timer.cancel()
+        if job is not None:
+            job.close()
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
     rc = proc.returncode if proc.returncode is not None else 0
     if timed_out["v"]:
         emit({FORGE_EVENT_KEY: "error", "text": f"build timed out after {timeout}s — process killed"})

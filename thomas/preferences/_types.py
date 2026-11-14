@@ -4,7 +4,7 @@ from typing import Literal
 
 Theme = Literal["auto", "light", "dark"]
 BubbleStyle = Literal["rounded", "square", "compact"]
-AutonomyLevel = Literal["L1", "L2", "L3", "L4"]
+AutonomyLevel = Literal["L1", "L2", "L3", "L4", "L5"]
 ReasoningEffort = Literal["low", "medium", "high", "max", "xhigh"]
 RunMode = Literal["auto", "fast", "thinking"]
 TokenEconomyLevel = Literal["cheap", "optimal", "max"]

@@ -58,10 +58,13 @@ def setup_chat_feedback_routes(
             payload = {}
         rating = str(payload.get("rating") or "").strip().lower()
         message_id = str(payload.get("message_id") or "").strip()
-        if rating not in _RATINGS or not message_id:
+        # Name the one thing that is wrong, so the page can say it rather than list both requirements.
+        if not message_id:
             return web.json_response(
-                {"ok": False, "error": "message_id and a rating of up or down are required"}, status=400
+                {"ok": False, "error": "message_id is required", "field": "message_id"}, status=400
             )
+        if rating not in _RATINGS:
+            return web.json_response({"ok": False, "error": "rating must be up or down", "field": "rating"}, status=400)
         row = {
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "session_id": str(payload.get("session_id") or "").strip()[:128],

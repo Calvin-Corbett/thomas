@@ -5,11 +5,12 @@
     chat: { label: 'Chat', history: 'Recent chats', search: 'Search chats', create: 'New chat', prompt: 'Message Thomas…' },
     // Named "Build" to the user; the key stays `code` because it is the adapter
     // id, the surface-mode attribute and half the API's vocabulary.
-    code: { label: 'Build', history: 'Builds', search: 'Search builds', create: 'New build', prompt: 'Ask Thomas to build, debug, or test…' },
+    code: { label: 'Build', history: 'Recent tasks', search: 'Search tasks', create: 'New task', prompt: 'Message Thomas…' },
     work: { label: 'Work', history: 'Jobs', search: 'Search jobs', create: 'Create job', prompt: 'Describe the job or message this job…' },
   };
   const runtime = {
     mode: 'chat',
+    adapterEntered: true,
     host: null,
     adapters: Object.create(null),
     switchGeneration: 0,
@@ -18,6 +19,20 @@
 
   function adapter(mode) { return runtime.adapters[mode] || null; }
   function byId(id) { return document.getElementById(id); }
+
+  function refreshInBackground(mode, generation) {
+    const current = adapter(mode);
+    if (!current || !current.refresh) return;
+    void Promise.resolve().then(() => current.refresh()).then(() => {
+      if (generation === runtime.switchGeneration && mode === runtime.mode) {
+        runtime.host && runtime.host.renderHistory && runtime.host.renderHistory();
+      }
+    }).catch(() => {
+      if (generation === runtime.switchGeneration && mode === runtime.mode) {
+        runtime.host && runtime.host.announce && runtime.host.announce(`Could not refresh ${MODES[mode].label}. Try again.`);
+      }
+    });
+  }
 
   function updateChrome() {
     const cfg = MODES[runtime.mode];
@@ -49,20 +64,24 @@
 
   async function performModeSwitch(next, options, generation) {
     if (generation !== runtime.switchGeneration) return false;
-    if (next === runtime.mode && !(options && options.force)) return false;
+    if (next === runtime.mode && runtime.adapterEntered && !(options && options.force)) return false;
     const previous = runtime.mode;
     const oldAdapter = adapter(previous);
     const nextAdapter = adapter(next);
     try {
-      if (oldAdapter && oldAdapter.leave) await oldAdapter.leave();
+      // A superseding request can arrive after leave disabled the surface.
+      // Keep that fact separate from its mode label so returning re-enters it.
+      const wasEntered = runtime.adapterEntered;
+      runtime.adapterEntered = false;
+      if (wasEntered && oldAdapter && oldAdapter.leave) await oldAdapter.leave();
       if (generation !== runtime.switchGeneration) return false;
       runtime.mode = next;
       updateChrome();
       runtime.host && runtime.host.modeChanged && runtime.host.modeChanged(next, previous);
       if (nextAdapter && nextAdapter.enter) await nextAdapter.enter(byId('tc-mode-surface'));
+      runtime.adapterEntered = true;
       if (generation !== runtime.switchGeneration) return false;
-      if (nextAdapter && nextAdapter.refresh) await nextAdapter.refresh();
-      if (generation !== runtime.switchGeneration) return false;
+      refreshInBackground(next, generation);
       runtime.host && runtime.host.renderHistory && runtime.host.renderHistory();
       if (options && options.focusTab) {
         const selected = document.querySelector(`[data-thomas-mode="${next}"]`);
@@ -72,6 +91,7 @@
       }
       return true;
     } catch (error) {
+      runtime.adapterEntered = false;
       try {
         if (nextAdapter && nextAdapter.leave) await nextAdapter.leave();
       } catch (_) {
@@ -82,7 +102,8 @@
       try {
         runtime.host && runtime.host.modeChanged && runtime.host.modeChanged(previous, next);
         if (oldAdapter && oldAdapter.enter) await oldAdapter.enter(byId('tc-mode-surface'));
-        if (oldAdapter && oldAdapter.refresh) await oldAdapter.refresh();
+        runtime.adapterEntered = true;
+        refreshInBackground(previous, generation);
         runtime.host && runtime.host.renderHistory && runtime.host.renderHistory();
       } catch (_) {
         // Keep the shell on the last known mode even when adapter recovery fails.
@@ -123,8 +144,10 @@
     if (runtime.mode === 'chat') return false;
     const current = adapter(runtime.mode);
     if (!current || !current.send) return false;
-    current.send(String(text || ''), context || {});
-    return true;
+    // The composer clears only when the mode took the message. An adapter that
+    // answers `false` has refused it and said why on its own surface, so the
+    // words stay in the box; anything else (a promise included) is a yes.
+    return current.send(String(text || ''), context || {}) === false ? 'refused' : true;
   }
 
   function isBusy(mode) {
@@ -150,13 +173,13 @@
     return true;
   }
 
-  function newConversation(projectRoot, projectLabel) {
+  function newConversation(projectRoot, projectLabel, options) {
     if (runtime.mode === 'chat') return false;
     const current = adapter(runtime.mode);
     // Forward the arguments: the library picker names the project it chose, and
     // dropping them here silently re-bound whatever was already selected.
-    if (current && current.newConversation) current.newConversation(projectRoot, projectLabel);
-    return true;
+    if (current && current.newConversation) return current.newConversation(projectRoot, projectLabel, options);
+    return false;
   }
 
   function connect(host) {
@@ -176,6 +199,10 @@
     });
     runtime.mode = 'chat';
     updateChrome();
+    try {
+      const initial = new URLSearchParams(location.search).get('tab_mode');
+      if (initial && MODES[initial] && initial !== 'chat') void setMode(initial);
+    } catch (_) { /* A standalone shell starts in Chat. */ }
   }
 
   window.ThomasUnifiedModes = {

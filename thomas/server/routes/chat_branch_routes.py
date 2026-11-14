@@ -3,7 +3,7 @@
 POST /api/chats/{chat_id}/branch  body {"upto": N} optional
   -> {"ok": true, "chat_id": "chat_<hex>", "messages": N}
 
-Copies the live v2 session file (``.thomas/sessions_v2/chat_<hex>.json``) to a
+Copies the live v2 session file (the sessions store's ``chat_<hex>.json``) to a
 fresh id, keeping the first ``upto`` messages (all of them by default), the
 model and settings, and none of the run log. The original is not touched.
 The sidebar's "Branch this chat" action calls this and opens the copy.
@@ -11,7 +11,6 @@ The sidebar's "Branch this chat" action calls this and opens the copy.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import secrets
 import time
@@ -51,16 +50,15 @@ def branch_session(session: dict[str, Any], *, new_id: str, upto: int | None) ->
 def setup_chat_branch_routes(
     app: web.Application,
     *,
-    sessions_dir: Path,
+    store: Any,
     require_api_access: Callable[[web.Request], Any] | None = None,
 ) -> None:
-    root = Path(sessions_dir)
     guard = require_api_access or (lambda _request: None)
 
     async def branch_chat(request: web.Request) -> web.Response:
         guard(request)
         chat_id = str(request.match_info.get("chat_id") or "").strip()
-        source = session_file_for(root, chat_id)
+        source = session_file_for(store, chat_id)
         if source is None:
             return web.json_response({"ok": False, "error": "chat id must be a session id or chat_<hex>"}, status=400)
         try:
@@ -83,11 +81,11 @@ def setup_chat_branch_routes(
             return web.json_response({"ok": False, "error": "no such chat"}, status=404)
         if not isinstance(session, dict):
             return web.json_response({"ok": False, "error": "no such chat"}, status=404)
-        # A store-style id (24 url-safe chars) and the store's file name for it.
+        # A store-style id (24 url-safe chars) and the store's file for it.
         new_id = secrets.token_urlsafe(18)
         copy = branch_session(session, new_id=new_id, upto=upto)
         copy["meta"]["branched_from"] = str(session.get("session_id") or chat_id)
-        target = root / f"chat_{hashlib.sha256(new_id.encode()).hexdigest()[:16]}.json"
+        target = Path(store.path_of(new_id))
         try:
             target.write_text(json.dumps(copy, ensure_ascii=False), encoding="utf-8")
         except OSError as exc:

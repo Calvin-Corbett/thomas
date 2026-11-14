@@ -1,0 +1,3 @@
+### Fixed
+
+- **A file named by its last folders is the file that is there, not a new one to make.** A repair round for the ChatGPT sign-in project mentioned that a status call "moved to js/chat_model_accounts.js". The file is thomas/server/web/js/chat_model_accounts.js, but the check of what a task must produce only looked three folders deep, so it asked the team to create `js/chat_model_accounts.js` at the top of the repo, and the team wrote an 18-line stand-in there to satisfy it. A path with a folder in it that is not at the top now means the one committed file whose path ends with it; when two files share that ending, it is not guessed.

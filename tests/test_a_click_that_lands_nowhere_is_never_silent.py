@@ -32,7 +32,10 @@ pytestmark = pytest.mark.skipif(not MAIN_JS.exists(), reason="desktop shell is n
 
 
 def _main() -> str:
-    return MAIN_JS.read_text(encoding="utf-8")
+    # The bridge code moved out of main.js into cdp.js and bridge_extra.js; the rules below
+    # apply to all three, so read them as one.
+    parts = [MAIN_JS, MAIN_JS.with_name("cdp.js"), MAIN_JS.with_name("bridge_extra.js")]
+    return "\n".join(p.read_text(encoding="utf-8") for p in parts if p.exists())
 
 
 def test_click_points_come_from_the_element_not_the_box_model() -> None:

@@ -9,12 +9,11 @@ the manifest only ever holds records the rest of Thomas knows how to read:
 
 from __future__ import annotations
 
-import functools
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
+from thomas.core.git_process import run_git
 from thomas.server.overlay import stock_tokens
 from thomas.server.overlay.schema import (
     RECORD_ID,
@@ -38,6 +37,8 @@ TOKEN_ADDRESS = re.compile(r"^token:([a-z][a-z0-9-]{1,31}|\*):(--[a-z0-9-]+)$")
 PROTECTED_POLICIES = frozenset({"protected", "no-edit"})
 ADDRESS_TEXT = re.compile(r"^[a-z]+:[^\x00-\x1f\x7f]{1,400}$")  # printable, bounded; kinds add their own grammar
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+# The running build's short sha, read once per process by _git_short_sha().
+_short_sha: str | None = None
 
 
 def validate_loaded(rec: Any, index: int) -> list[str]:
@@ -305,21 +306,25 @@ def stock_value_for(address: str, stock: dict[str, dict[str, str]]) -> str | Non
     return stock.get(theme, {}).get(match.group(2)) or stock.get("nebula", {}).get(match.group(2))
 
 
-@functools.lru_cache(maxsize=1)
 def _git_short_sha() -> str | None:
-    """Memoised per process: the running build does not change under a live server."""
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-            cwd=str(_REPO_ROOT),
-        )
-        return out.stdout.strip() or None
-    except (OSError, subprocess.SubprocessError):
+    """Memoised per process: the running build does not change under a live server.
+
+    Read through the bounded runner, not ``subprocess.run(..., timeout=5)``: that
+    timeout bounds nothing when git is reached through a launcher, and this runs
+    in the worker thread ``POST /api/ui/overlay/records`` hands the write to --
+    one thread out of the pool the runtime guard and every chat turn draw from.
+    A git that could not answer is not memoised, because "this build has no sha"
+    is a worse answer to keep than one read again next time.
+    """
+    global _short_sha
+
+    if _short_sha is not None:
+        return _short_sha
+    result = run_git(["rev-parse", "--short", "HEAD"], cwd=_REPO_ROOT, timeout=5.0, slot_wait=5.0)
+    if not result.ok:
         return None
+    _short_sha = result.output() or None
+    return _short_sha
 
 
 def birth_base(web_build: str = "") -> dict[str, Any]:

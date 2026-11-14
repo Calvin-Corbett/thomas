@@ -162,14 +162,6 @@ def _copy_snapshot_paths(repo_root: Path, snapshot_root: Path, rel_paths: Sequen
     return copied
 
 
-def _copy_directory_if_present(repo_root: Path, snapshot_root: Path, rel_path: str) -> None:
-    src = repo_root / rel_path
-    if not src.exists() or not src.is_dir():
-        return
-    dst = snapshot_root / rel_path
-    shutil.copytree(src, dst, dirs_exist_ok=True)
-
-
 def _remove_private_marker_files(snapshot_root: Path) -> list[str]:
     removed: list[str] = []
     for path in sorted(item for item in snapshot_root.rglob("*") if item.is_file()):

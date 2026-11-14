@@ -1,0 +1,3 @@
+### Fixed
+
+- A landing that changes Python no longer ends the checks that are running. On 2026-11-06 Thomas retired himself within a minute of each such landing (13:51, 14:38, 15:20) and ended checks 40 and 45 minutes into their work with shards still going, and a hand-in check takes longer than the gap between those landings, so none finished all afternoon. You asked: "dont stop working on thomas and checking that he is progressing". The reload now also waits for every check the capacity ledger shows running, and goes ahead as soon as none is left. A ledger that cannot be read at that moment never holds the reload back.

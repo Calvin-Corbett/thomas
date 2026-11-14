@@ -112,9 +112,9 @@ jobs:
 
       # Fourth ledger-backed gate scoped off `main`, for the same reason as the
       # workboard ones: it requires a matching entry in
-      # docs/ops/module_audit_log.json for every major-module change, and that
-      # ledger is listed in publish_strip_prefixes -- the published copy is
-      # empty on purpose. So on `main` any change under thomas/core/ asks for an
+      # docs/ops/module_audit_log.json for every major-module change, and the
+      # public release carries that ledger only as an empty stub, on purpose.
+      # So on `main` any change under thomas/core/ asks for an
       # audit entry the release tree is designed never to carry. The gate itself
       # is untouched: on `dev`, where the ledger is real, it still enforces.
       - name: Module audit gate
@@ -284,11 +284,10 @@ jobs:
           python -m pytest -q tests/test_llm_openai_tool_compat.py
           python -m pytest -q tests/test_agent_loop_tool_policy.py
           python -m pytest -q tests/test_tool_registry_resolution.py
-          # tests/test_chat_controls.py and tests/test_model_switching.py were
-          # named here but exist in no branch -- deleted at some point and never
-          # unwired, so this step aborted on "file or directory not found"
-          # before reaching the tests that do exist. The development branch
-          # still carries the same two dead references.
+          # tests/test_chat_controls.py and tests/test_model_switching.py used to
+          # be named here. Both were deleted long ago and never unwired, so this
+          # step stopped on "file or directory not found" before it reached the
+          # tests below. Every file this step names must exist.
           python -m pytest -q tests/test_server_chat_controls.py
           python -m pytest -q tests/test_agent_loop_autonomy.py
           python -m pytest -q tests/test_companion_policy_compliance.py
@@ -370,6 +369,8 @@ jobs:
             tests/test_agent_presence_more.py \
             tests/test_server_tools_api.py \
             tests/test_server_chat_v2_max_mode.py \
+            tests/test_server_chat_v2_max_mode_dispatch.py \
+            tests/test_server_chat_v2_max_mode_controls.py \
             tests/test_server_chat_v2_helpers.py \
             tests/test_server_health_routes.py \
             tests/test_chat_delegation.py \
@@ -497,7 +498,10 @@ jobs:
           python -m pytest -q -x tests/prompt_pack/test_p127_gateway_restart_command.py
           python -m pytest -q -x tests/test_server_access_mode.py
 
-  full-test-matrix:
+  # Eleven named files, not the suite: the suite (~13,000 tests) runs weekly and on
+  # demand in full-suite.yml. This job used to be called full-test-matrix, and a
+  # regression hid behind its green badge for two days (2026-09-05 to 07).
+  smoke-matrix:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -518,7 +522,7 @@ jobs:
           python -m pip install -e ".[server,repl,test]"
           python -m pip install pytest pytest-asyncio pytest-aiohttp
 
-      - name: Matrix regression suite
+      - name: Smoke list (eleven files; not the suite)
         run: |
           python -m pytest -q tests/test_server_access_mode.py
           python -m pytest -q tests/test_server_chat_controls.py
@@ -534,7 +538,7 @@ jobs:
 
   docker-smoke:
     runs-on: ubuntu-latest
-    needs: [protocol-parity, security-regression, codebase-auto-checks, full-test-matrix]
+    needs: [protocol-parity, security-regression, codebase-auto-checks, smoke-matrix]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -549,7 +553,7 @@ jobs:
 
   required-gates:
     runs-on: ubuntu-latest
-    needs: [protocol-parity, codebase-auto-checks, security-regression, full-test-matrix, docker-smoke]
+    needs: [protocol-parity, codebase-auto-checks, security-regression, smoke-matrix, docker-smoke]
     steps:
       - name: Required checks passed
         run: |

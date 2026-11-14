@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import subprocess
 from datetime import timezone
 from pathlib import Path
 
 import pytest
 
 import thomas.core.agent_presence as mod
+from thomas.core.git_process import GitResult
 
 
 def test_agent_presence_env_and_parse_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,6 +81,9 @@ def test_agent_presence_session_and_pid_edges(tmp_path: Path, monkeypatch: pytes
     path.write_text("[]", encoding="utf-8")
     assert mod.close_session(repo_root=tmp_path, session_id="sess-edge") is False
 
+    # The POSIX probe (thomas.core.process_alive); Windows never sends signal 0, which is CTRL_C_EVENT there:
+    # see tests/test_a_liveness_probe_sends_no_ctrl_c.py.
+    monkeypatch.setattr(mod.os, "name", "posix")
     monkeypatch.setattr(mod.os, "kill", lambda pid, sig: None)
     assert mod._is_pid_alive(7) is True
 
@@ -90,14 +93,14 @@ def test_agent_presence_session_and_pid_edges(tmp_path: Path, monkeypatch: pytes
     def _raise_permission(pid: int, sig: int) -> None:
         raise PermissionError()
 
-    def _raise_runtime(pid: int, sig: int) -> None:
-        raise RuntimeError("boom")
+    def _raise_os_error(pid: int, sig: int) -> None:
+        raise OSError("boom")
 
     monkeypatch.setattr(mod.os, "kill", _raise_lookup)
     assert mod._is_pid_alive(7) is False
     monkeypatch.setattr(mod.os, "kill", _raise_permission)
     assert mod._is_pid_alive(7) is True
-    monkeypatch.setattr(mod.os, "kill", _raise_runtime)
+    monkeypatch.setattr(mod.os, "kill", _raise_os_error)
     assert mod._is_pid_alive(7) is False
     assert mod._is_pid_alive(0) is False
 
@@ -107,26 +110,29 @@ def test_agent_presence_git_and_merge_helpers(monkeypatch: pytest.MonkeyPatch, t
     assert mod._porcelain_path("R  old.py -> thomas/core/new.py") == "thomas/core/new.py"
     assert mod._porcelain_path("??") == ""
 
-    def _raise_run(*args, **kwargs):
-        raise OSError("git unavailable")
+    # Reads git through run_git now, which bounds the call and reports a failure
+    # instead of raising -- an unusable git is a non-zero result, not an exception.
+    def _unusable_git(*args, **kwargs):
+        return GitResult(1, "", "git unavailable", False, 0.0, True)
 
-    monkeypatch.setattr(mod.subprocess, "run", _raise_run)
+    monkeypatch.setattr(mod, "run_git", _unusable_git)
     assert mod._git_dirty_paths(tmp_path) == []
 
     calls: list[list[str]] = []
 
-    def _fake_run(args: list[str], **kwargs):
-        calls.append(args)
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=0,
-            stdout=" M thomas/core/config.py\nR  old.py -> thomas/core/config.py\n!! node_modules/pkg\n?? tests/test_new.py\n",
-            stderr="",
+    def _fake_git(args, **kwargs):
+        calls.append(list(args))
+        return GitResult(
+            0,
+            " M thomas/core/config.py\nR  old.py -> thomas/core/config.py\n!! node_modules/pkg\n?? tests/test_new.py\n",
+            "",
+            False,
+            0.0,
         )
 
-    monkeypatch.setattr(mod.subprocess, "run", _fake_run)
+    monkeypatch.setattr(mod, "run_git", _fake_git)
     assert mod._git_dirty_paths(tmp_path) == ["thomas/core/config.py", "tests/test_new.py"]
-    assert calls and calls[0][:3] == ["git", "status", "--porcelain"]
+    assert calls and calls[0] == ["status", "--porcelain"]
 
     assert mod._classify_process_family("Codex.exe", "") == "codex"
     assert mod._classify_process_family("python.exe", "AppData/Roaming/Claude/host") == "claude"

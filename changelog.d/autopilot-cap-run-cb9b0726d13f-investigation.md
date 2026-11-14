@@ -1,0 +1,4 @@
+### Changed
+
+- Recorded the investigation of `autopilot_cap_run` fingerprint `cb9b0726d13f`. The supplied diagnostic contains only `{"category": "unavailable"}`; `runtime/logs/issues.jsonl` is absent from this checkout, and Git searches found no tracked occurrence or commit message matching the fingerprint before this fragment was added. The original incident was not reproduced, runtime behavior is unchanged, and no fix is claimed.
+- Confirmed that `_record_cap` in `thomas/server/routes/evolve_agent_autopilot.py` emits an `autopilot_cap` summary followed by an `autopilot_cap_run` entry for each counted continuation, including its run number, outcome, and reason. Reproduction needs sanitized incident evidence identifying the run outcome and reason, with relevant continuation history; the supplied category does not establish which behavior failed.

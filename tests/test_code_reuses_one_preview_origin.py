@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 WEB_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js"
 CODE_JS = WEB_JS / "unified_code_mode.js"
 # ensureArtifactDoc and the preview documents moved to the sibling module the
@@ -20,11 +22,11 @@ CODE_RESULTS_JS = WEB_JS / "unified_code_results.js"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
+    return read_code_sources(WEB_JS)
 
 
 def _ensure() -> str:
-    return _js().split("async function ensureArtifactDoc", 1)[1].split("\n  //", 1)[0]
+    return code_function_body(WEB_JS, "ensureArtifactDoc")
 
 
 def test_a_sibling_file_is_addressed_within_the_origin_already_minted() -> None:
@@ -45,8 +47,10 @@ def test_the_origin_is_only_reused_for_the_conversation_it_belongs_to() -> None:
 def test_switching_conversations_drops_it() -> None:
     text = _js()
     reset = text.split("state.artifactDocs = {};", 1)[1].split("\n", 1)[0]
-    assert "previewBase" in text.split("state.artifactDocs = {};", 1)[0] or "previewBase" in reset or (
-        "state.previewBase = null;" in text
+    assert (
+        "previewBase" in text.split("state.artifactDocs = {};", 1)[0]
+        or "previewBase" in reset
+        or ("state.previewBase = null;" in text)
     )
 
 

@@ -14,6 +14,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.breakglass_account import same_account
 from scripts.breakglass_context import (
     BreakglassContext,
     breakglass_context_from_env,
@@ -1057,11 +1058,8 @@ def _validate_with_logon_user(*, username: str, domain: str, secret: str) -> tup
         LOGON32_PROVIDER_DEFAULT,
         ctypes.byref(token),
     )
-    if ok:
-        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel32.CloseHandle.restype = wintypes.BOOL
-        kernel32.CloseHandle(token)
-        return True, "validated with LogonUserW"
+    if ok:  # whose credential it was, then the token closed (scripts/breakglass_account.py)
+        return same_account(token, "validated with LogonUserW", close=True)
     err = ctypes.get_last_error()
     return False, f"LogonUserW failed: {_format_windows_error(err)}"
 
@@ -1170,8 +1168,8 @@ def _validate_with_lsa(auth_package: int, auth_buffer: bytes) -> tuple[bool, str
             ctypes.byref(quotas),
             ctypes.byref(sub_status),
         )
-        if status == 0:
-            return True, "validated with LsaLogonUser"
+        if status == 0:  # whose credential it was; the token is closed below
+            return same_account(token, "validated with LsaLogonUser")
         primary = int(lsa_to_winerr(status))
         secondary = int(lsa_to_winerr(sub_status.value)) if sub_status.value else 0
         detail = _format_windows_error(primary)

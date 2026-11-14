@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.core.code_issue_engine import CodeIssueEngine, get_code_issue_engine
+from thomas.core.pause import paused
 from thomas.core.persistence import get_persistence
 from thomas.core.ui_workflow_engine import get_ui_workflow_engine
 
@@ -106,6 +107,7 @@ class SelfUpgradeEngine:
 
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
@@ -129,12 +131,14 @@ class SelfUpgradeEngine:
         if self._running or not self._enabled:
             return
         self._running = True
+        self._stopping.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="thomas-self-upgrade")
         self._thread.start()
         log.info("SelfUpgradeEngine started (idle threshold %.0fs).", self._idle_threshold_s)
 
     def stop(self) -> None:
         self._running = False
+        self._stopping.set()
 
     def record_user_message(self) -> None:
         self._last_user_ts = time.monotonic()
@@ -183,14 +187,15 @@ class SelfUpgradeEngine:
                 self._active_cycle = False
 
     def _loop(self) -> None:
-        while self._running:
-            time.sleep(self._poll_interval_s)
+        while self._running and not self._stopping.wait(self._poll_interval_s):
             try:
                 self._tick()
             except Exception as exc:
                 log.warning("SelfUpgradeEngine tick failed: %s", exc)
 
     def _tick(self) -> None:
+        if paused():
+            return
         if not self._enabled:
             return
         if not self.is_idle():

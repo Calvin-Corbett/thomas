@@ -125,7 +125,9 @@ def _run_coding(texts: list[str]) -> list:
         ),
     ],
 )
-def test_loop_blocks_failed_validation_without_parsing_final_words(final_words: str) -> None:
+def test_loop_blocks_failed_validation_without_parsing_final_words(final_words: str, tmp_path, monkeypatch) -> None:
+    # This synthetic edit must not inspect the checkout that happens to run pytest.
+    monkeypatch.chdir(tmp_path)
     events = _run_coding(["Applied the fix.", final_words])
     starts = [event for event in events if event.type == EventType.AGENT_START]
     done = [event for event in events if event.type == EventType.AGENT_DONE]

@@ -1,0 +1,3 @@
+### Fixed
+
+- **A restart that is waiting no longer stops your Builds over and over.** While Thomas waits to restart for landed code he asks git three things every half minute, each with four seconds to answer. If git was slow, the answer was read as "nothing has landed": Thomas ended the wait and resumed the Builds he had asked to stop, then half a minute later began the wait again and stopped them again. On 2026-11-09, with the PC at 100%, one landing was begun nine times in nineteen minutes and eight Builds were stopped after about two minutes of work each. Now a read that git could not finish changes nothing: the wait, the notice and the Builds stay as they are until git can say.

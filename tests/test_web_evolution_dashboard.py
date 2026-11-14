@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import read_code_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "thomas" / "server" / "web"
 RUNTIME_DIR = WEB / "js" / "runtime"
@@ -79,15 +81,19 @@ def test_evolution_css_present() -> None:
         )
     )
     assert ".tc-code-panel {" in css
-    assert ".tc-code-technical.is-error > i" in css
+    assert ".tc-code-technical:not(.tc-code-receipt).is-error > i" in css
+    assert ".tc-code-technical:not(.tc-code-receipt).is-error strong" in css
     assert ".tc-code-technical-log {" in css
     assert ".tc-code-approval {" in css
 
 
 def test_unified_code_mode_has_conversational_command_bar() -> None:
-    text = _read(WEB / "js" / "unified_code_mode.js")
+    text = read_code_sources(WEB / "js").replace("deps.", "")
     assert "modes().registerAdapter('code'" in text
-    assert 'id="tc-code-steer-form"' in text
+    # Steering a live run: a message queued above the composer is handed to the
+    # lead's inbox by its Steer button (the in-transcript form left in 2026-10).
+    assert "function steerQueued(id)" in text
+    assert "'/api/evolve/agent/message'" in text
     assert "'/api/evolve/agent/send'" in text
     assert "new EventSource(lifecycle().streamUrl(state))" in text
 

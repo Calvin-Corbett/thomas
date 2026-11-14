@@ -36,6 +36,9 @@ SENTENCE = "Look at the project I have selected tell me what it does"
 
 
 class _EmptyStdout:
+    async def read(self, _n: int = -1) -> bytes:
+        return await self.readline()
+
     async def readline(self) -> bytes:
         return b""
 
@@ -86,9 +89,7 @@ def _picked_repo(tmp_path: Path, name: str = "picked") -> Path:
     return repo.resolve()
 
 
-def test_an_answer_only_run_frees_its_folder_and_the_next_question_reuses_it(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_an_answer_only_run_frees_its_folder_and_the_next_question_reuses_it(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setattr(forge_code_projects, "thomas_owned_root", lambda: tmp_path / ".thomas")
 
     first = forge_code_projects.project_for_new_task(SENTENCE)

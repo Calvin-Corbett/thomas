@@ -8,6 +8,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.server.discord_bridge_key import TURNED_OFF, turned_on_runtime
 from thomas.server.workspace_specialist_policy import WORKSPACE_LABELS
 from thomas.server.workspace_specialist_readback import WorkspaceReadbackMixin
 
@@ -45,7 +46,7 @@ class WorkspaceActionExecutorMixin(WorkspaceReadbackMixin):
             jobs = self._list_mission_jobs(limit=40)
             snapshot.update(mission_jobs=jobs, mission_job_count=len(jobs))
         elif self.workspace_key == "app_builder":
-            from thomas.server.routes.canvas_studio_routes import _canvas_dir, _default_repo_root
+            from thomas.server.canvas_studio_shared import _canvas_dir, _default_repo_root
 
             directory = _canvas_dir(_default_repo_root())
             snapshot["saved_spec_ids"] = sorted(path.stem for path in directory.glob("*.json"))[:100]
@@ -58,18 +59,18 @@ class WorkspaceActionExecutorMixin(WorkspaceReadbackMixin):
                     "name": str(row.get("name") or ""),
                     "board_position": dict(row.get("board_position") or {}),
                 }
-                for row in _refresh_projects(self.app)[:100]
+                for row in (await asyncio.to_thread(_refresh_projects, self.app))[:100]
             ]
         elif self.workspace_key == "channels":
-            from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
-
-            snapshot["discord"] = await asyncio.to_thread(DiscordBridgeRuntime(self.config).status)
+            runtime = turned_on_runtime(self.app)
+            if runtime is None:
+                snapshot["discord"] = {"ok": False, "error": TURNED_OFF}
+            else:
+                snapshot["discord"] = await asyncio.to_thread(runtime.status)
         elif self.workspace_key == "marketplace":
             from thomas.server.desktop_plugins import list_installed_plugins
 
-            snapshot["installed_plugins"] = list_installed_plugins(
-                self.config, include_disabled=True
-            )[:100]
+            snapshot["installed_plugins"] = list_installed_plugins(self.config, include_disabled=True)[:100]
         elif self.workspace_key == "paper_trading":
             result = await self._execute_registry_tool("paper_trading.list_proposals", {})
             snapshot["proposals"] = result.get("data") if result.get("ok") else []
@@ -78,12 +79,10 @@ class WorkspaceActionExecutorMixin(WorkspaceReadbackMixin):
 
     async def _perform_mutation(self, action: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if action == "preferences.set":
-            data = self._patch_structured_preference(
-                str(arguments.get("key") or "").strip(), arguments.get("value")
-            )
+            data = self._patch_structured_preference(str(arguments.get("key") or "").strip(), arguments.get("value"))
             return {"ok": True, "data": data, "error": ""}
         if action == "canvas.spec.save":
-            from thomas.server.routes.canvas_studio_routes import _default_repo_root, _write_spec
+            from thomas.server.canvas_studio_shared import _default_repo_root, _write_spec
 
             spec_id = str(arguments.get("target_id") or "").strip()
             spec = dict(arguments.get("payload") or {})
@@ -92,31 +91,28 @@ class WorkspaceActionExecutorMixin(WorkspaceReadbackMixin):
             return {"ok": True, "data": {"id": saved_id}, "error": ""}
         if action == "library.project.move":
             try:
-                return self._move_library_project(arguments)
+                from thomas.server.routes.local_projects_registry import registry_lock
+
+                async with registry_lock(self.app):
+                    return await asyncio.to_thread(self._move_library_project, arguments)
             except (KeyError, web.HTTPException):
                 return {"ok": False, "data": None, "error": "Library project was not found."}
         if action == "channels.discord.set_enabled":
-            from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
-
-            runtime = DiscordBridgeRuntime(self.config)
+            runtime = turned_on_runtime(self.app)
+            if runtime is None:
+                return {"ok": False, "data": None, "error": TURNED_OFF}
             state = await asyncio.to_thread(runtime.set_enabled, bool(arguments.get("value")))
             return {"ok": True, "data": {"state": state}, "error": ""}
         if action == "marketplace.plugin.set_enabled":
             from thomas.server.desktop_plugins import set_installed_plugin_enabled
 
             plugin_id = str(arguments.get("target_id") or "").strip()
-            plugin = set_installed_plugin_enabled(
-                self.config, plugin_id, bool(arguments.get("value"))
-            )
+            plugin = set_installed_plugin_enabled(self.config, plugin_id, bool(arguments.get("value")))
             return {"ok": True, "data": {"plugin": plugin}, "error": ""}
         if action == "paper_trading.propose":
-            return await self._execute_registry_tool(
-                "paper_trading.propose", dict(arguments.get("payload") or {})
-            )
+            return await self._execute_registry_tool("paper_trading.propose", dict(arguments.get("payload") or {}))
         if action == "office.view.set_follow_agent":
-            state = self._office_state_store().set_follow_agent(
-                arguments.get("target_id"), user_id=self.user_id
-            )
+            state = self._office_state_store().set_follow_agent(arguments.get("target_id"), user_id=self.user_id)
             return {"ok": True, "data": state, "error": ""}
         if action.startswith("mission.job."):
             return self._mutate_mission_job(action, arguments)
@@ -161,9 +157,7 @@ class WorkspaceActionExecutorMixin(WorkspaceReadbackMixin):
         if action == "mission.job.cancel":
             store.cancel_job(job_id, actor="workspace_resident")
         elif action == "mission.job.run_now":
-            store.set_job_status(
-                job_id, "queued", next_run_at=datetime.now(timezone.utc), lock_clear=True
-            )
+            store.set_job_status(job_id, "queued", next_run_at=datetime.now(timezone.utc), lock_clear=True)
         elif action == "mission.job.requeue":
             store.set_job_status(
                 job_id,

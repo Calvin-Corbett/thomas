@@ -79,3 +79,34 @@ def slot_for_run_id(app: web.Application, run_id: str) -> dict[str, Any] | None:
         if str((slot.get("session") or {}).get("run_id") or "") == wanted:
             return slot
     return None
+
+
+def active_code_runs(app: web.Application) -> dict[str, str]:
+    """Map locally owned active conversations to runs, including pending saves.
+
+    Database event silence is not process death. Use the same ownership evidence
+    for restart refusal and stale-run reconciliation, without consulting models.
+    This registry belongs to this server; it is not a cross-server lease.
+    """
+    registry = app.get(APP_EVOLVE_AGENT_RUNS)
+    slots = dict(registry) if isinstance(registry, dict) else {}
+    legacy = app.get(APP_EVOLVE_AGENT_SESSION)
+    if isinstance(legacy, dict):
+        conversation_id = str(legacy.get("conversation_id") or app.get(APP_EVOLVE_AGENT_CONVO) or "")
+        slots.setdefault(
+            conversation_id,
+            {
+                "session": {**legacy, "proc": legacy.get("proc") or app.get(APP_EVOLVE_AGENT_TASK)},
+                "drain": app.get(APP_EVOLVE_AGENT_DRAIN),
+            },
+        )
+    active = {}
+    for conversation_id, slot in slots.items():
+        if not isinstance(slot, dict) or not slot_active(slot):
+            continue
+        session = slot.get("session") if isinstance(slot.get("session"), dict) else {}
+        drain = slot.get("drain") if isinstance(slot.get("drain"), dict) else {}
+        run_id = str(session.get("run_id") or drain.get("run_id") or conversation_id).strip()
+        if run_id:
+            active[str(conversation_id)] = run_id
+    return active

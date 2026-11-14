@@ -112,7 +112,7 @@ class TestSessionRunGuardAcrossModes(_BaseServerRunGuardCase):
 
         _ConcurrencyProbeBrain.reset("hold")
         try:
-            with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _ConcurrencyProbeBrain):
+            with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _ConcurrencyProbeBrain):
                 first_task = asyncio.create_task(self.client.post("/api/chat", json=first))
                 await asyncio.wait_for(_ConcurrencyProbeBrain.started.wait(), timeout=15.0)
 
@@ -154,7 +154,7 @@ class TestSessionRunGuardAcrossModes(_BaseServerRunGuardCase):
 
         _ConcurrencyProbeBrain.reset("hold")
         try:
-            with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _ConcurrencyProbeBrain):
+            with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _ConcurrencyProbeBrain):
                 held = asyncio.create_task(self.client.post("/api/chat", json={"session_id": sid_a, "text": "hold"}))
                 await asyncio.wait_for(_ConcurrencyProbeBrain.started.wait(), timeout=15.0)
 

@@ -4,31 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Thomas Agent Settings</title>
-  <style>
-    /* Local, deterministic icon fallback: Settings must work fully offline. */
-    .ph { display: inline-grid; place-items: center; width: 1.1em; font-style: normal; font-weight: 700; }
-    .ph::before { content: "\2022"; }
-    .ph-magnifying-glass::before { content: "\2315"; }
-    .ph-gear::before { content: "\2699"; }
-    .ph-cpu::before { content: "\25A3"; }
-    .ph-plug::before { content: "\238B"; }
-    .ph-robot::before { content: "\25C9"; }
-    .ph-shield-check::before { content: "\25C6"; }
-    .ph-palette::before { content: "\25D2"; }
-    .ph-wrench::before { content: "\25C7"; }
-    .ph-check::before { content: "\2713"; }
-    .ph-arrow-counterclockwise::before { content: "\21B6"; }
-    .ph-eye::before { content: "\25C9"; }
-    .ph-trash::before, .ph-x::before { content: "\00D7"; }
-    .ph-download::before { content: "\2193"; }
-    .ph-warning::before { content: "!"; }
-    .ph-floppy-disk::before, .ph-desktop::before { content: "\25A3"; }
-    .ph-arrow-clockwise::before { content: "\21BB"; }
-  </style>
+  <!-- Local, deterministic icon fallback: Settings must work fully offline. -->
+  <link rel="stylesheet" href="/static/css/settings_icons.css">
   
   <link rel="stylesheet" href="/static/css/tokens.css">
   <link rel="stylesheet" href="/static/css/workspace_shell.css">
   <link rel="stylesheet" href="/static/settings.style01.css">
+  <link rel="stylesheet" href="/static/css/settings_plugins.css">
   <link rel="stylesheet" href="/static/css/ui_edit_mode.css">
 
 </head>
@@ -49,14 +31,11 @@
           <i class="ph ph-palette" aria-hidden="true"></i>
           <span class="theme-picker-copy">
             <span>Theme</span>
-            <strong id="activeThemeName">Nebula Core</strong>
+            <strong id="activeThemeName">Dark</strong>
           </span>
           <select id="theme" class="dropdown-select" aria-label="Thomas theme" data-thomas-theme-select>
-            <option value="nebula">Nebula Core</option>
-            <option value="dark">Dark</option>
+            <option value="nebula">Dark</option>
             <option value="light">Light</option>
-            <option value="aurora">Aurora</option>
-            <option value="sandstone">Sandstone</option>
           </select>
         </label>
         <label class="search-box" for="searchInput" data-ui-id="settings.search" data-ui-policy="control" data-ui-constraints="preserve-id preserve-label">
@@ -95,9 +74,21 @@
           </button>
         </li>
         <li>
+          <button class="sidebar-nav-item" data-section="plugins" aria-label="Plugins settings">
+            <i class="ph ph-puzzle-piece"></i>
+            <span>Plugins</span>
+          </button>
+        </li>
+        <li>
           <button class="sidebar-nav-item" data-section="autonomy" aria-label="Autonomy settings">
             <i class="ph ph-robot"></i>
             <span>Autonomy</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="contributors" aria-label="Contributors settings">
+            <i class="ph ph-users-three"></i>
+            <span>Contributors</span>
           </button>
         </li>
         <li>
@@ -116,6 +107,12 @@
           <button class="sidebar-nav-item" data-section="advanced" aria-label="Advanced settings">
             <i class="ph ph-wrench"></i>
             <span>Advanced</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="publish" aria-label="Publish to GitHub settings">
+            <i class="ph ph-shield-check"></i>
+            <span>Publish to GitHub</span>
           </button>
         </li>
       </ul>
@@ -478,361 +475,31 @@
           </div>
         </div>
 
-        <!-- Autonomy Settings -->
-        <div id="autonomy" class="settings-panel" data-ui-id="settings.panel.autonomy" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-approval-boundaries">
-          <div class="panel-title">Autonomy</div>
-          <div class="panel-description">Control agent decision-making and automatic actions.</div>
-
-          <div class="settings-group" data-ui-id="settings.autonomy.level" data-ui-policy="layout" data-ui-constraints="preserve-controls">
-            <div class="group-title">Autonomy Level</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Agent Autonomy</div>
-                <div class="setting-description">Decision-making capability level</div>
-              </div>
-              <div class="setting-control">
-                <select id="autonomyLevel" class="dropdown-select">
-                  <option value="L1">L1 - Manual Only (requires approval for all actions)</option>
-                  <option value="L2">L2 - Semi-Autonomous (approval for important actions)</option>
-                  <option value="L3">L3 - Mostly Autonomous (approval for risky actions only)</option>
-                  <option value="L4">L4 - Full Autonomy (self-governing within constraints)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-group" data-ui-id="settings.autonomy.thresholds" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-safety-copy">
-            <div class="group-title">Auto-Approval Thresholds</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Cost Limit</div>
-                <div class="setting-description">Max API cost per action without approval</div>
-              </div>
-              <div class="setting-control">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span>$</span>
-                  <input type="number" id="costLimit" class="number-input" min="0" step="0.10" value="1.00" />
-                </div>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Time Commitment</div>
-                <div class="setting-description">Max hours per task without approval</div>
-              </div>
-              <div class="setting-control">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <input type="number" id="timeCommitment" class="number-input" min="0.25" step="0.25" value="4" />
-                  <span>hours</span>
-                </div>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Auto-approve with notification</div>
-                <div class="setting-description">Execute action and notify instead of requesting approval</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="autoApproveNotify" data-setting="autoApproveNotify" aria-label="Toggle auto-approve with notification" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-group" data-ui-id="settings.autonomy.behavior" data-ui-policy="layout" data-ui-constraints="preserve-controls">
-            <div class="group-title">Behavior</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Idle Timeout</div>
-                <div class="setting-description">Minutes before pausing autonomous actions</div>
-              </div>
-              <div class="setting-control">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <input type="number" id="idleTimeout" class="number-input" min="5" step="5" value="30" />
-                  <span>min</span>
-                </div>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Take initiative on errors</div>
-                <div class="setting-description">Automatically retry or recover from failures</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="initiativeOnErrors" data-setting="initiativeOnErrors" aria-label="Toggle initiative on errors" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-group" data-ui-id="settings.autonomy.tools" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-safety-copy">
-            <div class="group-title">Tool Permissions</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Shell / Terminal Access</div>
-                <div class="setting-description">Allow Thomas to run shell commands (install packages, run scripts, etc.)</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="allowShell" data-setting="allowShell" aria-label="Toggle shell access" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Browser / Web Browsing</div>
-                <div class="setting-description">Allow Thomas to open pages, click, type, and take screenshots in a browser</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="allowBrowser" data-setting="allowBrowser" aria-label="Toggle browser access" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Git Operations</div>
-                <div class="setting-description">Allow Thomas to commit, push, pull, and manage repositories</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="allowGit" data-setting="allowGit" aria-label="Toggle git access" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">File System Access</div>
-                <div class="setting-description">Allow Thomas to read, write, edit, and delete files</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch on" id="allowFilesystem" data-setting="allowFilesystem" aria-label="Toggle filesystem access" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Web Search</div>
-                <div class="setting-description">Allow Thomas to search the web for information</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch on" id="allowWebSearch" data-setting="allowWebSearch" aria-label="Toggle web search" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Email & Calendar</div>
-                <div class="setting-description">Allow Thomas to read and send emails, manage calendar events</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="allowEmail" data-setting="allowEmail" aria-label="Toggle email access" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Database Access</div>
-                <div class="setting-description">Allow Thomas to query and modify databases</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="allowDatabase" data-setting="allowDatabase" aria-label="Toggle database access" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">SSH / Remote Access</div>
-                <div class="setting-description">Allow Thomas to connect to remote servers via SSH</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="allowSSH" data-setting="allowSSH" aria-label="Toggle SSH access" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-          </div>
-
-          <div class="button-group">
-            <button class="btn btn-primary" onclick="saveSection('autonomy')">
-              <i class="ph ph-check"></i>
-              Save Changes
-            </button>
-            <button class="btn btn-secondary" onclick="resetSection('autonomy')" data-ui-id="settings.action.reset.autonomy" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
-              <i class="ph ph-arrow-counterclockwise"></i>
-              Reset
-            </button>
-          </div>
+        <!-- Plugins: the rows come from the server, so settings.plugins-panel.js fills this -->
+        <div id="plugins" class="settings-panel" data-ui-id="settings.panel.plugins" data-ui-policy="layout" data-ui-constraints="preserve-honest-status">
+          <div class="panel-title">Plugins</div>
+          <div class="panel-description">Parts of Thomas you can turn off and on. Thomas keeps running while you do.</div>
+          <div id="pluginsHost"></div>
         </div>
 
-        <!-- Privacy & Security Settings -->
-        <div id="privacy" class="settings-panel" data-ui-id="settings.panel.privacy" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-security-boundaries">
-          <div class="panel-title">Privacy & Security</div>
-          <div class="panel-description">Manage data privacy, security, and access controls.</div>
-
-          <div class="settings-group" data-ui-id="settings.privacy.data" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-security-copy">
-            <div class="group-title">Data Privacy</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Data Retention</div>
-                <div class="setting-description">How long to keep conversation history</div>
-              </div>
-              <div class="setting-control">
-                <select id="dataRetention" class="dropdown-select">
-                  <option value="7d">7 days</option>
-                  <option value="30d">30 days</option>
-                  <option value="90d">90 days</option>
-                  <option value="1y">1 year</option>
-                  <option value="forever">Forever</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Auto-delete sensitive data</div>
-                <div class="setting-description">Remove passwords, keys, and PII after retention period</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="autoDeleteSensitive" data-setting="autoDeleteSensitive" aria-label="Toggle auto-delete sensitive data" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-group" data-ui-id="settings.privacy.security" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete preserve-breakglass-endpoint">
-            <div class="group-title">Security</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Session Encryption</div>
-                <div class="setting-description">Encrypt all session data in transit and at rest</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch on" id="sessionEncryption" data-setting="sessionEncryption" aria-label="Toggle session encryption" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Rate Limiting</div>
-                <div class="setting-description">Maximum requests per minute</div>
-              </div>
-              <div class="setting-control">
-                <input type="number" id="rateLimit" class="number-input" min="10" step="10" value="100" />
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-group" data-ui-id="settings.privacy.domains" data-ui-policy="layout" data-ui-constraints="preserve-controls preserve-validation">
-            <div class="group-title">Domain Whitelist</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Allowed Domains</div>
-                <div class="setting-description">Domains this agent can access (one per line)</div>
-              </div>
-              <div class="setting-control">
-                <textarea id="allowedDomains" style="width: 100%; min-height: 120px; padding: 8px 12px; background-color: #262d3c; border: 1px solid #3a3f4e; border-radius: 6px; color: #e8eaed; font-size: 13px; font-family: 'Menlo', monospace; resize: vertical;" placeholder="example.com&#10;api.service.com&#10;*.company.com" aria-label="Allowed domains list"></textarea>
-              </div>
-            </div>
-          </div>
-
-          <div class="button-group">
-            <button class="btn btn-primary" onclick="saveSection('privacy')">
-              <i class="ph ph-check"></i>
-              Save Changes
-            </button>
-            <button class="btn btn-secondary" onclick="resetSection('privacy')" data-ui-id="settings.action.reset.privacy" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
-              <i class="ph ph-arrow-counterclockwise"></i>
-              Reset
-            </button>
-          </div>
+        <!-- Contributors: settings.contributors-panel.js asks once each time this is opened -->
+        <div id="contributors" class="settings-panel" data-ui-id="settings.panel.contributors" data-ui-policy="layout" data-ui-constraints="preserve-honest-status">
+          <div class="panel-title">Contributors</div>
+          <div class="panel-description">Who made the changes to this copy of Thomas: Thomas, Claude, Codex or you.</div>
+          <div id="contributorsHost"></div>
         </div>
 
-        <!-- Appearance Settings -->
-        <div id="appearance" class="settings-panel" data-ui-id="settings.panel.appearance" data-ui-policy="layout" data-ui-constraints="preserve-control-ids preserve-save-actions">
-          <div class="panel-title">Appearance</div>
-          <div class="panel-description">Customize the visual interface.</div>
+        <script src="/static/settings.autonomy-panel.js"></script>
 
-          <div class="settings-group" data-ui-id="settings.appearance.interface" data-ui-policy="layout" data-ui-constraints="preserve-controls">
-            <div class="group-title">Interface</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Font Size</div>
-                <div class="setting-description">Base interface font size</div>
-              </div>
-              <div class="setting-control">
-                <select id="fontSize" class="dropdown-select">
-                  <option value="small">Small</option>
-                  <option value="normal" selected>Normal</option>
-                  <option value="large">Large</option>
-                  <option value="xlarge">Extra Large</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Sidebar Position</div>
-                <div class="setting-description">Where to display navigation sidebar</div>
-              </div>
-              <div class="setting-control">
-                <select id="sidebarPosition" class="dropdown-select">
-                  <option value="left" selected>Left</option>
-                  <option value="right">Right</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Compact Mode</div>
-                <div class="setting-description">Reduce spacing and sizes for more density</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="compactMode" data-setting="compactMode" aria-label="Toggle compact mode" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-          </div>
+        <script src="/static/settings.privacy-panel.js"></script>
 
-          <div class="settings-group" data-ui-id="settings.appearance.messages" data-ui-policy="layout" data-ui-constraints="preserve-controls">
-            <div class="group-title">Chat & Messages</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Chat Bubble Style</div>
-                <div class="setting-description">Visual style for conversation bubbles</div>
-              </div>
-              <div class="setting-control">
-                <select id="bubbleStyle" class="dropdown-select">
-                  <option value="rounded" selected>Rounded</option>
-                  <option value="square">Square</option>
-                  <option value="minimal">Minimal</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Monospace Code</div>
-                <div class="setting-description">Use monospace font for code blocks</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch on" id="monospaceCode" data-setting="monospaceCode" aria-label="Toggle monospace code" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-          </div>
+        <script src="/static/settings.appearance-panel.js"></script>
 
-          <div class="settings-group" data-ui-id="settings.appearance.notifications" data-ui-policy="layout" data-ui-constraints="preserve-controls">
-            <div class="group-title">Notifications</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Desktop Notifications</div>
-                <div class="setting-description">Show system notifications for agent events</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch on" id="desktopNotifications" data-setting="desktopNotifications" aria-label="Toggle desktop notifications" role="switch" aria-checked="true"></button>
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Sound Alerts</div>
-                <div class="setting-description">Play sound on important events</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch" id="soundAlerts" data-setting="soundAlerts" aria-label="Toggle sound alerts" role="switch" aria-checked="false"></button>
-              </div>
-            </div>
-          </div>
-
-          <div class="button-group">
-            <button class="btn btn-primary" onclick="saveSection('appearance')">
-              <i class="ph ph-check"></i>
-              Save Changes
-            </button>
-            <button class="btn btn-secondary" onclick="resetSection('appearance')" data-ui-id="settings.action.reset.appearance" data-ui-policy="protected" data-ui-constraints="no-move no-edit no-delete">
-              <i class="ph ph-arrow-counterclockwise"></i>
-              Reset
-            </button>
-          </div>
+        <!-- Publish to GitHub: settings.publish-panel.js fills this, and asks the server only when you press a button -->
+        <div id="publish" class="settings-panel" data-ui-id="settings.panel.publish" data-ui-policy="layout" data-ui-constraints="preserve-honest-status preserve-security-boundaries">
+          <div class="panel-title">Publish to GitHub</div>
+          <div class="panel-description">Look at what would go public, then send a review copy to GitHub. Nothing leaves this computer until you sign in with Windows.</div>
+          <div id="publishHost"></div>
         </div>
 
         <!-- Advanced Settings -->
@@ -864,28 +531,6 @@
                   <option value="debug">Debug & All</option>
                   <option value="trace">Trace (Very Verbose)</option>
                 </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-group" data-ui-id="settings.advanced.plugins" data-ui-policy="layout" data-ui-constraints="preserve-controls">
-            <div class="group-title">Plugin Management</div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Plugin Directory</div>
-                <div class="setting-description">Path where custom plugins are loaded from</div>
-              </div>
-              <div class="setting-control">
-                <input type="text" id="pluginDirectory" class="text-input" placeholder="/home/user/.thomas/plugins" />
-              </div>
-            </div>
-            <div class="setting-item">
-              <div class="setting-label">
-                <div class="setting-name">Auto-load Plugins</div>
-                <div class="setting-description">Automatically load plugins on startup</div>
-              </div>
-              <div class="setting-control">
-                <button class="toggle-switch on" id="autoLoadPlugins" data-setting="autoLoadPlugins" aria-label="Toggle auto-load plugins" role="switch" aria-checked="true"></button>
               </div>
             </div>
           </div>
@@ -1096,6 +741,10 @@
   <script defer src="/static/js/ui_edit_mode.js"></script>
   <script src="/static/settings.isolated-desktop.js"></script>
   <script src="/static/settings.script01.js"></script>
+  <script src="/static/settings.plugins-sets.js"></script>
+  <script src="/static/settings.plugins-panel.js"></script>
+  <script src="/static/settings.contributors-panel.js"></script>
+  <script src="/static/settings.publish-panel.js"></script>
 
 </body>
 </html>

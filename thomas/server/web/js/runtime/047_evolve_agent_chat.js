@@ -938,7 +938,7 @@
     function railRowHtml(c) {
         var title = (c.title && String(c.title).trim()) || 'Untitled build';
         var meta = relTime(c.updated_at);
-        var model = modelLabel(c.last_model);
+        var model = c.last_model_used || (c.last_model ? modelLabel(c.last_model) + ' (model not reported)' : '');
         if (model) meta += (meta ? ' · ' : '') + model;
         var active = String(c.id) === String(currentConvoId || '');
         return '<div class="fc-convo' + (active ? ' is-active' : '') + '" data-id="' + escapeHtml(String(c.id)) + '">'

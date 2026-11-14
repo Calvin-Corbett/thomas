@@ -1,0 +1,3 @@
+### Changed
+
+- **Build shows what Thomas is doing as one shimmering line, and reads bigger.** You said the stack of "Read package.json, Read README.md…" lines should be one line that shimmers and rolls through what he is doing, with everything he did behind a click. Only the newest step shows now, shimmering while the run is live; click it to open every step, and click "Hide steps" to fold it back. His short updates ("I'll get the game running…") are standard 15px text in the main text colour, not small and grey, and the reading column is 860px instead of 700px. The "Thomas is reading · Step 1 of 3" line above the composer is gone, because the Steps card already shows the step; the clock stays.

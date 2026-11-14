@@ -1,3 +1,15 @@
+"""The `send_task` tool — how Thomas (the chat agent) hands real work off.
+
+This is the organic, no-regex dispatch mechanism Calvin asked for. Instead of a
+regex classifier deciding "is this a task?" behind the model's back (and the chat
+then faking an "On it!" it didn't earn), the MODEL decides — in the natural flow
+of the conversation — whether to call `send_task`. If it calls the tool, a real
+background task card is created (so any "I'm handing this off" it says is TRUE).
+If it doesn't, it just talks. No keyword trigger, no instant canned ack, no regex.
+
+The tool is offered to the chat model only; the chat agent itself never executes
+the work — calling `send_task` hands it to the task manager / worker bots.
+"""
 
 from __future__ import annotations
 
@@ -66,9 +78,59 @@ SEND_TASK_TOOL: dict = {
                     "type": "string",
                     "enum": ["isolated", "project"],
                     "description": (
-                        "Use 'isolated' for new artifacts and general work. Use 'project' only "
-                        "when the user explicitly wants the currently selected project changed."
+                        "Which files the work is allowed to touch. Use 'isolated' for ALL "
+                        "ordinary work — building a new app, page, game, document or file, or "
+                        "changing something you previously built for the user. Isolated work "
+                        "gets its own project folder, so 'isolated' does NOT mean throwaway. "
+                        "Use 'project' ONLY for self-development: the user is asking to change "
+                        "Thomas's own source code, the Thomas app itself. If the request never "
+                        "mentions Thomas's own behaviour or code, it is 'isolated'."
                     ),
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["code", "web_app", "document", "pdf", "image", "creative", "research", "data", "other"],
+                    "description": "The deliverable type. Choose from the user's requested result.",
+                },
+                "deliverable_format": {
+                    "type": "string",
+                    "description": "Requested output format, such as repo_changes.",
+                },
+                "needs_build": {
+                    "type": "boolean",
+                    "description": "True for source code, apps, games, scripts, sites, operating systems or project changes. Starts a real Build run.",
+                },
+                "project": {
+                    "type": "object",
+                    "properties": {"mode": {"type": "string", "enum": ["new", "existing"]}, "id": {"type": "string"}},
+                    "required": ["mode"],
+                },
+                "acceptance": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "kind": {
+                                "type": "string",
+                                "enum": [
+                                    "file_exists",
+                                    "file_contains",
+                                    "project_test_command",
+                                    "lint",
+                                    "render_html",
+                                    "pdf_opens",
+                                    "image_dimensions",
+                                    "custom_command",
+                                ],
+                            },
+                            "text": {"type": "string"},
+                            "cites": {"type": "string"},
+                            "path": {"type": "string", "description": "Project-relative file for file checks."},
+                            "needle": {"type": "string", "description": "Exact text required by file_contains."},
+                        },
+                        "required": ["id", "kind", "text", "cites"],
+                    },
                 },
             },
             "required": ["title", "instructions", "surface", "specialist", "workspace"],
@@ -85,7 +147,7 @@ SEND_TASK_TOOL_NAME = "send_task"
 # either spawned a wrong NEW task or did nothing. This tool lets the MODEL — which has
 # the full conversation and the background-work list (each item tagged [task <ref>]) —
 # pick the RIGHT running task and route the change to it, instead of a blind heuristic
-
+# guessing which task the user meant. (Calvin: "a skill where he tells the task manager
 # 'that one task — the user wants this actually'.")
 UPDATE_TASK_TOOL: dict = {
     "type": "function",
@@ -130,10 +192,10 @@ UPDATE_TASK_TOOL: dict = {
 UPDATE_TASK_TOOL_NAME = "update_task"
 
 
-
+# Memory is THOMAS'S OWN capability — not a task. Calvin: "he should be the one able to use
 # it, not a task manager; he shouldn't have to rely on a task." So Thomas gets first-class
 # remember/recall tools he uses INLINE in the conversation, and is told never to dispatch
-
+# memory work. (Calvin, 2026-06-27.)
 REMEMBER_TOOL: dict = {
     "type": "function",
     "function": {
@@ -152,7 +214,7 @@ REMEMBER_TOOL: dict = {
                     "type": "string",
                     "description": (
                         "The fact to remember as one clear standalone sentence, e.g. "
-                        "'maintainer's favorite color is blue' (not 'blue')."
+                        "'Calvin's favorite color is blue' (not 'blue')."
                     ),
                 },
             },
@@ -197,25 +259,39 @@ OPERATE_TOOL: dict = {
         "name": "operate",
         "description": (
             "Perform a small, reversible action that belongs to Thomas himself instead of "
-            "creating a background task. Use this for reading, listing, or changing the "
-            "user's Thomas preferences when they ask. Never use it for files, shell commands, "
-            "external messages, purchases, account changes, or artifact creation; send those "
-            "to the task manager. A successful call returns effect evidence including readback."
+            "creating a background task. preferences.get/list/set read and write the user's "
+            "free-form preference notes; they do NOT control your own settings. To change "
+            "your autonomy, the files you can change, or internet reach, use "
+            "settings.request_change: it shows the owner a card with what and why, they "
+            "decide, and raising a limit needs their password. Never say a setting changed "
+            "unless settings.request_change came back ok. Never use this tool for files, shell "
+            "commands, external messages, purchases, account changes, or artifact creation; send "
+            "those to the task manager. A successful call returns effect evidence including readback."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["preferences.get", "preferences.list", "preferences.set"],
+                    "enum": ["preferences.get", "preferences.list", "preferences.set", "settings.request_change"],
                     "description": "The bounded Thomas-owned action to perform.",
                 },
                 "key": {
                     "type": "string",
-                    "description": "Preference key for preferences.get or preferences.set.",
+                    "description": (
+                        "Preference key for preferences.get or preferences.set. For "
+                        "settings.request_change: autonomy, file_access or internet."
+                    ),
                 },
                 "value": {
-                    "description": "New preference value for preferences.set.",
+                    "description": (
+                        "New preference value for preferences.set. For settings.request_change, the level: "
+                        "autonomy 1-5; file_access workspace, project or pc; internet fortress, guarded or open."
+                    ),
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "settings.request_change only: why, in a sentence or two. The owner sees it on the card.",
                 },
             },
             "required": ["action"],

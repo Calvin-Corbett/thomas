@@ -378,10 +378,18 @@ function moduleRenderMarketplaceSurface(container) {
             <div class="marketplace-store-empty-actions"><button type="button" class="marketplace-command-btn marketplace-command-btn-primary" data-module-action-id="review-potential" data-module-marketplace-filter="potential" data-module-mode="marketplace">Review ${escapeHtml(String(potentialApps.length))} potential packages</button><button type="button" class="marketplace-command-btn" data-module-action-id="install-file-empty" data-marketplace-import data-module-mode="marketplace">Install From File</button><button type="button" class="marketplace-command-btn" data-module-action-id="install-url-empty" data-marketplace-import-url data-module-mode="marketplace">Install from URL</button></div>
         </section>
     ` : '';
-    const emptyMarkup = `
-        <section class="marketplace-empty-state${error ? ' marketplace-empty-state-error' : ''}">
+    // At the top, because the Plugged in section below the head fills a normal window.
+    const unavailable = Boolean(error) && !apps.length;
+    const errorMarkup = error ? `
+        <section class="marketplace-empty-state marketplace-empty-state-error">
+            <strong>Marketplace unavailable.</strong>
+            <p>${escapeHtml(error)} Thomas tries again about every minute and a half, or press Sync Catalog to try now.</p>
+        </section>
+    ` : '';
+    const emptyMarkup = unavailable ? '' : `
+        <section class="marketplace-empty-state">
             <strong>${escapeHtml(loading ? 'Loading upgrades...' : (searchText ? `No results for \"${searchText}\".` : 'No packages match this view.'))}</strong>
-            <p>${escapeHtml(error || (loading ? 'Thomas is syncing the marketplace catalog.' : 'Change the search or category filter to widen the results.'))}</p>
+            <p>${escapeHtml(loading ? 'Thomas is syncing the marketplace catalog.' : 'Change the search or category filter to widen the results.')}</p>
         </section>
     `;
 
@@ -406,7 +414,8 @@ function moduleRenderMarketplaceSurface(container) {
                         <button type="button" class="marketplace-command-btn marketplace-command-btn-primary" data-module-marketplace-refresh data-module-mode="marketplace">Sync Catalog</button>
                     </div>
                 </div>
-                <div class="marketplace-summary-row">
+                ${errorMarkup}
+                ${unavailable ? '' : `<div class="marketplace-summary-row">
                     <p class="marketplace-summary-copy">
                         <strong>${escapeHtml(String(verifiedApps.length))}</strong> verified
                         <span>${escapeHtml(String(potentialApps.length))} potential</span>
@@ -416,7 +425,7 @@ function moduleRenderMarketplaceSurface(container) {
                         <span>${escapeHtml(String(filteredApps.length))} visible</span>
                         ${syncedLabel ? `<span>Last sync ${escapeHtml(syncedLabel)}</span>` : (generatedLabel ? `<span>Updated ${escapeHtml(generatedLabel)}</span>` : '')}
                     </p>
-                </div>
+                </div>`}
                 ${warning ? `
                     <div class="marketplace-summary-row">
                         <p class="marketplace-summary-copy">
@@ -425,9 +434,9 @@ function moduleRenderMarketplaceSurface(container) {
                         </p>
                     </div>
                 ` : ''}
-                <div class="marketplace-filter-rail">
+                ${unavailable ? '' : `<div class="marketplace-filter-rail">
                     ${filterMarkup}
-                </div>
+                </div>`}
             </div>
             <input class="hidden" type="file" accept=".zip,application/zip" data-module-action-id="install-file-input" data-marketplace-import-input>
             ${renderSelectedStrip(selectedApp)}
@@ -916,6 +925,7 @@ async function moduleRefreshChannels({ force = false } = {}) {
         state.sessions = Array.isArray(historyPayload?.sessions) ? historyPayload.sessions : [];
         state.hits = Array.isArray(historyPayload?.hits) ? historyPayload.hits : [];
         state.lastLoadedAt = Date.now();
+        state.failedAt = 0;
         const preferredSessionId = safeString(state.selectedSessionId)
             || safeString(state.sessions?.[0]?.session_id)
             || safeString(state.hits?.[0]?.session_id);
@@ -929,6 +939,9 @@ async function moduleRefreshChannels({ force = false } = {}) {
         return state.status;
     }).catch((error) => {
         state.error = safeString(error?.message) || 'Failed to load Discord channel state.';
+        // A failed ask redraws the page and a redraw asks, so without this it asks again at once, for as long as the
+        // page is open. Anything you press still asks.
+        state.failedAt = Date.now();
         return null;
     }).finally(() => {
         state.loading = false;
@@ -946,7 +959,8 @@ function moduleRenderChannelsSurface(container) {
     const state = moduleChannelsState();
     if (!state) return null;
     const ageMs = Date.now() - Number(state.lastLoadedAt || 0);
-    if ((!state.status || ageMs >= MODULE_CHANNELS_REFRESH_TTL_MS) && !state.loading) {
+    const waiting = Date.now() - Number(state.failedAt || 0) < MODULE_CHANNELS_RETRY_AFTER_FAILURE_MS;
+    if ((!state.status || ageMs >= MODULE_CHANNELS_REFRESH_TTL_MS) && !state.loading && !waiting) {
         void moduleRefreshChannels();
     }
     return moduleRenderChannelsSurfaceNext(container, state);

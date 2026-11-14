@@ -7,16 +7,18 @@ library required. Follows the same Tool pattern as shell.py.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
+from thomas.tools import fs_scope
 from thomas.tools.base import Tool, ToolResult
-from thomas.tools.filesystem import _safe_path
 
 
 async def _git_run(args: list[str], cwd: Path) -> tuple[int, str, str]:
     """Run a git subcommand. Returns (returncode, stdout, stderr)."""
-    cmd = ["git"] + args
+    # --literal-pathspecs: a path is a path, never ":(top)" / ":/" / "*" magic, whatever the caller wrote.
+    cmd = ["git", "--literal-pathspecs"] + args
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -35,6 +37,31 @@ async def _git_run(args: list[str], cwd: Path) -> tuple[int, str, str]:
 
 
 _NOT_A_REPO = "not a git repository"
+
+
+def _checked(cwd: Path, rel: str) -> tuple[str, ToolResult | None]:
+    """The path the scope validated, as git should get it (relative to ``cwd``, forward slashes), or a refusal.
+
+    A value that starts with ``:`` is pathspec magic to git and is refused outright, so is one the scope will not
+    pass. What git receives is never the raw text.
+    """
+    refusal = ToolResult(ok=False, error=f"File outside project root: {rel}")
+    if rel.startswith(":"):
+        return "", refusal
+    scope = fs_scope.scopes().scope(cwd)
+    try:
+        resolved = scope.resolve(rel)
+        canonical = Path(os.path.relpath(resolved, scope.root.resolve())).as_posix()
+    except (ValueError, OSError):
+        return "", refusal
+    return canonical, None
+
+
+def _bad_ref(ref: str) -> ToolResult | None:
+    """A refusal for a ref that git would read as an option."""
+    if ref.startswith("-"):
+        return ToolResult(ok=False, error=f"Invalid ref (starts with '-'): {ref}")
+    return None
 
 
 def _git_result(rc: int, stdout: str, stderr: str, cwd: Path | None = None) -> ToolResult:
@@ -129,9 +156,15 @@ class GitDiffTool(Tool):
         if args.get("staged"):
             git_args.append("--staged")
         if args.get("ref"):
-            git_args.append(args["ref"])
+            ref = str(args["ref"])
+            if (bad := _bad_ref(ref)) is not None:
+                return bad
+            git_args.append(ref)
         if args.get("path"):
-            git_args += ["--", args["path"]]
+            path, refused = _checked(self._cwd, str(args["path"]))
+            if refused is not None:
+                return refused
+            git_args += ["--", path]
         rc, stdout, stderr = await _git_run(git_args, self._cwd)
         return _git_result(rc, stdout, stderr, self._cwd)
 
@@ -169,7 +202,10 @@ class GitLogTool(Tool):
         else:
             git_args += ["--pretty=format:%h %ad %an: %s", "--date=short"]
         if args.get("path"):
-            git_args += ["--", args["path"]]
+            path, refused = _checked(self._cwd, str(args["path"]))
+            if refused is not None:
+                return refused
+            git_args += ["--", path]
         rc, stdout, stderr = await _git_run(git_args, self._cwd)
         # Empty repo
         if rc != 0 and "does not have any commits" in stderr:
@@ -210,14 +246,15 @@ class GitCommitTool(Tool):
         all_staged = args.get("all_staged", False)
 
         if not all_staged and files:
-            # Validate paths are within sandbox
+            # Validate paths are within sandbox; git is given what the scope passed, not the raw text
+            staged: list[str] = []
             for f in files:
-                try:
-                    _safe_path(self._cwd, f)
-                except ValueError:
-                    return ToolResult(ok=False, error=f"File outside project root: {f}")
+                path, refused = _checked(self._cwd, str(f))
+                if refused is not None:
+                    return refused
+                staged.append(path)
             # Stage the specified files
-            rc, stdout, stderr = await _git_run(["add", "--"] + files, self._cwd)
+            rc, stdout, stderr = await _git_run(["add", "--"] + staged, self._cwd)
             if rc != 0:
                 return ToolResult(ok=False, error=f"git add failed: {stderr.strip()}")
 
@@ -255,7 +292,9 @@ class GitBlameTool(Tool):
         self._cwd = working_dir.resolve()
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        file_path = args["file"]
+        file_path, refused = _checked(self._cwd, str(args["file"]))
+        if refused is not None:
+            return refused
         git_args = ["blame", "--date=short"]
         start = args.get("start_line")
         end = args.get("end_line")
@@ -263,7 +302,7 @@ class GitBlameTool(Tool):
             s = start or 1
             e = end or ""
             git_args += ["-L", f"{s},{e}"]
-        git_args.append(file_path)
+        git_args += ["--", file_path]
         rc, stdout, stderr = await _git_run(git_args, self._cwd)
         return _git_result(rc, stdout, stderr, self._cwd)
 

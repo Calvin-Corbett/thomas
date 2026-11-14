@@ -1,0 +1,3 @@
+### Fixed
+
+- Opening a build no longer waits 15 to 40 seconds on git every time. You said: "its taking a long time to load pages and chats ... make them pages stop loading so slow". The page's list of changed files ran one git status and then up to three git calls per file, one file after another, and asked again on every open: 17.8 s for a small build, 14.9 s for gates, 39.3 s for AI control. A build nobody has touched since the last look is now answered from memory, and any change git could see (an edited file, a staged file, a commit, a new ignore rule) goes back to git. A page of many files reads its diffs side by side instead of one after another.

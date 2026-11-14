@@ -15,7 +15,11 @@ def _load_module(name: str, path: Path):
 
 
 ROOT = Path(__file__).resolve().parent.parent
-agent_commit = _load_module("agent_commit", ROOT / "scripts" / "crew" / "brief" / "commit.py")
+# Loaded under a name no other test uses. test_agent_commit.py registers commit.py
+# as sys.modules['agent_commit']; while this file re-registered that same name,
+# test_agent_commit_run_json_emits_blocker_payload passed on its own and failed
+# whenever both files were collected in one run.
+agent_commit = _load_module("_commit_gate_split_agent_commit", ROOT / "scripts" / "crew" / "brief" / "commit.py")
 merge_readiness = _load_module("check_merge_readiness", ROOT / "scripts" / "forge" / "gates" / "merge_readiness.py")
 
 

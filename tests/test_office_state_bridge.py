@@ -1,3 +1,9 @@
+"""What the Virtual Office keeps on the server: the agent it follows, behind ``/api/office/state``.
+
+The row ``thomas.server.rows.office_state`` turns these routes off and on. A check finds tests by following imports and
+dotted names and does not read the list of rows, so this name is what makes a change to that row run these tests.
+"""
+
 from __future__ import annotations
 
 import importlib.util
@@ -58,13 +64,7 @@ def test_office_iframe_message_applies_server_follow_state_without_reload() -> N
     from playwright.sync_api import sync_playwright
 
     script = (
-        Path(__file__).resolve().parents[1]
-        / "thomas"
-        / "server"
-        / "web"
-        / "js"
-        / "runtime"
-        / "office_server_state.js"
+        Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js" / "runtime" / "office_server_state.js"
     )
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -96,3 +96,22 @@ def test_office_iframe_message_applies_server_follow_state_without_reload() -> N
         page.wait_for_function("officeState.followAgentId === 'agent-9'")
         assert page.url == "http://thomas.test/"
         browser.close()
+
+
+@pytest.mark.asyncio
+async def test_a_refused_update_answers_in_json_like_a_success(tmp_path: Path) -> None:
+    """The page reads one shape from this route; a refusal used to be a bare line of text."""
+    app = web.Application()
+
+    async def _read_json(request: web.Request):
+        return await request.json()
+
+    register_office_state_routes(app, root=tmp_path, require_api_access=lambda _request: None, read_json=_read_json)
+    client = TestClient(TestServer(app))
+    await client.start_server()
+    try:
+        refused = await client.patch("/api/office/state", json={"theme": "dark"}, headers={"X-User-Id": "owner"})
+        assert refused.status == 400
+        assert (await refused.json()) == {"ok": False, "error": "follow_agent_id is the only supported Office field"}
+    finally:
+        await client.close()

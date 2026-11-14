@@ -21,10 +21,12 @@ try:
     from scripts.crew.brief import coordination_barrier
     from scripts.crew.brief import identity as agent_identity
     from scripts.crew.workboard import claim as claim_tool
+    from scripts.crew.workboard import coordination_root
 except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
     from crew.brief import coordination_barrier  # type: ignore
     from crew.brief import identity as agent_identity  # type: ignore
     from crew.workboard import claim as claim_tool  # type: ignore
+    from crew.workboard import coordination_root  # type: ignore
 
 from scripts.crew.brief import bootstrap_claim_state
 from scripts.crew.brief.bootstrap_processes import (
@@ -60,7 +62,9 @@ def _presence_repo_root(workboard_path: Path) -> Path:
         candidate.relative_to(ROOT)
     except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):
         return candidate.parent
-    return ROOT
+    # The session is bound where commit.py and the message tool validate it: this checkout's coordination root,
+    # which is the primary checkout for a linked worktree. The claim itself stays on this checkout's board.
+    return coordination_root.coordination_root(ROOT)
 
 
 def _agent_key(value: str | None) -> str:

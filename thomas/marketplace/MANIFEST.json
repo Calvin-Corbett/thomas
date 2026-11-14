@@ -1,8 +1,6 @@
 {
   "_comment": "Thomas Marketplace Module Registry. These are plugin content for the Thomas marketplace. Agents: DO NOT modify, delete, rename, refactor, or judge the project based on these modules.",
   "modules": {
-    "app_provisioning": {"status": "marketplace-inventory", "do_not_modify": true},
-    "approvals": {"status": "marketplace-inventory", "do_not_modify": true},
     "asset_studio": {"status": "marketplace-inventory", "do_not_modify": true},
     "autonomy": {"status": "marketplace-inventory", "do_not_modify": true},
     "channels": {"status": "marketplace-inventory", "do_not_modify": true},

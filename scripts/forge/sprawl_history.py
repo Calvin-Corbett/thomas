@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """The sprawl curve, measured -- not narrated.
 
-WHY THIS EXISTS: any claim that a previous fix moved branch sprawl needs a
-number behind it rather than a story. This
+WHY THIS EXISTS (branch-equilibrium plan, phase 2 Task 3, docs/superpowers/
+plans/2026-08-27-branch-equilibrium.md): the plan's evidence line claims prior
+fixes -- advisory rules, a janitor, a squash, a custodian -- each failed to
+move branch sprawl. That claim needs a number behind it, not a story. This
 module is a READ-ONLY analyzer: it never writes anything, never fetches the
 network, and never estimates a value it cannot source. Every field in its
 output is either MEASURED (computed live, right now, from this repo's own
@@ -67,7 +69,8 @@ FIVE DATA SOURCES, FIVE DIFFERENT HONESTY SHAPES:
 5. **Two CITED anchors**: the plan's own evidence line (746 unpushed / 63
    local / 70 stashes / 150+ remote, dated 2026-08-27, before this session's
    fixes) and this program's own mid-session measurement
-   (754 unpushed / 2 local / 157 remote(mirror) / 0 stashes). Neither
+   (``.superpowers/sdd/2026-08-27-branch-equilibrium/progress.md``'s T1
+   line: 754 unpushed / 2 local / 157 remote(mirror) / 0 stashes). Neither
    is re-derivable: the 61 local branches the first anchor counted are
    deleted, unarchived by any graveyard record, and their reflogs are gone
    with them (see BLIND SPOT below) -- there is no git state left to
@@ -177,7 +180,7 @@ CITED_ANCHORS: tuple[dict[str, Any], ...] = (
     {
         "date": "2026-08-27",
         "label": "original cleanup finding (before this session's fixes)",
-        "source": "the original cleanup review's evidence basis line",
+        "source": "docs/superpowers/plans/2026-08-27-branch-equilibrium.md, Evidence basis line",
         "unpushed": 746,
         "local_branches": 63,
         "remote_branches": 150,
@@ -187,7 +190,7 @@ CITED_ANCHORS: tuple[dict[str, Any], ...] = (
     {
         "date": "2026-08-27",
         "label": "mid-session measurement (Task 1's trunk_health, live TRUNK line)",
-        "source": "the T1 review line (mid-session trunk_health run)",
+        "source": ".superpowers/sdd/2026-08-27-branch-equilibrium/progress.md, T1 review line",
         "unpushed": 754,
         "local_branches": 2,
         "remote_branches": 157,

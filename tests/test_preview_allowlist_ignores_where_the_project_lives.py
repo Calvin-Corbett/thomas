@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-ROUTES = Path(__file__).resolve().parent.parent / "thomas" / "server" / "routes" / "evolve_agent_routes.py"
+ROUTES = Path(__file__).resolve().parent.parent / "thomas" / "server" / "routes" / "evolve_agent_preview_routes.py"
 
 
 def _definition(marker: str) -> str:
@@ -60,12 +60,20 @@ def _allowlist_body() -> str:
     return pruned + "\n" + _definition("def _preview_allowlist")
 
 
-def test_the_hidden_directory_filter_runs_on_the_relative_path() -> None:
-    body = _preview_body()
-    guard = next(line for line in body.splitlines() if ".thomas" in line and "part in" in line)
+def test_the_hidden_directory_filter_runs_on_the_relative_path(tmp_path: Path) -> None:
+    from thomas.server.routes.evolve_agent_preview_routes import _preview_allowlist
 
-    assert "rel.parts" in guard, "an absolute path carries the project's own location"
-    assert "path.parts" not in guard
+    root = tmp_path / ".thomas" / "projects" / "preview"
+    for relative in ("index.html", "assets/app.js", ".git/config.json", ".thomas/private.html"):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("fixture", encoding="utf-8")
+
+    # Exercise the real pruned walk: a hidden ancestor is allowed, hidden
+    # metadata inside the project is excluded, and every result is relative.
+    allowed = _preview_allowlist(root)
+    assert allowed == {"index.html", "assets/app.js"}
+    assert all(not Path(path).is_absolute() for path in allowed)
 
 
 def test_a_project_under_a_dot_directory_still_lists_its_files(tmp_path) -> None:
@@ -125,9 +133,11 @@ def test_a_traversal_in_the_requested_path_is_refused() -> None:
 def test_the_resolved_target_must_stay_inside_the_project() -> None:
     """The `..` check alone is not enough — a symlink or an absolute path would
     pass it. The resolved path is compared against the project root."""
-    body = _preview_body()
+    body = _definition("def _preview_target")
+    route = _preview_body()
 
     assert "is_relative_to(root.resolve())" in body
+    assert 'off_loop("preview.target_check", _preview_target, root, tail)' in route
 
 
 def test_the_allowlist_does_not_depend_on_which_file_was_requested() -> None:

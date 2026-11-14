@@ -15,8 +15,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.crew.workboard import backstop_order, claim_evidence_sweep
     from scripts.crew.workboard import claim as workboard_claim
-    from scripts.crew.workboard import claim_evidence_sweep
     from scripts.crew.workboard import issue as workboard_issue
     from scripts.forge.gates import workboard_claim_freshness as freshness_gate
     from scripts.forge.gates import workboard_claims as claims_gate
@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover
     from forge.gates import workboard_claim_freshness as freshness_gate  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
+    from scripts.crew.workboard import backstop_order  # type: ignore
     from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 
@@ -448,7 +449,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 [row for row in active_tasks if _norm(row.agent) == _norm(agent)],
                 key=lambda item: str(item.task_id).lower(),
             ):
-                ok, message = workboard_issue.move_task_to_up_for_grabs(
+                ok, message = backstop_order.move_task_to_up_for_grabs(
                     workboard_path,
                     task_id=task.task_id,
                     reported_by=args.reported_by,
@@ -461,9 +462,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
             # Stale-claim reclaim: the task is moved to up-for-grabs above precisely
             # because the claim went stale before the task finished.
-            ok_release, release_msg = workboard_claim.release(
-                workboard_path, agent=agent, require_done_state=False
-            )
+            ok_release, release_msg = workboard_claim.release(workboard_path, agent=agent, require_done_state=False)
             if ok_release:
                 released_agents.append(agent)
             elif "no active claim found" in _norm(release_msg):

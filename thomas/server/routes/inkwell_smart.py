@@ -166,7 +166,7 @@ def _resolve_model(config: Any) -> tuple[Any, list[Any], bool]:
 
 async def analyze_text(config: Any, text: str, *, local_now: str = "") -> dict[str, Any]:
     """Ask the active Thomas model to sort a note (full pipeline pass)."""
-    from thomas.core.llm_client import LLMClient
+    from thomas.core.llm_slot import models
 
     model_cfg, fallbacks, failover_enabled = _resolve_model(config)
     # The full contract rides in the USER message: some providers (the codex
@@ -178,7 +178,7 @@ async def analyze_text(config: Any, text: str, *, local_now: str = "") -> dict[s
         f"Note contents:\n{text}"
     )
     messages = [{"role": "user", "content": user_prompt}]
-    llm = LLMClient(model_cfg, fallback_configs=fallbacks, failover_enabled=failover_enabled)
+    llm = models().open(model_cfg, fallback_configs=fallbacks, failover_enabled=failover_enabled)
     try:
         result = await asyncio.wait_for(llm.chat(messages, tools=None), timeout=_ANALYZE_TIMEOUT_S)
     except asyncio.TimeoutError as e:

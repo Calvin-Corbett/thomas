@@ -102,6 +102,30 @@ async def _run_execute_tools(loop: _LoopStub, tool_calls: list[dict[str, Any]]) 
     return events
 
 
+def test_build_read_batch_reports_tool_exception_and_continues_to_write() -> None:
+    class FailingReadRunner(_SpyRunner):
+        async def run(self, *, tool_call, **kwargs):
+            if tool_call["name"] == "fs.read_file":
+                raise RuntimeError("read failed")
+            return await super().run(tool_call=tool_call, **kwargs)
+
+    loop = _LoopStub(autonomy_level=4, runner=FailingReadRunner())
+    loop._build_read_parallel_only = True
+    events = asyncio.run(
+        _run_execute_tools(
+            loop,
+            [
+                {"id": "read", "name": "fs.read_file", "arguments": '{"path":"one.txt"}'},
+                {"id": "write", "name": "fs.write_file", "arguments": '{"path":"two.txt","content":"ok"}'},
+            ],
+        )
+    )
+    assert [event.data["tool_id"] for event in events] == ["read", "write"]
+    assert events[0].data["ok"] is False
+    assert "read failed" in events[0].data["result_text"]
+    assert events[1].data["ok"] is True
+
+
 def test_execute_tools_level_4_passes_no_human_mode_allow() -> None:
     runner = _SpyRunner()
     loop = _LoopStub(autonomy_level=4, runner=runner)
@@ -219,6 +243,21 @@ def test_self_development_guard_blocks_runaway_inspection_before_write() -> None
     assert events[0].data["ok"] is False
     assert "Self-development write-first guard" in str(events[0].data["result_text"])
     assert "fs.write_file" in str(events[0].data["result_text"])
+
+
+def test_self_development_guard_never_blocks_reading_a_file() -> None:
+    """Measured live 2026-09-22 (exec-8ef69b69fb68): the guard refused fs.read_file of
+    the very file the worker had to edit, and the worker then wrote that 107-line
+    module blind, as nothing but its new 5-line docstring. Reading the file is how
+    an edit starts; the guard is for search and listing loops."""
+    runner = _SpyRunner()
+    loop = _LoopStub(autonomy_level=4, runner=runner)
+    loop._current_job_type = "self_development"
+    loop._self_development_write_guard = {"inspection_count": 10, "write_seen": False, "limit": 6}
+
+    events = asyncio.run(_run_execute_tools(loop, [{"id": "t1", "name": "fs.read_file", "arguments": "{}"}]))
+
+    assert "write-first guard" not in str(events[0].data.get("result_text"))
 
 
 def test_self_development_guard_allows_first_write_tool() -> None:

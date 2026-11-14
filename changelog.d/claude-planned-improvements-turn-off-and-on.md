@@ -1,0 +1,3 @@
+### Changed
+
+- **The queue of Thomas projects can now be turned off and on while Thomas runs.** The four `/api/self/projects/queue` routes moved out of the server's fixed list into an entry called Planned improvements, which ships on, so nothing changes until you turn it off. While it is off, the Planned improvements part of the Improve Thomas window shows a line of technical text instead of the queue and its switch, and asks once each time you open the window. The rest of the window carries on. The queue stays where it is, and the server's own timer goes on starting queued projects and planning new ones.

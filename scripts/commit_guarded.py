@@ -130,6 +130,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     repo_root = Path(args.repo_root).resolve()
     messages = [str(item) for item in args.message if str(item).strip()]
     env = dict(os.environ)
+    env.update(GIT_AUTHOR_NAME="Thomas-Agent", GIT_AUTHOR_EMAIL="352198248+Thomas-Agent@users.noreply.github.com")
     agent = _resolve_agent(str(args.agent or ""))
     if agent:
         env["AGENT_ID"] = agent

@@ -24,6 +24,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.core import agent_presence, task_bot_runtime
+from thomas.core.event_loop_offload import off_loop
 
 log = logging.getLogger(__name__)
 
@@ -152,7 +153,9 @@ async def api_metrics(request: web.Request) -> web.Response:
     total_errors = sum(_ERROR_COUNTS)
     total_requests = sum(_REQUEST_COUNTS)
     error_rate = (total_errors / total_requests * 100) if total_requests > 0 else 0
-    task_bot_summary = task_bot_runtime.read_summary(refresh=True)
+    # refresh=True re-derives the whole execution board from disk and rewrites its
+    # summary -- 218-303 ms on the live 637-record board, measured 2026-09-24.
+    task_bot_summary = await off_loop("observability.task_bot_summary", task_bot_runtime.read_summary, refresh=True)
 
     response_data = {
         **_METRICS_STORE,
@@ -168,8 +171,15 @@ async def api_metrics(request: web.Request) -> web.Response:
 
 
 async def api_agents_activity(request: web.Request) -> web.Response:
+    """Agent presence, gathered in a worker thread.
+
+    ``collect_presence`` runs ``git status`` and enumerates the machine's
+    processes. Both are slow, and on Windows the process listing shells out to
+    PowerShell -- so awaiting this on the loop stops every other request for as
+    long as it takes, which is the shape of the 2026-09-24 outage.
+    """
     try:
-        payload = agent_presence.collect_presence()
+        payload = await off_loop("observability.agent_presence", agent_presence.collect_presence)
     except Exception as exc:
         return web.json_response({"success": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
     return web.json_response(payload)
@@ -177,7 +187,7 @@ async def api_agents_activity(request: web.Request) -> web.Response:
 
 async def api_task_bot_executions(request: web.Request) -> web.Response:
     try:
-        summary = task_bot_runtime.read_summary(refresh=True)
+        summary = await off_loop("observability.task_bot_summary", task_bot_runtime.read_summary, refresh=True)
     except Exception as exc:
         return web.json_response({"success": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
     return web.json_response({"success": True, "task_bots": summary})

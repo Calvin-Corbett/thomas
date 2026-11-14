@@ -9,6 +9,18 @@ param(
   [switch]$Tray,
   [switch]$Headless,
   [switch]$NoMonolithWatch,
+  # Replace a Thomas server that is already running on the port. Without it one that
+  # is this copy is reused, and none is replaced while a Build run is in flight.
+  [switch]$Restart,
+  # Stop the Thomas server on the port and exit. Refused while a Build run is in flight.
+  [switch]$Stop,
+  # First-run setup may install Node.js, the Codex CLI and Ollama (winget / npm), as
+  # THOMAS_AUTO_INSTALL_TOOLS=1 does. Off by default; first launch only, then setup.cmd.
+  [switch]$InstallTools,
+  # Point the thomas:// handler at this copy even if one is already registered.
+  [switch]$RegisterProtocol,
+  # Never write the thomas:// handler to the registry.
+  [switch]$NoProtocolHandler,
   [string]$DeepLink = "",
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$RemainingArgs
 )
@@ -24,6 +36,7 @@ if ($Tray) {
 } elseif (-not $PSBoundParameters.ContainsKey('NoTray')) {
   $NoTray = $true
 }
+$PortNamed = $PSBoundParameters.ContainsKey('Port')  # a -Port you name is the port: the recorded one is never looked at
 
 if ([string]::IsNullOrWhiteSpace($DeepLink) -and $RemainingArgs) {
   foreach ($candidate in $RemainingArgs) {
@@ -120,11 +133,34 @@ function Invoke-Native {
   return (Invoke-NativeCore -Exe $Exe -Args $Args)
 }
 
+function Test-PythonRuns {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [string[]]$LauncherArgs = @()
+  )
+  # Without Python, "python.exe" still resolves: the Store alias, a stub that exits 9009. Trust an
+  # interpreter only after it has run and reported a version Thomas supports (pyproject.toml: requires-python >= 3.10).
+  $probe = 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 10) else 1)'
+  # The Python install manager's py.exe installs a runtime it lacks; a probe must not. Only
+  # AUTOMATIC_INSTALL is its off switch (CONFIRM=0 skips the prompt, so it would install).
+  $saved = $env:PYTHON_MANAGER_AUTOMATIC_INSTALL
+  $env:PYTHON_MANAGER_AUTOMATIC_INSTALL = '0'
+  try { $code = Invoke-NativeQuiet $Path @($LauncherArgs + @('-c', $probe)) }
+  finally { $env:PYTHON_MANAGER_AUTOMATIC_INSTALL = $saved }
+  return ($code -eq 0)
+}
+
 function Find-SystemPython {
-  $cmd = Get-Command python -ErrorAction SilentlyContinue
-  if ($cmd) { return @{ Kind = "python"; Path = $cmd.Source } }
-  $cmd = Get-Command py -ErrorAction SilentlyContinue
-  if ($cmd) { return @{ Kind = "py"; Path = $cmd.Source } }
+  foreach ($cmd in @(Get-Command python -All -ErrorAction SilentlyContinue | Where-Object { $_.CommandType -eq 'Application' })) {
+    if ($cmd.Source -and (Test-PythonRuns -Path $cmd.Source)) { return @{ Kind = "python"; Path = $cmd.Source } }
+  }
+  # "py -3" is the newest Python installed, so the versions Thomas is tested on are
+  # asked for first; a machine with 3.12 and 3.14 gets 3.12 and one with only 3.14 gets that.
+  foreach ($cmd in @(Get-Command py -All -ErrorAction SilentlyContinue | Where-Object { $_.CommandType -eq 'Application' })) {
+    foreach ($flag in @('-3.13', '-3.12', '-3.11', '-3.10', '-3')) {
+      if ($cmd.Source -and (Test-PythonRuns -Path $cmd.Source -LauncherArgs @($flag))) { return @{ Kind = "py"; Path = $cmd.Source; Flag = $flag } }
+    }
+  }
   return $null
 }
 
@@ -145,6 +181,9 @@ function Test-WingetAvailable {
 }
 
 function Ensure-ThomasProtocolRegistration {
+  # Writes HKCU (your Windows account), and used to on every launch, unannounced. Now it
+  # writes once, when no handler exists or the registered script is gone, and says so.
+  if ($NoProtocolHandler) { return }
   try {
     $scriptPath = (Resolve-Path (Join-Path $Root "scripts\run-ui.ps1")).Path
     $powershellExe = Get-CommandPathAny @("powershell.exe", "powershell")
@@ -157,6 +196,18 @@ function Ensure-ThomasProtocolRegistration {
     $commandKey = Join-Path $protocolKey 'shell\open\command'
     $commandValue = ('"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}" -DeepLink "%1"' -f $powershellExe, $scriptPath)
 
+    $existing = ''
+    $existingKey = Get-Item -LiteralPath $commandKey -ErrorAction SilentlyContinue
+    if ($existingKey) { $existing = [string]$existingKey.GetValue('') }
+    if ($existing -and -not $RegisterProtocol) {
+      # Another program's handler, or a copy of Thomas that still works, stays.
+      $registered = [regex]::Match($existing, '(?i)-File\s+"([^"]*run-ui\.ps1)"')
+      if (-not $registered.Success) { return }
+      if (Test-Path -LiteralPath $registered.Groups[1].Value) { return }
+    }
+
+    Write-Host '[thomas] Registering the thomas:// link handler for your Windows account (HKCU\Software\Classes\thomas).'
+    Write-Host '[thomas] Skip it with -NoProtocolHandler; remove it with: reg delete HKCU\Software\Classes\thomas /f'
     New-Item -Path $protocolKey -Force | Out-Null
     New-Item -Path $defaultIconKey -Force | Out-Null
     New-Item -Path $commandKey -Force | Out-Null
@@ -187,6 +238,162 @@ function Get-ThomasLaunchUrl {
   }
   $encodedDeepLink = [System.Uri]::EscapeDataString($deepLink)
   return ("{0}{1}nav=marketplace&thomas_deep_link={2}" -f $base, $separator, $encodedDeepLink)
+}
+
+function Get-LocalThomasVersion {
+  # Read the literal out of thomas/__init__.py rather than booting a Python
+  # interpreter for one string; importing the package to print its version cost
+  # roughly a second of the launch every single time.
+  try {
+    $initPath = Join-Path $Root "thomas\__init__.py"
+    if (Test-Path $initPath) {
+      $initText = [System.IO.File]::ReadAllText($initPath, [System.Text.Encoding]::UTF8)
+      $m = [regex]::Match($initText, '(?m)^__version__\s*=\s*["'']([^"'']+)["'']')
+      if ($m.Success) { return $m.Groups[1].Value.Trim() }
+    }
+  } catch { }
+  return ""
+}
+
+function ConvertTo-ComparablePath([string]$Path) {
+  if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
+  try { $Path = [System.IO.Path]::GetFullPath($Path) } catch { }
+  return $Path.Trim().TrimEnd('\', '/').Replace('/', '\').ToLowerInvariant()
+}
+
+function Get-LocalGitCommit {
+  # The commit this copy is at, as /api/health names the server's (8 characters), or
+  # "" when git or a repository is not there. An installed copy has none to compare.
+  $ErrorActionPreference = 'Continue'
+  try {
+    $git = Get-CommandPathAny @('git', 'git.exe')
+    if (-not $git) { return '' }
+    $out = & $git -C $Root rev-parse --short=8 HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) { return '' }
+    return ([string]($out | Select-Object -First 1)).Trim()
+  } catch { return '' }
+}
+
+function Get-ThomasBuildLabel($Instance) {
+  # "v1.2.3 dev@abcd1234+dirty, C:\path": build_info.build_label plus where it runs from.
+  $label = 'v' + $Instance.Version
+  if ($Instance.Branch) { $label += ' ' + $Instance.Branch }
+  if ($Instance.Commit) { $label += '@' + $Instance.Commit }
+  if ($Instance.Dirty) { $label += '+dirty' }
+  if ($Instance.Root) { $label += ', ' + $Instance.Root }
+  if ($Instance.Status -eq 'degraded') { $label += ' (reporting degraded)' }
+  return $label
+}
+
+function Get-ThomasRunningInstance {
+  # A Thomas server answering /api/health on this port, or $null. Identity comes from the payload,
+  # not from the port being busy: version, status, and the build block (root, commit, branch, dirty)
+  # that tells two copies on one version apart. A server deep in a Build is slow, so the timeout is long. Broken: degraded for a reason a restart can change; model_auth (no sign-in yet) is not one, the app shows it in chat.
+  param([Parameter(Mandatory = $true)][int]$P)
+  if (-not (Test-PortListening $P)) { return $null }
+  try {
+    $resp = Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/health" -f $P) -UseBasicParsing -TimeoutSec 10 -Method Get -ErrorAction Stop
+    $health = $resp.Content | ConvertFrom-Json
+  } catch {
+    return $null
+  }
+  $version = [string]$health.version
+  $status = [string]$health.status
+  if (-not $version -or $status -notin @('ok', 'degraded')) { return $null }
+  $build = $health.build
+  return [pscustomobject]@{
+    Version = $version
+    Status = $status
+    Broken = ($status -eq 'degraded' -and (@($health.degraded | Where-Object { $_ -ne 'model_auth' }).Count -gt 0 -or @($health.degraded).Count -eq 0))
+    Root = [string]$build.root
+    Commit = [string]$build.commit
+    Branch = [string]$build.branch
+    Dirty = ($build.dirty -eq $true)
+    UptimeSec = $(try { [double]$health.uptime_s } catch { 0 })
+  }
+}
+
+function Test-CodeNewerThanServer([string]$CodeRoot, [double]$UptimeSec) {
+  # A server reads its Python and thomas.toml once, when it starts: a .py under thomas\ or
+  # a thomas.toml written after that (now minus the uptime /api/health reports) is not loaded.
+  if (-not $CodeRoot -or $UptimeSec -le 0) { return $false }
+  try {
+    $startedUtc = [DateTime]::UtcNow.AddSeconds(-$UptimeSec)
+    $files = @([System.IO.Directory]::EnumerateFiles((Join-Path $CodeRoot 'thomas'), '*.py', 'AllDirectories')) + (Join-Path $CodeRoot 'thomas.toml')
+    foreach ($file in $files) {
+      if ([System.IO.File]::GetLastWriteTimeUtc($file) -gt $startedUtc) { return $true }  # a missing file reads as 1601
+    }
+  } catch { }
+  return $false
+}
+
+function Get-ThomasActiveRuns {
+  # Build runs the server on this port is working on right now, taken from the same
+  # registry api_server_restart consults before it agrees to restart. Known is $false when
+  # the server would not say (timeout, refusal, an answer with no "running"). A 404 is an
+  # answer: a server with no such route predates Build, so it has no run to cut off.
+  param([Parameter(Mandatory = $true)][int]$P)
+  $unknown = [pscustomobject]@{ Known = $false; Count = 0 }
+  try {
+    $resp = Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/evolve/agent/status" -f $P) -UseBasicParsing -TimeoutSec 10 -Method Get -ErrorAction Stop
+    $status = $resp.Content | ConvertFrom-Json
+  } catch {
+    $http = 0; try { $http = [int]$_.Exception.Response.StatusCode.value__ } catch { }
+    if ($http -eq 404) { return [pscustomobject]@{ Known = $true; Count = 0 } }
+    return $unknown
+  }
+  if ($null -eq $status -or $null -eq $status.PSObject.Properties['running']) { return $unknown }
+  $count = if ($status.runs) { @($status.runs).Count } else { 0 }
+  if (($status.running -eq $true -or $status.recording -eq $true) -and $count -eq 0) { $count = 1 }
+  return [pscustomobject]@{ Known = $true; Count = $count }
+}
+
+function Get-ExistingServerPlan {
+  # What to do about a server already on the port: 'start' (nothing usable there); 'attach' (use
+  # it: this copy and current, or not but mid-Build or would not say, so left running, Left);
+  # 'replace' (asked for, or not this copy or out of date with no Build running); 'refuse'
+  # (replacing was asked for, a Build runs). This copy: same root and version, and same commit
+  # when both know it. Current: not started from a dirty tree, no .py or thomas.toml written since.
+  param(
+    [Parameter(Mandatory = $true)][int]$P,
+    [string]$LocalVersion = "",
+    [string]$LocalRoot = "",
+    [switch]$ReplaceIt
+  )
+  $running = Get-ThomasRunningInstance -P $P
+  if ($null -eq $running) {
+    $message = if (Test-PortListening $P) { "Port {0} is in use, but nothing there answered /api/health as Thomas within 10 seconds. A listener that looks like a Thomas server and does not answer is stopped and replaced, which ends any Build it is running; any other program there is left alone." -f $P } else { '' }
+    return [pscustomobject]@{ Action = 'start'; Message = $message }
+  }
+  $label = Get-ThomasBuildLabel $running; $localCommit = ''; $isOther = $false
+  if (($running.Root -and $LocalRoot -and (ConvertTo-ComparablePath $running.Root) -ne (ConvertTo-ComparablePath $LocalRoot)) -or ($LocalVersion -and $LocalVersion -ne $running.Version)) {
+    $isOther = $true
+  } elseif ($running.Commit) {
+    $localCommit = Get-LocalGitCommit
+    $isOther = ($localCommit -and -not ($localCommit.StartsWith($running.Commit) -or $running.Commit.StartsWith($localCommit)))
+  }
+  $isStale = -not $isOther -and ($running.Dirty -or (Test-CodeNewerThanServer $LocalRoot $running.UptimeSec))
+  # The full command with this copy's path, which works from any folder: a bare .ps1 is refused by the default execution policy.
+  $restart = ('powershell -NoProfile -ExecutionPolicy Bypass -File "{0}\scripts\run-ui.ps1" -Restart -Port {1}' -f $LocalRoot, $P)
+  if (-not ($isOther -or $isStale) -and -not $ReplaceIt) {
+    $message = "Using the Thomas already running on port {0} ({1}). To replace it run: {2}" -f $P, $label, $restart
+    return [pscustomobject]@{ Action = 'attach'; Degraded = $running.Broken; Message = $message }
+  }
+  $localLabel = Get-ThomasBuildLabel ([pscustomobject]@{ Version = $LocalVersion; Commit = $localCommit; Root = $LocalRoot })
+  $why = if ($isOther) { "is not this copy ($localLabel)" } else { 'is out of date (started with uncommitted changes, or before the code or thomas.toml here last changed)' }
+  $active = Get-ThomasActiveRuns -P $P
+  if ($active.Count -gt 0) {
+    if ($ReplaceIt) { return [pscustomobject]@{ Action = 'refuse'; Other = $isOther; Message = ("Thomas on port {0} is running {1} Build run(s), so it was left running. Wait for it to finish, then try again." -f $P, $active.Count) } }
+    $message = "The Thomas on port {0} ({1}) {2} and is running {3} Build run(s), so it was left running and is what opens now. Wait for it to finish, then run: {4}" -f $P, $label, $why, $active.Count, $restart
+    return [pscustomobject]@{ Action = 'attach'; Left = $true; Other = $isOther; Message = $message }
+  }
+  if (-not $active.Known) {
+    if ($ReplaceIt) { return [pscustomobject]@{ Action = 'replace'; Other = $isOther; Message = ("Thomas on port {0} would not say whether a Build is running; going ahead as you asked." -f $P) } }
+    $message = "The Thomas on port {0} ({1}) {2} and would not say whether a Build is running, so it was left running and is what opens now. To replace it run: {3}" -f $P, $label, $why, $restart
+    return [pscustomobject]@{ Action = 'attach'; Left = $true; Other = $isOther; Message = $message }
+  }
+  $message = if ($ReplaceIt) { '' } else { "Replacing the Thomas on port {0} ({1}); it {2}." -f $P, $label, $why }
+  return [pscustomobject]@{ Action = 'replace'; Other = $isOther; Message = $message }
 }
 
 function Install-WithWinget {
@@ -225,7 +432,7 @@ function Ensure-SystemPython {
     return $found
   }
 
-  Write-Host "[thomas] Python not found. Attempting automatic install..."
+  Write-Host "[thomas] Python 3.10 or newer was not found. Installing Python with winget (3.11, or 3.12 if that fails; it is added to your PATH)..."
   $installed = Install-WithWinget -PackageId "Python.Python.3.11" -DisplayName "Python 3.11"
   if (-not $installed) {
     $installed = Install-WithWinget -PackageId "Python.Python.3.12" -DisplayName "Python 3.12"
@@ -264,6 +471,77 @@ function Ensure-SystemPython {
   return $null
 }
 
+function Stop-ThomasServerOnPort([int]$P) {
+  $stoppedAny = $false
+
+  # Stop tray agents bound to this port first; otherwise they immediately
+  # respawn the server we are trying to reclaim.
+  try {
+    $pyProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue
+    foreach ($proc in $pyProcs) {
+      $procId = [int]$proc.ProcessId
+      if ($procId -le 0) { continue }
+      $procCmd = [string]$proc.CommandLine
+      if (-not $procCmd) { continue }
+      if ($procCmd -match '(?i)-m\s+thomas\.tray_agent\b' -and $procCmd -match ("(?i)(--port\s+{0}\b|--port={0}\b)" -f $P)) {
+        Write-Host ("[thomas] Found Thomas tray agent on port {0} (pid {1}); stopping it..." -f $P, $procId)
+        try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
+        $stoppedAny = $true
+      }
+    }
+  } catch { }
+
+  # Cheap check first. Get-NetTCPConnection stays below because killing the old
+  # server needs its OwningProcess, which the .NET listener table does not carry
+  # - but on the common path (nothing listening on this port) we now answer in
+  # ~3ms instead of paying ~1s for a connection object we would throw away.
+  if (-not (Test-PortListening $P)) {
+    if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
+    return $stoppedAny
+  }
+
+  $listeners = Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue
+  if (-not $listeners) {
+    if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
+    return $stoppedAny
+  }
+
+  foreach ($l in $listeners) {
+    # Avoid PowerShell's built-in $PID (read-only) which is case-insensitive.
+    $owningPid = [int]$l.OwningProcess
+    if ($owningPid -le 0) { continue }
+
+    $cmd = $null
+    try {
+      $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
+    } catch { }
+
+    if ($cmd -and $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|\bthomas(\.exe)?\s+serve\b)') {
+      # If this server is managed by a tray agent, stop the parent tray first
+      # so it does not immediately respawn the duplicate server.
+      try {
+        $procObj = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue
+        $parentPid = [int]$procObj.ParentProcessId
+        if ($parentPid -gt 0) {
+          $parentCmd = [string](Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $parentPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
+          if ($parentCmd -and $parentCmd -match '(?i)-m\s+thomas\.tray_agent\b') {
+            Write-Host ("[thomas] Found tray parent for duplicate server on port {0} (pid {1}); stopping tray parent..." -f $P, $parentPid)
+            try { Stop-Process -Id $parentPid -Force -ErrorAction SilentlyContinue } catch { }
+            $stoppedAny = $true
+          }
+        }
+      } catch { }
+
+      Write-Host ("[thomas] Port {0} is in use by an existing Thomas server (pid {1}); stopping it..." -f $P, $owningPid)
+      try { Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue } catch { }
+      $stoppedAny = $true
+    }
+  }
+
+  if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
+  return $stoppedAny
+}
+
 function Test-VenvValid {
   param([string]$VenvRoot)
 
@@ -272,35 +550,118 @@ function Test-VenvValid {
   return ((Test-Path $cfg) -and (Test-Path $py))
 }
 
-Ensure-ThomasProtocolRegistration
-
-$SysPy = Ensure-SystemPython
-if (-not $SysPy) {
-  Write-Host "[thomas] ERROR: Python not found in PATH."
-  Write-Host "[thomas] Install Python 3.10+ and try again."
-  exit 2
+function Enter-LaunchLock {
+  # One launch of this copy at a time: a second double-click waits for the first, then
+  # finds Thomas running and uses it instead of racing it for the port. The lock is a file
+  # this process holds open, which Windows frees if it dies. $null: it could not be taken.
+  param([int]$WaitSec = 600)
+  $lockPath = Join-Path $Root 'runtime\launch.lock'; $deadline = (Get-Date).AddSeconds($WaitSec); $told = $false
+  while ($true) {
+    try {
+      New-Item -ItemType Directory -Force -Path (Split-Path $lockPath) | Out-Null
+      return [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    } catch [System.IO.IOException] {
+      # Only a lock another launch holds (Win32 32 or 33) is worth waiting for; a full disk or a missing folder is not.
+      if (($_.Exception.HResult -band 0xFFFF) -notin @(32, 33)) { return $null }
+      if ((Get-Date) -ge $deadline) { Write-Host ("[thomas] Another launch is still going after {0} seconds; continuing without waiting for it." -f $WaitSec); return $null }
+      if (-not $told) { Write-Host "[thomas] Another launch of Thomas is still starting; waiting for it to finish."; $told = $true }
+      Start-Sleep -Milliseconds 500
+    } catch { return $null }
+  }
 }
 
-$VenvRoot = Join-Path $Root ".venv"
-$VenvPy = Join-Path $VenvRoot "Scripts\\python.exe"
-if (-not (Test-VenvValid $VenvRoot)) {
+function Get-RecordedPort {
+  # The port this copy's Thomas last started on; it moves up from -Port when that is busy.
+  # 0: none recorded, -Port itself, or a -Port that was named (it is never second-guessed).
+  if ($PortNamed) { return 0 }
+  try { $p = [int](Get-Content -LiteralPath (Join-Path $Root 'runtime\thomas.port') -TotalCount 1 -ErrorAction Stop) } catch { return 0 }
+  if ($p -lt 1024 -or $p -gt 65535 -or $p -eq $Port) { return 0 }
+  return $p
+}
+
+function Invoke-ExistingServerGate {
+  # Acts on Get-ExistingServerPlan before anything is written or installed. Returns the
+  # exit code when the launch ends here (an existing Thomas was used or left alone, or
+  # -Stop was asked for: 5 none found, 6 one would not stop), or $null when it should go
+  # on and start a server. -Again: the same question a second time, so a replacement
+  # already announced is not announced twice. The recorded port is asked about too, but only a Thomas that is this copy there is acted on.
+  param([switch]$Again)
+  $ask = @{ LocalVersion = (Get-LocalThomasVersion); LocalRoot = $Root; ReplaceIt = [bool]($Restart -or $Stop) }
+  $plan = Get-ExistingServerPlan -P $Port @ask
+  $moved = Get-RecordedPort
+  $alt = if ($moved -and ($Stop -or $plan.Action -eq 'start')) { Get-ExistingServerPlan -P $moved @ask }
+  if ($alt -and ($alt.Other -or ($alt.Action -eq 'start' -and (Test-PortListening $moved)))) { $alt = $null }
+  if ($alt -and $alt.Action -ne 'start' -and -not $Stop) { $plan = $alt; $script:Port = $moved }
+  if ($plan.Message -and -not ($Again -and $plan.Action -in @('replace', 'start'))) { Write-Host ("[thomas] " + $plan.Message) }
+
+  if ($Stop) {
+    if ($alt -and $alt.Action -eq 'refuse') { Write-Host ("[thomas] " + $alt.Message) }
+    if ($plan.Action -eq 'refuse' -or ($alt -and $alt.Action -eq 'refuse')) { return 3 }
+    $ports = @($Port, $(if ($alt) { $moved }) | Where-Object { $_ })
+    $ended = @($ports | Where-Object { Stop-ThomasServerOnPort $_ })
+    # Stop-Process says nothing when it fails, so a Thomas still there is found by looking.
+    $stuck = @($ports | Where-Object { (Test-PortListening $_) -and (($ended -contains $_) -or (Get-ThomasRunningInstance -P $_)) })
+    if ($stuck) { Write-Host ("[thomas] Thomas on port " + ($stuck -join ' and ') + " could not be stopped."); return 6 }
+    Write-Host ("[thomas] " + $(if ($ended) { "Stopped Thomas on port " + ($ended -join ' and ') + "." } else { "No Thomas was found on port " + ($ports -join ' or ') + "." }))
+    return $(if ($ended) { 0 } else { 5 })
+  }
+  if ($plan.Action -notin @('attach', 'refuse')) { return $null }
+
+  if ($Tray) { Write-Host "[thomas] -Tray was not started: Thomas is already running. Add -Restart to replace it with the tray agent." }
+  if (-not $NoBrowser) {
+    $existingUrl = Get-ThomasLaunchUrl -BaseUrl ("http://127.0.0.1:{0}/" -f $Port) -RequestedDeepLink $DeepLink
+    try { Start-Process $existingUrl | Out-Null } catch { }
+  }
+  if ($plan.Action -eq 'refuse') { return 3 }
+  # 4: a Thomas is open, but it is not this copy or is out of date; 7: it is this copy but reports degraded. launch-thomas.vbs says so.
+  if ($plan.Left) { return 4 }
+  if ($plan.Degraded) { return 7 }
+  return 0
+}
+
+function Ensure-ThomasVenv {
+  # A system Python is only needed to create .venv; a working .venv never asks for one.
+  # Returns an exit code when .venv cannot be made, $null when it is there.
+  if (Test-VenvValid $VenvRoot) { return $null }
+  $SysPy = Ensure-SystemPython
+  if (-not $SysPy) {
+    Write-Host "[thomas] ERROR: Python 3.10 or newer was not found, and it could not be installed automatically."
+    Write-Host "[thomas] Install Python 3.10 or newer from https://www.python.org/downloads/ and try again."
+    return 2
+  }
   if (Test-Path $VenvRoot) {
     Write-Host "[thomas] Existing .venv is incomplete. Recreating it..."
     Remove-Item -Recurse -Force $VenvRoot -ErrorAction Stop
   }
-
   Write-Host "[thomas] Creating venv in .venv..."
   if ($SysPy.Kind -eq "py") {
-    & $SysPy.Path -3 -m venv .venv
+    & $SysPy.Path $SysPy.Flag -m venv .venv | Out-Host
   } else {
-    & $SysPy.Path -m venv .venv
+    & $SysPy.Path -m venv .venv | Out-Host
   }
 
   if (-not (Test-VenvValid $VenvRoot)) {
     Write-Host "[thomas] ERROR: venv creation failed."
-    exit 2
+    return 2
   }
+  return $null
 }
+
+$LaunchLock = $null
+if (-not $Stop) { $LaunchLock = Enter-LaunchLock }
+
+# A Thomas server that already answers on this port is used, left alone or replaced
+# here, before anything is written or installed: stopping one ends whatever it is
+# in the middle of (a second double-click, a thomas:// link click).
+$gateExit = Invoke-ExistingServerGate
+if ($null -ne $gateExit) { exit $gateExit }
+
+Ensure-ThomasProtocolRegistration
+
+$VenvRoot = Join-Path $Root ".venv"
+$VenvPy = Join-Path $VenvRoot "Scripts\\python.exe"
+$venvExit = Ensure-ThomasVenv
+if ($null -ne $venvExit) { exit $venvExit }
 
 function Ensure-Installed {
   if ($NoInstall) { return }
@@ -665,7 +1026,10 @@ function Open-BootDoctorRescue {
       "--port", "$DiagPort",
       "--reason", $Reason,
       "--startup-context", $contextPath,
-      "--relaunch"
+      "--relaunch",
+      # The window is hidden, so the rescue must never wait for typed input:
+      # without this it ends at "Press Enter" and waits for good.
+      "--no-interactive"
       # Hidden: a rescue is Thomas's business, not a console the owner must
       # watch. Without this a PowerShell window pops up on every rescue.
     ) -WorkingDirectory $Root -WindowStyle Hidden -PassThru
@@ -694,15 +1058,25 @@ function Invoke-FirstRunQuickSetup {
   if ($NoInstall) { return }
 
   $statusPath = Join-Path $Root "runtime\\setup\\last_setup.txt"
-  if (Test-Path $statusPath) { return }
+  if (Test-Path $statusPath) {
+    if ($InstallTools) { Write-Host "[thomas] -InstallTools only applies to a first launch, and first-run setup has already run. Run setup.cmd to install Node.js, the Codex CLI or Ollama." }
+    return
+  }
 
   $setupScript = Join-Path $Root "scripts\\setup.ps1"
   if (-not (Test-Path $setupScript)) { return }
 
-  Write-Host "[thomas] First launch detected. Running quick setup..."
+  Write-Host "[thomas] First launch detected. Running quick setup: it picks a default model in thomas.toml, adds Desktop and Start Menu shortcuts, and runs npm install for the desktop shell if Node.js is already installed."
+  $setupArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $setupScript, '-Easy', '-NoPrompt', '-SkipInstall', '-SkipDoctor')
+  if ($InstallTools -or $env:THOMAS_AUTO_INSTALL_TOOLS -eq '1') {
+    Write-Host "[thomas] Tool installs are on: setup may install Node.js, the Codex CLI and Ollama with winget and npm."
+    $setupArgs += '-AutoInstallTools'
+  } else {
+    Write-Host "[thomas] Not installing Node.js, the Codex CLI or Ollama. Without Node.js the desktop shell is not installed, so web tabs stay blank on sites that refuse framing. Run setup.cmd (or run-ui with -InstallTools on a first launch) if you want them."
+  }
   $code = 0
   try {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $setupScript -Easy -AutoInstallTools -NoPrompt -SkipInstall -SkipDoctor
+    & powershell @setupArgs
     $code = $LASTEXITCODE
   } catch {
     $code = 1
@@ -714,77 +1088,6 @@ function Invoke-FirstRunQuickSetup {
 }
 
 Invoke-FirstRunQuickSetup
-
-function Stop-ThomasServerOnPort([int]$P) {
-  $stoppedAny = $false
-
-  # Stop tray agents bound to this port first; otherwise they immediately
-  # respawn the server we are trying to reclaim.
-  try {
-    $pyProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue
-    foreach ($proc in $pyProcs) {
-      $procId = [int]$proc.ProcessId
-      if ($procId -le 0) { continue }
-      $procCmd = [string]$proc.CommandLine
-      if (-not $procCmd) { continue }
-      if ($procCmd -match '(?i)-m\s+thomas\.tray_agent\b' -and $procCmd -match ("(?i)(--port\s+{0}\b|--port={0}\b)" -f $P)) {
-        Write-Host ("[thomas] Found Thomas tray agent on port {0} (pid {1}); stopping it..." -f $P, $procId)
-        try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
-        $stoppedAny = $true
-      }
-    }
-  } catch { }
-
-  # Cheap check first. Get-NetTCPConnection stays below because killing the old
-  # server needs its OwningProcess, which the .NET listener table does not carry
-  # - but on the common path (nothing listening on this port) we now answer in
-  # ~3ms instead of paying ~1s for a connection object we would throw away.
-  if (-not (Test-PortListening $P)) {
-    if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
-    return $stoppedAny
-  }
-
-  $listeners = Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue
-  if (-not $listeners) {
-    if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
-    return $stoppedAny
-  }
-
-  foreach ($l in $listeners) {
-    # Avoid PowerShell's built-in $PID (read-only) which is case-insensitive.
-    $owningPid = [int]$l.OwningProcess
-    if ($owningPid -le 0) { continue }
-
-    $cmd = $null
-    try {
-      $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
-    } catch { }
-
-    if ($cmd -and $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|\bthomas(\.exe)?\s+serve\b)') {
-      # If this server is managed by a tray agent, stop the parent tray first
-      # so it does not immediately respawn the duplicate server.
-      try {
-        $procObj = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue
-        $parentPid = [int]$procObj.ParentProcessId
-        if ($parentPid -gt 0) {
-          $parentCmd = [string](Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $parentPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
-          if ($parentCmd -and $parentCmd -match '(?i)-m\s+thomas\.tray_agent\b') {
-            Write-Host ("[thomas] Found tray parent for duplicate server on port {0} (pid {1}); stopping tray parent..." -f $P, $parentPid)
-            try { Stop-Process -Id $parentPid -Force -ErrorAction SilentlyContinue } catch { }
-            $stoppedAny = $true
-          }
-        }
-      } catch { }
-
-      Write-Host ("[thomas] Port {0} is in use by an existing Thomas server (pid {1}); stopping it..." -f $P, $owningPid)
-      try { Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue } catch { }
-      $stoppedAny = $true
-    }
-  }
-
-  if ($stoppedAny) { Start-Sleep -Milliseconds 500 }
-  return $stoppedAny
-}
 
 function Uses-OllamaLocal {
   $cfgPath = Join-Path $Root "thomas.toml"
@@ -882,10 +1185,13 @@ if (Uses-OllamaLocal) {
 }
 Show-DefaultModelWarning
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ ALWAYS start fresh Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-# Always start the requested Thomas surface from this working tree without
+# Ã¢â€â‚¬Ã¢â€â‚¬ Start fresh Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# A current copy was reused above. Asked again just before the stop: setup takes minutes, and a Build may have started.
+# Start the requested Thomas surface from this working tree without
 # enumerating or stopping unrelated listeners on other ports.
 # Stop-ThomasServerOnPort also stops a tray agent bound to this exact port.
+$lastGate = Invoke-ExistingServerGate -Again
+if ($null -ne $lastGate) { exit $lastGate }
 Stop-ThomasServerOnPort $Port | Out-Null
 
 $FreePort = Find-FreePort $Port
@@ -909,20 +1215,11 @@ if ($FreePort -ne $Port) {
   }
   $Port = $FreePort
 }
+# Where this copy's Thomas is, for -Stop and the next launch: the default port was busy and it moved up. Not for a named -Port.
+if (-not $PortNamed) { try { Set-Content -LiteralPath (Join-Path $Root 'runtime\thomas.port') -Value $Port -Encoding Ascii -ErrorAction Stop } catch { } }
 
 # Show what version we're about to start so the user can confirm it's current.
-# Read the literal out of thomas/__init__.py rather than booting a Python
-# interpreter for one string; importing the package to print its version cost
-# roughly a second of the launch every single time.
-$startingVersion = ""
-try {
-  $initPath = Join-Path $Root "thomas\__init__.py"
-  if (Test-Path $initPath) {
-    $initText = [System.IO.File]::ReadAllText($initPath, [System.Text.Encoding]::UTF8)
-    $m = [regex]::Match($initText, '(?m)^__version__\s*=\s*["'']([^"'']+)["'']')
-    if ($m.Success) { $startingVersion = $m.Groups[1].Value.Trim() }
-  }
-} catch { }
+$startingVersion = Get-LocalThomasVersion
 if (-not $startingVersion) { $startingVersion = "unknown" }
 
 $Url = "http://$BindHost`:$Port/"
@@ -1054,10 +1351,13 @@ function Start-DetachedThomasServer {
   $stderrLog = Join-Path $logDir 'server_stderr.log'
 
   try {
+    # Hidden: both streams go to the logs above, so the console window this would
+    # otherwise open is empty, and closing it stops Thomas mid-session.
     $proc = Start-Process `
       -FilePath $VenvPy `
       -ArgumentList @('-m', 'thomas.server', '--host', $BindAddress, '--port', "$ServerPort") `
       -WorkingDirectory $Root `
+      -WindowStyle Hidden `
       -RedirectStandardOutput $stdoutLog `
       -RedirectStandardError $stderrLog `
       -PassThru
@@ -1096,6 +1396,8 @@ if (-not $NoTray) {
 
   $startupWatchProc = Start-ThomasStartupRecoveryWatch
   $watchProc = Start-MonolithWatch
+  # The tray agent runs for as long as Thomas does; another launch must not wait on it.
+  if ($LaunchLock) { $LaunchLock.Dispose() }
   try {
     # Run tray agent (which starts and manages the server)
     $exitCode = Invoke-ThomasRuntime @("-m", "thomas.tray_agent", "--port", "$Port")
@@ -1120,7 +1422,7 @@ if (-not $NoTray) {
   }
 } else {
   # -NoTray: Run server directly as a detached process and gate success on health.
-  Write-Host "[thomas] Starting server directly (no tray icon)..."
+  Write-Host "[thomas] Starting server directly (no tray icon). It has no window; to stop it run: powershell -NoProfile -ExecutionPolicy Bypass -File `"$Root\scripts\run-ui.ps1`" -Stop -Port $Port"
   Write-Host ""
 
   $watchProc = Start-MonolithWatch

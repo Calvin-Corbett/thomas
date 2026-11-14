@@ -76,3 +76,18 @@ def test_the_agent_loop_prunes_at_a_third_of_the_window_without_a_compactor() ->
     tools = [m for m in agent._conversation if m["role"] == "tool"]
     assert PRUNED_MARKER in tools[0]["content"]
     assert PRUNED_MARKER not in tools[-1]["content"]
+
+
+def test_stale_outputs_wait_until_a_whole_batch_can_be_cut() -> None:
+    """Each cut rewrites an earlier part of the request and the provider's cache serves nothing after it, so cutting
+    one output per call broke the cache on every call (41% of Build's requests, 2026-11-06)."""
+    conv = _conv(8)  # 17 messages; with the last 10 kept, 3 outputs are stale
+    assert prune_stale_tool_outputs(conv, keep_recent_messages=10, min_chars=1500, min_batch=4) == 0
+    assert not any(PRUNED_MARKER in str(m["content"]) for m in conv)
+
+
+def test_a_full_batch_is_cut_together() -> None:
+    conv = _conv(8)
+    saved = prune_stale_tool_outputs(conv, keep_recent_messages=6, min_chars=1500, min_batch=4)
+    stubbed = [m for m in conv if m["role"] == "tool" and PRUNED_MARKER in m["content"]]
+    assert saved > 0 and len(stubbed) == 5

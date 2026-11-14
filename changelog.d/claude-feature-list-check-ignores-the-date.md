@@ -1,0 +1,2 @@
+### Fixed
+- **The feature master list check compares the list with the code, not with today's date.** `sync_feature_master_list.py --check` rebuilt the document with today's date in its `**Last Updated:**` line and compared the whole text, so an accurate, untouched list failed every day after it was written; the committed list says 2026-06-14, so the check had been failing on the calendar alone. The check now reuses the date the committed file carries, and a regeneration still stamps today.

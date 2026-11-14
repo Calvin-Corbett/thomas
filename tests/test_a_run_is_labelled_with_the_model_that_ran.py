@@ -1,74 +1,61 @@
-"""A Code turn must name the engine that actually produced it.
+"""A Code turn must name the model that actually produced it.
 
-Code has exactly two executors. `forge_code_settings.from_payload`::
-
-    gpt = id.startswith("gpt-") or model.startswith(("gpt-", "codex", ...))
-    if gpt:  family "gpt"    -> in-process ChatGPT via openai_codex
-    else:    family "claude" -> the claude CLI subprocess
-
-and the shell feeds it (`unified_code_lifecycle.js`)::
-
-    model:    modelId.startsWith('gpt-') ? modelId : 'claude:sonnet',
-    model_id: modelId,
-
-so picking a local qwen, a Gemini or a Mistral in the Code model menu runs the
-Claude CLI. That is a real product limit and this test does not argue with it.
-
-What it pins is the REPORT. Both turn-recording call sites in
-``evolve_agent_routes`` passed ``settings.model_id or settings.dispatch_model``
--- the owner's pick winning over the executor -- and ``capability_report``
-reported the same value with ``status: "applied"``. Observed live on this
-machine: active profile ``Local``, ``model_id`` empty, a turn labelled
-``qwen2.5-coder:7b``, and a transcript ending ``claude exited 1`` because the
-Claude CLI is not logged in here. A model that had no part in the run was named
-as its author, and the failure was attributed to it.
-
-The module docstring says it "preserves every requested dial while separately
-reporting which values the current executor applies, fixes to a safe value, or
-cannot honor". For the model dial it did the opposite.
-
-Nothing about what RUNS changes here -- only what Thomas says ran. The other
-half of the trap, inventing ``claude:sonnet`` when the caller sent no model at
-all, was closed 2026-08-05 after it bit live (chip on GPT-5.6 Terra, dispatch
-to an unauthenticated Claude CLI): an empty request now resolves the server's
-configured default, or fails before dispatch. That path is pinned in
-``test_an_unselected_model_never_silently_becomes_claude.py``.
+Build now refuses unsupported models before dispatch, including legacy payloads
+that pair a Claude placeholder with a foreign model id. The historical reroute
+fixture constructs that older settings state directly so attribution remains
+covered without requiring the parser to silently substitute models again.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from thomas.forge.anvil import forge_code_settings
-from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings
+from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, ForgeCodeSettingsError
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The live drift state, reproduced exactly: the shell sends its `claude:sonnet`
-# placeholder for anything non-GPT, and the owner's actual pick in `model_id`.
 DRIFTED = {"model": "claude:sonnet", "model_id": "qwen2.5-coder:7b"}
 
 
-def test_a_rerouted_request_is_not_labelled_with_the_model_it_did_not_use() -> None:
-    settings = ForgeCodeSettings.from_payload(DRIFTED)
+def _historical_rerouted_settings(model_id: str = DRIFTED["model_id"]) -> ForgeCodeSettings:
+    """Construct the old rerouted state without bypassing validation for new runs."""
+    settings = ForgeCodeSettings.from_payload({"model": "claude:sonnet", "agent": "claude_code"})
+    return replace(settings, model_id=model_id)
 
-    assert settings.family == "claude", "precondition: a non-GPT model routes to the Claude CLI"
+
+def test_a_new_foreign_model_request_is_refused_before_it_can_be_mislabelled() -> None:
+    with pytest.raises(ForgeCodeSettingsError, match="qwen2.5-coder:7b.*the selected model"):
+        ForgeCodeSettings.from_payload(DRIFTED)
+
+
+def test_a_rerouted_request_is_not_labelled_with_the_model_it_did_not_use() -> None:
+    settings = _historical_rerouted_settings()
+
+    assert settings.family == "claude", "precondition: the historical run used the Claude CLI"
     recorded = settings.recorded_model()
     assert recorded != "qwen2.5-coder:7b", (
         "the turn is still labelled with the model the owner picked rather than "
         "the executor that ran. That model had no part in the run, and any "
         "failure in it gets attributed to a model that never executed."
     )
-    assert recorded.startswith("claude"), (
-        f"the recorded model {recorded!r} does not name the executor that ran"
-    )
+    assert recorded.startswith("claude"), f"the recorded model {recorded!r} does not name the executor that ran"
+
+
+@pytest.mark.parametrize("model_id", ["qwen2.5-coder:7b", "octopus-7b"])
+def test_a_new_request_cannot_recreate_a_historical_reroute(model_id: str) -> None:
+    with pytest.raises(ForgeCodeSettingsError, match=re.escape(model_id)):
+        ForgeCodeSettings.from_payload({"model": "claude:sonnet", "model_id": model_id})
 
 
 def test_the_report_says_the_model_was_substituted_not_applied() -> None:
-    support = ForgeCodeSettings.from_payload(DRIFTED).capability_report()["support"]["model"]
+    settings = _historical_rerouted_settings("qwen2.5-coder:7b")
+    report = settings.capability_report()
+    support = report["support"]["model"]
 
     assert support["status"] == "substituted", (
         f"the model dial reports {support['status']!r}. 'applied' asserts the "
@@ -78,8 +65,14 @@ def test_the_report_says_the_model_was_substituted_not_applied() -> None:
         "the report no longer preserves what was actually asked for, so the "
         "owner cannot see that a substitution happened"
     )
+    assert support["effective"] == report["effective"]["model"] == settings.recorded_model() == "claude:sonnet", (
+        "the substitution report must attribute the run to the Claude model that actually ran"
+    )
     assert "reason" in support and "Claude" in support["reason"], (
         "a substituted model is reported without saying why or what ran instead"
+    )
+    assert support["requested"] in support["reason"] and support["effective"] in support["reason"], (
+        "the substitution reason must name both the requested model and its replacement"
     )
 
 
@@ -93,8 +86,7 @@ def test_a_genuine_claude_request_is_still_applied() -> None:
     for payload in ({"model": "claude:opus"}, {"model": "claude:sonnet", "model_id": "sonnet"}):
         report = ForgeCodeSettings.from_payload(payload).capability_report()
         assert report["support"]["model"]["status"] == "applied", (
-            f"{payload} is a genuine Claude request but reports "
-            f"{report['support']['model']['status']!r}"
+            f"{payload} is a genuine Claude request but reports {report['support']['model']['status']!r}"
         )
 
 
@@ -143,9 +135,7 @@ def test_a_codex_shaped_request_is_not_blamed_on_the_claude_cli() -> None:
             f"{name!r} carries a substitution reason: {support.get('reason')!r}. "
             "Nothing was substituted -- a GPT request was handled by the GPT executor."
         )
-        assert "Claude" not in str(support), (
-            f"{name!r} names the Claude CLI, which had no part in this request"
-        )
+        assert "Claude" not in str(support), f"{name!r} names the Claude CLI, which had no part in this request"
 
 
 def test_gpt_keeps_its_exact_model() -> None:
@@ -160,7 +150,7 @@ def test_gpt_keeps_its_exact_model() -> None:
 def test_a_model_merely_containing_a_claude_name_is_not_treated_as_claude() -> None:
     """`octopus-7b` contains "opus". A substring test would clear it wrongly."""
 
-    settings = ForgeCodeSettings.from_payload({"model": "claude:sonnet", "model_id": "octopus-7b"})
+    settings = _historical_rerouted_settings("octopus-7b")
     assert settings.capability_report()["support"]["model"]["status"] == "substituted"
 
 
@@ -171,9 +161,7 @@ def test_both_turn_recorders_use_the_honest_accessor() -> None:
     the first would leave every interrupted run mislabelled.
     """
 
-    source = (ROOT / "thomas" / "server" / "routes" / "evolve_agent_routes.py").read_text(
-        encoding="utf-8"
-    )
+    source = (ROOT / "thomas" / "server" / "routes" / "evolve_agent_routes.py").read_text(encoding="utf-8")
     stale = re.findall(r"settings\.model_id\s+or\s+settings\.dispatch_model", source)
     assert not stale, (
         f"{len(stale)} turn recorder(s) still pass `settings.model_id or "

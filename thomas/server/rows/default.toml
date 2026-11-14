@@ -1,0 +1,576 @@
+# Which plugins a running Thomas loads, in this order. Your own choices sit on top of this, in
+# <data dir>/plugins/choices.json, and only the server writes that file.
+# Spec: docs/superpowers/specs/2026-10-31-cordis-foundation-design.md
+#
+# It lives inside the package because the package is the one thing every install carries. A release bundle, a Docker
+# image and a pip copy all leave behind what sits beside it, and a server with no list starts with no rows.
+#
+# title, about, off_means and stop_now are what the Plugins page shows you, so every row needs them, and they live here
+# because a row that starts off is never imported. stop_now is the cost printed beside Stop now. Only a row a stop never
+# waits for may leave it empty, because that row never shows the button.
+name = "default"
+
+[[row]]
+id = "companion"
+entry = "thomas.server.app_routes_companion:plugin"
+enabled = true
+title = "Companion apps"
+about = "Runs the apps on your phone companion, your phone calendar, and the Paper Trading, Inkwell and Life Manager workspaces."
+off_means = "While this is off, those apps stop working until you turn it back on."
+stop_now = "Anything those apps are waiting on will fail, and may need doing again."
+
+[[row]]
+id = "consolidation"
+entry = "thomas.server.consolidation_maintenance:plugin"
+enabled = true
+title = "Version pile-up check"
+about = "Every few hours, Thomas counts the versions of its own code and leaves a warning for its agents if too many have piled up."
+off_means = "While this is off, Thomas stops checking on its own. Its agents still check when they start work, and you can still ask for every version in the System Map reading while that is on."
+stop_now = ""
+
+[[row]]
+id = "goals"
+entry = "thomas.server.rows.goals:plugin"
+enabled = true
+title = "Upgrade goal counts"
+about = "Lets other programs see and change the list of upgrade goals Thomas sets for itself. No page in the sidebar shows this list."
+off_means = "While this is off, nothing you normally use changes, because no page in the sidebar reads this list. Other programs cannot reach it. If you still have an older page open that counts these goals, it keeps its old number until you reload it, then leaves them out and does not say so. Thomas keeps the list and goes on updating it. The goals you set in chat are a separate list and are not affected."
+stop_now = "A request to see or change the list that is still running will fail, and may need sending again."
+
+[[row]]
+id = "mention_context"
+entry = "thomas.server.rows.mention_context:plugin"
+enabled = true
+title = "Mention context panel"
+about = "Works out what a line using @file:, @thread: or @session: names, for other programs to call. It answers which pieces of context those name, which were kept, which were dropped and why, and the tokens used against the budget the caller sets. No page in Thomas shows this any more, so only other programs can call it. Nothing in chat calls it either: a message you send in chat is not read by it. Other programs can also register threads and sessions for it to find. Nothing in Thomas does that."
+off_means = "While this is off, nothing you see in Thomas changes, because no page uses it and your chats and Build runs do not either. Every one of its routes answers 404 and none is listed. Turning this off forgets every thread and session that was registered, and other programs cannot register any. When you turn this back on, the routes work with no restart, and start with none registered."
+stop_now = "A request to resolve or register that is still running will fail, and may need sending again."
+
+[[row]]
+id = "search"
+entry = "thomas.server.rows.search:plugin"
+enabled = true
+title = "Web search page"
+about = "Shows the page of web results you get by typing words into a Search or type a URL box, at the top of Thomas or on a new tab, with a short Thomas overview. It also lets other programs look through a separate index of conversations and keep bookmarks and saved searches there. No page shows those, and Thomas adds nothing new to that index, so it may be empty."
+off_means = "While this is off, pressing Enter on words in either box opens the results page saying Search unavailable and HTTP 404, with no results and no overview, and its Try again button cannot help until this is back on. A web address typed there still opens. A results page already open keeps what it shows until it searches again, which reloading it or going back to it also does. Thomas can still search the web for you in chat. Other programs cannot reach the index, and what it holds stays for when this comes back on. The bookmarks bar is a separate list and is not affected."
+stop_now = "A web search still running will fail, and you can search again once this is back on."
+
+[[row]]
+id = "spend"
+entry = "thomas.server.rows.spend:plugin"
+enabled = true
+title = "Token Economy figures"
+about = "Fills in the Token Economy page, and gives the cost line under your message box in Chat the prices behind its dollar figures. The page counts the runs Thomas makes to upgrade itself, so replies in chat do not show up in its numbers."
+off_means = "While this is off, the cost line in Chat still counts tokens. A Chat page already open keeps showing dollars. Reload it and the dollars go, and a model on your own computer may lose its no charge note, until this is back on and you reload Chat again. A Token Economy page already open keeps its counts, and Refresh does nothing until this is back on. Changing its Window is the exception. Token history then reads awaiting first API call under its old total, as if nothing had been counted, and the bar under today's count and the percent under the average go. They stay gone until this is back on and you press Refresh. Reloaded, it reads no calls and no history, loses its runtime details, still says Live and does not say why. Export opens a page that says not found. The Cheap, Optimal and Max buttons still work. Thomas goes on adding to its record, and the spending limit on its upgrade runs still applies."
+stop_now = "A request for these numbers or an export that is still running will fail, and may need asking again."
+
+[[row]]
+id = "secrets"
+entry = "thomas.server.rows.secrets:plugin"
+enabled = true
+title = "Saving API keys"
+about = "Saves the API key you paste for a model provider, from the box under a provider that has none in the Chat model menu, and from Easy Setup. Other programs can also use it to see which providers have a key, see when one is due for changing, and change or remove one. No page shows those dates or removes a key saved this way."
+off_means = "While this is off, the keys you already saved stay saved, and whatever uses them goes on as before. The Chat model menu looks the same, on an open page or after a reload, but the box under a provider that has no key stops working: press Save and the box empties, a small red 404: Not Found appears, and the key is not kept, so paste it again once this is back on. On a new install Easy Setup fails the same way if you type a key into it: it says it could not save the key and tells you to check the key's format, though nothing is wrong with the key. Neither place says this is turned off. Other programs can no longer see which providers have a key, or change or remove one, this way. The key boxes in Settings, signing in with ChatGPT and the key boxes for creating images, music and video do not use this and are not affected."
+stop_now = "A key still being saved or removed will fail, and may need doing again."
+
+[[row]]
+id = "memory_routes"
+entry = "thomas.server.rows.memory_routes:plugin"
+enabled = true
+title = "Memory controls for other programs"
+about = "Lets other programs see what Thomas has pinned, how much it holds and, for a chat they name, what it searched its memory for, which can be your own words from that chat. They can also pin a fact or forget a pinned one, and settle memory changes that are waiting for a decision, such as two facts that disagree. No page in the sidebar or Settings uses this."
+off_means = "While this is off, nothing you normally use changes, because no page in the sidebar or Settings reads this. Other programs lose these controls. They can still chat with Thomas, which uses what it remembers, and deleting a chat still forgets what came from it, apart from any fact Thomas saved to keep. Thomas goes on remembering and goes on using what it remembers in chat, and changes waiting for a decision go on waiting. If you still have the older full page open, the Memory tab of its Tools Console keeps what it last showed until it next refreshes. It then says memory is disabled, with no pins and no contradictions, which is not true of Thomas."
+stop_now = "A request to one of these controls that is still running may fail, and may need sending again."
+
+[[row]]
+id = "office_state"
+entry = "thomas.server.rows.office_state:plugin"
+enabled = true
+title = "Who the Virtual Office follows"
+about = "Saves which agent the Virtual Office follows and hands it to the page, so another browser that opens the Office picks up the same agent. In the Classic layout, an agent you choose in the chat from the Chat button at the top right of the Office reaches your screen too."
+off_means = "While this is off, the Virtual Office still opens, its agents still move, and nothing tells you this is off. The next time it opens it goes straight to its newer floor plan, where it would otherwise start on the older tile map, and the button on the small map reads Hide instead of Follow. Following an agent only moves the tile map, so no agent is followed on the floor plan, and another browser does not pick one up. If you use the Classic layout, the Chat button at the top right of the Office opens a chat that can follow an agent. While this is off, that chat saves the agent and may tell you it worked, but the Office on your screen does not change. An Office already open stays as it is and goes on following its agent until you reload it. A different agent you pick there is not saved while this is off, but your browser remembers it. Thomas keeps the saved agent while this is off. When you turn this back on, the agent your browser remembers can replace the saved agent the next time the Office opens, or it may not, so you cannot count on which one the Office follows."
+stop_now = "If the Virtual Office is reading or saving the agent it follows at that moment, that one request fails and the Office does not say so, so a different agent you just picked may not be saved."
+
+[[row]]
+id = "engine_actions"
+entry = "thomas.server.rows.engine_actions:plugin"
+enabled = true
+title = "Upkeep jobs on request"
+about = "Lets other programs start Thomas's four upkeep jobs when they ask, one or all of them, even a job set not to run by itself. They are a check of its own code, which can correct a mismatched version number or remove a leftover lock; a review that updates its list of upgrade goals; a check of its pages; and a save of new files to git, which leaves out changes to files already in git, and saves nothing if one of those files was deleted or a change is already waiting to be committed. No page has a button for this. In an installed release the code check and the save cannot run, so they do nothing."
+off_means = "While this is off, nothing you normally use changes, because no page uses it. Other programs can no longer start these jobs. If a job is running when you turn this off, Thomas waits for it to finish, which can take minutes. Whether the jobs also run by themselves while you are away is a separate setting, and this does not change it."
+stop_now = "A job already running goes on to its end, and may still change or save files, but the program that asked gets no answer. In a run of all four, the jobs not yet begun do not start."
+
+[[row]]
+id = "schedules"
+entry = "thomas.server.rows.schedules:plugin"
+enabled = true
+title = "Scheduled tasks"
+about = "Runs the tasks on your schedule at the times you set, and lets you see and change them in Settings, under Autonomy, in Scheduled tasks."
+off_means = "While this is off, no task starts at its time, and Scheduled tasks in Settings cannot show or change your list. If that page is already open it keeps the old list until you reload it, then says it could not load schedules. Adding a task, or pressing a button on one, shows an error until you turn this back on. A task already under way is not stopped, and carries on until it ends, which can take up to half an hour. A task already waiting to start when you turn this off still starts, and can then take up to half an hour too. Your tasks stay saved, and the thomas cron command can still list and change them. When you turn this back on, each task that came due while it was off runs straight away. Most run once, but one that comes due every few minutes can run several times over after a long time off. The queue of jobs shown on the System page is a separate list and is not affected."
+stop_now = "Stop now does not end a task already under way: it carries on until it ends, which can take up to half an hour. A task already waiting to start still starts, and can take as long. A request to see or change your tasks that is still running will fail, and may need sending again."
+
+[[row]]
+id = "cooldown_and_logs"
+entry = "thomas.server.rows.cooldown_and_logs:plugin"
+enabled = true
+title = "Rate limit line and log export"
+about = "Tells the line under the message box in Chat which models are resting, which plan has reached its usage limit, and when that limit resets. Also packs Thomas's logs into a zip when you press Export Logs on the Advanced tab of Settings. On a Thomas with no logs folder yet, that button stays grey even with this on."
+off_means = "While this is off, the line in Chat can no longer say which plan has reached its usage limit or when it resets, and it says nothing about a limit already running when you open Chat. If a message runs into a resting model the line still counts down, but that countdown can end long before a usage limit does. A reply that fails because of a usage limit still tells you so, with the reset time when the provider gave one. Thomas goes on resting models and moving between them as before. A line already showing stays until you reload Chat, its time is up, that model answers, or a message runs into a resting model, which puts a countdown in its place and takes away any plan and reset it named. After you reload Settings, Export Logs is grey. If Settings is already open it still looks ready, and pressing it says the export failed. Thomas goes on writing its logs."
+stop_now = "Nothing is lost: a log export already being packed still finishes and reaches you."
+
+[[row]]
+id = "webhooks"
+entry = "thomas.server.rows.webhooks:plugin"
+enabled = true
+title = "Messages from other services"
+about = "Receives the messages, known as webhooks, that services you have set up, such as GitHub and Stripe, send to Thomas, and keeps a record of them. Thomas does not act on what it receives, and no page shows the record."
+off_means = "While this is off, no page changes, because none shows these messages. Anything a service sends is refused and not kept, so it is gone unless that service sends it again. Programs you gave the webhook admin token can no longer see or change your webhooks or the record. What is already recorded stays. If you run the security audit command on Thomas's source code, it fails until you turn this back on, because it looks for the places these messages arrive. Messages Thomas sends out to other services are separate and are not affected."
+stop_now = "A message or request that is still being handled will fail, and may need sending again."
+
+[[row]]
+id = "observability"
+entry = "thomas.server.rows.observability:plugin"
+enabled = true
+title = "Agent and task reports"
+about = "Lets other programs ask which agents are working on Thomas's own code and how the background tasks in the folder it was started from are going. No page in Thomas reads these reports. The System page shows those background tasks its own way."
+off_means = "While this is off, nothing you normally use changes, because no page in Thomas reads these reports. The System page shows background tasks its own way and is not affected. Other programs lose this way of asking for these reports, and one connected to the live event feed is dropped. That feed, the event list and the tool use figures have nothing in them today, so nothing is lost there. Agents and background tasks carry on as before, and Thomas goes on keeping their records."
+stop_now = "A request for these reports that is still running will fail, and may need sending again."
+
+[[row]]
+id = "catalog"
+entry = "thomas.server.rows.catalog:plugin"
+enabled = true
+title = "Marketplace and installed apps"
+about = "Runs the Marketplace page, where you find, install, turn on, turn off and remove apps and plugins. It also opens the pages of the apps you installed, from the sidebar, from Library or from a desktop shortcut. If other computers can reach this Thomas, it offers them a plugin store too."
+off_means = "While this is off, the Marketplace page says it is unavailable and where to turn it back on, and nothing from the store is listed. You cannot install, remove, turn on or turn off anything from it, except in its Plugged in section, which still answers. The page tries again about every minute and a half, even in a tab you have left, and you can scroll it, type in its search box and click on it as usual. Turned back on, it fills in by itself the next time it tries, or at once if you press Sync Catalog. Apps you installed stay installed and keep what they saved, but their pages will not open: after a reload they leave the sidebar and Library and nothing says why, and a desktop shortcut to one shows 404: Not Found. An app page already open goes on working until you reload it. A Marketplace page already open keeps its list until you reload it, but installing or removing anything from it fails. Other computers cannot reach the plugin store on this Thomas."
+stop_now = "A plugin download, an install or a check of the store that is still running will fail, and may need doing again."
+
+[[row]]
+id = "setup"
+entry = "thomas.server.rows.setup:plugin"
+enabled = true
+title = "Easy Setup checks and repair"
+about = "Tells Easy Setup what this computer has and which way of connecting suits it, and does the work behind its Auto Repair and Approve required downloads buttons and its download of local models. A new install shows Easy Setup over Virtual Office, Canvas, Channels, Token Economy and Marketplace. Other programs can also use this to check Thomas's settings, download a model, and see or change its local background work. No page uses those."
+off_means = "While this is off, a Thomas that has finished or skipped Easy Setup carries on as before, because nothing you normally use asks for this. On a new install Chat still opens and Easy Setup still appears, but in place of a recommendation it says Bootstrap check failed: Setup bootstrap failed (404), and it chooses no way of connecting for you. ChatGPT and Manual API Key can still be finished. Local Ollama cannot. Connect and Test says there are no recommended local models for this device and downloads none, whatever the computer. The next step then marks Ollama as Required even if it is installed and running, and Approve required downloads says Repair call failed, so Continue stays grey. Auto Repair shows nothing and repairs nothing. None of this says it is turned off. Skip for now still closes Easy Setup, but it then does not come back by itself, even once this is back on. If Easy Setup was already open when you turned this off, Connect and Test for Local Ollama says Local model sync failed and to make sure Ollama is running, though nothing is wrong with Ollama. Once this is back on, reload the page, go back to Connect and Test and press it again, and the models download. Your keys, your settings and the models you already have stay, Thomas's local background work carries on, and running repair from the command line still works. Other programs can no longer check Thomas's settings, download a model, or see or change its local background work this way. If a repair or a model download Easy Setup started is running when you turn this off, Thomas waits for it to finish, which for a repair can take up to half an hour, but a model download another program started stops at once."
+stop_now = "Stop now does not end a repair already running: it goes on to its end and can still change things on this computer, and nothing tells you how it went. The same goes for a round of local background work another program asked for. A local model still downloading stops partway, and Connect and Test has to start it again. Any other request still running will fail, and may need sending again."
+
+[[row]]
+id = "runs"
+entry = "thomas.server.rows.runs:plugin"
+enabled = true
+title = "Run history for other programs"
+about = "Lets other programs list the runs Thomas has recorded, read each one back step by step and save a copy of it. Most runs are the record of one reply in Chat or one job in Build. A request to cancel a run is answered here too, but it stops nothing. No page in the sidebar or Settings uses this."
+off_means = "While this is off, nothing you normally use changes, because no page in the sidebar or Settings reads this. Other programs can no longer list, read or save runs this way, and one part way through reading a run is cut off. Thomas goes on recording replies in Chat and jobs in Build, and the System page goes on listing the recent ones. When this is back on, runs recorded while it was off are on the list with the others. If you still have the older full page open, the Runs tab of its Tools Console keeps what it last showed until it next refreshes. It then reads 0 listed and 0 failed and says the run store endpoint is not available in this environment, though Thomas is still recording."
+stop_now = "A request to read a run that is still running will fail, and may need sending again."
+
+[[row]]
+id = "pr_review"
+entry = "thomas.server.rows.pr_review:plugin"
+enabled = true
+title = "Pull request review"
+about = "Keeps pull request reviews for other programs to call. No page in Thomas shows them any more, so only other programs can use it. A caller sends a diff, and it ranks each change by risk and lets the caller comment, hand off a fix and approve. All of that stays in these routes: it does not reach GitHub or change your code, no agent picks up a fix that is handed off, and approving only marks the review. Reviews last only until Thomas restarts."
+off_means = "While this is off, nothing you see in Thomas changes, because no page uses it. Every one of its routes answers 404 and none is listed. Thomas keeps the reviews it holds while this is off, and they are there again when it is back on. A restart still loses them. Opening a pull request from chat does not use this and is not affected."
+stop_now = "A review or comment still on its way to Thomas is cut off and not kept, so it needs sending again. Reviews Thomas already holds are not touched."
+
+[[row]]
+id = "agent_panels"
+entry = "thomas.server.rows.agent_panels:plugin"
+enabled = true
+title = "Agent steering, run telemetry and worktree progress"
+about = "Keeps routes for steering a running agent, live run telemetry and worktree progress. No page in Thomas shows these any more, so only other programs can call them. Nothing in Thomas reports to them, so your agents, Build runs and chats never appear there. They hold only what another program sends them. A steer sent to them is kept, but no agent reads it."
+off_means = "While this is off, your agents, Build runs and chats carry on as before, because none of them report to these routes. Nothing you see in Thomas changes, because no page shows them. Every one of these routes answers 404 and none is listed. Turning this off forgets everything they held, including any target set and any steer sent, and other programs cannot report here. When you turn this back on the routes work with no restart, and start empty."
+stop_now = "A report or a steer still being handled will fail, and may need sending again."
+
+[[row]]
+id = "asset_studio"
+entry = "thomas.server.rows.asset_studio:plugin"
+enabled = true
+title = "Asset Studio and ComfyUI"
+about = "Lets other programs run jobs with tools on this computer, such as Blender, and keep job templates, and connects Thomas to ComfyUI, the image tool. No page shows those jobs. The one page that uses this is the older Asset Studio page, and no button in the sidebar or Settings opens it."
+off_means = "While this is off, nothing you normally use changes, because no button in the sidebar or Settings opens the Asset Studio page and no page shows these jobs. Other programs cannot reach any of it. A job still running is ended and marked cancelled, and a program set to hear when jobs finish is told. Your jobs, your templates and that setting are kept, and come back when you turn this on. A ComfyUI that Thomas started can keep running, and after this Thomas cannot stop it, so close it yourself. If you still have the Asset Studio page open, it goes on showing what it last showed until you press something. Then Boot, Refresh, Queue Render and Get Outputs each show a failure that does not say why, and Stop says a shutdown signal was sent when nothing was. Reloaded, the page says Comfy is offline, even if ComfyUI is running."
+stop_now = "A program or page still waiting on a job or on ComfyUI gets no answer, and may need to ask again. The job is ended and marked cancelled. A workflow already on its way to ComfyUI may still arrive."
+
+[[row]]
+id = "media"
+entry = "thomas.server.rows.media:plugin"
+enabled = true
+title = "Creating images, video and music"
+about = "Runs Create image, Create video and Create music, in the menu of the plus button beside your message box in Chat. They use a model on your computer or a Hugging Face key, once you have set one up, and what they make appears in that chat and in Library."
+off_means = "While this is off, Create image, Create video and Create music are still in that menu, but none of them can start. Asking for one puts a line in Chat saying it could not start, followed by an error about JSON, and nothing says this is turned off. Your words stay in the box. A setup box already open fails with the same error and does not keep the key you typed. What you already made stays in your chats and Library, and your choice of model or key stays for when this is back on. Anything being made when you turn this off is stopped straight away, and none of it reaches you. Its message in an open Chat goes on saying Reconnecting, and its Stop button only says Stopping, until you open Thomas again, which shows it as Stopped, or turn this back on, which says it was interrupted. The reload button may not clear it. A model on your computer cannot be stopped partway, so it runs to its end, and so does any that was waiting for it, and anything new you create with one waits behind them. A request already with Hugging Face goes on until it answers. If a model is still downloading when you turn this off, Thomas waits for it to finish, which can take a long time."
+stop_now = "A model still downloading goes on downloading, but the setup box shows an error and your choice is not saved, so choose it again once this is back on. A request to start something that is still running will fail, and may need sending again."
+
+[[row]]
+id = "machine_capacity"
+entry = "thomas.server.rows.machine_capacity:plugin"
+enabled = true
+title = "Build memory watch"
+about = "Watches how much memory each Build run really uses. After five runs Thomas uses what it saw to reset how many Build runs this computer can hold at once. This also lets other programs ask for that number, how busy this computer is and where Thomas's time has gone. No page in Thomas asks for these."
+off_means = "While this is off, nothing you normally use changes, because no page in Thomas asks for this. Build keeps the number it already has and still holds new runs to it. Thomas stops watching how much memory new runs use, so that number no longer changes with what they use, and what it learned before stays saved. A run going when you turn this back on counts only for what is seen from then on. Other programs can no longer ask for that number, how busy this computer is or where the time has gone. Thomas goes on keeping that record of its time, so nothing is missing from it when this is back on."
+stop_now = "A request for these figures that is still running will fail, and may need sending again. The reading behind it finishes by itself and changes nothing."
+
+[[row]]
+id = "realtime"
+entry = "thomas.server.rows.realtime:plugin"
+enabled = true
+title = "Realtime assistant page"
+about = "A page of its own, headed Realtime Human Assistant Layer, that was meant for talking to Thomas by voice or by typing. Nothing in Thomas links to it or uses it, so you reach it only by typing its address. As it comes, pressing Connect there shows a warning that it is disabled, and the page keeps trying again about twice a second until you press Connect a second time. If you change the setting that warning names, it connects, but anything you send comes back as an error. In Docker, or installed with pip somewhere outside the Thomas folder, this page is left out, so its address shows 404: Not Found even with this on."
+off_means = "While this is off, nothing you normally use changes, because nothing in Thomas uses this page. Typing its address shows 404: Not Found, and so does reloading it. If you pressed Connect on a copy that is still open, it stays on screen and says there was a WebSocket error and that text mode still works, but it does not: what you type appears there and nothing answers. It tries again about every eight seconds for as long as it stays open, and once this is back on it shows the disabled warning again and goes back to trying about twice a second. Files already dropped onto it stay where they were saved."
+stop_now = "Only a file still being dropped onto that page can hold this up. It is cut off, none of it is kept, and it needs sending again."
+
+[[row]]
+id = "ratchet"
+entry = "thomas.server.rows.ratchet:plugin"
+enabled = true
+title = "Daily backlog landing"
+about = "Once a day it looks through work on Thomas's own branches that never landed, tests each piece, has a Build team repair what needs it, and brings what passes to you on a card. It runs only in the caged Thomas, the copy on its own Windows account, and on any other copy it never starts a run. No page in the sidebar shows what it found."
+off_means = "While this is off, no daily run starts, and other programs cannot read what it found or ask for a run. Nothing you normally use changes, because no page in the sidebar reads this. Chat can still tell you what is unlanded, from the records it has. A card already waiting for you stays, and answering it still works: the next run after this is back on reads what you decided. If a run is going when you turn this off, Thomas waits for it to end, and that can take many hours, because a run can be waiting for your card or for a Build team. In the caged Thomas, when you turn this back on, the first run comes about 15 minutes later, then once a day."
+stop_now = "Stop now ends the run where it is. Tests it was running are thrown away and run again next time. A Build team it started keeps working, and the next run takes up what that team made. A change it was already handing to you can still reach your card. Chat may go on saying a change is being proven until the next run. A request to read this or start a run that is still going will fail, and may need sending again."
+
+[[row]]
+id = "overlay"
+entry = "thomas.server.rows.overlay:plugin"
+enabled = true
+title = "Saved interface changes"
+about = "Keeps the changes you save to how Thomas looks, such as a colour, a theme, the name it answers to, or the size and place of a part of a page, and puts them on Chat, Settings and the older full page that Virtual Office, Channels, Token Economy and Marketplace open in, each time they open. System and Library do not show them. Redesign with AI, in the menu of the plus button beside your message box in Chat, is what saves them."
+off_means = "While this is off, every page you open comes up as Thomas ships it, with none of your saved changes. Nothing is deleted, and when you turn this back on the pages you open next show every saved change exactly as before. Opening Settings, Library or Virtual Office while this is off makes this browser forget which of your saved themes you had chosen, so choose it again once this is back on. A page already open keeps its look until you reload it. Redesign with AI still opens, but a change to a colour or a name is not applied, and a change to a part of a page shows only in this browser. Its note then says to reload and Apply again, or to restart Thomas, and neither helps while this is off. Other programs cannot read or change your saved changes through Thomas. If a save is under way when you turn this off, Thomas waits for it to finish."
+stop_now = "A request to read or save a change that is still running is dropped and may need sending again, but a save already under way still finishes and is kept."
+
+[[row]]
+id = "aliveness"
+entry = "thomas.server.rows.aliveness:plugin"
+enabled = false
+title = "Idle awareness"
+about = "About every five minutes Thomas looks at its own surroundings: which version of its code is running (only when it runs from a copy that keeps its history), how many files are changed, whether it is ahead of or behind the shared copy, and how many of its own upgrade goals are open. It writes down what it would have said about each change and never says it, so nothing reaches you from this and no page in the sidebar shows what it wrote. This begins off. If you started Thomas with its aliveness setting on and have never chosen here, it begins on and remembers that, and after that what you choose here wins over the setting."
+off_means = "While this is off, Thomas does not make this look or write anything down, and nothing you normally use changes, because no page reads what it writes. What it already wrote is kept. While Server status lists is on, other programs that ask Thomas for its list of engines still see Aliveness, marked stopped. Turning this on later starts with a fresh look, which is not counted as a change. If you started Thomas with its aliveness setting on, a separate recorder that notes the goals it would have picked up after half an hour idle goes on working, and this does not reach it."
+stop_now = "Stop now ends the wait for a look that is partway through. That look finishes by itself in the background and may still write down what it found after this reads off."
+
+[[row]]
+id = "discord"
+entry = "thomas.server.rows.discord:plugin"
+enabled = true
+title = "Discord channel"
+about = "Connects Thomas to Discord. It runs the Discord bridge, the program that listens in your Discord server and answers through Thomas, and the Channels page in the sidebar that starts and stops it, keeps its token and settings, and searches what it has heard. It also lets the helper Thomas offers on that page read and switch the channel."
+off_means = "While this is off, the Channels page cannot reach the Discord connection. A page that is already open shows a line saying 404: Not Found under its Discord card by itself within about 20 seconds, but the card keeps reading On channel and the button keeps reading Turn Channel Off, even if you press Refresh. Only reloading the page turns the card to Off channel and the button to Turn Channel On. Start Bridge, Restart Bridge, Turn Channel On and Save Configuration then do nothing but show that line, and Run Wake Probe leaves its button on Running Wake Probe until you reload. If the bridge is running when you turn this off, Thomas stops it, so the bot goes offline in Discord and nothing it hears reaches Thomas. Your bot token, your settings and what it heard are kept, and the helper on that page reads and changes nothing. Turning this back on starts the bridge again only if it was running when you turned this off. Closing Thomas stops it the same way, and starting Thomas again brings it back. Sending to Discord with the thomas channels send command or a webhook is separate and carries on."
+stop_now = "A start, restart or wake probe that is still running holds the turn off until it finishes, and installing the bridge's files can take minutes. Stop now cuts that wait and the request fails, but the bridge it was starting can still come up with this off, and turning this on and off again ends it."
+
+[[row]]
+id = "desktop"
+entry = "thomas.server.rows.desktop:plugin"
+enabled = true
+title = "Isolated desktop setup"
+about = "Runs the Isolated Desktop Mode part of Advanced in Settings: the Enable Isolated Desktop Mode switch, Worker VM Source, Remote Trust Mode, Save Desktop Settings, Install Host Service, Open Viewer and Refresh Status. Install Host Service starts the Windows installer, which asks for administrator approval, and Open Viewer opens the worker computer's window. This is setup only: nothing here starts an isolated desktop. It also lets Easy Setup report how the isolated desktop is set up and the System page list its helper while it runs, and lets other programs use the same buttons."
+off_means = "While this is off, Advanced in Settings still shows Isolated Desktop Mode, and nothing on it says it is turned off. After a reload the status reads Not Enabled and the switch shows off even if you had turned it on. Refresh Status shows a red Failed to load isolated desktop status. Save Desktop Settings shows that red message and then a green Isolated desktop settings saved, though nothing was saved, so what you chose there is lost. Install Host Service shows a red Failed to launch isolated desktop install and Open Viewer a red Failed to open isolated desktop viewer, and neither is greyed out as it is when this is on. Nothing asks again and again. What you saved before stays and is read again when this is back on. Nothing is uninstalled, and a host service already installed carries on. Easy Setup stops reporting the isolated desktop and the System page stops listing its helper. If Thomas had started the desktop helper, turning this off stops it. A Settings page already open keeps what it last showed until you press something on it."
+stop_now = "A save, an install or an open viewer request that is still being sent fails and needs sending again. A program an install or a viewer request already launched keeps going."
+
+[[row]]
+id = "onboarding"
+entry = "thomas.server.rows.onboarding:plugin"
+enabled = true
+title = "First-run measurements"
+about = "Keeps a note of each step you take in Easy Setup, such as opening it, moving to a step, answering a question, skipping it or finishing. The page sends each note as it goes, and three readings report on the notes. Only the Tools Console on the older full page shows a reading, and no button in the sidebar or Settings opens it. Other programs can ask for the same readings."
+off_means = "While this is off, first-run setup carries on as before. Chat itself never opens Easy Setup. A new install still opens it over Virtual Office, Canvas, Channels, Token Economy and Marketplace, and on the older full page, and you can finish it or skip it there with Skip for now. Your choices and the point where setup counts as finished are saved by Settings, which this does not touch, so Easy Setup does not come back after you finish or skip it. What stops is the note of each step. Easy Setup sends it without waiting for an answer, so nothing on the screen changes and nothing asks again and again. Notes already kept stay, and none are kept while this is off, so the count for that time is short. The Tools Console on the older full page keeps saying No onboarding diagnostics loaded yet and does not say why. Other programs cannot ask for the readings."
+stop_now = "A note or a reading that is still being handled fails, and a note lost this way is not sent again."
+
+[[row]]
+id = "workspace"
+entry = "thomas.server.rows.workspace:plugin"
+enabled = true
+title = "Workspaces, linked projects and source notes"
+about = "Keeps your list of workspaces with their members and invitations, the folders you linked as projects, and the notes you leave on lines of source. Library and the project menu beside your message box in Build use the projects. No page shows workspaces or source notes, so only other programs use those."
+off_means = "While this is off, Library cannot list or open projects. It shows 404: Not Found at the top and no items, and Choose Folder under Add Project shows the same. The project menu beside your message box in Build (it does not show in Chat) says Thomas could not read your library just now. A Library page you already have open keeps what it last showed until you reload it. Other programs cannot use workspaces, projects or notes. Nothing is deleted: your linked projects, your workspaces with their members, and your notes stay where they are and come back when you turn this on."
+stop_now = "A request to read or change any of these that is still running will fail, and may need sending again. A folder window opened from Add Project holds this up until you close it, and Stop now cannot close it. A program started from a project card goes on running, and Thomas cannot stop it afterwards."
+
+[[row]]
+id = "gateway"
+entry = "thomas.server.rows.gateway:plugin"
+enabled = true
+title = "Gateway for other programs"
+about = "Lets other programs use Thomas's gateway. They can ask it to run a restart command you have set, save a small piece of state in it, and read lines from a log file you point it at. They can also send chat requests in the OpenAI style, which Thomas hands on to an outside service you have given a key, and Responses requests, which it hands on to a service you name, or answers with an echo of what was sent when none is named. No page in Thomas uses any of this."
+off_means = "While this is off, nothing you normally use changes, because no page in Thomas uses it. Other programs that call it get 404: Not Found, except as the next sentences say about the gateway token. State saved through it stays in memory and is there again when this is back on, until Thomas restarts. The check of the gateway token is not part of this and keeps working. If you have set a gateway token, a caller who shows none gets 401 and not 404 on every address of the gateway itself, until a token is shown, and on every address at all when you have set the check to cover the whole server. On the other addresses, such as the chat and responses ones that copy another company's format, the default check does not look for a token, so a request that reaches them gets 404. If a request is still running when you turn this off, Thomas waits for it to finish. The connection kept open to the outside service is closed."
+stop_now = "A request that is still running is cut off. A chat answer being handed on stops partway, and the program that asked has to send it again."
+
+[[row]]
+id = "praxis"
+entry = "thomas.server.rows.praxis:plugin"
+enabled = true
+title = "Build run channel"
+about = "Lets a Build run call back into Thomas while it works. Through it, a Build team starts readers, reviewers and checkers, waits for them, and deletes files in its own project folder when it may edit. It also keeps what those helpers were doing, so Thomas can take them up again after a restart. No page in the sidebar shows this, and no page calls it."
+off_means = "Once this is off, a Build run that starts gets no channel: its team cannot start readers, reviewers or checkers or delete files, and the run carries on without them. While Thomas is still waiting for a run to end, a run that starts gets a channel as usual and Thomas waits for that one too, so a steady chain of runs can keep it waiting. Nothing you normally use changes at that moment. A run that is already going keeps its channel until it ends. If one is going when you turn this off, Thomas waits for it, which can take many hours, and its calls still work while it waits. After a restart with this off, Thomas has nothing to report about the helpers of a run the restart interrupted, and nothing takes them up again. What was saved for those runs stays saved, and turning this back on takes up the ones that were reading, reviewing or checking."
+stop_now = "Stop now ends the wait. Every open run's helpers are stopped where they are and saved, so turning this back on takes up again the ones that were reading, reviewing or checking. A helper that was writing files is marked interrupted and needs a new Build run. While the stop is finishing, a Build run that starts may fail to start. A Build run that is already going is not stopped, but its calls to Thomas fail after that. So a writer in it that has not started cannot start, and one that had already put its file in place may still be marked as failed."
+
+[[row]]
+id = "work"
+entry = "thomas.server.rows.work:plugin"
+enabled = true
+title = "Jobs and Work"
+about = "Runs the job queue and Work. The System page, in the sidebar, lists Thomas's tasks and says when approvals are waiting for you, and lets you stop, retry or run now a job. Work, next to Chat and Build, keeps your Work jobs with their workflows, accounts, skills and automations, and hands each automation to the job queue to run. The first time a job is made, Thomas starts the engine that runs queued jobs. Other programs can use the same routes."
+off_means = "While this is off, System still opens, but its Tasks page lists no tasks and says the task list could not be read. It asks Thomas again every five seconds, and the page stays usable. Work still opens, with no jobs and a red message reading Work returned an unreadable response (404). Virtual Office keeps its rooms and agents and gets no live updates from the job queue. Jobs already queued do not run while this is off, because the engine that runs them is stopped. If the engine is running a job when you turn this off, Thomas lets that job finish first, so turning this off takes as long as the job does. Queued jobs stay saved, and the job list shows them again after this is back on and something has started the engine. Turning this back on does not start the engine again: Thomas starts it the next time a job is made or the autopilot is set up, and until then queued jobs and automations do not run. Your Work jobs and their workflows stay saved, and Work shows them again when this is back on. A benchmark that is running is ended when this is turned off. Other programs that call these routes get 404."
+stop_now = "A request that is still running, such as a Work dashboard being designed, is cut off and may need sending again. A job the engine is running is cut off too, and may need running again."
+
+[[row]]
+id = "models"
+entry = "thomas.server.rows.models:plugin"
+enabled = true
+title = "Model list and connection tests"
+about = "Lists the models Thomas can use and tests that a connection to one of them works. The model button in the top bar of Chat, Build and Work and its menu show that list, and Connect and Test in Easy Setup runs the test. Once a day Thomas also refreshes the list of models your providers offer, and Check for new models in the menu does it when you press it. Other programs can ask for the same list and tests."
+off_means = "While this is off, the model button in the top bar of Chat, Build and Work reads Loading, and its menu says Not checked yet and lists no models, so you cannot pick one. A message you send in Chat or Build is not sent: Thomas says The selected model is not ready in this tab, and your text stays in the box. Reloading does not help. Connect and Test in Easy Setup ends in a red failure message, which on the Manual API Key path says no cloud model is set up when one is, and Continue stays grey, so you cannot finish connecting there, though Skip for now still works. The Companion page keeps saying loading at the top. Nothing asks again and again. A page you already had open before turning this off keeps the models it loaded and goes on working until you reload it. The daily refresh of the model list stops, and Check for new models does nothing you can see. The ChatGPT sign-in in Easy Setup then shows Thomas's built in list of ChatGPT models, not the live one. Your models, keys and choices are kept, and the list comes back when this is on. The server's own version check carries on."
+stop_now = "A connection test that is still running holds the turn off until it finishes, which can take up to about two and a half minutes. Stop now cuts that wait, and the page that asked sees a failure. A refresh of the model list that is already running is not ended and finishes by itself. If a connection test already started Ollama on this computer, it keeps running."
+
+[[row]]
+id = "openai_codex"
+entry = "thomas.server.rows.openai_codex:plugin"
+enabled = true
+title = "Sign in with ChatGPT"
+about = "Lets you sign in to your ChatGPT account so Thomas can use its models. Easy Setup uses it when you choose ChatGPT and press Connect and Test. Chat uses it to offer Connect ChatGPT when a reply says ChatGPT is not connected, and to show your email and plan at the top of the model menu while you are signed in. Signing in opens a small listener on this computer that waits for ChatGPT's reply, and it stays open until this is turned off or Thomas closes. Other programs can use the same addresses to see the account, list its models, sign in and sign out."
+off_means = "While this is off, you cannot sign in to ChatGPT from Thomas and nothing shows which ChatGPT account is answering. Models you have already signed in to keep answering, because the sign-in stays saved and Thomas reads it without these addresses. In Easy Setup, Connect and Test for ChatGPT says ChatGPT OAuth login failed and to complete sign-in and retry, which does not say that this is off. In Chat, Connect ChatGPT is never offered, so a reply that says ChatGPT is not connected stands alone, and your email and plan leave the top of the model menu once the page is reloaded. A Chat page already open keeps showing them, and a Connect ChatGPT box already open says ChatGPT connection failed when you press it. Each page asks once or twice when it loads and then stops, so nothing keeps asking. Turning this off closes the listener and forgets any sign-in you had started but not finished, and turning it on again lets the next sign-in open a new one. If you are in the middle of signing in, Thomas waits for it, which can take up to five minutes from Easy Setup or Chat. Other programs that call these addresses get 404: Not Found."
+stop_now = "A sign-in that is waiting for you to finish in the browser is ended and does not complete, so you start it again after turning this back on. Any other request to see the account, list its models or sign out that is still running fails and may need sending again."
+
+[[row]]
+id = "canvas_studio"
+entry = "thomas.server.rows.canvas_studio:plugin"
+enabled = true
+title = "Canvas layout saving and AI"
+about = "Lets Canvas, in the sidebar, save the layout you are drawing into the project folder Thomas was started from, and lets other programs load a saved layout or turn one into code. It also lets the AI Template button build a layout from a description and Import Sketch build one from a picture, using the model Thomas is set to use."
+off_means = "While this is off, Canvas still opens and you can still draw, press Generate Code and read the code, and press Export Spec, because the page does those itself. Save shows Save failed. and saves nothing. AI Template shows AI returned no layout. and Import Sketch shows Vision route returned no layout. and leaves Reading sketch... under the drawing. Nothing in Canvas asks again on its own, so the page stays quiet. A Canvas page you already have open behaves the same as one opened after you turned this off, and Save and the AI buttons work again as soon as this is back on, with no reload. Layouts already saved stay where they are, and the part of Thomas that saves a layout when an assistant asks for one does not use these routes and keeps working. Other programs that call these routes get 404."
+stop_now = "A save, load, code or layout request that is still running will fail. AI Template and Import Sketch wait for the model, so turning this off waits for its answer to come back, and Stop now cuts that request off, so no layout is made and you press the button again."
+
+[[row]]
+id = "chat_titles"
+entry = "thomas.server.rows.chat_titles:plugin"
+enabled = true
+title = "Short names for long threads"
+about = "Gives long thread names in the sidebar list a short readable title. When the list loads, the sidebar sends the model the names of up to twelve threads in view that look like a pasted prompt, which costs a request to the model, and shows the titles that come back. A title you typed yourself is never replaced. Other programs can ask for the same titles."
+off_means = "While this is off, nothing you use stops working. The sidebar list keeps the names threads already have: a thread that began with a long message shows that message cut off with dots, and no new short titles appear. Titles already made stay and still show, because the sidebar keeps them in your browser. The sidebar asks once when the list loads, gets an error and carries on, so nothing repeats and nothing on the screen says why. No request goes to the model for titles. Other programs that ask for titles get an error. If a request is waiting on the model when you turn this off, Thomas waits for it."
+stop_now = "A request for titles that is still waiting on the model is cut off, and its threads keep their long names until you reload the page."
+
+[[row]]
+id = "chat_export"
+entry = "thomas.server.rows.chat_export:plugin"
+enabled = true
+title = "Chat export and branching"
+about = "Lets you take a chat out of Thomas as a Markdown file or as a web page you can send, and copy a chat into a new one to take in a different direction. In the chat list, right-click a chat for Export as Markdown, Save as web page to share and Branch this chat. Under each reply there is also a small branch button, whose tooltip reads Branch from here, and the export command in the message box exports the open chat. Other programs can ask for the same two things."
+off_means = "While this is off, how chats are saved and answered does not change, and your saved chats and any copies already made stay. Export as Markdown, Save as web page to share and the export command in the message box each open a new browser tab that reads 404: Not Found, and no file is saved. Branch this chat and the branch button under a reply show a message box with a technical error about reading JSON, which in Chrome begins Unexpected non-whitespace character after JSON, and no copy is made. These items stay in a page you already have open and in one you reload, and nothing on them says they are off. Nothing asks on its own, so the page stays quiet. Other programs that ask for an export or a branch get 404: Not Found."
+stop_now = "An export or a branch that is still running is cut off and has to be asked for again. A branch cut off at the last moment may already have made its copy, which then shows in the chat list."
+
+[[row]]
+id = "chat_feedback"
+entry = "thomas.server.rows.chat_feedback:plugin"
+enabled = true
+title = "Reply thumbs"
+about = "Saves the thumbs up or thumbs down you give a reply from Thomas in Chat, with the note you can add to a thumbs down, and lets other programs read the saved list. You give one with the two small buttons beside Copy under each reply, Good reply and Bad reply, drawn as a plus and a minus."
+off_means = "While this is off, those buttons are still under each reply, but nothing you press is saved. A thumbs up does not change when you press it. A thumbs down still asks what was wrong first, and after you answer it does not change either and nothing tells you it was not saved. A Chat page you already have open does the same, with no reload needed, and it does not ask Thomas again and again. Thumbs saved earlier stay where they are, are not deleted, and are listed again when this is back on. Other programs that ask for the list or send a thumb get 404: Not Found. How Thomas answers does not change."
+stop_now = "A thumb that is being saved at that moment can fail to save, and you would press it again."
+
+[[row]]
+id = "notifications"
+entry = "thomas.server.rows.notifications:plugin"
+enabled = true
+title = "Notification tools"
+about = "Gives Chat and the workers Thomas starts six tools meant for keeping notifications in a database file: open a store, create a notification, list them, mark them read, count the unread ones and clear them. A store lives in a folder named notifications inside the folder where Thomas keeps its memory, and a tool refuses a name that points outside that folder, on another drive or on a network share. Today only three of the six work: opening a store, counting the unread ones and marking one read by its id. Creating, listing a store that has anything in it, clearing and marking all read fail with an error, so no tool can put a notification into a store. This also saves a record in a file called notifications.sqlite whenever a task Thomas handed to a worker finishes, fails or waits for your approval, with no pop-up and no sound. Unless you have named another place for it, that file is in a folder called data inside the folder Thomas was started from. No page in Thomas shows any of this."
+off_means = "While this is off, nothing you use changes, because no page in Thomas shows these notifications. Chat and the workers Thomas starts are no longer given the six tools, so an assistant that tries one is told it cannot be used. A worker that was already running keeps them, and each one answers that notifications are turned off and does nothing. A call already running is not cut off. A task handed to a worker still reports its ending and its wait for your approval in Chat as before, and no record is saved. Turning this on again brings the tools back and saves records again from then on, and a worker that was refused stays refused. Stores and records already saved stay where they are and nothing is deleted. The command line version of Thomas no longer has the six tools at all, whether this is on or off."
+stop_now = ""
+
+[[row]]
+id = "browser"
+entry = "thomas.server.rows.browser:plugin"
+enabled = true
+title = "Browser tools"
+about = "Gives Thomas a web browser it can drive while it works. In Chat and Build, a run can open a page, click, type, take a screenshot, read the text of a page, and read what a page wrote to its console and which requests it made. The first time a run opens a page, Thomas starts a Chromium browser of its own on this computer, out of sight unless the run asks to see it. It is closed when this is turned off and when Thomas closes. The switch under Autonomy in Settings that allows Thomas to open pages, click, type, and take screenshots in a browser is your permission, and this is whether Thomas has a browser at all, so Thomas browses only while both are on."
+off_means = "While this is off, Thomas has no browser tools, so a chat message or Build run started now cannot open a page, click, type or take a screenshot of one. Web search and fetching the text of an address are other tools and carry on. A run that was already going and asks for a browser tool is refused at once, and goes on with its other tools. Chat is told the tool is unknown, and a Build run is told the browser is turned off. The browser Thomas started is closed with every page and sign-in in it, and what Thomas had recorded of the console and requests of its pages is forgotten, so turning this on again starts with a blank browser. The switch under Autonomy in Settings stays where you left it and still saves, and turning this on does not override it: if that is off, Thomas still does not browse. No page asks again and again, because no page calls these tools."
+stop_now = "A page that a run is loading, clicking or reading when this is turned off is cut off, and that step ends in an error. If closing the browser is still going when you press Stop now, it is cut short and the browser may stay open until Thomas closes."
+
+[[row]]
+id = "build"
+entry = "thomas.server.rows.build:plugin"
+enabled = true
+required = true
+title = "Build runs and upgrade loop"
+about = "Runs Build, next to Chat and Work: sending a message, the live stream of a run, stopping, steering and approving, your Build conversations with their files and previews, and keeping or reverting a run's changes. It also serves the upgrade loop's status, plan, start, pause, approve and reject, which the Evolution dashboard calls, and the orchestration status and plan, which no page calls."
+off_means = "This cannot be turned off, because Build does not work without it. The Plugins page shows it on and locked, and a request to turn it off is refused. If it fails to start, Thomas keeps running, the Plugins page shows it as failed with the reason, and Try again starts it. When Thomas closes, the upgrade loop and each approval it started are ended."
+stop_now = ""
+
+[[row]]
+id = "chat"
+entry = "thomas.server.rows.chat:plugin"
+required = true
+title = "Chat and your saved sessions"
+about = "Lets you talk to Thomas in Chat: your message goes to the model and the reply comes back as it is written. It keeps each conversation so it can be reopened, exported, cut back to resend an edited message, copied into a new one or started from a conversation brought in from elsewhere. It follows, steers and cancels the tasks Thomas handed to workers from Chat, shows the plan Thomas is following, lists the commands you can type after a slash, takes documents you attach, listens to your voice and reads replies aloud, and serves the pages and games those workers built so you can open and play them. It also lists the questions Thomas is waiting for you to answer, such as a choice or a password, takes your answer, and lists the checklist Thomas is working through."
+off_means = "Chat is part of how Thomas works, so it cannot be turned off. The Plugins page shows it as on, with no switch, and anything that tries to turn it off is refused with a message saying so. If Chat fails to start, Thomas goes on running without it, sending a message is answered with a message that Chat is unavailable, and Try again on this page starts it once the cause is fixed."
+stop_now = ""
+
+[[row]]
+id = "file_audit"
+entry = "thomas.server.rows.file_audit:plugin"
+enabled = true
+title = "File change record"
+about = "Lets other programs ask for the file changes Thomas notes while it works. Today the answer is always an empty list, because these routes read a copy of the record that nothing writes to. No page in Thomas shows it."
+off_means = "While this is off, nothing you use changes, because no page in Thomas reads this record and the routes list nothing today. Other programs that ask get 404. Thomas goes on noting every file a run writes in the record it keeps, and nothing already noted is deleted."
+stop_now = "A request that is still running will fail, and may need sending again."
+
+[[row]]
+id = "issues"
+entry = "thomas.server.rows.issues:plugin"
+enabled = true
+title = "Failure reports from pages"
+about = "Lets the Chat, Code and Work pages send Thomas a note when something goes wrong in them, so it is kept in the failure list. It also lets other programs add a note to that list, or read a summary of it for the last hour up to the last two weeks. No page in the sidebar shows that summary."
+off_means = "While this is off, Chat, Code and Work go on working, because they send these notes without waiting for an answer. A note they send gets 404 and is lost, and nothing on the screen says so. They do not send it again and again, and an open page behaves the same as one you reload. Other programs that add a note or ask for the summary get 404. Everything else in Thomas that records a failure writes to the failure list directly, and Thomas still reads that list when it reviews its own recent work, so none of that changes. Notes already kept stay."
+stop_now = "A note or a summary request that is still running will fail, and may need sending again."
+
+[[row]]
+id = "self_review"
+entry = "thomas.server.rows.self_review:plugin"
+enabled = true
+title = "Thomas reviews itself"
+about = "Lets other programs ask for Thomas's review of its own recent work. It reads recent chats, the failure list, the tasks workers finished and the thumbs you gave replies, and writes a short report of what went wrong and what to fix first. The first ask answers at once that the report is being made, and starts it in the background, which costs a request to the model. No page in Thomas shows it. Only programs on this computer can ask for it, and programs on other computers only when Thomas is open to them and they send your access key."
+off_means = "While this is off, nothing you use changes, because no page in Thomas asks for it. Other programs that ask get 404, and no review is started. A report being written when you turn this off is cancelled, and the reports kept in memory are forgotten, so turning this on again starts with none."
+stop_now = "A request that is still running will fail, and may need sending again."
+[[row]]
+id = "task_ledger"
+entry = "thomas.server.rows.task_ledger:plugin"
+enabled = true
+title = "Current task record"
+about = "Lets other programs read what Thomas has recorded about the task each chat is on: its goal, how far it got, anything it is waiting for, and its last few steps. The older full page, which Classic layout opens, reads it every few seconds. Its Current Task box, in Mission Control on that older page, shows the goal and progress only for a chat that has delegated work running, and otherwise says No current task."
+off_means = "While this is off, nothing you normally use changes, and other programs cannot read the record. The older full page keeps asking for it every few seconds and gets an error it does not show, so nothing repeats faster. Its Current Task box, in Mission Control on that older page, then shows a chat with delegated work running without its goal and progress. A page that is already open keeps showing what it last read until you reload it. Thomas goes on recording the task for each chat, so turning this on again shows it as it stands."
+stop_now = "A request to read the record that is still running will fail, and may need sending again."
+
+[[row]]
+id = "server_diagnostics"
+entry = "thomas.server.rows.server_diagnostics:plugin"
+enabled = true
+title = "Server status lists"
+about = "Lets other programs, and the Tools panel on the older full page, read the list of engines Thomas runs and the list of tools it has. It also serves the landing heartbeat, which says whether the work in this copy of Thomas has been saved to git, and how late the server has been in answering. No page shows the heartbeat."
+off_means = "While this is off, Thomas keeps its engines and its tools, and other programs cannot read the lists or the heartbeat. The Tools panel then shows no tools and no engines, though Thomas still has them: its Tools tab reads Total 0 and No tools in registry, and once you press Refresh its System tab reads Engines 0 and No engine rows returned. The panel asks when you open its Tools or System tab or press Refresh, and never on its own, so nothing repeats. A panel that is already open keeps its lists until you press Refresh. The command line's check of a running Thomas then shows its engines as not ok, and still calls Thomas healthy."
+stop_now = "A request for a list that is still running will fail, and may need sending again. A reading of the landing heartbeat that is partway through is cut off from the program that asked, and its git commands finish by themselves within fifteen seconds."
+
+[[row]]
+id = "system_map"
+entry = "thomas.server.rows.system_map:plugin"
+enabled = true
+title = "System Map reading"
+about = "The System Map page is gone: its old address now sends you to System, and so do saved links to it. This keeps that redirect and the reading, which other programs can still ask for: the branches, separate working copies and set-aside piles in this project, and how long since each was touched. It only shows what is there and changes nothing."
+off_means = "While this is off, the old System Map address answers 404: Not Found instead of sending you to System, and other programs cannot ask for the reading. Nothing you see in Thomas changes, because no page of Thomas asks for it. The reading is made when asked and kept nowhere, so turning this on again gives a fresh one and nothing is lost."
+stop_now = "A reading that is partway through is cut off from whoever asked, and has to be asked for again. Its git commands finish by themselves within half a minute."
+[[row]]
+id = "agents"
+entry = "thomas.server.rows.agents:plugin"
+enabled = true
+title = "System page"
+about = "Shows the System workspace: seven plain pages about what Thomas is doing and how he is, with every task he is running, the ones that have stalled, and live charts of this PC's CPU and memory. It opens from System in the sidebar."
+off_means = "While this is off, System in the sidebar opens a frame that reads 404: Not Found. Nothing else you use changes, and tasks keep running; you just cannot watch them there. The charts keep ten minutes of history in memory only, so turning this on again starts them empty."
+stop_now = "A request for the page or the charts that is partway through is cut off and has to be asked for again. Nothing else is interrupted."
+
+[[row]]
+id = "windows"
+entry = "thomas.server.rows.windows:plugin"
+enabled = true
+title = "Window records"
+about = "Lets other programs read what each of your windows landed, newest first, up to the last 20: when it opened, how many minutes it was given, its pairing code, why it ended and every change it landed or undid. It reads the records your windows keep and never writes to them. Only a program on this computer can ask. No page in Thomas shows this list."
+off_means = "While this is off, nothing you use changes, because no page in Thomas reads this list. Other programs that ask for it are told there is no such address. The records of your windows are not touched, so the list is complete again as soon as this is turned on. The Landed in line on a change's card in Chat comes from the change itself, not from this list, and carries on."
+stop_now = "A request for the list that is still being answered will fail and may need sending again."
+
+[[row]]
+id = "project_queue"
+entry = "thomas.server.rows.project_queue:plugin"
+enabled = true
+title = "Planned improvements"
+about = "Shows and changes the queue of Thomas projects waiting to start, and the switch that lets Thomas plan and start improvements to itself on its own. You see it in the Improve Thomas window, which opens from the Improve Thomas button in the project menu beside the message box in Build. Under Planned improvements the window shows how many projects are running and queued, and a switch for automatic improvements. Other programs on this computer can queue a project or read the queue the same way. Only a program on this computer can ask."
+off_means = "While this is off, the Planned improvements part of the Improve Thomas window is replaced by a line of technical text about a problem reading an answer, which does not say this is turned off. The window asks for the queue once each time you open it, and not again and again. The rest of the window carries on, because Thomas projects right now and Start a Thomas project do not use the queue. You cannot queue a project, read the queue or change the switch, and a program that tries is told there is no such address. A window that was already open keeps showing what it last read, and its switch flips back and shows the same technical text. The queue stays where it is, and the server's own timer starts queued projects and plans new ones without using these requests, so both carry on as they were. Turning this on again brings the queue back in the window with no restart."
+stop_now = "A request to read or change the queue that is still running will fail, and may need sending again. A request that was queuing a project may not have finished, so look at the queue afterwards."
+
+[[row]]
+id = "project_change"
+entry = "thomas.server.rows.project_change:plugin"
+enabled = true
+title = "Stopped project changes"
+about = "Lets other programs read the whole change a Thomas project made in its private copy: the files it changed and the patch. It does not hand the project in or change the copy, and it also works for a project you stopped. Only a program on this computer can ask. No page in Thomas shows it."
+off_means = "While this is off, nothing you use changes, because no page in Thomas reads a project's change. A program that asks is told there is no such address. Projects, their private copies and their changes are not touched. The list of Thomas projects, and starting, sending back, handing in again and stopping a project, are separate and carry on. Turning this on again brings it back with no restart."
+stop_now = "A request for a project's change that is still being read will fail, and may need sending again."
+
+[[row]]
+id = "pause"
+entry = "thomas.server.rows.pause:plugin"
+required = true
+title = "Pause and Resume"
+about = "Lets you stop everything Thomas starts by himself, and start it again. While paused, the server stays up and Chat still answers you, but the background engines, the daily run that checks and lands Thomas's own changes, the queue that starts planned Thomas projects, scheduled jobs, the idle awareness sweep and any new Build or Code run do not start. A new Build or Code run is refused with a message saying Thomas is paused. Work that is already running is not stopped and finishes. The choice is kept in your data folder, so a Thomas that starts while paused starts none of this either. Other programs can read the state, pause and resume through three addresses, and each says how many runs are still going."
+off_means = "Pause and Resume is part of how Thomas works, so it cannot be turned off. The Plugins page shows it as on, with no switch, and anything that tries to turn it off is refused with a message saying so. If it fails to start, Thomas goes on running without it, and Try again on this page starts it once the cause is fixed."
+stop_now = ""
+[[row]]
+id = "plugin_sets"
+entry = "thomas.server.rows.plugin_sets:plugin"
+enabled = true
+title = "Ready-made plugin sets"
+about = "Offers ready-made sets of plugins, such as Everyday and Just chat and build, and the plain headings the long list of plugins is filed under. Applying a set turns on every plugin it names and turns off every other plugin that can be turned off. Chat and Build, and this plugin itself, are never turned off. The answer to applying a set says what was turned on, what was turned off and what was left alone, and why. The Plugins page shows the sets as cards and folds the long list of plugins away under a button, with the plugins filed under these headings."
+off_means = "While this is off, the sets and headings cannot be fetched and no set can be applied. Each plugin's own switch on the Plugins page still works, and every plugin stays as it is. Turning this on again brings the sets back with no restart. The Plugins page then shows the long list of plugins in place of the cards, as it did before there were sets, and brings the cards back by itself."
+stop_now = "A set that is being applied is cut off part way, and the plugins it had not reached stay as they were."
+
+[[row]]
+id = "contributors"
+entry = "thomas.server.rows.contributors:plugin"
+enabled = true
+title = "Who made the commits"
+about = "Shows how many of the changes to this copy of Thomas were made by Thomas, by Claude, by Codex and by you, over all time and over the last 30 days, in Settings under Contributors. It only reads the record of changes and changes nothing."
+off_means = "While this is off, Contributors in Settings says the counts are not available, and nothing else changes. The page asks once each time you open it, so nothing repeats. A Contributors page you already have open keeps its numbers until you leave it and come back."
+stop_now = "Counting only reads the record, so a count that is cut off loses nothing. The page asks again the next time you open Contributors."
+
+[[row]]
+id = "public_release"
+entry = "thomas.server.rows.public_release:plugin"
+enabled = true
+title = "Publish to GitHub"
+about = "Shows what would go into a public release of Thomas and, when you ask, sends a review copy to GitHub. You find it in Settings, under Publish to GitHub. Looking builds the public version in a scratch folder on this computer and checks it, which takes a few minutes, and sends nothing. Sending asks you to sign in with Windows for exactly what you were shown, including where it goes, and writes only a new review branch. It never changes the main branch. Only a program on this computer can ask."
+off_means = "While this is off, the Publish to GitHub section of Settings is still there, but it says publishing is turned off, and nothing is built or sent. Nothing else in Thomas changes. A preview that was already on the screen stays there until you reload the page, and sending it is then refused. Turning this on again brings the section back with no restart."
+stop_now = "A preview that is still being built is thrown away when it finishes. A release that is already being sent to GitHub carries on and cannot be called back."
+
+[[row]]
+id = "voice"
+entry = "thomas.server.rows.voice:plugin"
+enabled = true
+title = "Talk to Thomas"
+about = "Lets you talk with Thomas out loud in Chat and in Code. Rest the pointer on the microphone under the message box for a moment and it turns into a switch, and clicking the switch turns the microphone into a speaker and live talk on. Speak, and when you pause what you said is sent like any message to the smallest and fastest model you have set up, or to the model you chose when none is small. Thomas reads his answer aloud a sentence at a time while he is still writing it, and he stops when you start talking. Thomas listens by himself, on this computer, with NVIDIA's Parakeet TDT 0.6B v3 speech model, shared under the CC BY 4.0 licence and run with sherpa-onnx, so no other program has to be open and nothing has to be accepted. The first time you turn live talk on before that model is on your computer, a window in the middle of the screen says you don't have voice set up and offers Set up later or Set up now. Set up now downloads the model once from its makers, about 670 MB, checks every file, installs the speech engine first when it is missing and shows how far it has got, and live talk then listens with it. A set-up that stops says why and can be tried again. Until it is set up, or after Set up later, he listens with Voice Studio when it can, or with your browser's own hearing. He speaks with Voice Studio's voice when that program is running, and with your browser's own voice when it is not. This never starts Voice Studio. A quick click on the microphone still types what you say, as before. You can change the voice at any time, and one voice is saved as your default."
+off_means = "While this is off, the microphone under the message box never turns into a switch, and it still types what you say into the message box, as before. A page you already have open keeps the switch until you reload it, and turning it on then says voice is turned off instead of listening. Nothing keeps asking Thomas while it is off. Other programs that ask for the voice choices, live listening, setting up Thomas's hearing, a recording turned into words or words turned into sound get 404: Not Found. The voice you chose stays saved and is there again when this is back on."
+stop_now = "A recording or a piece of speech that is being made at that moment is cut off, and the program that asked has to ask again."
+
+[[row]]
+id = "settings_knowledge"
+entry = "thomas.server.rows.settings_knowledge:plugin"
+enabled = true
+title = "Settings self-knowledge"
+about = "Finds settings from the running plugin rows, configuration fields and page controls. Ask Thomas for a setting to get a card. Changes need your press; Express needs Windows sign-in. The index and approval audit can also be read through the local settings API."
+off_means = "Stops settings discovery and its cards. Existing settings and their own controls stay as they are."
+stop_now = "New settings requests are refused. A change already accepted by its own control may finish."
+
+[[row]]
+id = "display"
+entry = "thomas.server.rows.display:plugin"
+enabled = true
+title = "Reply display types"
+about = "Lets you switch off, one by one, the kinds of block Thomas draws in a reply, such as a table with lines between its rows. A block that is switched off shows as the plain words it carries."
+off_means = "While this is off, you cannot switch a block type off or on, and every type is drawn with its own renderer on a page you open next, whatever you switched off before. The list you saved is kept, and comes back when you turn this on. A page already open keeps the types it had when it opened until you reload it."
+stop_now = "A request to read or change the list that is still running will fail, and may need sending again."
+
+[[row]]
+id = "attention"
+entry = "thomas.server.rows.attention:plugin"
+enabled = true
+title = "Cards beside the conversation"
+about = "Lets Thomas put a card in the empty space left of the conversation, on whichever Chat, Build or Work tab you are looking at. A card is a notice, a question with buttons, a reply box, a picture, a live preview of a page he built, or a layout he wrote himself. A widget is a card that stays open and shows live readings, lists, progress and switches in the app's own style, such as this PC's load or which plugins are on. Chat and the workers Thomas starts are given four tools for it, to show a card, read what you answered, summon a widget and save a new one. A Build tab that is not on screen shows a card when its task ends. A card also appears while this PC is close to its load limit. Other programs can use the same routes."
+off_means = "While this is off, no card or widget appears, and a page that is open asks once a minute in case it is turned back on. Chat and the workers Thomas starts are no longer given the four tools, and a tool call to show a card is refused. Cards are kept in memory only, so a restart starts with none. A widget Thomas saved stays in the data folder and can be summoned again."
+stop_now = "A request that is still running will fail, and may need sending again."
+
+[[row]]
+id = "restart_cancel"
+entry = "thomas.server.rows.restart_cancel:plugin"
+required = true
+title = "Cancel a waiting restart"
+about = "Lets you call off a restart that is still waiting. A restart you ask for waits for every running check, which can take an hour, and new tasks are held until it happens. Cancel restart, on the restart notice at the top of the window, lets new tasks start again and carries on the work that was held. Nothing that was running is stopped, and it answers only from this computer."
+off_means = "Cancelling a waiting restart is part of how Thomas works, so it cannot be turned off. The Plugins page shows it as on, with no switch, and anything that tries to turn it off is refused with a message saying so. If it fails to start, Thomas goes on running without it, and Try again on this page starts it once the cause is fixed."
+stop_now = ""
+
+[[row]]
+id = "cage_inspector"
+entry = "thomas.server.rows.cage_inspector:plugin"
+enabled = true
+title = "Look inside the cage"
+about = "Lets you, another AI, or Thomas himself look inside the caged Thomas without opening the cage: what it is running, what each Build run is doing move by move and whether it looks stuck in a loop, and what a self-fix has changed so far, down to a single file. It only reads, only from this computer, and hides anything that looks like a password or key."
+off_means = "While this is off, nothing you normally use changes, because no page asks for this. Builds and self-fixes run as before. You, and any other AI you ask, lose the way to see inside the cage from outside, because the cage's own account still refuses yours, so the only way left is to ask Thomas himself what he is doing."
+stop_now = "A look that is still running will fail, and may need asking again. Nothing it was reading is changed."

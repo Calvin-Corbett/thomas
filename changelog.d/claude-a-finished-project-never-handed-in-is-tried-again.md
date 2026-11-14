@@ -1,0 +1,2 @@
+### Fixed
+- A finished project whose hand-in never happened is now tried again by itself. Before, nothing could move it on: hand in again refused it because it had never been handed in, and a restart did not look at it. Now, when Thomas starts and every 15 minutes after, a finished project with changes and no hand-in record is booked for its hand-in and goes through the same check before your card and second look as any other.

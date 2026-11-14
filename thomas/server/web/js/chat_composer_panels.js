@@ -9,8 +9,7 @@
    every call site in chat.html is untouched.
 
    DIAL_FIELDS and saveDials stay in the page on purpose: a UX guard
-   (tests/test_web_evolve_chat_ux.py) pins the effort vocabulary to chat.html
-   itself, and setProfile still calls saveDials. */
+   (tests/test_web_evolve_chat_ux.py) pins the effort vocabulary to chat.html itself, and setProfile still calls saveDials. */
 (function () {
   "use strict";
 
@@ -72,7 +71,7 @@
       // everything else), so a non-gpt pick is rewritten to claude:sonnet
       // before dispatch. The model named in the picker is not the model that
       // writes the code. Reasoning effort being ignored is a symptom of that.
-      return 'Build runs this on Claude Sonnet. Thomas Code has two engines — ChatGPT for '
+      return 'Not applied in Code: Build runs this on Claude Sonnet. Thomas Code has two engines — ChatGPT for '
         + 'GPT models and the Claude CLI for everything else — so the model above is '
         + 'substituted here, and reasoning effort does not apply.';
     }
@@ -107,27 +106,90 @@
       if (changed) saveDials();
     }
 
-    // Raising a limit is a decision, so it gets a sentence and a confirmation.
-    // Lowering one never asks: being handed a smaller blast radius needs no
-    // defending, and a prompt on the safe direction teaches people to click
-    // through prompts.
-    function confirmElevation(fieldLabel, optionLabel, description) {
-      return window.confirm(
-        fieldLabel + ' → ' + optionLabel + '\n\n' + description
-        + '\n\nThis applies to every message from now on. You can change it back in this panel at any time.'
-      );
+    // Raising a limit asks at the operating system -- Windows Hello or your
+    // password -- not in this page. This used to be window.confirm(), an OK box
+    // anything driving the browser can click, and the server took whatever level
+    // a request carried. Now the server is the lock (thomas/server/dial_elevation):
+    // a level it has not seen approved runs one step lower whatever this menu
+    // says. The prompt is only how you give the approval. Lowering never asks:
+    // a smaller blast radius needs no defending, and a prompt on the safe
+    // direction teaches people to click through prompts.
+    const SERVER_DIAL = { autonomy: 'autonomy', fileAccess: 'file_access', guardrails: 'guardrails' };
+    const ELEVATION_REFUSED = {
+      declined_recently: 'You said no a moment ago. Try again in a few seconds.',
+      prompt_open: 'A password prompt is already open. Answer that one first.',
+    };
+
+    async function requestElevation(fieldKey, value) {
+      let answer = null;
+      try {
+        const res = await fetch('/api/security/elevate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dial: SERVER_DIAL[fieldKey], value: value }),
+        });
+        answer = await res.json();
+      } catch (_) {
+        answer = { approved: false, reason: 'unreachable' };
+      }
+      // Anything but an explicit approval is a no.
+      return answer && typeof answer === 'object' ? answer : ({ approved: false });
+    }
+
+    // A saved raised level outlives the approval behind it: approvals are kept
+    // in the server's memory, so a restart forgets them while this browser still
+    // remembers "Autopilot". Ask the server what it will honour and show that.
+    async function reconcileElevatedDials() {
+      const pairs = [];
+      DIAL_FIELDS.forEach(f => {
+        if (!SERVER_DIAL[f.key]) return;
+        const picked = f.opts.filter(o => String(o[0]) === String(state.dials[f.key]))[0];
+        if (picked && picked[3] && picked[3].elevates) {
+          pairs.push(SERVER_DIAL[f.key] + '=' + encodeURIComponent(String(state.dials[f.key])));
+        }
+      });
+      if (!pairs.length) return;
+      let honoured;
+      try {
+        const res = await fetch('/api/security/elevation?' + pairs.join('&'));
+        honoured = ((await res.json()) || {}).honoured || {};
+      } catch (_) { return; }
+      let changed = false;
+      DIAL_FIELDS.forEach(f => {
+        const server = honoured[SERVER_DIAL[f.key]];
+        if (server === undefined || String(server) === String(state.dials[f.key])) return;
+        state.dials[f.key] = f.num ? parseInt(server, 10) : String(server);
+        changed = true;
+      });
+      if (!changed) return;
+      saveDials();
+      renderToolsMenu();
+      if (typeof syncDynamic === 'function') syncDynamic();
+    }
+    reconcileElevatedDials().catch(() => {});
+
+    // A setting Thomas asked for on a card and you approved (ask_user_panel.js
+    // applies it and announces it here, where the live dials are kept).
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('thomas:dial-set', (event) => {
+        const detail = (event && event.detail) || {};
+        if (!detail.key || !(detail.key in state.dials)) return;
+        state.dials[detail.key] = detail.value;
+        saveDials();
+        renderToolsMenu();
+        if (typeof syncDynamic === 'function') syncDynamic();
+      });
     }
 
     function renderToolsMenu() {
       const wrap = document.getElementById('tc-tools-menu'); if (!wrap) return;
       migrateRetiredDials();
-      wrap.innerHTML = '<div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--c-muted);padding:2px 2px 10px;">AI settings</div>';
+      // Looks are classes (chat_shell.css .tc-tools-*) so Build can restyle them.
+      wrap.innerHTML = '<div class="tc-tools-heading">AI settings</div>';
       DIAL_FIELDS.forEach(f => {
-        const row = document.createElement('label');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;font-size:13px;';
-        const span = document.createElement('span'); span.textContent = f.label; span.style.color = 'var(--c-dim)';
+        const row = document.createElement('label'); row.className = 'tc-tools-field';
+        const span = document.createElement('span'); span.textContent = f.label;
         const sel = document.createElement('select');
-        sel.style.cssText = 'flex:0 0 auto;min-width:150px;background:var(--c-surface);color:var(--c-text);border:1px solid var(--c-border);border-radius:8px;padding:5px 8px;font-family:inherit;font-size:12.5px;cursor:pointer;';
         const shown = optionsFor(f);
         shown.forEach(o => { const el = document.createElement('option'); el.value = String(o[0]); el.textContent = o[1]; if (String(o[0]) === String(state.dials[f.key])) el.selected = true; sel.appendChild(el); });
         row.appendChild(span); row.appendChild(sel); wrap.appendChild(row);
@@ -137,21 +199,30 @@
         // "every drive", and that difference is the whole point of the control.
         const desc = document.createElement('div');
         desc.className = 'tc-dial-desc';
-        desc.style.cssText = 'margin:0 0 10px;font-size:11px;line-height:1.4;color:var(--c-muted);max-width:100%;';
         const describe = () => {
           const current = f.opts.filter(o => String(o[0]) === String(state.dials[f.key]))[0];
           desc.textContent = current ? String(current[2] || '') : '';
         };
         describe();
 
-        sel.addEventListener('change', () => {
+        sel.addEventListener('change', async () => {
           const picked = f.opts.filter(o => String(o[0]) === String(sel.value))[0];
           const meta = (picked && picked[3]) || {};
           const previous = state.dials[f.key];
-          if (meta.elevates && String(sel.value) !== String(previous)
-              && !confirmElevation(f.label, picked[1], String(picked[2] || ''))) {
-            sel.value = String(previous);
-            return;
+          if (meta.elevates && String(sel.value) !== String(previous)) {
+            sel.disabled = true;
+            desc.textContent = 'Waiting for your approval at the password prompt…';
+            const answer = await requestElevation(f.key, sel.value);
+            sel.disabled = false;
+            if (!answer.approved) {
+              sel.value = String(previous);
+              describe();
+              desc.textContent = ELEVATION_REFUSED[answer.reason]
+                || (answer.reason === 'unreachable'
+                  ? 'Thomas could not reach the password prompt, so nothing changed.'
+                  : 'Not approved, so nothing changed.');
+              return;
+            }
           }
           state.dials[f.key] = f.num ? parseInt(sel.value, 10) : sel.value;
           saveDials();
@@ -171,25 +242,27 @@
         if (noteFor) {
           const hint = document.createElement('div');
           hint.className = 'tc-dial-note';
-          hint.style.cssText = 'margin:-5px 0 9px;font-size:11px;line-height:1.35;color:var(--c-muted);';
           hint.textContent = noteFor;
           wrap.appendChild(hint);
         }
       });
-      const memRow = document.createElement('label');
-      memRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;font-size:13px;cursor:pointer;';
-      const memSpan = document.createElement('span'); memSpan.textContent = 'Memory'; memSpan.style.color = 'var(--c-dim)';
-      const memChk = document.createElement('input'); memChk.type = 'checkbox'; memChk.checked = !!state.dials.memory; memChk.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--c-accent);';
+      const memRow = document.createElement('label'); memRow.className = 'tc-tools-field tc-tools-memory';
+      const memSpan = document.createElement('span'); memSpan.textContent = 'Memory';
+      const memChk = document.createElement('input'); memChk.type = 'checkbox'; memChk.checked = !!state.dials.memory;
       memChk.addEventListener('change', () => { state.dials.memory = memChk.checked; saveDials(); });
       memRow.appendChild(memSpan); memRow.appendChild(memChk); wrap.appendChild(memRow);
     }
+    // aria-expanded: the open state for assistive tech and for the stylesheet.
+    function showToolsMenu(open) {
+      state.toolsMenuOpen = open;
+      const m = document.getElementById('tc-tools-menu'); if (m) m.style.display = open ? 'block' : 'none';
+      const btn = document.getElementById('tc-tools-btn'); if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
     function toggleToolsMenu() {
-      state.toolsMenuOpen = !state.toolsMenuOpen;
-      const m = document.getElementById('tc-tools-menu');
-      m.style.display = state.toolsMenuOpen ? 'block' : 'none';
+      showToolsMenu(!state.toolsMenuOpen);
       if (state.toolsMenuOpen) renderToolsMenu();
     }
-    function closeToolsMenu() { state.toolsMenuOpen = false; const m = document.getElementById('tc-tools-menu'); if (m) m.style.display = 'none'; }
+    function closeToolsMenu() { showToolsMenu(false); }
 
     // ---------- Thomas Library (choose what Thomas works on) ----------
     // A folder path is not how anyone remembers what they made. 88 of the 113
@@ -221,6 +294,7 @@
     state.libraryLoading = false;
     state.libraryError = '';
     state.libraryFilter = '';
+    state.libraryNewProject = null;
     let _libraryObserver = null;
     let _libraryMounted = [];
 
@@ -273,21 +347,64 @@
       teardownLibraryPreviews();
     }
 
-    // The trigger sits mid-composer, so a panel anchored to its left edge runs
-    // off the right of the window and clips its own New project button. Pull it
-    // back by however much it overflows, leaving a margin.
+    // You reported this chooser opening "off to the right rather than centered". It is
+    // `position:absolute; left:0` inside #tc-code-project-wrap, the THIRD control in the
+    // composer's button row (after "+" and "Tools"), so `left:0` was the folder button's
+    // left edge, ~140px into the composer card, while the panel is up to 760px wide: sized
+    // to the reading column but started a third of the way across it. Resizing made it
+    // worse: across the viewer in Build's viewer layout, off the screen at phone widths.
+    //
+    // Markup cannot fix that: the offset needed is the distance from the trigger to the
+    // column centre, and neither is known until layout, so measure both. #tc-composer-rail
+    // IS the reading column (.tc-rail in chat_shell.css); the composer card fills it, so
+    // their centres agree. Width is capped by the rail, the 760px design width and the
+    // viewport; the left edge is then clamped so a phone-width screen keeps a 16px margin.
+    const LIBRARY_MENU_MAX_WIDTH = 760;
+    const LIBRARY_MENU_EDGE_MARGIN = 16;
     function positionLibraryMenu() {
       const m = document.getElementById('tc-code-library-menu');
       const wrap = document.getElementById('tc-code-project-wrap');
-      if (!m || !wrap) return;
-      m.style.left = '0px';
+      const rail = document.getElementById('tc-composer-rail');
+      if (!m || !wrap || !rail) return;
+      const margin = LIBRARY_MENU_EDGE_MARGIN;
+      const railBox = rail.getBoundingClientRect();
+      // A rail with no box is Build's surface mid-swap, not a column to centre
+      // on -- and the observer below fires on the way to a real width as well
+      // as at it. Writing that zero through would collapse an open chooser to
+      // nothing until the next notification, which reads as the panel closing
+      // itself. Keep the last good geometry until there is a column to measure.
+      if (railBox.width <= 0) return;
       const wrapLeft = wrap.getBoundingClientRect().left;
-      const width = m.getBoundingClientRect().width;
-      const margin = 16;
-      const overflow = (wrapLeft + width) - (window.innerWidth - margin);
-      if (overflow > 0) m.style.left = `${-Math.min(overflow, Math.max(0, wrapLeft - margin))}px`;
+      const viewport = window.innerWidth;
+      const width = Math.max(0, Math.min(LIBRARY_MENU_MAX_WIDTH, railBox.width, viewport - 2 * margin));
+      // chat_shell.css already makes every box border-box, so this changes
+      // nothing today. It is pinned because the arithmetic below treats the
+      // written width as the VISIBLE width, and the panel has a 1px border:
+      // under content-box the same number would render 2px wider and half a
+      // border off centre, which is a strange thing to leave resting on a
+      // global reset in another file.
+      m.style.boxSizing = 'border-box';
+      // Rewritten on every call, never accumulated, so the narrow-screen width
+      // does not survive into a later wide layout.
+      m.style.width = `${width}px`;
+      const left = Math.max(margin, Math.min(
+        railBox.left + (railBox.width - width) / 2,
+        viewport - margin - width,
+      ));
+      // `left` is viewport-relative; the panel's containing block is the wrap.
+      m.style.left = `${left - wrapLeft}px`;
     }
     window.addEventListener('resize', () => { if (state.libraryMenuOpen) positionLibraryMenu(); });
+    // Build's activity drawer and viewer resize the rail WITHOUT a viewport
+    // resize -- unified_code_mode.css drives both off [data-code-side] on the
+    // shell. An open chooser has to follow the column it is centred on, so
+    // watch the rail itself rather than the window. Clicking the sidebar
+    // toggle is not a case to handle here: chat_shell_bindings.js closes this
+    // panel on any click outside [data-code-library-wrap].
+    const libraryRail = document.getElementById('tc-composer-rail');
+    if (libraryRail && typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => { if (state.libraryMenuOpen) positionLibraryMenu(); }).observe(libraryRail);
+    }
 
     function teardownLibraryPreviews() {
       if (_libraryObserver) { try { _libraryObserver.disconnect(); } catch (e) {} _libraryObserver = null; }
@@ -310,6 +427,9 @@
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error('unavailable');
         state.libraryProjects = Array.isArray(data.projects) ? data.projects : [];
+        if (data.refreshing && state.libraryMenuOpen) {
+          setTimeout(() => { if (state.libraryMenuOpen) loadLibraryProjects(); }, 800);
+        }
       } catch (e) {
         state.libraryProjects = [];
         state.libraryError = 'Thomas could not read your library just now.';
@@ -360,6 +480,7 @@
     function renderLibraryMenu() {
       const m = document.getElementById('tc-code-library-menu');
       if (!m || !state.libraryMenuOpen) return;
+      if (state.libraryNewProject) { renderLibraryProjectForm(m); return; }
       const items = libraryVisibleProjects();
       const total = Array.isArray(state.libraryProjects) ? state.libraryProjects.length : 0;
       let body;
@@ -386,7 +507,97 @@
         </div>
         ${total ? `<div style="flex:0 0 auto;padding:10px 14px 0;"><input id="tc-library-filter" type="text" placeholder="Search your library…" value="${esc(state.libraryFilter)}" style="width:100%;height:32px;padding:0 11px;border-radius:9px;border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-text);font-family:inherit;font-size:12.5px;outline:none;"></div>` : ''}
         <div class="tc-scroll" id="tc-library-body" style="flex:1;min-height:0;overflow:auto;padding:12px 14px 14px;">${body}</div>`;
+      const selfEditButton = document.createElement('button');
+      selfEditButton.type = 'button';
+      selfEditButton.dataset.libAction = 'self-edit';
+      selfEditButton.textContent = 'Improve Thomas';
+      selfEditButton.style.cssText = 'margin:10px 14px;padding:9px;border:1px solid var(--c-border);border-radius:8px;background:var(--c-surface);color:var(--c-text);cursor:pointer';
+      m.prepend(selfEditButton);
       mountLibraryPreviews();
+    }
+
+    function renderLibraryProjectForm(menu) {
+      teardownLibraryPreviews();
+      const draft = state.libraryNewProject;
+      const focused = document.activeElement && document.activeElement.id === 'tc-library-project-name';
+      menu.innerHTML = `<form id="tc-library-new-project" style="padding:18px;display:grid;gap:12px;">
+        <label for="tc-library-project-name" style="font-weight:700;color:var(--c-text);">Name your new project</label>
+        <input id="tc-library-project-name" name="projectName" required maxlength="64" autocomplete="off" placeholder="My new project" value="${esc(draft.name)}" ${draft.busy ? 'disabled' : ''}
+          style="width:100%;padding:10px;border:1px solid var(--c-border);border-radius:9px;background:var(--c-surface);color:var(--c-text);font:inherit;">
+        <p role="status" style="margin:0;color:var(--c-muted);font-size:13px;">${esc(draft.error || 'Thomas will create a separate folder for this project.')}</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+          <button type="button" data-lib-action="cancel-new" ${draft.busy ? 'disabled' : ''}>Cancel</button>
+          <button type="submit" ${draft.busy ? 'disabled' : ''}>${draft.busy ? 'Creating…' : 'Create project'}</button>
+        </div>
+      </form>`;
+      if (focused && !draft.busy) document.getElementById('tc-library-project-name')?.focus();
+    }
+
+    async function submitLibraryProject() {
+      const draft = state.libraryNewProject;
+      if (!draft || draft.busy) return;
+      const name = draft.name.trim();
+      if (!name) {
+        draft.error = 'Enter a project name.';
+        renderLibraryMenu();
+        document.getElementById('tc-library-project-name')?.focus();
+        return;
+      }
+      draft.busy = true;
+      draft.error = '';
+      renderLibraryMenu();
+      try {
+        const created = await window.ThomasUnifiedModes?.newConversation('', name, { newProjectName: name });
+        if (created !== true) throw new Error('Could not create this project. Try again when Thomas is ready.');
+        if (state.libraryNewProject === draft) {
+          state.libraryNewProject = null;
+          state.libraryProjects = null;
+          closeLibraryMenu();
+          inputEl.focus();
+        }
+      } catch (error) {
+        if (state.libraryNewProject === draft) draft.error = error.message || 'Could not create this project.';
+      } finally {
+        draft.busy = false;
+        renderLibraryMenu();
+      }
+    }
+
+    function bindLibraryActions() {
+      const menu = document.getElementById('tc-code-library-menu');
+      if (!menu) return;
+      menu.addEventListener('click', event => {
+        const action = event.target.closest('[data-lib-action]');
+        if (action) {
+          const kind = action.getAttribute('data-lib-action');
+          if (kind === 'self-edit') {
+            closeLibraryMenu();
+            void window.ThomasSelfEdit?.selectThomas(chooseLibraryProject).catch(error => window.alert(error.message));
+          } else if (kind === 'new') {
+            state.libraryNewProject = { name: '', error: '', busy: false };
+            renderLibraryMenu();
+            document.getElementById('tc-library-project-name')?.focus();
+          } else if (kind === 'cancel-new' && !state.libraryNewProject?.busy) {
+            state.libraryNewProject = null;
+            renderLibraryMenu();
+            menu.querySelector('[data-lib-action="new"]')?.focus();
+          } else if (kind === 'browse') {
+            closeLibraryMenu();
+            window.ThomasUnifiedModes?.pickProject();
+          }
+          return;
+        }
+        const card = event.target.closest('[data-lib-card]');
+        if (card) void chooseLibraryProject(card.getAttribute('data-lib-card'), card.getAttribute('data-lib-label'));
+      });
+      menu.addEventListener('input', event => {
+        if (event.target.id === 'tc-library-project-name' && state.libraryNewProject) state.libraryNewProject.name = event.target.value;
+      });
+      menu.addEventListener('submit', event => {
+        if (event.target.id !== 'tc-library-new-project') return;
+        event.preventDefault();
+        void submitLibraryProject();
+      });
     }
 
     function mountLibraryPreviews() {
@@ -454,73 +665,111 @@
       catch (e) { /* the mode surface reports its own failures */ }
     }
 
-    function readFile(file) {
-      return new Promise(res => {
-        const r = new FileReader();
-        if (/^image\//.test(file.type)) { r.onload = () => res({ kind: 'image', data_url: r.result, name: file.name }); r.onerror = () => res(null); r.readAsDataURL(file); }
-        else { r.onload = () => res({ kind: 'doc', name: file.name, text: String(r.result || '') }); r.onerror = () => res(null); r.readAsText(file); }
-      });
+    async function readFile(file) {
+      if (file.size > 5000000) return ({ kind: 'doc', name: file.name, error: 'Choose a file no larger than 5 MB.' });
+      if (/^image\//.test(file.type)) {
+        return new Promise(res => {
+          const r = new FileReader();
+          r.onload = () => res({ kind: 'image', data_url: r.result, name: file.name });
+          r.onerror = () => res({ kind: 'doc', name: file.name, error: 'This image could not be read.' });
+          r.readAsDataURL(file);
+        });
+      }
+      // Binary documents must be decoded before the composer promises they can
+      // be read. The server owns format detection, size limits and PDF parsing.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const body = new FormData();
+        body.append('document', file, file.name);
+        const response = await fetch('/api/v2/chat/documents/extract', { method: 'POST', body, signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'This document could not be read.');
+        return ({ ...result.document, kind: 'doc', name: file.name });
+      } catch (error) {
+        return ({ kind: 'doc', name: file.name, error: error.name === 'AbortError'
+          ? 'Document reading timed out. Try a smaller file.' : (error.message || 'This document could not be read.') });
+      } finally { clearTimeout(timer); }
     }
     async function onFiles(fileList) {
       const files = Array.from(fileList || []);
-      for (const f of files) { const a = await readFile(f); if (!a) continue; if (a.kind === 'image') state.images.push({ data_url: a.data_url, name: a.name }); else state.docs.push({ name: a.name, text: a.text }); }
+      // Bind uploads to the draft that selected them, even if conversation or
+      // draft state is replaced while extraction is running.
+      const docs = state.docs;
+      const images = state.images;
+      const entries = files.map(file => ({ file, pending: { name: file.name, text: '', pending: true } }));
+      entries.forEach(entry => docs.push(entry.pending)); renderAttachments();
+      for (const { file: f, pending } of entries) {
+        if (!docs.includes(pending)) continue;
+        const a = await readFile(f);
+        const pendingIndex = docs.indexOf(pending);
+        if (pendingIndex < 0) continue; // Removed while reading; do not reattach it.
+        if (a.kind === 'image') {
+          docs.splice(pendingIndex, 1);
+          images.push({ data_url: a.data_url, name: a.name });
+        } else {
+          Object.assign(pending, a, { text: a.text || '', pending: false, ...(a.error ? { error: a.error } : {}) });
+        }
+      }
       renderAttachments();
     }
     function renderAttachments() {
+      syncDynamic();
       const row = document.getElementById('tc-attach-row'); if (!row) return;
-      const items = state.docs.map((d, i) => ({ type: 'doc', i, name: d.name })).concat(state.images.map((im, i) => ({ type: 'img', i, name: im.name })));
+      const items = state.docs.map((d, i) => ({ type: 'doc', i, name: d.name, error: d.error, pending: d.pending })).concat(state.images.map((im, i) => ({ type: 'img', i, name: im.name })));
       if (!items.length) { row.style.display = 'none'; row.innerHTML = ''; return; }
       row.style.display = 'flex'; row.innerHTML = '';
       items.forEach(it => {
         const chip = document.createElement('span');
         chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px;background:var(--c-surface-2);border:1px solid var(--c-border);font-size:12px;color:var(--c-text);max-width:200px;';
         chip.innerHTML = '<i class="ph ' + (it.type === 'img' ? 'ph-image' : 'ph-file-text') + '" style="font-size:13px;color:var(--c-accent);"></i><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(it.name) + '</span>';
+        if (it.pending) {
+          chip.setAttribute('role', 'status');
+          chip.innerHTML = '<span>' + esc(it.name + ' — Reading… Wait to send.') + '</span>';
+        }
+        if (it.error) {
+          chip.setAttribute('role', 'alert');
+          chip.style.maxWidth = '100%';
+          chip.innerHTML = '<span>' + esc(it.name + ' — Not attached: ' + it.error) + '</span>';
+        }
         const x = document.createElement('button'); x.innerHTML = '<i class="ph ph-x" style="font-size:12px;"></i>'; x.style.cssText = 'border:0;background:transparent;color:var(--c-muted);cursor:pointer;padding:0;display:flex;';
+        x.setAttribute('aria-label', 'Remove ' + it.name);
         x.addEventListener('click', () => { if (it.type === 'doc') state.docs.splice(it.i, 1); else state.images.splice(it.i, 1); renderAttachments(); });
         chip.appendChild(x); row.appendChild(chip);
       });
     }
 
-    let recognition = null;
+    function attachmentsReady() {
+      if (!state.docs.some(doc => doc.pending)) return true;
+      inputEl.setCustomValidity('Wait for file extraction to finish before sending.');
+      inputEl.reportValidity();
+      return false;
+    }
+
+    function syncAttachmentState(modeBusy) {
+      const pending = state.docs.some(doc => doc.pending);
+      const button = document.getElementById('tc-send');
+      if (button) {
+        button.disabled = pending && !(modeBusy && !state.input.trim());
+        // Build names its own button (Pause, Resume, Stop) and marks it; "Send" here used to overwrite that tooltip on every sync.
+        if (pending) button.title = 'Wait for file extraction before sending';
+        else if (!button.getAttribute('data-primary')) button.title = 'Send';
+      }
+      if (!pending && inputEl.setCustomValidity) inputEl.setCustomValidity('');
+    }
+
+    // The mic lives in js/chat_mic.js; it reads the same state and composer hooks.
     function setupMic() {
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const btn = document.getElementById('tc-mic-btn'); if (!btn) return;
-      if (!SR) { btn.title = 'Voice input not supported in this browser'; btn.style.opacity = '0.45'; return; }
-      // Continuous listening: stays on through pauses, stops only after ~5s of
-      // silence (or a manual click). No auto cut-off mid-sentence.
-      recognition = new SR(); recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-US';
-      const SILENCE_MS = 5000;
-      let base = '', finalChunk = '', silenceTimer = null, stopRequested = false;
-      function micOn() { btn.style.color = 'var(--c-accent-ink)'; btn.style.background = 'var(--c-accent)'; btn.title = 'Listening… (stops after a pause)'; }
-      function micOff() { btn.style.color = 'var(--c-dim)'; btn.style.background = 'transparent'; btn.title = 'Voice input'; }
-      function resetSilence() { if (silenceTimer) clearTimeout(silenceTimer); silenceTimer = setTimeout(() => { stopRequested = true; try { recognition.stop(); } catch (e) {} }, SILENCE_MS); }
-      recognition.onresult = (e) => {
-        let interim = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finalChunk += r[0].transcript; else interim += r[0].transcript; }
-        const combined = ((base ? base + ' ' : '') + finalChunk + interim).replace(/\s+/g, ' ').replace(/^\s+/, '');
-        state.input = combined; inputEl.value = combined; autosize(); syncDynamic();
-        resetSilence();
-      };
-      recognition.onerror = () => { /* keep listening; onend handles restart */ };
-      recognition.onend = () => {
-        if (state.listening && !stopRequested) { try { recognition.start(); return; } catch (e) {} }
-        state.listening = false; if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; } micOff();
-      };
-      btn.addEventListener('click', () => {
-        if (state.listening) { stopRequested = true; try { recognition.stop(); } catch (e) {} return; }
-        base = state.input.trim(); finalChunk = ''; stopRequested = false; state.listening = true; micOn();
-        try { recognition.start(); resetSilence(); } catch (e) { state.listening = false; micOff(); }
-      });
+      if (window.ThomasChatMic) window.ThomasChatMic.create({ state, inputEl, autosize, syncDynamic }).setupMic();
     }
 
     return {
       toggleToolsMenu, closeToolsMenu, renderToolsMenu, buildCanRunModel, hiddenForBuildNote,
       toggleLibraryMenu, closeLibraryMenu, positionLibraryMenu, renderLibraryMenu,
       libraryVisibleProjects, libraryCardHTML, mountLibraryPreviews,
-      teardownLibraryPreviews, loadLibraryProjects, chooseLibraryProject,
-      relativeWhen, readFile, onFiles, renderAttachments, setupMic,
+      teardownLibraryPreviews, loadLibraryProjects, chooseLibraryProject, bindLibraryActions,
+      relativeWhen, readFile, onFiles, renderAttachments, setupMic, attachmentsReady, syncAttachmentState,
     };
   }
-
   window.ThomasChatComposerPanels = { create: create };
 })();

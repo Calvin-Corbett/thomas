@@ -25,6 +25,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core import landing_health as lh
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
+from thomas.core.git_process import TIMED_OUT_RETURNCODE, GitResult
 from thomas.server.app import create_app
 
 
@@ -233,31 +234,39 @@ class TestDegradesInsteadOfRaising(unittest.TestCase):
         self._assert_honest_unknown(health)
         self.assertIn("Git is not installed", " ".join(health.sentences))
 
-    def test_every_git_command_timing_out(self):
-        original = lh.subprocess.run
+    def _with_git_runner(self, runner) -> lh.LandingHealth:
+        """Read the health with ``run_git`` replaced by one of its failure shapes.
 
-        def always_times_out(*_args, **_kwargs):
-            raise subprocess.TimeoutExpired(cmd="git", timeout=1.0)
-
-        lh.subprocess.run = always_times_out
+        The seam is ``run_git`` rather than ``subprocess.run`` because that is
+        how this module runs git now: its timeout is a real upper bound, and it
+        reports a failure instead of raising one. Patching it here is also what
+        makes these two tests fail if somebody puts a raw ``subprocess.run``
+        back -- the name they patch would no longer be the one being called.
+        """
+        original = lh.run_git
+        lh.run_git = runner
         try:
-            health = lh.collect_landing_health()
+            return lh.collect_landing_health()
         finally:
-            lh.subprocess.run = original
-        self._assert_honest_unknown(health)
+            lh.run_git = original
+
+    def test_every_git_command_timing_out(self):
+        def always_times_out(*_args, **kwargs):
+            return GitResult(
+                TIMED_OUT_RETURNCODE,
+                "",
+                "git did not finish within its bound and was abandoned",
+                True,
+                float(kwargs.get("timeout") or 1.0),
+            )
+
+        self._assert_honest_unknown(self._with_git_runner(always_times_out))
 
     def test_git_binary_that_cannot_be_executed(self):
-        original = lh.subprocess.run
+        def never_spawns(*_args, **_kwargs):
+            return GitResult(1, "", "OSError: git exploded", False, 0.0, True)
 
-        def always_oserror(*_args, **_kwargs):
-            raise OSError("git exploded")
-
-        lh.subprocess.run = always_oserror
-        try:
-            health = lh.collect_landing_health()
-        finally:
-            lh.subprocess.run = original
-        self._assert_honest_unknown(health)
+        self._assert_honest_unknown(self._with_git_runner(never_spawns))
 
     @unittest.skipUnless(_git_available(), "git is not installed")
     def test_real_repo_with_no_remote(self):

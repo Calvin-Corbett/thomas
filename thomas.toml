@@ -316,6 +316,14 @@ sandbox_root = "."
 allow_shell = true                   # Execute-first setup/integration behavior depends on shell availability.
 shell_timeout = 30                   # Default shell command timeout (seconds)
 max_file_size = 5000000              # Max file size for fs.read_file (bytes)
+# 2 = project. Unset, this falls back to 1 (workspace), which confined every
+# worker to its own task folder -- so a task aimed at the Thomas repo was refused
+# at chat_delegation before it began, and Thomas could never work on himself.
+# His own runtime code is NOT opened up by this: thomas/core, thomas/server,
+# thomas/agent, thomas/tools and scripts/ stay runtime-protected at every level,
+# and writing one still goes through fs.write_protected_file, which asks for a
+# Windows Hello tap per file. This level is what lets him reach the repo at all.
+file_access = 2
 
 # -----------------------------------------------------------------------------
 # Task Journal

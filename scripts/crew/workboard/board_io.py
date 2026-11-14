@@ -6,7 +6,6 @@ from __future__ import annotations
 import errno
 import json
 import os
-import subprocess
 import threading
 import time
 import uuid
@@ -16,30 +15,17 @@ from functools import wraps
 from pathlib import Path
 from typing import ParamSpec, TypeVar
 
+try:
+    from scripts.crew.workboard import coordination_root as _coordination_root
+except ImportError:  # loaded with scripts/crew/workboard itself on sys.path
+    import coordination_root as _coordination_root  # type: ignore[no-redef]
+
 _LOCAL_ROOT = Path(__file__).resolve().parents[3]
-
-
-def _canonical_repo_root() -> Path:
-    """Return the primary checkout so linked worktrees share one lock."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            cwd=str(_LOCAL_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            common = Path(result.stdout.strip())
-            if common.name == ".git" and common.parent.exists():
-                return common.parent
-    except (OSError, ValueError, subprocess.SubprocessError):
-        pass
-    return _LOCAL_ROOT
-
-
-ROOT = _canonical_repo_root()
-COORDINATION_DIR = ROOT / "runtime" / "coordination"
+# One root for the lock, the board and the receipts: the primary checkout, so
+# every linked worktree interlocks on the same file. The rule lives in
+# coordination_root.py and every default-path tool reads it from there.
+ROOT = _coordination_root.coordination_root(_LOCAL_ROOT)
+COORDINATION_DIR = _coordination_root.coordination_dir(ROOT)
 LOCK_FILE = COORDINATION_DIR / "workboard.lock"
 LOCK_TIMEOUT_SECONDS = 10.0
 LOCK_STALE_SECONDS = 60.0

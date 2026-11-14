@@ -19,6 +19,13 @@ ENV_ROOT = "THOMAS_PROJECT_ROOT"
 _MAX_DEPTH = 40
 
 
+def code_checkout() -> Path:
+    """The checkout this code runs from. Build's catalog lives here, and every reader of it resolves it this one way:
+    a second way is how one reader ends up walking a different tree and an empty answer reads as clean."""
+
+    return Path(__file__).resolve().parents[2]
+
+
 def find_project_root(start_dir: Path, *, max_depth: int = _MAX_DEPTH) -> Path:
     """Nearest ancestor with ``.git``; inside the data dir, the data dir; else the folder itself."""
 

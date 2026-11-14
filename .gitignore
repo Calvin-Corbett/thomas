@@ -56,8 +56,6 @@ node_modules/
 output/
 artifacts/
 dist/
-demo/agentic-runs/
-demo/runs/
 tmp/
 .tmp*/
 .tmp_*
@@ -103,6 +101,28 @@ plans/thomas/problems/*
 !plans/thomas/problems/agent-coordination-hardening-2026-05-28/**
 !plans/thomas/problems/bible-public-system-2026-05-22/
 !plans/thomas/problems/bible-public-system-2026-05-22/**
+
+# Agent-authored ENGINEERING incident records (2026-09-09).
+# The deny-by-default above is right for auto-generated chat records, which can
+# carry private user content -- that is the 2026-05-19 leak. But it also made
+# every engineering incident invisible: 91 of 94 records here are untracked, so
+# they do not survive a clean clone, never reach CI, and the diff-based problem
+# closure gate cannot see the records it exists to close. The obligations were
+# machine-local.
+#
+# An `ENG-` prefix separates the two by ORIGIN rather than by a hand-maintained
+# list: agents name engineering incidents `ENG-<slug>`, the chat generator never
+# does, and the security property holds because nothing auto-generated lands
+# under that prefix. Records named this way go through the same commit gates as
+# code. Do NOT put user content in an ENG- record.
+!plans/thomas/problems/ENG-*/
+!plans/thomas/problems/ENG-*/**
+# The two written before the convention existed, kept at their original paths so
+# the board messages that cite them stay valid.
+!plans/thomas/problems/BULK-GUARD-BLOCKS-LEGITIMATE-WORK/
+!plans/thomas/problems/BULK-GUARD-BLOCKS-LEGITIMATE-WORK/**
+!plans/thomas/problems/SHARED-REPO-RACES-BLOCK-AND-LOSE-WORK/
+!plans/thomas/problems/SHARED-REPO-RACES-BLOCK-AND-LOSE-WORK/**
 
 # Auto-indexed research notes from chat transcripts (private user content).
 # Security: prior incident (2026-05-19) leaked a Telegram token via library/entries/research-notes/.
@@ -229,7 +249,3 @@ indices/**/*.db-shm
 indices/**/*.db-wal
 thomas_test_report_*.md
 _*.log
-
-# Local package build output
-build/
-dist/

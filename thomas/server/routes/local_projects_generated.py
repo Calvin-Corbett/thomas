@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import web
 
@@ -56,10 +57,30 @@ def _generated_deliverable_summary(raw_summary: str, entry_name: str) -> str:
 # finished run produced is listable; only what the card SAYS differs by kind.
 _KIND_PRESENTATION: dict[str, dict[str, str]] = {
     "web": {"framework": "Generated HTML", "project_type": "web_app", "icon": "APP", "open_label": "Open App"},
-    "pdf": {"framework": "Generated PDF", "project_type": "generated_document", "icon": "PDF", "open_label": "Open PDF"},
-    "image": {"framework": "Generated image", "project_type": "generated_image", "icon": "IMG", "open_label": "Open Image"},
-    "text": {"framework": "Generated document", "project_type": "generated_document", "icon": "DOC", "open_label": "Open File"},
-    "file": {"framework": "Generated file", "project_type": "generated_file", "icon": "FILE", "open_label": "Open File"},
+    "pdf": {
+        "framework": "Generated PDF",
+        "project_type": "generated_document",
+        "icon": "PDF",
+        "open_label": "Open PDF",
+    },
+    "image": {
+        "framework": "Generated image",
+        "project_type": "generated_image",
+        "icon": "IMG",
+        "open_label": "Open Image",
+    },
+    "text": {
+        "framework": "Generated document",
+        "project_type": "generated_document",
+        "icon": "DOC",
+        "open_label": "Open File",
+    },
+    "file": {
+        "framework": "Generated file",
+        "project_type": "generated_file",
+        "icon": "FILE",
+        "open_label": "Open File",
+    },
 }
 
 
@@ -71,8 +92,13 @@ def _generated_deliverable_project(record: dict[str, Any], *, index: int = 0) ->
     if state not in {"completed", "verified", "done"}:
         return None
 
-    artifact_kind = deliverable_kind(execution_id)
-    artifact_url = deliverable_url(execution_id)
+    # Resolved once for this record. The kind, the URL and the entry name are
+    # three readings of one answer, and resolving it walks the whole workspace,
+    # so this card used to cost three walks of it -- once per listed card, in the
+    # catalogue a project picker asks for the moment it opens.
+    entry = deliverable_entry(execution_id, record=record) or ""
+    artifact_kind = deliverable_kind(execution_id, entry=entry)
+    artifact_url = deliverable_url(execution_id, entry=quote(entry, safe="/"))
     # Only an EMPTY workspace is skipped: that run produced no file at all, so
     # there is nothing to open. Any produced kind is listed. The old
     # `artifact_kind != "web"` gate silently dropped every non-HTML deliverable
@@ -86,7 +112,6 @@ def _generated_deliverable_project(record: dict[str, Any], *, index: int = 0) ->
     if workspace is None:
         return None
     presentation = _KIND_PRESENTATION.get(artifact_kind, _KIND_PRESENTATION["file"])
-    entry = deliverable_entry(execution_id) or ""
     entry_name = Path(entry).name or "deliverable"
     project_id = _generated_project_id(execution_id)
     # What the user asked for, not what the file happens to be called. 88 of 113
@@ -165,11 +190,11 @@ def _generated_deliverable_project(record: dict[str, Any], *, index: int = 0) ->
 
 
 def _generated_deliverable_projects(*, start_index: int = 0, limit: int = _MAX_PROJECTS) -> list[dict[str, Any]]:
-    rows = task_bot_runtime.list_executions(refresh=True)
+    rows = task_bot_runtime.list_user_executions()
     projects: list[dict[str, Any]] = []
     for row in rows:
         execution_id = _safe_text(row.get("execution_id"))
-        full = task_bot_runtime.get_execution(execution_id) if execution_id else None
+        full = task_bot_runtime.get_execution(execution_id, row.get("_record_root")) if execution_id else None
         project = _generated_deliverable_project(full or row, index=start_index + len(projects))
         if project is not None:
             projects.append(project)

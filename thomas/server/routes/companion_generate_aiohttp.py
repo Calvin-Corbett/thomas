@@ -15,6 +15,7 @@ import logging
 import os
 import re
 from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any
 
@@ -204,9 +205,7 @@ def register_companion_generate_routes(
                 status=413,
             )
 
-        display_name = _clean_title(payload.get("display_name") or "")[:60] or _derive_title(
-            description, document
-        )
+        display_name = _clean_title(payload.get("display_name") or "")[:60] or _derive_title(description, document)
         registry = ModuleRegistry(kernel)
         module_id = _unique_module_id(registry, _slugify_module_id(display_name))
 
@@ -238,8 +237,12 @@ def register_companion_generate_routes(
         verify_report = verifier.verify_bundle(bundle_dir)
         if not verify_report.ok:
             return web.json_response(
-                {"ok": False, "error": "generated bundle failed verification",
-                 "errors": list(verify_report.errors), "bundle_dir": str(bundle_dir)},
+                {
+                    "ok": False,
+                    "error": "generated bundle failed verification",
+                    "errors": list(verify_report.errors),
+                    "bundle_dir": str(bundle_dir),
+                },
                 status=400,
             )
 
@@ -253,8 +256,12 @@ def register_companion_generate_routes(
         )
         if not bool(compliance.get("ok")):
             return web.json_response(
-                {"ok": False, "error": "generated app failed policy compliance",
-                 "compliance": compliance, "bundle_dir": str(bundle_dir)},
+                {
+                    "ok": False,
+                    "error": "generated app failed policy compliance",
+                    "compliance": compliance,
+                    "bundle_dir": str(bundle_dir),
+                },
                 status=400,
             )
 
@@ -271,9 +278,7 @@ def register_companion_generate_routes(
             },
         )
         if not bool(result.get("ok")):
-            return web.json_response(
-                {"ok": False, "error": "install failed", "result": result}, status=400
-            )
+            return web.json_response({"ok": False, "error": "install failed", "result": result}, status=400)
 
         row = registry.get(module_id)
         return web.json_response(
@@ -291,26 +296,26 @@ def register_companion_generate_routes(
 async def _generate_document(config: Any, description: str) -> str:
     """Ask the configured model for one self-contained HTML document."""
     try:
-        from thomas.core.llm_client import LLMClient
         from thomas.core.llm_shared import LLMError
+        from thomas.core.llm_slot import models
     except ImportError as exc:
         raise web.HTTPServiceUnavailable(text="model client unavailable") from exc
-
-    try:
-        model_cfg = config.get_model(getattr(config, "default_model", "") or None)
-        client = LLMClient(model_cfg)
-    except (AttributeError, KeyError, ValueError) as exc:
-        log.warning("Surface generate could not resolve a model: %s", exc)
-        raise web.HTTPServiceUnavailable(text="no model configured") from exc
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": description},
     ]
-    try:
-        result = await client.chat(messages, tools=None)
-    except (LLMError, OSError, TimeoutError, ValueError, RuntimeError) as exc:
-        log.warning("Surface generate model call failed: %s", exc)
-        raise web.HTTPBadGateway(text="model call failed") from exc
+    async with AsyncExitStack() as stack:
+        try:
+            model_cfg = config.get_model(getattr(config, "default_model", "") or None)
+            client = await stack.enter_async_context(models().session(model_cfg))
+        except (AttributeError, KeyError, ValueError) as exc:
+            log.warning("Surface generate could not resolve a model: %s", exc)
+            raise web.HTTPServiceUnavailable(text="no model configured") from exc
+        try:
+            result = await client.chat(messages, tools=None)
+        except (LLMError, OSError, TimeoutError, ValueError, RuntimeError) as exc:
+            log.warning("Surface generate model call failed: %s", exc)
+            raise web.HTTPBadGateway(text="model call failed") from exc
 
     return _extract_document(str(result.get("text") or ""))

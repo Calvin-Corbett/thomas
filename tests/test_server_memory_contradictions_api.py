@@ -1,3 +1,10 @@
+"""The memory routes on the real engine, through the live table.
+
+These routes are ``thomas.server.routes.memory_aiohttp``, turned on by ``thomas.server.rows.memory_routes``. Nothing here
+imports either, because the tests reach them over HTTP, so the names are written out: a check finds tests by imports and
+dotted names, and without them a change to the row or its routes would not run this file.
+"""
+
 import tempfile
 import unittest
 from pathlib import Path

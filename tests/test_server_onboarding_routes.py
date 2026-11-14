@@ -1,4 +1,8 @@
-"""Tests for thomas.server.routes.onboarding_aiohttp (telemetry, outcomes, gate)."""
+"""Tests for thomas.server.routes.onboarding_aiohttp (telemetry, outcomes, gate).
+
+They are the onboarding row's, so this names ``thomas.server.rows.onboarding``: a check finds a test by following imports
+and dotted names, and nothing here imports the row.
+"""
 
 import tempfile
 import unittest

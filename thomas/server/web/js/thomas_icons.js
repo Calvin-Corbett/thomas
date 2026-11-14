@@ -16,18 +16,18 @@
   const EYES = '<rect x="7.6" y="9.4" width="2.9" height="5.2" rx="1.4" fill="currentColor"/>'
     + '<rect x="13.5" y="9.4" width="2.9" height="5.2" rx="1.4" fill="currentColor"/>';
 
+  const MARK = 'fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
   const FACES = {
     // Thomas talking: the mark, plus a speech tail.
     chat: HEAD + EYES + '<path d="M7.4 20.6 6.1 23.4l3.6-2.8Z" fill="currentColor"/>',
-    // Thomas building: a forge hammer caught mid-swing.
+    // Thomas building: code brackets round a slash. You said of the hammer and the briefcase that replaced an
+    // anvil: "i also dont like the builds forge icon or the breif case doenst looks good the chat one is fine."
+    // Both are line marks now, the weight of the head they sit in, so the three read as one set.
     build: HEAD
-      + '<g transform="rotate(-22 12 12)">'
-      + '<rect x="6.2" y="7.6" width="9.4" height="3.9" rx="1.1" fill="currentColor"/>'
-      + '<rect x="9.9" y="11.2" width="2.3" height="6.1" rx="1.1" fill="currentColor"/></g>',
-    // Thomas on the job: a briefcase.
+      + '<path d="M9.3 9 6.6 12l2.7 3M14.7 9l2.7 3-2.7 3M12.9 8.2l-1.8 7.6" ' + MARK + '/>',
+    // Thomas on the job: a tick, for work that gets done.
     work: HEAD
-      + '<rect x="6.4" y="10.2" width="11.2" height="6.6" rx="1.6" fill="currentColor"/>'
-      + '<path d="M9.8 10.2V9a1.3 1.3 0 0 1 1.3-1.3h1.8A1.3 1.3 0 0 1 14.2 9v1.2" fill="none" stroke="currentColor" stroke-width="1.6"/>',
+      + '<path d="M7.5 12.3l3.1 3.1 5.9-6.6" ' + MARK + ' stroke-width="2.1"/>',
   };
 
   // Everything else in the sidebar. Stroke-based to match the heads.

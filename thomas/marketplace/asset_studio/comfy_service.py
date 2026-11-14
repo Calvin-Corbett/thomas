@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Mapping
@@ -43,6 +44,16 @@ def _json_get(url: str, *, timeout_s: float) -> Any:
     return json.loads(payload)
 
 
+def _connection_refused(exc: BaseException) -> bool:
+    """True only when the port actively refused: nothing listens there, so a second probe would only wait again.
+
+    A timeout or a reset is NOT this: a busy ComfyUI can answer one path slowly or drop one request and still
+    answer the other, and boot() trusts status() to say whether one is already running.
+    """
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    return isinstance(reason, ConnectionRefusedError)
+
+
 class ComfyStudioService:
     def __init__(
         self,
@@ -79,13 +90,18 @@ class ComfyStudioService:
         stats_payload: Any = None
         last_error = ""
 
+        unreachable = False
         try:
             queue_payload = _json_get(f"{server_url}/queue", timeout_s=timeout)
         except Exception as exc:
             last_error = str(exc)
+            unreachable = _connection_refused(exc)
 
         try:
-            stats_payload = _json_get(f"{server_url}/system_stats", timeout_s=timeout)
+            if (
+                not unreachable
+            ):  # a refused connection means nothing listens; a timeout or reset still gets its second probe
+                stats_payload = _json_get(f"{server_url}/system_stats", timeout_s=timeout)
         except Exception as exc:
             if not last_error:
                 last_error = str(exc)
@@ -324,5 +340,9 @@ class ComfyStudioService:
         }
 
     async def close(self) -> None:
+        if self._process is None:
+            # Nothing was booted by this service, so there is nothing to stop. shutdown() would only probe the
+            # default server for a status nobody reads, and a dead localhost service costs 2 s per probe.
+            return
         with contextlib.suppress(Exception):
             await self.shutdown(wait_timeout_s=3.0)

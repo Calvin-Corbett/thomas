@@ -9,13 +9,14 @@ import logging
 import os
 import re
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from thomas.agent.guidance import load_cached_purpose_brief
+from thomas.agent.loop_system_text import load_purpose_text as _load_purpose_text
+from thomas.agent.loop_system_text import with_required_system_text as _with_required_system_text
 from thomas.agent.project_instructions import (
     discover_project_instructions,
     format_project_instructions,
@@ -32,6 +33,8 @@ from thomas.core.autonomy import (
 )
 from thomas.core.config import AppConfig
 from thomas.core.tokens import (
+    ContextBudgetExhausted,
+    RequiredRequestTooLarge,
     estimate_message_tokens,
     estimate_messages_tokens,
     estimate_tools_tokens,
@@ -64,19 +67,10 @@ log = logging.getLogger(__name__)
 # Stale tool outputs shrink once the transcript passes this share of the
 # window; full (model-summarised) compaction still waits for `threshold`.
 _PRUNE_THRESHOLD = 0.33
+_PRUNE_NOW_THRESHOLD = 0.5  # past this, every stale output is cut at once
+_PRUNE_BATCH = 6  # below it, stale outputs wait until this many can be cut together
 
 _TPM_HEADROOM_DEFAULT = 0.90
-
-
-@lru_cache(maxsize=1)
-def _load_purpose_text() -> str:
-    """Load cached startup guidance brief (best effort)."""
-    try:
-        return load_cached_purpose_brief()
-    except Exception:  # REVIEWED: swallow — optional feature, fallback to empty string
-        # Broad catch: purpose brief is decorative context; any load failure must not break agent startup.
-        log.debug("Purpose brief load failed; continuing without it.", exc_info=True)
-        return ""
 
 
 @dataclass
@@ -239,20 +233,29 @@ class AgentLoop:
             except Exception as e:  # REVIEWED: log-and-continue — compaction is optional
                 log.debug("ContextCompactor init failed: %s", e)
 
-    async def _run_plugin_hook(self, hook: str, payload: dict[str, Any]) -> None:
+    async def _run_plugin_hook(self, hook: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Invoke the optional plugin hook runner, never breaking the turn.
 
-        Observational-only this release: any return value is ignored, and any
-        exception is swallowed at debug level so a misbehaving plugin can never
-        abort an agent turn. No-op when no hook runner was supplied.
+        Returns the payload as the hooks left it. It used to return nothing and
+        the docstring said so — "any return value is ignored" — which is why the
+        528 bundled extension packs each define ``before_tool``/``after_tool``
+        returning a modified payload that no caller ever read. Handing the
+        payload back is what lets a hook participate instead of spectate; the
+        runner supplied by ``make_plugin_hook_runner`` folds every plugin's
+        output into it.
+
+        A misbehaving plugin still cannot abort a turn: on failure the payload
+        comes back unchanged. No-op when no hook runner was supplied.
         """
         runner = self._plugin_hook_runner
         if runner is None:
-            return
+            return payload
         try:
-            await runner(hook, payload)
+            result = await runner(hook, payload)
         except Exception as e:  # REVIEWED: plugin hooks must never break a turn
-            log.debug("Plugin hook %r failed (non-fatal): %s", hook, e)
+            log.warning("Plugin hook %r failed (non-fatal): %s", hook, e)
+            return payload
+        return result if isinstance(result, dict) else payload
 
     def _build_system_message(
         self,
@@ -351,9 +354,15 @@ class AgentLoop:
         include_autonomy_profile: bool = True,
         include_editing_policy: bool = True,
         include_project_instructions: bool = True,
+        required_system_text: str = "",
+        shorter_required_texts: Sequence[str] = (),
     ) -> list[dict[str, Any]]:
-        """Build the message list for an LLM call, with context window management."""
-        system_msg = self._build_system_message(
+        """Build the message list for an LLM call, with context window management.
+
+        ``shorter_required_texts`` say what ``required_system_text`` says while repeating less of a pinned message,
+        shortest last; the first that leaves room for every message is sent (the last when none does).
+        """
+        base_system_msg = self._build_system_message(
             memory_text,
             include_purpose=include_purpose,
             route_path=route_path,
@@ -362,6 +371,7 @@ class AgentLoop:
             include_editing_policy=include_editing_policy,
             include_project_instructions=include_project_instructions,
         )
+        system_msg = _with_required_system_text(base_system_msg, required_system_text)
         system_tokens = estimate_message_tokens(system_msg)
 
         # Estimate tool spec tokens
@@ -370,6 +380,8 @@ class AgentLoop:
         # Conversation history already contains the current run's messages because
         # we append them as we go.
         all_messages: list[dict[str, Any]] = list(self._conversation)
+        # The active task and current steering: kept by every trim and restored if missing.
+        anchors = [message for message in (getattr(self, "_context_anchors", None) or ()) if isinstance(message, dict)]
         preserve_first_i = max(0, int(preserve_first))
         preserve_last_i = max(1, int(preserve_last))
 
@@ -384,12 +396,19 @@ class AgentLoop:
                 tools_tokens=tools_tokens,
                 preserve_first=preserve_first_i,
                 preserve_last=preserve_last_i,
+                required=anchors,
             )
 
         # Trim to fit context window, preserving recent messages
         # Reserve tokens for the model's response
         response_reserve = min(self.llm.config.max_tokens, self._context_window // 4)
         budget = self._context_window - response_reserve
+        for shorter in shorter_required_texts:  # a second copy goes before any history, memory or result does
+            if estimate_messages_tokens(all_messages) <= budget - system_tokens - tools_tokens - 100:  # trim's room
+                break
+            required_system_text = shorter
+            system_msg = _with_required_system_text(base_system_msg, required_system_text)
+            system_tokens = estimate_message_tokens(system_msg)
 
         trimmed = trim_messages_to_budget(
             all_messages,
@@ -398,21 +417,23 @@ class AgentLoop:
             tools_tokens=tools_tokens,
             preserve_first=preserve_first_i,
             preserve_last=preserve_last_i,
+            required=anchors,
         )
 
         messages = [system_msg] + trimmed
         state.token_estimate = estimate_messages_tokens(messages) + tools_tokens
         # Final context firewall. Tool schemas and the response allowance share
         # the same provider window as messages, so reserve both before trimming.
-        message_hard_cap = int(self._context_window) - tools_tokens - response_reserve
+        message_hard_cap = self._request_message_budget(tool_specs)
         try:
             try:
                 messages = fit_messages_to_hard_cap(
                     messages,
                     hard_cap=message_hard_cap,
                     anchor_source=all_messages,
+                    required_anchors=anchors,
                 )
-            except ValueError:
+            except RequiredRequestTooLarge:
                 # Optional context is dropped in stages, each as one complete,
                 # well-formed section: merged project instructions first (bulk
                 # ambient files), then retrieved memory — memory_text carries
@@ -438,24 +459,79 @@ class AgentLoop:
                         include_editing_policy=include_editing_policy,
                         include_project_instructions=stage_instructions,
                     )
+                    messages[0] = _with_required_system_text(messages[0], required_system_text)
                     try:
                         messages = fit_messages_to_hard_cap(
                             messages,
                             hard_cap=message_hard_cap,
                             anchor_source=all_messages,
+                            required_anchors=anchors,
                         )
                         break
-                    except ValueError:
+                    except RequiredRequestTooLarge:
                         if stage_index == len(stages) - 1:
                             raise
-        except ValueError as exc:
-            raise ValueError(
+        except RequiredRequestTooLarge as exc:
+            raise RequiredRequestTooLarge(
                 "Model context window cannot fit the required instructions and latest request after reserving "
                 f"{tools_tokens} tool-schema tokens and {response_reserve} response tokens: {exc}"
             ) from exc
         state.token_estimate = estimate_messages_tokens(messages) + tools_tokens
+        self._stop_if_current_run_results_missing(messages)
 
         return messages
+
+    def _request_message_budget(self, tool_specs: list[dict[str, Any]] | None) -> int:
+        """Tokens left for messages in one request: the window minus tool schemas and the response reserve.
+
+        The request builder uses this number for its hard cap.
+        """
+        response_reserve = min(self.llm.config.max_tokens, self._context_window // 4)
+        return int(self._context_window) - estimate_tools_tokens(tool_specs or []) - response_reserve
+
+    def _stop_if_current_run_results_missing(self, messages: list[dict[str, Any]]) -> None:
+        """Refuse a request that lost this run's evidence.
+
+        Evidence is every tool result stored after the turn request, and every compaction summary made in
+        this run (it replaced earlier results, so once compaction has removed their ids it is the only copy).
+        Either one missing from the request stops the run instead of trimming it silently.
+        """
+        from thomas.agent.context_compaction_heuristics import _is_compaction_summary
+
+        anchors = getattr(self, "_context_anchors", None) or []
+        conversation = self._conversation
+        start = next((index for index, message in enumerate(conversation) if anchors and message is anchors[0]), None)
+        if start is None:
+            return
+        names: dict[str, str] = {}
+        stored: list[str] = []
+        for message in conversation[start:]:
+            for call in message.get("tool_calls") or []:
+                if isinstance(call, dict) and call.get("id"):
+                    function = call.get("function") if isinstance(call.get("function"), dict) else {}
+                    names[str(call["id"])] = str(function.get("name") or "a tool")
+            if message.get("role") == "tool" and message.get("tool_call_id"):
+                stored.append(str(message["tool_call_id"]))
+        sent = {str(message.get("tool_call_id")) for message in messages if message.get("role") == "tool"}
+        missing = [call_id for call_id in stored if call_id not in sent]
+        sent_messages = {(message.get("role"), str(message.get("content"))) for message in messages}
+        lost_summaries = [
+            message
+            for message in conversation[start:]
+            if _is_compaction_summary(message)
+            and (message.get("role"), str(message.get("content"))) not in sent_messages
+        ]
+        problems: list[str] = []
+        if missing:
+            listed = ", ".join(sorted({names.get(call_id, "a tool") for call_id in missing}))
+            problems.append(f"{len(missing)} tool result(s) from this run ({listed}) that no summary covers")
+        if lost_summaries:
+            problems.append(f"{len(lost_summaries)} compaction summary(ies) of this run's earlier tool results")
+        if problems:
+            raise ContextBudgetExhausted(
+                "The request cannot hold " + " or ".join(problems) + ", so the run stops instead of continuing "
+                "without them."
+            )
 
     async def _auto_compact_if_needed(
         self,
@@ -471,8 +547,14 @@ class AgentLoop:
 
         Returns compaction result dict if compaction occurred, else None.
         """
+        # The runner's word from the context meter: compact now (once per click), and the window you chose, if any.
+        probe = getattr(self, "run_directives_probe", None)
+        forced, chosen = probe() if callable(probe) else (False, None)
+        if chosen:
+            self._context_window = int(chosen)
         compact_cap = int(self._context_window) if (hard_cap is None or int(hard_cap) <= 0) else int(hard_cap)
-        conv_tokens = _compact_estimate_tokens(self._conversation)
+        # The same estimator as the request's hard cap, so the trigger and the cap agree.
+        conv_tokens = estimate_messages_tokens(self._conversation)
         # Cheap step first (frontier parity, 2026-09-05): once the transcript
         # passes a third of the window, stale tool outputs shrink to a stub with
         # no model call. TB-4.0 run 3 re-sent ~116k tokens per call for 128
@@ -480,15 +562,19 @@ class AgentLoop:
         if conv_tokens >= int(compact_cap * _PRUNE_THRESHOLD):
             from thomas.agent.tool_output_pruning import prune_stale_tool_outputs
 
-            removed = prune_stale_tool_outputs(self._conversation, keep_recent_messages=preserve_recent * 2)
+            # Cut in batches so the cache breaks once per batch, not every call; at half the window, cut at once.
+            batch = 1 if conv_tokens >= int(compact_cap * _PRUNE_NOW_THRESHOLD) else _PRUNE_BATCH
+            removed = prune_stale_tool_outputs(
+                self._conversation, keep_recent_messages=preserve_recent * 2, min_batch=batch
+            )
             if removed:
                 before = conv_tokens
-                conv_tokens = _compact_estimate_tokens(self._conversation)
+                conv_tokens = estimate_messages_tokens(self._conversation)
                 log.info("Pruned stale tool outputs: %d -> %d tokens", before, conv_tokens)
                 self._last_prune_result = {"original_tokens": before, "pruned_tokens": conv_tokens}
         if not _HAS_CONTEXT_COMPACTOR or self._context_compactor is None:
             return None
-        if conv_tokens < int(compact_cap * threshold):
+        if not forced and conv_tokens < int(compact_cap * threshold):
             return None
 
         log.info(
@@ -500,12 +586,30 @@ class AgentLoop:
 
         try:
             target = int(compact_cap * 0.55)  # Compact to ~55% to give headroom
+            if forced:
+                target = min(target, max(1, int(conv_tokens * 0.5)))  # you asked: shrink what is there, even if small
+            pinned = {id(message) for message in (getattr(self, "_context_anchors", None) or ())}
             result = await self._context_compactor.compact(
                 self._conversation,
                 target_budget=target,
                 preserve_recent=preserve_recent,
                 use_llm=True,
+                pinned=pinned,
             )
+            if result.tokens_saved <= 0 and preserve_recent > 4:
+                # Compaction is due but nothing is older than the preserved recent window. Left alone, the
+                # request builder would drop those messages without a summary, so compact the oldest
+                # completed exchange instead and record that the window was reduced.
+                retry = await self._context_compactor.compact(
+                    self._conversation,
+                    target_budget=target,
+                    preserve_recent=4,
+                    use_llm=True,
+                    pinned=pinned,
+                )
+                if retry.tokens_saved > 0:
+                    retry.preserve_recent_reduced = True
+                    result = retry
             self._last_compaction_result = result
             return {
                 "original_tokens": result.original_tokens,
@@ -515,6 +619,7 @@ class AgentLoop:
                 "compacted_messages": result.compacted_message_count,
                 "segments_summarized": result.segments_summarized,
                 "elapsed_ms": result.elapsed_ms,
+                "preserve_recent_reduced": bool(getattr(result, "preserve_recent_reduced", False)),
             }
         except Exception as e:
             log.warning("Auto-compaction failed: %s", e)

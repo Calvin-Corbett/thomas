@@ -1,0 +1,3 @@
+### Changed
+
+- Build's GPT lead, read-only helpers, and isolated file builders now pass native HTTP attempts through the original Praxis adaptive provider pacer within their Build process. It reacts to provider refusal with per-builder Retry-After, lowers the request allowance, and lets clean new attempts raise it gradually. A four-slot lane keeps the lead able to report progress while workers fill their allowance. The older 16-request per-team cap is removed from this path. This is an incremental port: distinct Build processes and ordinary Chat do not yet share one account controller, and the original manager, obligation, recovery, and full-scale gates are still pending.

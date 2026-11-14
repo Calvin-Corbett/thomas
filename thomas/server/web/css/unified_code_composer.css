@@ -1,0 +1,188 @@
+/* Build's composer controls: the queue stack and status line above the card,
+   and the primary button's Pause / Resume / Stop glyphs.
+
+   Markup: js/unified_code_composer.js (ThomasCodeComposer). Values are the
+   design's (Thomas Build.dc.html, screen 3a composer), in tokens. */
+
+/* ---------- The mount (#tc-code-composer-extras, chat.html) ---------- */
+
+/* Build only, whatever its `hidden` says: a queue left over from a Build run
+   must not show above Chat's composer. */
+#tc-shell:not([data-surface-mode="code"]) #tc-code-composer-extras { display: none !important; }
+
+#tc-code-composer-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+/* `display: flex` here and below outranks the browser's own [hidden] rule. */
+#tc-code-composer-extras[hidden],
+#tc-code-composer-extras [hidden] { display: none; }
+
+/* Same box as the composer card under it. The rail takes its column from
+   these properties in Build (unified_code_mode.css), and the stack is its
+   sibling, so it has to take the same ones or it would span the whole wrapper
+   while the card stays in the reading column. */
+#tc-shell[data-surface-mode="code"] [data-ui-id="chat.composer"] > #tc-code-composer-extras {
+  width: var(--tc-code-col-width);
+  margin-left: var(--tc-code-col-inset);
+  margin-right: auto;
+}
+/* …including the rail's small-screen inset (chat_shell.css, max-width 1080px). */
+@media (max-width: 1080px) {
+  [data-ui-id="chat.composer"] > #tc-code-composer-extras { padding-left: 20px; padding-right: 20px; }
+}
+
+/* ---------- Queued messages ---------- */
+
+.tc-code-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tc-code-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--c-border-2);
+  border-radius: 8px;
+  background: var(--c-menu-bg);
+}
+.tc-code-queue-label {
+  flex: 0 0 auto;
+  font: 600 10px/1 var(--font-sans);
+
+
+  color: var(--c-muted);
+}
+.tc-code-queue-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-code-queue-steer {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--c-accent);
+  color: var(--c-accent-ink);
+  font: 700 12px/1 var(--font-sans, inherit);
+  cursor: pointer;
+}
+.tc-code-queue-steer:hover:not(:disabled) { filter: brightness(1.08); }
+.tc-code-queue-remove {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-muted);
+  font: 12px/1 var(--font-sans, inherit);
+  cursor: pointer;
+}
+.tc-code-queue-remove:hover:not(:disabled) { background: var(--c-hover); color: var(--c-text); }
+.tc-code-queue-steer:disabled,
+.tc-code-queue-remove:disabled { opacity: .55; cursor: default; }
+.tc-code-queue-item.is-busy .tc-code-queue-text { color: var(--c-dim); }
+
+/* ---------- Status line ---------- */
+
+.tc-code-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--c-dim);
+}
+.tc-code-status-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-muted);
+}
+.tc-code-status[data-tone="working"] .tc-code-status-dot {
+  background: var(--c-accent);
+  animation: tc-code-status-pulse 1.4s ease-in-out infinite;
+}
+.tc-code-status[data-tone="paused"] .tc-code-status-dot { background: var(--c-warn); }
+.tc-code-status-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-code-status-meta {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font: 500 11px/16px var(--font-sans);
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+@keyframes tc-code-status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ---------- Primary button icons ----------
+   The icon map in chat_shell.css draws `ph-pause` as "‖" and `ph-stop` as "×"
+   (a close mark). Everything here is keyed off `data-primary`, which only
+   Build sets, so Chat and Work keep the map's glyphs; the id outranks the
+   map's plain class, which loads after this sheet.
+
+   Fallback glyphs first: two solid bars for Pause, a square for Stop, and a
+   play triangle carrying U+FE0E so Windows does not draw a colour emoji. */
+#tc-send[data-primary="pause"] .ph-pause::before { content: "\275A\275A"; font-size: .5em; }
+#tc-send[data-primary="resume"] .ph-play::before { content: "\25B6\FE0E"; font-size: .56em; }
+#tc-send[data-primary="stop"] .ph-stop::before { content: "\25A0"; font-size: .78em; }
+
+/* Then the design's own icons (its SVG paths, 16px arrow, 14px others) as
+   masks in the button's ink, wherever masks work -- every current engine. At
+   1x a font glyph this small blurred the pause bars into one grey block; the
+   design's are 2.3px bars with a 2px gap, which only a drawing can hit. */
+@supports (mask-image: none) or (-webkit-mask-image: none) {
+  #tc-send[data-primary="send"] {
+    --tc-primary-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M5 12l7-7 7 7'/%3E%3C/svg%3E");
+    --tc-primary-icon-size: 16px;
+  }
+  #tc-send[data-primary="pause"] {
+    --tc-primary-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='5' width='4' height='14' rx='1'/%3E%3Crect x='14' y='5' width='4' height='14' rx='1'/%3E%3C/svg%3E");
+  }
+  #tc-send[data-primary="resume"] {
+    --tc-primary-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 5v14l12-7z'/%3E%3C/svg%3E");
+  }
+  #tc-send[data-primary="stop"] {
+    --tc-primary-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='6' width='12' height='12' rx='2'/%3E%3C/svg%3E");
+  }
+  #tc-send[data-primary] #tc-send-icon::before {
+    content: "";
+    width: var(--tc-primary-icon-size, 14px);
+    height: var(--tc-primary-icon-size, 14px);
+    background: currentColor;
+    -webkit-mask: var(--tc-primary-icon) center / contain no-repeat;
+    mask: var(--tc-primary-icon) center / contain no-repeat;
+  }
+}
+/* High-contrast mode repaints backgrounds; keep the icon in the button's text colour. */
+@media (forced-colors: active) {
+  #tc-send[data-primary] #tc-send-icon::before { forced-color-adjust: none; background: ButtonText; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-code-status[data-tone="working"] .tc-code-status-dot { animation: none; }
+}

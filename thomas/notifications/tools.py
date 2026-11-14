@@ -3,36 +3,66 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
+from thomas.core.file_access import names_another_volume
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.fs_scope import Scope
 
 log = logging.getLogger(__name__)
 
 
-class NotificationsGetStoreTool(Tool):
-    """Get or create notification store."""
+def _database_under(scope: Scope, text: Any) -> str:
+    """The database file ``text`` names inside the scope's folder, as the path to open.
+
+    The name is read as text first, so another drive or a network name is refused before the disk is touched. Only then
+    does the scope resolve it, which also refuses a ``..`` and a link that leads out. The path the scope returns is the
+    one opened, never the text the model sent.
+    """
+    if not isinstance(text, str) or not text.strip() or "\x00" in text:
+        raise ValueError("store_path must name a database file inside the notifications folder")
+    root = Path(scope.root)
+    if names_another_volume(text, root) or ".." in Path(text).parts:
+        raise ValueError(f"store_path leaves the notifications folder: {text}")
+    try:
+        return str(scope.resolve(text))
+    except (ValueError, OSError):
+        raise ValueError(f"store_path leaves the notifications folder: {text}") from None
+
+
+class _NotificationTool(Tool):
+    """A notification tool whose database files all live inside one folder, the scope's."""
+
+    def __init__(self, scope: Scope) -> None:
+        self._scope = scope
+
+    def _open(self, args: dict[str, Any]) -> Any:
+        from .store import NotificationStore
+
+        return NotificationStore(_database_under(self._scope, args.get("store_path")))
+
+
+class NotificationsGetStoreTool(_NotificationTool):
+    """Open a notification store inside the notifications folder."""
 
     name = "notifications_get_store"
     category = "notifications"
-    description = "Get a notification store instance for managing notifications."
+    description = "Open a notification store, a database file inside the notifications folder."
     parameters = {
         "type": "object",
         "properties": {
             "store_path": {
                 "type": "string",
-                "description": "Path to SQLite database (optional, defaults to in-memory)",
+                "description": "Database file inside the notifications folder",
             },
         },
-        "required": [],
+        "required": ["store_path"],
     }
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            from .store import NotificationStore
-
-            store_path = args.get("store_path")
-            store = NotificationStore(store_path) if store_path else NotificationStore()
+            store = self._open(args)
 
             return ToolResult(
                 ok=True,
@@ -45,7 +75,7 @@ class NotificationsGetStoreTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-class NotificationsCreateTool(Tool):
+class NotificationsCreateTool(_NotificationTool):
     """Create and store a notification."""
 
     name = "notifications_create"
@@ -56,7 +86,7 @@ class NotificationsCreateTool(Tool):
         "properties": {
             "store_path": {
                 "type": "string",
-                "description": "Path to SQLite database",
+                "description": "Database file inside the notifications folder",
             },
             "type": {
                 "type": "string",
@@ -84,9 +114,9 @@ class NotificationsCreateTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            from .store import NotificationCreate, NotificationStore
+            from .store import NotificationCreate
 
-            store = NotificationStore(args["store_path"])
+            store = self._open(args)
 
             nc = NotificationCreate(
                 type=args["type"],
@@ -111,7 +141,7 @@ class NotificationsCreateTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-class NotificationsListTool(Tool):
+class NotificationsListTool(_NotificationTool):
     """List notifications with filtering."""
 
     name = "notifications_list"
@@ -122,7 +152,7 @@ class NotificationsListTool(Tool):
         "properties": {
             "store_path": {
                 "type": "string",
-                "description": "Path to SQLite database",
+                "description": "Database file inside the notifications folder",
             },
             "unread_only": {
                 "type": "boolean",
@@ -146,9 +176,7 @@ class NotificationsListTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            from .store import NotificationStore
-
-            store = NotificationStore(args["store_path"])
+            store = self._open(args)
 
             notifications = store.list(
                 unread_only=args.get("unread_only", False),
@@ -179,7 +207,7 @@ class NotificationsListTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-class NotificationsMarkReadTool(Tool):
+class NotificationsMarkReadTool(_NotificationTool):
     """Mark notifications as read."""
 
     name = "notifications_mark_read"
@@ -190,7 +218,7 @@ class NotificationsMarkReadTool(Tool):
         "properties": {
             "store_path": {
                 "type": "string",
-                "description": "Path to SQLite database",
+                "description": "Database file inside the notifications folder",
             },
             "notification_id": {
                 "type": "string",
@@ -202,9 +230,7 @@ class NotificationsMarkReadTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            from .store import NotificationStore
-
-            store = NotificationStore(args["store_path"])
+            store = self._open(args)
 
             notif_id = args.get("notification_id")
             if notif_id:
@@ -217,7 +243,7 @@ class NotificationsMarkReadTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-class NotificationsGetUnreadCountTool(Tool):
+class NotificationsGetUnreadCountTool(_NotificationTool):
     """Get unread notification count."""
 
     name = "notifications_get_unread_count"
@@ -228,7 +254,7 @@ class NotificationsGetUnreadCountTool(Tool):
         "properties": {
             "store_path": {
                 "type": "string",
-                "description": "Path to SQLite database",
+                "description": "Database file inside the notifications folder",
             },
         },
         "required": ["store_path"],
@@ -236,9 +262,7 @@ class NotificationsGetUnreadCountTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            from .store import NotificationStore
-
-            store = NotificationStore(args["store_path"])
+            store = self._open(args)
             count = store.unread_count()
 
             return ToolResult(ok=True, data={"unread_count": count})
@@ -246,7 +270,7 @@ class NotificationsGetUnreadCountTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-class NotificationsClearTool(Tool):
+class NotificationsClearTool(_NotificationTool):
     """Clear notifications (delete)."""
 
     name = "notifications_clear"
@@ -257,7 +281,7 @@ class NotificationsClearTool(Tool):
         "properties": {
             "store_path": {
                 "type": "string",
-                "description": "Path to SQLite database",
+                "description": "Database file inside the notifications folder",
             },
             "severity": {
                 "type": "string",
@@ -273,9 +297,7 @@ class NotificationsClearTool(Tool):
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
-            from .store import NotificationStore
-
-            store = NotificationStore(args["store_path"])
+            store = self._open(args)
 
             severity = args.get("severity")
             notif_type = args.get("notification_type")
@@ -287,15 +309,13 @@ class NotificationsClearTool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-def register_notifications_tools(registry):
-    """Register notifications tools with the tool registry."""
-    tools = [
-        NotificationsGetStoreTool(),
-        NotificationsCreateTool(),
-        NotificationsListTool(),
-        NotificationsMarkReadTool(),
-        NotificationsGetUnreadCountTool(),
-        NotificationsClearTool(),
+def build_notifications_tools(scope: Scope) -> list[Tool]:
+    """The six notification tools, each keeping its database files inside ``scope``'s folder."""
+    return [
+        NotificationsGetStoreTool(scope),
+        NotificationsCreateTool(scope),
+        NotificationsListTool(scope),
+        NotificationsMarkReadTool(scope),
+        NotificationsGetUnreadCountTool(scope),
+        NotificationsClearTool(scope),
     ]
-    for tool in tools:
-        registry.register(tool)

@@ -25,6 +25,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = ROOT / "thomas" / "server" / "web" / "chat.html"
 DELEGATION = ROOT / "thomas" / "server" / "chat_delegation.py"
@@ -43,11 +45,9 @@ def _shell() -> str:
     a line, so `https://` inside a string survives.
     """
 
-    text = CHAT_HTML.read_text(encoding="utf-8", errors="replace")
+    text = read_chat_sources(CHAT_HTML)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("//")
-    )
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//"))
 
 
 def test_the_specialist_ids_match_the_ones_delegation_accepts() -> None:
@@ -58,9 +58,7 @@ def test_the_specialist_ids_match_the_ones_delegation_accepts() -> None:
     matches anything. This is the check that keeps the two lists honest.
     """
 
-    backend = re.search(
-        r"specialist_id not in \{([^}]*)\}", DELEGATION.read_text(encoding="utf-8")
-    )
+    backend = re.search(r"specialist_id not in \{([^}]*)\}", DELEGATION.read_text(encoding="utf-8"))
     assert backend, "chat_delegation no longer declares its accepted specialist ids"
     accepted = set(re.findall(r'"([a-z_]+)"', backend.group(1)))
 

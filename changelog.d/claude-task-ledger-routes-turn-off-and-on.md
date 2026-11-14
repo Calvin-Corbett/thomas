@@ -1,0 +1,3 @@
+### Changed
+
+- **The task-ledger routes can now be turned off and on while Thomas runs.** The four routes that read what Thomas has recorded about the task each chat is on, `/api/task-ledger/current`, `/api/task-ledger/history` and their underscore spellings, moved out of the server's fixed list into a row called Current task record, which ships on, so nothing changes until you turn it off. While it is off those routes answer 404 and nothing you normally use changes. The older full page keeps asking for the record every few seconds and gets an error it does not show, and its Current Task box in Mission Control shows a chat with delegated work running without its goal and progress. Thomas goes on recording the task for each chat.

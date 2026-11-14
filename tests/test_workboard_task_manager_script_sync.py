@@ -378,7 +378,7 @@ def test_sync_sessions_apply_writes_active_registry(tmp_path: Path, capsys) -> N
     assert rc == 0
     assert payload["ok"] is True
     assert payload["session_entry_count"] == 1
-    assert payload["session_lease_minutes"] == 5.0
+    assert payload["session_lease_minutes"] == mod.DEFAULT_SESSION_LEASE_MINUTES
     assert "## Agent Sessions" in text
     assert "agent=Codex 3;" in text
     assert "state=active;" in text

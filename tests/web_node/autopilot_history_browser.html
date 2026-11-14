@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autopilot counted-run history</title>
+  <style>
+    body { margin: 2rem; color: #eee; background: #151821; font: 16px/1.5 system-ui; }
+    .tc-code-actions, .tc-code-context { display: none; }
+    .tc-code-continuations { max-width: 50rem; padding: 1rem; border: 1px solid #888; }
+    li { margin: .8rem 0; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>Autopilot counted-run history</h1>
+  <main id="surface"></main>
+  <script src="../../thomas/server/web/js/unified_code_surface.js"></script>
+  <script>
+    const root = document.getElementById('surface');
+    const esc = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const state = {
+      activeId: 'history-probe', runStatus: 'failed', changes: [], changedFiles: [], artifacts: [], tree: [], treeEntries: [],
+      liveEvents: [], modelOptions: [], conversations: [], drawerOpen: false, conversation: {
+        turns: [{role: 'user', text: 'Continue the project'}],
+        continuation_history: {count: 2, runs: [
+          {outcome: 'failed', reason: 'worker exited 2', run_id: 'run-2', ts: '2026-10-01T17:15:00Z'},
+          {outcome: 'interrupted', reason: 'server restarted', run_id: 'run-3', ts: '2026-10-01T17:20:00Z'}
+        ]}
+      }
+    };
+    const noop = () => {};
+    window.ThomasCodeViewState = { capture: noop, restore: noop };
+    const results = {
+      viewerHtml: () => '', artifactHtml: () => '', playtestChatCardHtml: () => '', publishColumnState: noop, bindViewer: noop,
+      bindDrawerResize: noop, bindArtifactActions: noop
+    };
+    window.addEventListener('error', event => { root.textContent = event.error.stack; });
+    window.ThomasCodeSurface.create({
+      adapterActive: true, state, surface: () => root, esc,
+      transcriptScroller: () => root, codeResults: () => results,
+      codeProjects: () => ({updateProjectButton: noop}),
+      visibleChanges: () => [], visibleTurnStream: () => [], artifactHtml: () => '', changeHtml: () => '', completedReplyHtml: () => '', finalReplyEvent: () => null, progressEvents: () => [],
+      turnHtml: turn => `<p>${esc(turn.text)}</p>`, emptyStateHtml: () => '',
+      historyHtml: () => '', historyAskHtml: () => '', bindHistoryChoice: noop, interleavedActivityHtml: () => ''
+    }).render();
+  </script>
+</body>
+</html>

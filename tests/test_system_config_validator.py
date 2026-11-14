@@ -123,6 +123,58 @@ model = "gpt-4o-mini"
     assert any(item["code"] == "models.profile_missing_key" for item in report["warnings"])
 
 
+def _claude_profile_config(tmp_path: Path) -> Path:
+    """Chat set to your Claude plan: the Anthropic profile, chosen, with no key stored."""
+    return _write_config(
+        tmp_path,
+        f"""
+default_model = "anthropic"
+
+[memory]
+root = "{(tmp_path / "runtime").as_posix()}"
+
+[models.anthropic]
+provider = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+model = "sonnet"
+""".strip(),
+    )
+
+
+def test_your_claude_plan_is_not_reported_as_a_profile_missing_its_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It needs no key: the Claude CLI carries its own sign-in, which Chat runs on
+    since 2026-09-25 (thomas/core/claude_plan.py). Asking for a key here sent you
+    looking for something the connection does not want."""
+    from thomas.core import claude_plan
+
+    monkeypatch.setattr(claude_plan, "claude_cli_path", lambda **_kw: "C:/claude.cmd")
+
+    report = validate_config(_claude_profile_config(tmp_path))
+
+    assert report["ok"] is True
+    codes = {item["code"] for item in [*report["errors"], *report["warnings"]]}
+    assert "models.default_profile_missing_key" not in codes
+    assert "models.profile_missing_key" not in codes
+
+
+def test_without_the_claude_cli_that_profile_really_does_need_a_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nothing serves it then, so the finding is the truth and stays."""
+    from thomas.core import claude_plan
+
+    monkeypatch.setattr(claude_plan, "claude_cli_path", lambda **_kw: "")
+
+    report = validate_config(_claude_profile_config(tmp_path))
+
+    assert report["ok"] is False
+    assert any(item["code"] == "models.default_profile_missing_key" for item in report["errors"])
+
+
 def test_remote_mode_webhook_signature_disable_is_blocking_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

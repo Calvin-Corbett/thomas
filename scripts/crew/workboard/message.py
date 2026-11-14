@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from collections.abc import Sequence
@@ -20,54 +19,30 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.crew.brief import identity as agent_identity
+from scripts.crew.workboard import board_io as _board_io
+from scripts.crew.workboard import coordination_root, message_audit, message_queries
 from scripts.crew.workboard import issue as workboard_issue
-from scripts.crew.workboard import message_audit, message_queries
 from scripts.forge.gates import workboard_claims as claims_gate
 
 
 def _canonical_repo_root() -> Path:
-    """Resolve the PRIMARY (main) worktree root so every worktree shares ONE
-    coordination board + lock.
+    """The primary checkout every linked worktree shares one board and one lock with.
 
-    ``Path(__file__).parents[3]`` resolves to *this script copy's* worktree. Each
-    linked git worktree has its own copy of this script AND its own checked-out
-    ``plans/thomas/WORKBOARD.md`` + ``runtime/coordination`` lock -- so an agent
-    running the tool from a worktree silently reads/writes a DIFFERENT board than
-    an agent in the main checkout, and their locks don't interlock. That fragments
-    agent-to-agent messages (a real, observed misdelivery). Anchoring to the main
-    worktree via git's shared common-dir makes all copies converge on one board.
-    Falls back to the local script root if git is unavailable.
+    The rule is `coordination_root.coordination_root`; it is the same rule the
+    inbox gate, the startup router and the commit barrier read, so a message
+    sent from the primary checkout is the message a worktree is gated on.
     """
-    local_root = Path(__file__).resolve().parents[3]
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            cwd=str(local_root),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if out.returncode == 0:
-            common = Path(out.stdout.strip())
-            # The shared common dir is "<main-worktree>/.git" (a dir for normal
-            # repos). Its parent is the main worktree root, identical for the main
-            # checkout and every linked worktree.
-            if common.name == ".git" and common.parent.exists():
-                return common.parent
-    # git unavailable / not a repo / slow (OSError, SubprocessError) or an
-    # unparseable path (ValueError) -> fall back to this script's own worktree
-    # root. This MUST NOT raise: it runs at module import time, so an exception
-    # here would make every `message` command -- the inter-agent delivery
-    # path -- unimportable rather than merely worktree-local.
-    except (OSError, ValueError, subprocess.SubprocessError):
-        pass
-    return local_root
+    return coordination_root.coordination_root(Path(__file__).resolve().parents[3])
 
 
 ROOT = _canonical_repo_root()
-DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
-COORDINATION_DIR = ROOT / "runtime" / "coordination"
-LOCK_FILE = COORDINATION_DIR / "workboard_message.lock"
+DEFAULT_WORKBOARD = coordination_root.default_workboard(ROOT)
+COORDINATION_DIR = coordination_root.coordination_dir(ROOT)
+# ONE board, ONE lock. Messages used to lock workboard_message.lock while
+# claim writes locked workboard_claim.lock and board_io locked workboard.lock,
+# so a message send and a claim write never excluded each other and each
+# could revert the other's whole-file write.
+LOCK_FILE = _board_io.LOCK_FILE
 LOCK_TIMEOUT_SECONDS = 10.0
 LOCK_STALE_SECONDS = 60.0
 MESSAGE_HEADING = "Agent Message Traffic"
@@ -142,37 +117,9 @@ def _now_iso() -> str:
 
 @contextmanager
 def _file_lock(lock_file: Path = LOCK_FILE, timeout: float = LOCK_TIMEOUT_SECONDS):
-    COORDINATION_DIR.mkdir(parents=True, exist_ok=True)
-    deadline = time.time() + timeout
-    fd: int | None = None
-    while True:
-        try:
-            fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, f"pid={os.getpid()} ts={time.time():.3f}".encode("utf-8", errors="ignore"))
-            break
-        except (FileExistsError, PermissionError):
-            try:
-                age = time.time() - lock_file.stat().st_mtime
-            except FileNotFoundError:
-                age = 0.0
-            if age > LOCK_STALE_SECONDS:
-                try:
-                    lock_file.unlink()
-                except (FileNotFoundError, PermissionError):
-                    pass
-                continue
-            if time.time() >= deadline:
-                raise TimeoutError(f"Timed out waiting for lock: {lock_file}")
-            time.sleep(0.05)
-    try:
+    """Delegate to board_io's reentrant lock so nested board writes do not deadlock."""
+    with _board_io.file_lock(lock_file, timeout):
         yield
-    finally:
-        if fd is not None:
-            os.close(fd)
-        try:
-            lock_file.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def resolve_current_agent(explicit: str = "", *, require_binding: bool = False) -> str:
@@ -299,63 +246,6 @@ def _sanitize(label: str, value: str) -> str:
     if not cleaned:
         raise ValueError(f"{label} is required")
     return cleaned
-
-
-def _escape_field_value(value: str) -> str:
-    return str(value or "").replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace(";", "\\;")
-
-
-def _unescape_field_value(value: str) -> str:
-    out: list[str] = []
-    escaped = False
-    for char in str(value or ""):
-        if escaped:
-            if char == "n":
-                out.append("\n")
-            elif char == "r":
-                out.append("\r")
-            elif char in {";", "\\"}:
-                out.append(char)
-            else:
-                out.append("\\")
-                out.append(char)
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        out.append(char)
-    if escaped:
-        out.append("\\")
-    return "".join(out)
-
-
-def _split_kv_parts(token: str) -> list[str]:
-    parts: list[str] = []
-    current: list[str] = []
-    escaped = False
-    for char in str(token or ""):
-        if escaped:
-            current.append("\\")
-            current.append(char)
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if char == ";":
-            part = "".join(current).strip()
-            if part:
-                parts.append(part)
-            current = []
-            continue
-        current.append(char)
-    if escaped:
-        current.append("\\")
-    part = "".join(current).strip()
-    if part:
-        parts.append(part)
-    return parts
 
 
 def _find_section(lines: Sequence[str], *, heading_prefix: str) -> tuple[int, int] | None:
@@ -588,7 +478,14 @@ def list_messages(
     task_id: str = "",
 ) -> tuple[bool, dict[str, object]]:
     if not workboard_path.exists():
-        return True, {"messages": [], "message_count": 0, "missing_workboard": True}
+        # A board that is not there is not an empty inbox. Reporting zero unread
+        # messages here let a gate pass on a path nobody ever wrote to.
+        return False, {
+            "error": f"missing workboard file: {workboard_path}",
+            "missing_workboard": True,
+            "messages": [],
+            "message_count": 0,
+        }
     lines = workboard_path.read_text(encoding="utf-8").splitlines()
     section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
     if section is None:
@@ -696,6 +593,21 @@ def wait_for_messages(
     )
 
 
+# Read receipts live in message_receipts.py -- that module explains why they
+# exist and why the board is deliberately NOT staged.
+from scripts.crew.workboard import message_receipts as _receipts  # noqa: E402
+from scripts.crew.workboard.message_fields import (  # noqa: E402  (row field codec)
+    _escape_field_value,
+    _split_kv_parts,
+    _unescape_field_value,
+)
+
+
+def reconcile_receipts(workboard_path: Path, *, agent: str) -> list[str]:
+    """Replay this agent's receipts onto a board that lost them."""
+    return _receipts.reconcile(workboard_path, agent=agent, list_messages=list_messages, set_state=_set_message_state)
+
+
 def unread_messages(
     workboard_path: Path,
     *,
@@ -704,7 +616,10 @@ def unread_messages(
     agent_clean = str(agent or "").strip()
     if not agent_clean:
         return False, {"error": "agent identity is required for inbox checks"}
-    return list_messages(workboard_path, recipient=agent_clean, state="open")
+    ok, payload = list_messages(workboard_path, recipient=agent_clean, state="open")
+    if not ok:
+        return ok, payload
+    return ok, _receipts.filter_unread(payload, workboard_path, agent_clean)  # type: ignore[arg-type]
 
 
 def send_message(
@@ -838,6 +753,7 @@ def _set_message_state(
     state: str,
     decision: str = "",
     require_claims_to_have_active_task: bool = True,
+    record_receipt: bool = True,
 ) -> tuple[bool, dict[str, object]]:
     with _file_lock():
         msg_key = _norm(msg_id)
@@ -904,6 +820,15 @@ def _set_message_state(
         )
         if not ok:
             return False, {"error": "message update rejected by gate", "violations": violations}
+        if record_receipt:
+            # Durability aid only. A receipt that cannot be written must never
+            # fail an ack that already succeeded on the board -- a coordination
+            # tool that adds a new way to fail is a worse trade than the problem
+            # it solves. The cost of losing one is today's behaviour, exactly.
+            try:
+                _receipts._write_receipt(workboard_path, actor_clean, target, state_clean)
+            except OSError:
+                pass
         return True, {"message": target}
 
 
@@ -914,13 +839,18 @@ def ack_message(
     actor: str,
     decision: str = "",
 ) -> tuple[bool, dict[str, object]]:
-    return _set_message_state(
-        workboard_path,
-        msg_id=msg_id,
-        actor=actor,
-        state="acked",
-        decision=decision,
-    )
+    """Ack one message, and heal any earlier ack whose board write was reverted.
+
+    Reconciliation belongs to what acking MEANS, not to the CLI, so every
+    caller gets it. It writes, which is why no gate read path calls it.
+    """
+    ok, payload = _set_message_state(workboard_path, msg_id=msg_id, actor=actor, state="acked", decision=decision)
+    if ok:
+        restored = reconcile_receipts(workboard_path, agent=actor)
+        if restored:
+            payload = dict(payload)
+            payload["reconciled"] = restored
+    return ok, payload
 
 
 def resolve_message(

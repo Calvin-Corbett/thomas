@@ -52,9 +52,22 @@ HARNESS = REPO_ROOT / "tests" / "web_node" / "code_run_terminal_status.mjs"
 # the adapter configures them at load time.
 SIBLINGS = (
     WEB_JS / "unified_code_lifecycle.js",
+    WEB_JS / "unified_code_artifacts.js",
     WEB_JS / "unified_code_results.js",
     WEB_JS / "unified_code_projects.js",
+    WEB_JS / "unified_code_roster.js",
+    WEB_JS / "unified_code_drawer.js",
+    WEB_JS / "unified_code_agent_chat.js",
+    WEB_JS / "unified_code_cards.js",
+    WEB_JS / "unified_code_live_diff.js",
+    WEB_JS / "unified_code_composer.js",
     WEB_JS / "unified_code_events.js",
+    WEB_JS / "unified_code_live_view.js",
+    WEB_JS / "unified_code_surface.js",
+    WEB_JS / "unified_code_run_stream.js",
+    WEB_JS / "unified_code_questions.js",
+    WEB_JS / "unified_code_controls.js",
+    WEB_JS / "unified_code_view_state.js",
 )
 
 
@@ -67,7 +80,15 @@ def _sources() -> str:
 
     return chr(10).join(
         path.read_text(encoding="utf-8")
-        for path in (CODE_JS, WEB_JS / "unified_code_events.js")
+        for path in (
+            CODE_JS,
+            WEB_JS / "unified_code_events.js",
+            WEB_JS / "unified_code_live_view.js",
+            WEB_JS / "unified_code_surface.js",
+            WEB_JS / "unified_code_run_stream.js",
+            WEB_JS / "unified_code_questions.js",
+            WEB_JS / "unified_code_controls.js",
+        )
     )
 
 
@@ -142,7 +163,7 @@ def test_the_run_status_vocabulary_is_never_taken_from_the_server_wording() -> N
 
     # Both terminal sites must route through the one predicate: the SSE `done`
     # handler and the already-finished `/send` reply.
-    assert code.count("terminalRunStatus(") == 3, (
+    assert len(re.findall(r"(?<!get )terminalRunStatus\(", code)) == 3, (
         "expected one definition and exactly two callers of terminalRunStatus "
         "(the streamed `done` frame and the already-finished send reply)"
     )

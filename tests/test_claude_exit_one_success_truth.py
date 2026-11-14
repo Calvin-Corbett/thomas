@@ -11,12 +11,23 @@ import pytest
 from aiohttp import web
 
 from tests.test_evolve_agent_routes import _new_repo
-from thomas.forge.anvil import forge_code_git, forge_code_runner, forge_code_store
+from thomas.core import persistence
+from thomas.forge.anvil import agent_passes, forge_code_git, forge_code_runner, forge_code_store
 from thomas.forge.anvil.dispatch_claude_cli import CliDispatchResult, dispatch_via_claude_cli
 from thomas.server.routes import evolve_agent_runtime
 
 
+@pytest.fixture(autouse=True)
+def isolated_persistence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(persistence, "_DEFAULT_STATE_FILE", tmp_path / "thomas_state.json")
+    monkeypatch.setattr(persistence, "_DEFAULT_REPORT_DIR", tmp_path / "reports")
+    monkeypatch.setattr(persistence, "_engine", None)
+
+
 class _EmptyStdout:
+    async def read(self, _n: int = -1) -> bytes:
+        return await self.readline()
+
     async def readline(self) -> bytes:
         return b""
 
@@ -58,7 +69,7 @@ def test_claude_final_plus_changed_file_outvotes_exit_one(
             "result": "Done; index.html was built.",
         }
     )
-    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root: {})
+    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root, **_kw: {})
     monkeypatch.setattr(forge_code_git, "project_delta_since", lambda _root, _snap: ["index.html"])
 
     result = dispatch_via_claude_cli(
@@ -95,7 +106,7 @@ def test_claude_final_plus_exit_one_still_must_pass_verification(
         verifier_calls.append((root, changed))
         return False, 7, "the focused check failed"
 
-    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root: {})
+    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root, **_kw: {})
     monkeypatch.setattr(forge_code_git, "project_delta_since", lambda _root, _snap: ["index.html"])
 
     result = dispatch_via_claude_cli(
@@ -126,7 +137,7 @@ def test_partial_narration_plus_changed_file_does_not_outvote_exit_one(
             "message": {"content": [{"type": "text", "text": "I am still building it"}]},
         }
     )
-    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root: {})
+    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root, **_kw: {})
     monkeypatch.setattr(forge_code_git, "project_delta_since", lambda _root, _snap: ["index.html"])
 
     result = dispatch_via_claude_cli(
@@ -149,7 +160,7 @@ def test_runner_marks_its_single_final_verdict(
     events: list[dict[str, Any]] = []
     monkeypatch.setattr(forge_code_runner, "history_turns", lambda _root, _cid: [])
     monkeypatch.setattr(
-        forge_code_runner,
+        agent_passes,
         "dispatch_via_claude_cli",
         lambda *_args, **_kwargs: CliDispatchResult(
             True,

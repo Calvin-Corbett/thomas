@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = REPO_ROOT / "thomas/server/web/chat.html"
 DRAWER_JS = REPO_ROOT / "thomas/server/web/js/workspace_chat_drawer.js"
@@ -14,14 +16,18 @@ LIBRARY_JS = REPO_ROOT / "thomas/server/web/static/my_stuff.script01.js"
 
 
 def test_parent_shell_owns_one_workspace_chat_drawer_and_transforms_top_action() -> None:
-    html = CHAT_HTML.read_text(encoding="utf-8")
+    html = read_chat_sources(CHAT_HTML)
     js = DRAWER_JS.read_text(encoding="utf-8")
     view = DRAWER_VIEW_JS.read_text(encoding="utf-8")
 
     assert html.count("/static/js/workspace_chat_drawer.js") == 1
     assert html.count("/static/js/workspace_chat_drawer_view.js") == 1
     assert html.count("/static/js/workspace_chat_transport.js") == 1
-    assert html.index("workspace_chat_transport.js") < html.index("workspace_chat_drawer_view.js") < html.index("workspace_chat_drawer.js")
+    assert (
+        html.index("workspace_chat_transport.js")
+        < html.index("workspace_chat_drawer_view.js")
+        < html.index("workspace_chat_drawer.js")
+    )
     assert html.count("/static/css/workspace_chat_drawer.css") == 1
     assert 'id="tc-primary-action-label">Canvas</span>' in html
     assert "state.workspaceOpen && window.ThomasWorkspaceChat" in html
@@ -37,7 +43,16 @@ def test_workspace_drawer_uses_scoped_resident_surface_without_general_session_b
     transport = TRANSPORT_JS.read_text(encoding="utf-8")
     js = transport + DRAWER_JS.read_text(encoding="utf-8")
 
-    for mode in ("mission", "office", "app_builder", "my_stuff", "channels", "token_economy", "marketplace", "settings"):
+    for mode in (
+        "mission",
+        "office",
+        "app_builder",
+        "my_stuff",
+        "channels",
+        "token_economy",
+        "marketplace",
+        "settings",
+    ):
         assert f"workspace:{mode}" in transport
     assert "surface_mode: 'workspace'" in js
     assert "context_id: scoped.context" in js

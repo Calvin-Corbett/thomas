@@ -102,7 +102,7 @@ class TestServerMixedModeConcurrency(AioHTTPTestCase):
             )
             return resp.status, _parse_ndjson(await resp.text())
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", _fake_process_message):
             (fast_status, fast_events), (thinking_status, thinking_events) = await asyncio.gather(
                 _call_fast(),
                 _call_thinking(),

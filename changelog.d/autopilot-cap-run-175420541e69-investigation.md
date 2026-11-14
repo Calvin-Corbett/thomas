@@ -1,0 +1,6 @@
+### Changed
+
+- Recorded the investigation of `autopilot_cap_run` fingerprint `175420541e69`; the original incident was not reproduced and no runtime fix is claimed. The supplied diagnostic contains only `{"category": "unavailable"}`, `runtime/logs/issues.jsonl` is absent from this checkout, and Git search found no tracked occurrence of the fingerprint before this fragment was added.
+- Confirmed that `_record_cap` in `thomas/server/routes/evolve_agent_autopilot.py` emits an `autopilot_cap` entry followed by an `autopilot_cap_run` entry for each counted run, recording its run number, outcome, and reason. The supplied category does not identify which run failed or why.
+- Further diagnosis needs sanitized run numbers, outcomes, failure reasons, execution evidence, and the sequence of continuation requests and new instructions around the cap. Credentials and private conversation contents are not needed. Runtime behavior is unchanged.
+- Existing checks in `tests/test_autopilot_counts_only_ran_continuations.py`, `tests/test_autopilot_decides_when_it_is_done.py`, `tests/test_autopilot_keeps_going.py`, and `tests/test_architecture.py` passed together: 139 tests, with five pytest temporary-directory cleanup warnings. These checks do not verify resolution of the reported incident.

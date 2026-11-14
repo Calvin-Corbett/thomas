@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thomas task card · live renderer check</title>
+<style>
+:root{--c-accent:#92e3b0;--c-accent-ink:#10241b;--c-accent-line:#335845;--c-accent-soft:#172a22;--c-surface:#182322;--c-border:#30413d;--c-border-2:#3b514c;--c-text:#f1f7f3;--c-muted:#abbab1;--c-dim:#d1ded4;--font-sans:system-ui,sans-serif}
+body{background:#101a19;color:var(--c-text);font:14px var(--font-sans);margin:0;padding:40px}
+main{max-width:720px;margin:auto}h1{font-size:23px;margin:0 0 8px}p{color:var(--c-muted);margin-bottom:24px}#activity{display:flex;flex-direction:column;align-items:flex-start}#observation{margin-top:24px;color:var(--c-muted)}
+</style>
+</head>
+<body>
+<main><h1>Chat · task updates</h1><p>Thomas project · recorded Build progress. Past four updates the panel offers "Show all"; the card header opens it too. <strong>Keyboard:</strong> this card rebuilds itself every three seconds, the way the delegation poll rebuilds a running one. Tab onto the ✕ or into the updates panel and wait — the focus ring has to still be there afterwards, not back at the top of the page.</p><section id="activity" aria-label="Task card"></section><p><button id="advance" type="button">Record another update</button></p><h2 style="font-size:16px;margin:28px 0 6px">An ordinary task, no Build conversation</h2><p>Same recorded history, read through the same route — this is the card most tasks get.</p><section id="worker-activity" aria-label="Worker task card"></section><h2 style="font-size:16px;margin:28px 0 6px">A finished task whose history could not be read</h2><p>Its first read fails. The panel says so and offers the retry — nothing polls a settled task, so that button is the way back. The second read succeeds. Reach "Try again" by keyboard and press it: the focus ring moves to the reading line, then into the panel as the history lands, never back to the top of the page.</p><section id="stranded-activity" aria-label="Failed-read task card"></section><h2 style="font-size:16px;margin:28px 0 6px">A task you stopped</h2><p>Stopping is recorded with <code>blocker="cancelled"</code>. The update reads "Stopped by you." and stays neutral — a stop you asked for is not a failure, so no red "Blocked:" line.</p><section id="stopped-activity" aria-label="Stopped task card"></section><h2 style="font-size:16px;margin:28px 0 6px">Two workers on one card</h2><p>The panel shows their merged history and tags each line with the worker it came from. The header line stays the task's status — worker attribution belongs in the panel, not in the one ellipsised line above it.</p><section id="merged-activity" aria-label="Two-worker task card"></section><h2 style="font-size:16px;margin:28px 0 6px">Two workers, one of whom did not answer</h2><p>The card reads every handoff it has. One replies and one does not, so what you are looking at is part of the run — the panel says which, and offers the same "Try again". Press it and the missing worker's line appears.</p><section id="partial-activity" aria-label="Part-read task card"></section><div id="observation" role="status">Preparing the task card…</div></main>
+<script src="../../thomas/server/web/js/chat_turn_flow.js"></script>
+<script src="../../thomas/server/web/js/chat_activity_view.js"></script>
+<script src="../../thomas/server/web/js/chat_activity_actions.js"></script>
+<script>
+// Browser fixture: use the app's real card renderer and action handler with
+// deterministic API responses. No mocked HTML or invented completion event.
+const escapeHTML = value => String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const view = window.ThomasChatActivityView.create({esc:escapeHTML,deMd:s=>s});
+window.ThomasChatTurnFlow.partialArtifactsHTML = () => '';
+// The status line arrives carrying the server's "Build update: " provenance
+// marker, exactly as a real delegation row does; the card must read without it.
+const statusLine = window.ThomasChatTurnFlow.progressLabel('Build update: Inspecting the task-card update path');
+const card = {activity:{steps:[{kind:'handoff',id:'visual-exec',buildId:'visual-build',worker:'Thomas',label:statusLine,status:'running'}],expanded:false},text:'',streaming:false};
+const state = {sessionId:'visual-session',messages:[card]};
+const activityEl = document.getElementById('activity');
+// Each read hands back one more durable step, the way a real Build run records
+// them. The last one carries a blocker, so its reason has somewhere to show.
+const recorded=[
+  {summary:'Found the missing update history in the card',at:'2026-08-05T12:00:00Z',state:'in_progress'},
+  {summary:'Checked the card render and confirmed recorded progress',at:'2026-08-05T12:01:00Z',state:'in_progress'},
+  {summary:'Re-ran the delegation detail read',at:'2026-08-05T12:02:00Z',state:'in_progress'},
+  {summary:'Rewrote the card so every recorded update is reachable',at:'2026-08-05T12:03:00Z',state:'in_progress'},
+  {summary:'Ran the integration check',at:'2026-08-05T12:04:00Z',state:'failed',blocker:'Pass budget exhausted after 30 passes'},
+];
+// The ordinary case: a worker task with no Build conversation. Its history is
+// the same recorded transitions[], read through the same /detail route.
+const worker={activity:{steps:[{kind:'handoff',id:'worker-exec',worker:'Nova',label:'Costing the ingredients',status:'running'}],expanded:false},text:'',streaming:false};
+const workerRecorded=[
+  {summary:'Getting started',at:'2026-08-05T12:00:00Z',state:'queued'},
+  {summary:'Laying out the menu',at:'2026-08-05T12:01:00Z',state:'in_progress'},
+  {summary:'Costing the ingredients',at:'2026-08-05T12:02:00Z',state:'in_progress'},
+];
+// A SETTLED task whose first history read fails. The delegation poll is the
+// only automatic retry and it runs while a task is running, so this card is
+// where "temporarily unavailable" needs a control behind the word.
+const stranded={activity:{steps:[{kind:'handoff',id:'stranded-exec',worker:'Nova',label:'Plated the dinner plan',status:'completed'}],expanded:false},text:'',streaming:false};
+const strandedRecorded=[{summary:'Read when asked again',at:'2026-08-05T12:05:00Z',state:'completed'}];
+// A task the reader stopped with the card's own Cancel button. Served here with
+// the raw blocker the runtime records (cancel_execution writes "cancelled"), so
+// what you see is the card staying honest even when the token reaches it — the
+// route drops it as well, which the Python tests cover.
+const stopped={activity:{steps:[{kind:'handoff',id:'stopped-exec',worker:'Nova',label:'Stopped by you.',status:'cancelled'}],expanded:false},text:'',streaming:false};
+const stoppedRecorded=[
+  {summary:'Laying out the menu',at:'2026-08-05T12:00:00Z',state:'in_progress'},
+  {summary:'Stopped by you.',at:'2026-08-05T12:01:00Z',state:'cancelled',blocker:'cancelled'},
+];
+// Two handoffs on ONE card. fetchActivityDetail reads both and tags each line
+// with the worker it came from, so the panel's merged history can be told apart.
+// The header is deliberately worker-free ("attribution lives in the expanded
+// step detail"), so it must show the task's status — it used to read the newest
+// merged line instead, which both duplicated the panel's first row and made the
+// header the one place that "[worker] " marker reached the reader.
+const merged={activity:{steps:[
+  {kind:'handoff',id:'merged-a',buildId:'visual-build',worker:'Thomas',label:'Rewriting the card',status:'completed'},
+  {kind:'handoff',id:'merged-b',buildId:'visual-build-2',worker:'Nova',label:'Checking it in the browser',status:'running'},
+],expanded:false},text:'',streaming:false};
+// Two handoffs where only ONE answers. The card HAS history, so it is not
+// "unavailable" — it is PART of the run, and nothing used to say so: the silent
+// worker's lines were simply absent under a heading counting the ones that
+// arrived, on a settled card that nothing polls.
+const partial={activity:{steps:[
+  {kind:'handoff',id:'partial-a',worker:'Thomas',label:'Rewrote the card',status:'completed'},
+  {kind:'handoff',id:'partial-b',worker:'Nova',label:'Checked it in the browser',status:'completed'},
+],expanded:false},text:'',streaming:false};
+let readCount=0,strandedReads=0,partialReads=0;
+window.fetch=async url=>{
+  if (url.endsWith('/partial-a/detail')) return {ok:true,json:async()=>({ok:true,bot_name:'Thomas',steps:[{summary:'Rewrote the card',at:'2026-08-05T12:00:00Z',state:'completed'}]})};
+  if (url.endsWith('/partial-b/detail')) {
+    partialReads++;
+    if (partialReads===1) return {ok:false,status:503};
+    return {ok:true,json:async()=>({ok:true,bot_name:'Nova',steps:[{summary:'Checked it in the browser',at:'2026-08-05T12:01:00Z',state:'completed'}]})};
+  }
+  if (url.endsWith('/merged-a/detail')) return {ok:true,json:async()=>({ok:true,bot_name:'Thomas',steps:[{summary:'Rewrote the card',at:'2026-08-05T12:00:00Z',state:'completed'}]})};
+  if (url.endsWith('/merged-b/detail')) return {ok:true,json:async()=>({ok:true,bot_name:'Nova',steps:[{summary:'Checking it in the browser',at:'2026-08-05T12:01:00Z',state:'in_progress'}]})};
+  if (url.endsWith('/stopped-exec/detail')) return {ok:true,json:async()=>({ok:true,steps:stoppedRecorded})};
+  if (url.endsWith('/stranded-exec/detail')) {
+    strandedReads++;
+    if (strandedReads===1) return {ok:false,status:503};
+    return {ok:true,json:async()=>({ok:true,steps:strandedRecorded})};
+  }
+  if (url.endsWith('/worker-exec/detail')) return {ok:true,json:async()=>({ok:true,steps:workerRecorded})};
+  if (!url.endsWith('/visual-exec/detail')) throw new Error('Unexpected request: '+url);
+  readCount++;
+  return {ok:true,json:async()=>({ok:true,steps:recorded.slice(0,Math.min(readCount,recorded.length))})};
+};
+const actions=window.ThomasChatActivityActions.create({state,msgRefs:[{activityEl}],activityHTML:view.activityHTML,captureConversation:()=>()=>true});
+window.ThomasCodeMode={openConversation:async id=>{document.getElementById('observation').textContent='Open in Build requested conversation '+id+'.';}};
+const observe=note=>{document.getElementById('observation').textContent=note;};
+actions.renderActivity(0);
+const workerActions=window.ThomasChatActivityActions.create({state:{sessionId:'visual-session',messages:[worker]},msgRefs:[{activityEl:document.getElementById('worker-activity')}],activityHTML:view.activityHTML,captureConversation:()=>()=>true});
+workerActions.renderActivity(0);
+const strandedActions=window.ThomasChatActivityActions.create({state:{sessionId:'visual-session',messages:[stranded]},msgRefs:[{activityEl:document.getElementById('stranded-activity')}],activityHTML:view.activityHTML,captureConversation:()=>()=>true});
+strandedActions.renderActivity(0);
+const stoppedActions=window.ThomasChatActivityActions.create({state:{sessionId:'visual-session',messages:[stopped]},msgRefs:[{activityEl:document.getElementById('stopped-activity')}],activityHTML:view.activityHTML,captureConversation:()=>()=>true});
+stoppedActions.renderActivity(0);
+const mergedActions=window.ThomasChatActivityActions.create({state:{sessionId:'visual-session',messages:[merged]},msgRefs:[{activityEl:document.getElementById('merged-activity')}],activityHTML:view.activityHTML,captureConversation:()=>()=>true});
+mergedActions.renderActivity(0);
+const partialActions=window.ThomasChatActivityActions.create({state:{sessionId:'visual-session',messages:[partial]},msgRefs:[{activityEl:document.getElementById('partial-activity')}],activityHTML:view.activityHTML,captureConversation:()=>()=>true});
+partialActions.renderActivity(0);
+window.advanceTask=async()=>{
+  const activity=state.messages[0].activity;
+  activity.detailLoading=false;activity.detailUnavailable=false;
+  await actions.fetchActivityDetail(0);
+  const count=activity.timeline.length;
+  observe(count+' recorded update'+(count===1?'':'s')+'; task remains running. Collapsed shows the latest 4 — use "Show all" in the panel, or the card header, for the rest.');
+};
+document.getElementById('advance').addEventListener('click',()=>{void window.advanceTask();});
+// The delegation poll rebuilds a RUNNING card's innerHTML every three seconds.
+// That is the condition the keyboard has to survive, so reproduce it here
+// rather than describing it: tab onto the ✕ or into the updates panel and wait.
+window.repaintTicker=setInterval(()=>{actions.renderActivity(0);},3000);
+setTimeout(()=>{observe('First recorded update loaded; task remains running.');},200);
+</script>
+</body>
+</html>

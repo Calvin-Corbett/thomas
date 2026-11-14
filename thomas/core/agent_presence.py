@@ -12,6 +12,28 @@ from typing import Any
 
 from . import agent_presence_inference
 
+# Moved to agent_presence_scope on 2026-09-09 (monolith baseline), re-exported
+# under their original names so every existing caller and test keeps resolving.
+from .agent_presence_scope import (  # noqa: F401  (re-exported API)
+    DEFAULT_INFERRED_EXPIRY_SECONDS,
+    DEFAULT_SCOPE_HOLD_SECONDS,
+    DEFAULT_STALE_SECONDS,
+    _dedupe,
+    _env_int,
+    _from_iso,
+    _gate_message,
+    _hold_expired,
+    _is_coordination_surface,
+    _normalize_scope,
+    _now,
+    _owned_scope,
+    _paths_overlap,
+    _row_idle_seconds,
+    _scope_overlaps,
+    _scope_sample,
+    _to_iso,
+)
+
 # The session layer -- register/heartbeat/close and the identity checks that
 # bind a session to one agent and one PID -- lives in agent_presence_sessions.
 # It is re-exported here so that `agent_presence.register_session(...)` and its
@@ -29,14 +51,23 @@ from .agent_presence_sessions import (  # noqa: F401  (re-exported API)
     resolve_agent_id,
     session_env_exports,
 )
+from .atomic_json import write_json_atomic
+from .git_process import run_git
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "AGENT_ID", "CODEX_AGENT_ID", "GEMINI_AGENT_ID", "CLAUDE_AGENT_ID")
 SESSION_ENV_KEYS = ("THOMAS_AGENT_SESSION_ID", "AGENT_SESSION_ID")
 PROCESS_HINTS = ("codex", "claude", "gemini", "thomas", "cursor", "agent")
-DEFAULT_STALE_SECONDS = 120
-DEFAULT_INFERRED_EXPIRY_SECONDS = 600
 OVERRIDE_REASON_MIN_LEN = 12
+# Not an agent: a synthetic row listing dirty paths that no active scope covers.
+# It is the ABSENCE of a claimant, so it can never be evidence that someone else
+# holds your files -- by construction nobody does. It must stay a warning. Left
+# able to refuse, it closes a circle: a session goes stale after
+# DEFAULT_STALE_SECONDS (120), so by the time an agent reaches its own commit its
+# own scope no longer counts as covering anything, its own edits resurface here as
+# unclaimed activity, and the gate refuses the commit because the files being
+# committed are uncommitted.
+WORKTREE_ACTIVITY_ROW = "unregistered-worktree"
 
 
 def resolve_repo_root(repo_root: str | Path | None = None) -> Path:
@@ -75,80 +106,6 @@ def default_workboard_path(repo_root: str | Path | None = None) -> Path:
     return resolve_repo_root(repo_root) / "plans" / "thomas" / "WORKBOARD.md"
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _to_iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat(timespec="seconds")
-
-
-def _from_iso(value: str | None) -> datetime | None:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except Exception:
-        return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = str(os.getenv(name, "")).strip()
-    try:
-        value = int(raw)
-    except Exception:
-        return default
-    return value if value > 0 else default
-
-
-def _dedupe(values: Sequence[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for value in values:
-        token = str(value or "").strip()
-        if token and token not in seen:
-            seen.add(token)
-            out.append(token)
-    return out
-
-
-def _normalize_scope(scope: str | Sequence[str] | None) -> list[str]:
-    if scope is None:
-        return []
-    parts = str(scope).split(",") if isinstance(scope, str) else [str(item or "") for item in scope]
-    out: list[str] = []
-    for raw in parts:
-        token = str(raw or "").strip().replace("\\", "/")
-        while token.startswith("./"):
-            token = token[2:]
-        while "//" in token:
-            token = token.replace("//", "/")
-        token = token.strip("/") or "."
-        out.append(token)
-    return _dedupe(out)
-
-
-def _paths_overlap(a: str, b: str) -> bool:
-    left = _normalize_scope([a])[0]
-    right = _normalize_scope([b])[0]
-    return left == right or left == "." or right == "." or left.startswith(f"{right}/") or right.startswith(f"{left}/")
-
-
-def _scope_overlaps(left: Sequence[str], right: Sequence[str]) -> bool:
-    return any(_paths_overlap(a, b) for a in left for b in right)
-
-
-def _scope_sample(left: Sequence[str], right: Sequence[str]) -> list[str]:
-    sample: list[str] = []
-    for a in left:
-        for b in right:
-            if _paths_overlap(a, b):
-                sample.append(a if len(a) <= len(b) else b)
-    return _dedupe(sample)[:5]
-
-
 def _read_json(path: Path, default: Any) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -157,24 +114,14 @@ def _read_json(path: Path, default: Any) -> Any:
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    write_json_atomic(path, payload)
 
 
 def _is_pid_alive(pid: int | None) -> bool:
-    if not pid or pid <= 0:
-        return False
-    try:
-        os.kill(int(pid), 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except Exception:
-        return False
-    return True
+    # Never os.kill(pid, 0) on Windows: signal 0 there is CTRL_C_EVENT (see thomas.core.process_alive).
+    from .process_alive import process_alive
+
+    return process_alive(pid)
 
 
 PROCESS_FAMILY_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -366,18 +313,15 @@ def _porcelain_path(line: str) -> str:
 
 
 def _git_dirty_paths(repo_root: Path) -> list[str]:
-    try:
-        proc = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True, check=False,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-        )
-    except Exception:
-        return []
-    if proc.returncode != 0:
+    # Through run_git, which bounds the call and never raises. This had no timeout
+    # at all, and /api/agents/activity reaches it. stdout is read unstripped: a
+    # porcelain line's first two columns are the status (" M path").
+    result = run_git(["status", "--porcelain"], cwd=repo_root)
+    if not result.ok:
         return []
     paths = [
         _porcelain_path(str(line or "").rstrip())
-        for line in str(proc.stdout or "").splitlines()
+        for line in str(result.stdout or "").splitlines()
         if str(line or "").strip() and not str(line).startswith("!!")
     ]
     return _dedupe([path for path in paths if path])
@@ -419,7 +363,6 @@ def _query_process_records(repo_root: Path) -> list[dict[str, Any]]:
                 capture_output=True,
                 text=True,
                 check=False,
-                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             raw = json.loads(proc.stdout or "[]") if proc.returncode == 0 else []
             rows = raw if isinstance(raw, list) else ([raw] if isinstance(raw, dict) else [])
@@ -898,7 +841,7 @@ def collect_presence(
         item for item in activity if not any(_paths_overlap(str(item.get("path") or ""), scope) for scope in claimed)
     ]
     if uncovered:
-        key = "unregistered-worktree"
+        key = WORKTREE_ACTIVITY_ROW
         agents[key] = _merge_row(
             agents.get(key, _base_row(repo, key)),
             {
@@ -1036,6 +979,7 @@ def _append_override_audit(
         "requested_scope": list(requested_scope),
         "reason": str(reason),
         "warnings": list(gate_result.get("warnings") or []),
+        "not_live": list(gate_result.get("not_live") or []),
         "conflicts": list(gate_result.get("conflicts") or []),
     }
     with path.open("a", encoding="utf-8") as handle:
@@ -1055,31 +999,42 @@ def evaluate_soft_gate(
     repo = resolve_repo_root(repo_root)
     actor = resolve_agent_id(actor_agent)
     scope = _normalize_scope(requested_scope)
+    # Overlap is judged on the parts of a scope an agent can actually own. Meeting
+    # on the board is the system working; see _is_coordination_surface.
+    owned = _owned_scope(scope)
     snapshot = collect_presence(repo_root=repo, workboard_path=workboard_path)
     warnings: list[dict[str, Any]] = []
+    not_live: list[dict[str, Any]] = []
     conflicts: list[dict[str, Any]] = []
+    non_blocking: list[dict[str, Any]] = []
     for row in list(snapshot.get("agents") or []):
         agent_id = str(row.get("agent_id") or "").strip()
         if actor and agent_id.lower() == actor.lower():
             continue
-        row_scope = _normalize_scope(row.get("scope"))
+        row_scope = _owned_scope(_normalize_scope(row.get("scope")))
         row_state = str(row.get("state") or "")
         relevant = (
             not scope
-            or (row_scope and _scope_overlaps(scope, row_scope))
+            or (row_scope and _scope_overlaps(owned, row_scope))
             or (row_state == "unregistered" and not row_scope)
         )
         if not relevant:
             continue
         if row_state == "unregistered":
-            warnings.append(
-                {
-                    "agent_id": agent_id,
-                    "state": row_state,
-                    "scope": row_scope,
-                    "message": f"Unregistered activity detected from '{row.get('display_name') or agent_id}'.",
-                }
-            )
+            warning = {
+                "agent_id": agent_id,
+                "state": row_state,
+                "scope": row_scope,
+                "message": f"Unregistered activity detected from '{row.get('display_name') or agent_id}'.",
+            }
+            warnings.append(warning)
+            if not row_scope or agent_id == WORKTREE_ACTIVITY_ROW:
+                # A bare pid that has declared no scope carries no information about
+                # a collision -- it cannot be shown to overlap anything. Every python
+                # process in the checkout produces one, the gates themselves spawn
+                # them, so refusing on it refuses unconditionally. Surfaced and
+                # coordinated below, but it does not decide the gate.
+                non_blocking.append(warning)
         elif not scope and row_state in {"active", "alive", "declared"}:
             conflicts.append(
                 {
@@ -1089,40 +1044,40 @@ def evaluate_soft_gate(
                     "message": f"Agent '{row.get('display_name') or agent_id}' is active in this repo.",
                 }
             )
-        elif scope and row_scope and _scope_overlaps(scope, row_scope) and row_state in {"active", "alive", "declared"}:
+        elif owned and row_scope and _scope_overlaps(owned, row_scope) and row_state in {"active", "alive", "declared"}:
             conflicts.append(
                 {
                     "agent_id": agent_id,
                     "state": row_state,
-                    "scope": _scope_sample(scope, row_scope),
+                    "scope": _scope_sample(owned, row_scope),
                     "message": f"Scope overlaps active agent '{row.get('display_name') or agent_id}'.",
                 }
             )
-        elif scope and row_scope and _scope_overlaps(scope, row_scope) and row_state == "stale":
-            warnings.append(
-                {
-                    "agent_id": agent_id,
-                    "state": row_state,
-                    "scope": _scope_sample(scope, row_scope),
-                    "message": f"Scope overlaps stale agent '{row.get('display_name') or agent_id}'.",
-                }
-            )
-    needs_override = bool(warnings or conflicts)
-    message = ""
-    if needs_override:
-        counts = []
-        if conflicts:
-            counts.append(f"{len(conflicts)} conflict(s)")
-        if warnings:
-            counts.append(f"{len(warnings)} warning(s)")
-        detail = [
-            str(item.get("message") or "")
-            for item in [*conflicts[:2], *warnings[:2]]
-            if str(item.get("message") or "").strip()
-        ]
-        message = "presence gate requires override: " + ", ".join(counts)
-        if detail:
-            message += ". " + " ".join(detail)
+        elif owned and row_scope and _scope_overlaps(owned, row_scope) and row_state == "stale":
+            warning = {
+                "agent_id": agent_id,
+                "state": row_state,
+                "scope": _scope_sample(owned, row_scope),
+                "message": f"Scope overlaps stale agent '{row.get('display_name') or agent_id}'.",
+            }
+            if _hold_expired(row):
+                # Silent past the hold window: still reported, no longer holding.
+                # Nothing in this system ever expired an abandoned session record,
+                # so a row could sit at state=active with a six-day-old heartbeat and
+                # lock its declared files against every other agent for good.
+                not_live.append(warning)
+            else:
+                warnings.append(warning)
+    # The gate refuses on what it KNOWS: a conflict, or a warning naming a path
+    # this actor also wants (a stale agent still holding overlapping scope). It
+    # does not refuse on what it merely noticed -- an unregistered process that has
+    # declared no scope at all, which cannot be shown to overlap anything and which
+    # every python process in this checkout produces. Those are still reported and
+    # still open a coordination thread (_notify_overlap_coordination runs either
+    # way); they just do not get a veto.
+    informative = [item for item in warnings if item not in non_blocking]
+    needs_override = bool(conflicts or informative)
+    message = _gate_message(conflicts, warnings, not_live, needs_override)
     result = {
         "ok": not needs_override,
         "needs_override": needs_override,
@@ -1131,6 +1086,7 @@ def evaluate_soft_gate(
         "actor_agent": actor,
         "requested_scope": scope,
         "warnings": warnings,
+        "not_live": not_live,
         "conflicts": conflicts,
         "message": message,
         "snapshot": snapshot,

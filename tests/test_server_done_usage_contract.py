@@ -87,7 +87,7 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
         sid = str((await sess_resp.json()).get("session_id") or "")
         self.assertTrue(sid)
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", _fake_process_message):
             resp = await self.client.post(
                 "/api/v2/chat",
                 json={
@@ -126,7 +126,7 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
 
     async def test_two_model_owned_turns_preserve_cumulative_session_usage(self):
         session_id = "usage-model-cumulative"
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", _fake_process_message):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", _fake_process_message):
             seeded = await self.client.post(
                 "/api/v2/chat",
                 json={
@@ -181,7 +181,7 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
             )
         ):
             session_id = f"usage-normalization-{index}"
-            with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", processor):
+            with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", processor):
                 response = await self.client.post(
                     "/api/v2/chat",
                     json={

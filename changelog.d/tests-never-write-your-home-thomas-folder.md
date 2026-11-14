@@ -1,0 +1,3 @@
+### Fixed
+
+- You used to get a passing self-edit test run even when it left a copy of a pytest source folder, its baseline, and new lock files in your real `~/.thomas`: on dev 144b1954, 56 passing tests left one copy and 15 locks in a fresh home, while your existing folder held 275 candidate entries (61 baselines from pytest folders) and 716 locks. Tests now set `THOMAS_SELF_EDIT_HOME` to their own run folder, including for child processes; a running Thomas never sets it and still uses the `~/.thomas` of the account it runs as. A new entry in either self-edit folder in your `~/.thomas` during a test run now fails the run and is named. Nothing already there was deleted, so the old test copies are still there for you to remove.

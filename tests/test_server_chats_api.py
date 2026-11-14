@@ -166,7 +166,7 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         orchestrator = Mock(side_effect=AssertionError("workspace created the general orchestrator"))
         with (
             patch("thomas.server.routes.chat_v2.handle_workspace_chat_v2", resident),
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain", orchestrator),
+            patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", orchestrator),
         ):
             response = await self.client.post(
                 "/api/v2/chat",

@@ -1,0 +1,2 @@
+### Changed
+- Thomas's CPU limit is now soft, so he gets more done. You asked on 2026-10-26: "make a soft limiter ... average utilization over 5 mins is 90% then start reducing stuff the focus again is Thomas getting more done". He starts with the whole PC. Only when the whole PC has averaged 90% or more over 5 minutes is his share cut, by 10 points at most once a minute and never under 30%. Once the average is back under 85% it is given back the same way. A short spike slows nothing. Thomas still runs below normal priority, so your own apps win whenever they compete.

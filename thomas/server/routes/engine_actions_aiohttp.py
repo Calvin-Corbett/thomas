@@ -1,4 +1,16 @@
-"""Manual controls for background engine actions."""
+"""Manual controls for background engine actions.
+
+These engines are the only thing in the server that runs an entire maintenance
+cycle in response to one request. ``workspace_sync_engine`` alone shells out to
+git repeatedly (``subprocess.run(["git", ...], timeout=60.0)``) and compiles
+every changed Python file in its own subprocess, and ``engine: "all"`` runs four
+of them back to back -- so awaiting ``run_cycle_once`` where it stands held the
+server's single loop for the whole cycle, which is the outage this endpoint's
+neighbours were just fixed for. ``setup_aiohttp`` already ran the local agent
+engine's identical call in a thread; this one was missed. Every cycle now goes
+through :func:`off_loop`, so the loop keeps answering while the engine works and
+the time it took is on the record.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +18,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiohttp import web
+
+from thomas.core.event_loop_offload import off_loop
 
 SUPPORTED_ENGINES = (
     "code_issue_engine",
@@ -133,7 +147,12 @@ def register_engine_actions_routes(
 
                         runner = get_workspace_sync_engine()
 
-                    result = runner.run_cycle_once(force=force, reason=reason)
+                    result = await off_loop(
+                        f"engine_actions.{each}",
+                        runner.run_cycle_once,
+                        force=force,
+                        reason=reason,
+                    )
                     if not isinstance(result, dict):
                         result = {
                             "ok": False,
@@ -192,7 +211,12 @@ def register_engine_actions_routes(
                     status=400,
                 )
 
-            result = runner.run_cycle_once(force=force, reason=reason)
+            result = await off_loop(
+                f"engine_actions.{engine}",
+                runner.run_cycle_once,
+                force=force,
+                reason=reason,
+            )
         except Exception as exc:
             return web.json_response(
                 {

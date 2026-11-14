@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -127,14 +128,6 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         "thomas.server.audit_log",
         SimpleNamespace(AuditLog=lambda path, redactor: SimpleNamespace(path=path, redactor=redactor)),
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "thomas.server.routes.audit",
-        SimpleNamespace(
-            handle_audit_files=lambda request: (b"{}", 200, {}),
-            handle_audit_run_files=lambda request, run_id: (f'{{"run":"{run_id}"}}'.encode(), 200, {}),
-        ),
-    )
     monkeypatch.setattr(app_core._file_audit, "init_audit", lambda path: None)
     monkeypatch.setitem(sys.modules, "thomas.agent.approval", SimpleNamespace(ApprovalBroker=lambda: SimpleNamespace()))
     monkeypatch.setitem(
@@ -165,18 +158,16 @@ def patch_create_app_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.marketplace.realtime.routes",
-        SimpleNamespace(setup_realtime_routes=lambda app, require_api_access=None: None),
-    )
-    monkeypatch.setitem(
-        sys.modules,
         "thomas.marketplace.autonomy",
-        SimpleNamespace(install_autonomy=lambda app, config, enabled=False, api_token=None: None),
+        # **kwargs so a new keyword on the real install_autonomy (chat_adapter
+        # today) does not turn this double into a TypeError the boot path never
+        # catches.
+        SimpleNamespace(install_autonomy=lambda app, config, **kwargs: None),
     )
     monkeypatch.setitem(
         sys.modules,
         "thomas.core.engine_manager",
-        SimpleNamespace(get_engine_manager=lambda: SimpleNamespace(start_all=lambda: {"ok": True})),
+        SimpleNamespace(get_engine_manager=lambda: SimpleNamespace(start_all=lambda **_: {"ok": True})),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -230,6 +221,35 @@ def test_create_app_applies_model_resolution_and_health_security_flag(
 
 
 @pytest.mark.asyncio
+async def test_create_app_recovery_updates_its_own_secret_store(
+    tmp_path: Path, patch_create_app_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import time
+
+    from thomas.server import openai_codex_oauth as oauth
+    from thomas.server.secrets import SecretStore
+
+    monkeypatch.setattr(app_core, "SecretStore", SecretStore)
+    monkeypatch.delenv("THOMAS_SECRET_ROOT", raising=False)
+    home = tmp_path / "codex"
+    home.mkdir()
+    (home / "auth.json").write_text(json.dumps({"tokens": {"access_token": "live"}}), encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setattr(oauth, "_server_secret_store", None)
+    app = app_core.create_app(_base_config(tmp_path))
+    store = app[APP_SECRETS]
+    oauth.write_openai_codex_token(store, "openai_codex", {"access_token": "old", "expires_at": time.time() + 3600})
+    replacement, live_rejected = await oauth._recover_rejected_access_token("openai_codex", "old")
+    assert replacement == "live" and live_rejected is True
+    assert oauth._default_secret_store() is store
+    assert oauth.read_openai_codex_token(store, "openai_codex")["access_token"] == "live"
+    store.set("another", "value", persist=True)
+    assert oauth.read_openai_codex_token(SecretStore(store._root_dir), "openai_codex")["access_token"] == "live"
+    monkeypatch.setattr(oauth, "_server_secret_store", None)
+
+
+@pytest.mark.asyncio
 async def test_api_health_reports_protected_mode_and_bootdoctor_routes(
     tmp_path: Path, patch_create_app_dependencies: None
 ) -> None:
@@ -258,6 +278,89 @@ async def test_api_health_reports_protected_mode_and_bootdoctor_routes(
         assert status_payload["status"]["severity"] == "ok"
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_api_health_uses_the_build_stamp_from_app_start(
+    tmp_path: Path, patch_create_app_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The build stamp is captured when the application starts, not on a health request."""
+    ran_on: list[threading.Thread] = []
+
+    def record_build_info() -> dict[str, object]:
+        ran_on.append(threading.current_thread())
+        return {"version": "test", "commit": "abc1234", "branch": "dev", "dirty": False, "root": str(tmp_path)}
+
+    monkeypatch.setitem(sys.modules, "thomas.core.build_info", SimpleNamespace(build_info=record_build_info))
+    app = app_core.create_app(_base_config(tmp_path))
+    client = await _start_client(app)
+    try:
+        payload = await (await client.get("/api/health")).json()
+    finally:
+        await client.close()
+
+    assert payload["build"]["commit"] == "abc1234", "the stamp must still reach the payload"
+    assert ran_on, "application startup never asked for the build stamp"
+    assert len(ran_on) == 1, "health must reuse the startup stamp, not look it up again"
+    assert ran_on[0] is threading.main_thread()
+
+
+@pytest.mark.asyncio
+async def test_health_keeps_running_commit_when_checkout_moves(
+    tmp_path: Path, patch_create_app_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from thomas.core.git_process import GitResult
+
+    monkeypatch.setitem(
+        sys.modules,
+        "thomas.core.build_info",
+        SimpleNamespace(build_info=lambda: {"version": "test", "commit": "abc12345", "root": str(tmp_path)}),
+    )
+    seen: list[tuple[str, ...]] = []
+
+    def newer_head(args, **_kwargs):  # noqa: ANN001, ANN202
+        seen.append(tuple(args))
+        return GitResult(0, "def67890\n", "", False, 0.0)
+
+    monkeypatch.setattr("thomas.core.git_process.run_git", newer_head)
+    app = app_core.create_app(_base_config(tmp_path))
+    monkeypatch.setattr(sys.modules["thomas.core.build_info"], "build_info", lambda: {"commit": "def67890"})
+    client = await _start_client(app)
+    try:
+        payload = await (await client.get("/api/health")).json()
+    finally:
+        await client.close()
+    assert payload["build"]["commit"] == "abc12345"
+    assert payload["build"]["latest_commit"] == "def67890"
+    assert payload["build"]["stale"] is True
+    assert seen == [("rev-parse", "--short=8", "HEAD")]
+
+
+@pytest.mark.asyncio
+async def test_health_counts_a_swapped_landing_as_served(
+    tmp_path: Path, patch_create_app_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A landing swapped into the running rows (landed_code_reload.APP_LANDED_SWAP_BASE) is not "newer code"."""
+    from thomas.core.git_process import GitResult
+
+    monkeypatch.setitem(
+        sys.modules,
+        "thomas.core.build_info",
+        SimpleNamespace(build_info=lambda: {"version": "test", "commit": "abc12345", "root": str(tmp_path)}),
+    )
+    monkeypatch.setattr(
+        "thomas.core.git_process.run_git", lambda args, **_kwargs: GitResult(0, "def67890\n", "", False, 0.0)
+    )
+    app = app_core.create_app(_base_config(tmp_path))
+    app["landed_swap_base"] = "def67890" + "0" * 32
+    client = await _start_client(app)
+    try:
+        payload = await (await client.get("/api/health")).json()
+    finally:
+        await client.close()
+    assert payload["build"]["commit"] == "abc12345"
+    assert payload["build"]["swapped_commit"] == "def67890"
+    assert payload["build"]["stale"] is False
 
 
 @pytest.mark.asyncio
@@ -321,8 +424,8 @@ async def test_api_bootdoctor_report_and_actions_cover_success_and_failures(
 
         retry = await client.post("/api/bootdoctor/action", json={"action": "retry_repair", "reason": "Investigate"})
         assert retry.status == 200
-        assert popen_calls and "report" in popen_calls[0]
-        assert "Investigate" in popen_calls[0]
+        # This is the global Popen, so the first build_info on this worker puts its git call ahead of the report.
+        assert any("report" in call and "Investigate" in call for call in popen_calls)
         assert write_calls
 
         rescue = await client.post("/api/bootdoctor/action", json={"action": "open_rescue"})
@@ -430,19 +533,8 @@ async def test_create_app_health_surfaces_optional_subsystem_failures(
     )
     monkeypatch.setitem(
         sys.modules,
-        "thomas.marketplace.realtime.routes",
-        SimpleNamespace(
-            setup_realtime_routes=lambda app, require_api_access=None: (_ for _ in ()).throw(RuntimeError("realtime"))
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules,
         "thomas.marketplace.autonomy",
-        SimpleNamespace(
-            install_autonomy=lambda app, config, enabled=False, api_token=None: (_ for _ in ()).throw(
-                ValueError("autonomy")
-            )
-        ),
+        SimpleNamespace(install_autonomy=lambda app, config, **kwargs: (_ for _ in ()).throw(ValueError("autonomy"))),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -458,9 +550,7 @@ async def test_create_app_health_surfaces_optional_subsystem_failures(
         payload = await response.json()
         assert payload["status"] == "degraded"
         degraded = set(payload["degraded"])
-        assert {"task_ledger", "action_audit", "file_audit", "guardrails", "realtime", "autonomy", "engines"}.issubset(
-            degraded
-        )
+        assert {"task_ledger", "action_audit", "file_audit", "guardrails", "autonomy", "engines"}.issubset(degraded)
         assert payload["security"]["protected_mode"] is True
     finally:
         await client.close()
@@ -483,11 +573,10 @@ async def test_audit_routes_and_guardrail_pref_denies_are_wired(
         redact_additional_patterns=["secret"],
         guardrails=SimpleNamespace(enabled=True, approval_timeout_s=5, no_human_mode="off"),
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "thomas.server.routes.audit",
-        SimpleNamespace(handle_audit_files=_handle_audit_files, handle_audit_run_files=_handle_audit_run_files),
-    )
+    # The file_audit row registers the two routes, and they call these two names in the module at each request.
+    # This test builds the app without the real middleware or any row, so the routes go on a bare app of their own.
+    monkeypatch.setattr("thomas.server.routes.audit.handle_audit_files", _handle_audit_files)
+    monkeypatch.setattr("thomas.server.routes.audit.handle_audit_run_files", _handle_audit_run_files)
     monkeypatch.setitem(
         sys.modules,
         "thomas.preferences.store",
@@ -499,20 +588,24 @@ async def test_audit_routes_and_guardrail_pref_denies_are_wired(
         "thomas.marketplace.policy.config",
         SimpleNamespace(load_policy_config=lambda root: policy_cfg),
     )
-    monkeypatch.setattr(app_core, "_require_api_access", lambda request: None, raising=False)
 
-    app = app_core.create_app(_base_config(tmp_path))
-    client = await _start_client(app)
+    from thomas.server.routes.audit import register_audit_routes
+
+    bare = web.Application()
+    register_audit_routes(bare, require_api_access=lambda request: None)
+    audit_client = await _start_client(bare)
     try:
-        files = await client.get("/api/audit/files")
+        files = await audit_client.get("/api/audit/files")
         assert files.status == 200
         assert await files.text() == '{"files":1}'
 
-        run_files = await client.get("/api/audit/runs/run-7/files")
+        run_files = await audit_client.get("/api/audit/runs/run-7/files")
         assert run_files.status == 200
         assert await run_files.text() == '{"run":"run-7"}'
     finally:
-        await client.close()
+        await audit_client.close()
+
+    app = app_core.create_app(_base_config(tmp_path))
 
     deny_groups = set(app[APP_GUARDRAILS_CTX]["config"].deny_groups)
     assert {"shell", "network", "browser", "git"}.issubset(deny_groups)
@@ -548,16 +641,47 @@ async def test_create_app_loads_default_config_and_uses_posix_rescue_bootdoctor(
 
     app = app_core.create_app()
     app[app_core.APP_BOOT_DOCTOR_ROOT] = tmp_path
-    monkeypatch.setattr(app_core.os, "name", "posix")
-    monkeypatch.setattr(app_core, "Path", type(tmp_path))
     client = await _start_client(app)
     try:
-        rescue = await client.post("/api/bootdoctor/action", json={"action": "open_rescue", "reason": "Escalate"})
-        assert rescue.status == 200
-        assert (await rescue.json())["action"] == "open_rescue"
+        # `app_core.os` is the real os module, so this patch is process-wide:
+        # hold it only across the request, or the app's own cleanup (the
+        # scheduler's file lock, for one) takes the posix branch too.
+        with monkeypatch.context() as posix:
+            posix.setattr(app_core.os, "name", "posix")
+            posix.setattr(app_core, "Path", type(tmp_path))
+            rescue = await client.post("/api/bootdoctor/action", json={"action": "open_rescue", "reason": "Escalate"})
+            assert rescue.status == 200
+            assert (await rescue.json())["action"] == "open_rescue"
     finally:
         await client.close()
 
-    assert popen_calls
-    assert popen_calls[0][:4] == [sys.executable, "-m", "thomas.bootdoctor", "rescue"]
-    assert "--startup-context" in popen_calls[0]
+    # This is the global Popen, so the first build_info on this worker puts its git call ahead of the rescue.
+    rescues = [call for call in popen_calls if call[:4] == [sys.executable, "-m", "thomas.bootdoctor", "rescue"]]
+    assert rescues
+    assert "--startup-context" in rescues[0]
+
+
+@pytest.mark.asyncio
+async def test_api_health_reads_its_preference_off_the_event_loop(
+    tmp_path: Path, patch_create_app_dependencies: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On 2026-10-27 the server's freeze dumps showed /api/health opening the preferences database on the event loop:
+    while that database was busy, every request waited behind a health check for up to its 30 s timeout."""
+    opened_on: list[int] = []
+
+    class _Recording(_PrefsStore):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            opened_on.append(threading.get_ident())
+            super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+
+    app = app_core.create_app(_base_config(tmp_path))
+    monkeypatch.setattr(sys.modules["thomas.preferences.store"], "PreferencesStore", _Recording)
+    client = await _start_client(app)
+    try:
+        loop_thread = threading.get_ident()
+        health = await client.get("/api/health")
+        assert health.status == 200
+        assert (await health.json())["security"]["protected_mode"] is True
+    finally:
+        await client.close()
+    assert opened_on and loop_thread not in opened_on

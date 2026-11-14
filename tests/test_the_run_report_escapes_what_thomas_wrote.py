@@ -1,7 +1,7 @@
 """Everything in the run report is untrusted text rendered into the page.
 
 The report carries filenames, tool output, verification evidence and error
-messages — all produced by a model or by code it generated, none of it written
+messages â€” all produced by a model or by code it generated, none of it written
 by the person reading it. It is built with template strings and assigned via
 innerHTML, so an unescaped field is a script tag in the owner's own UI.
 
@@ -10,7 +10,7 @@ state in which a control disappears during an ordinary refactor.
 
 The risk grew concrete on 2026-07-28: the report began carrying the names of
 files another code task created. A filename is attacker-influenced in the
-weakest sense — the model chooses it — but "the model chooses it" is exactly
+weakest sense â€” the model chooses it â€” but "the model chooses it" is exactly
 the class of input that should never be trusted into markup.
 """
 
@@ -18,6 +18,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+from tests.web_fixtures.chat_sources import read_chat_sources
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
 
 WEB_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js"
 # The report and the artifact cards moved to a sibling module when
@@ -34,30 +37,11 @@ CODE_EVENTS_JS = WEB_JS / "unified_code_events.js"
 
 
 def _js() -> str:
-    return chr(10).join(
-        path.read_text(encoding="utf-8")
-        for path in (CODE_JS, CODE_RESULTS_JS, CODE_EVENTS_JS)
-    )
+    return read_code_sources(WEB_JS)
+
 
 def _function_body(name: str) -> str:
-    """The body of one top-level function, whichever module the split left it in.
-
-    Sliced at the next function *header* rather than at a literal two-space
-    "function": the event-render cluster sits a level deeper now, inside a
-    create() factory. A fixed-indent delimiter would not have raised here --
-    str.split returns the whole remainder when it matches nothing, so each
-    assertion below would have quietly begun scanning the rest of the file, and
-    a positive one could then pass for the wrong reason.
-    """
-
-    for path in (CODE_JS, CODE_EVENTS_JS):
-        text = path.read_text(encoding="utf-8")
-        if f"function {name}" not in text:
-            continue
-        after = text.split(f"function {name}", 1)[1]
-        return re.split(r"\n\s+(?:async )?function ", after, maxsplit=1)[0]
-    raise AssertionError(f"{name}() is in neither Code module")
-
+    return code_function_body(WEB_JS, name)
 
 
 def test_the_escaper_covers_every_dangerous_character() -> None:
@@ -90,18 +74,25 @@ def test_the_section_title_is_escaped_too() -> None:
 
 def test_every_filename_reaching_the_dom_is_escaped() -> None:
     """Artifact cards carry names Thomas chose, into attributes and text. The
-    card markup was rewritten heavily on 2026-07-28 — thumbnails, an inline
-    stage, a download control, edit-mode identities — and each rewrite is a
+    card markup was rewritten heavily on 2026-07-28 â€” thumbnails, an inline
+    stage, a download control, edit-mode identities â€” and each rewrite is a
     chance to interpolate a name raw.
 
     Audited then: the only bare `${file}` builds a JavaScript key, not markup.
-    Every path into the document escapes."""
-    body = _js().split("function artifactCardsHtml", 1)[1].split("\n  }\n", 1)[0]
+    Every path into the document escapes.
 
-    for attribute in ("data-code-open-artifact", "data-code-save-artifact", "data-code-artifact-slot"):
-        assert f'{attribute}="${{esc(' in body, f"{attribute} interpolates a filename unescaped"
-    assert 'title="Download ${esc(file)}"' in body
-    assert 'src="${esc(doc)}"' in body, "a preview URL is interpolated raw into an attribute"
+    The 2026-10 Build redesign replaced the card's Download / Open in chat /
+    separate-window buttons with one row under the turn (Open in a tab / Keep
+    all / Review N files, ThomasCodeCards.artifactActionsHtml); the tab's href
+    carries the file name, so it is held to the same rule there."""
+    body = code_function_body(WEB_JS, "plainCardHtml")
+
+    for attribute in ("data-code-open-artifact", "data-code-artifact-slot"):
+        assert f'{attribute}="${{deps.esc(' in body, f"{attribute} interpolates a filename unescaped"
+    live = code_function_body(WEB_JS, "livePreviewHtml")
+    assert 'data-live-src="${deps.esc(doc)}"' in live, "a preview URL is interpolated raw into an attribute"
+    assert 'href="${deps.esc(href)}"' in live, "the new-tab link interpolates the file URL unescaped"
+    assert 'data-code-live="${deps.esc(slot)}"' in live and "${deps.esc(title)}" in live
 
 
 CHAT_HTML = WEB_JS.parent / "chat.html"
@@ -120,7 +111,7 @@ def test_the_code_reply_renders_markdown_through_chats_renderer() -> None:
     # The reply is now built per outcome (ok / stopped / failed-with-answer),
     # and every branch that carries model prose must still route it through the
     # markdown path: the answer on both outcomes, and the failure note.
-    assert "replyHtml(answer" in body, "the model's answer no longer goes through the markdown path"
+    assert "replyBlockHtml(answer" in body, "the model's answer no longer goes through the markdown path"
     assert "replyHtml(failure)" in body, "the failure note no longer goes through the markdown path"
     assert "esc(answer" not in body, "the answer is being double-handled"
 
@@ -140,21 +131,29 @@ def test_progress_notes_use_the_inline_renderer_only() -> None:
 
     helper = _function_body("progressHtml")
     assert "mdInline" in helper
-    assert "mdToHtml" not in helper, (
-        "the block renderer would put <p>/<ul> inside the note's <span>"
-    )
+    assert "mdToHtml" not in helper, "the block renderer would put <p>/<ul> inside the note's <span>"
     assert "return esc(text)" in helper, "no fallback for a shell-less load"
 
 
 def test_raw_tool_output_is_never_rendered_as_markdown() -> None:
     """Technical rows carry command output, not prose. Backticks and asterisks in
-    a shell line are characters, not formatting, and must stay literal."""
+    a shell line are characters, not formatting, and must stay literal.
+
+    Since the 2026-10 redesign a technical event is drawn as a work row by
+    ThomasCodeCards.workRowHtml: the event cluster hands it the raw label as
+    TEXT, and the row escapes it into its <pre>. Both halves are pinned."""
     body = _function_body("eventHtml")
     technical = body.split("isTechnicalEvent(event)", 1)[1].split("const label", 1)[0]
 
-    assert "esc(eventLabel(event))" in technical
+    assert "workRowHtml(" in technical
+    assert "text: eventLabel(event)" in technical
     assert "progressHtml" not in technical
     assert "replyHtml" not in technical
+
+    row = _function_body("workRowHtml")
+    assert "<pre>${esc(full)}</pre>" in row, "the row's full output is not escaped into its body"
+    for renderer in ("mdInline", "mdToHtml", "progressHtml", "ThomasMarkdown"):
+        assert renderer not in row, f"a work row renders tool output through {renderer}"
 
 
 def test_the_code_reply_falls_back_to_the_plain_escaper() -> None:
@@ -177,11 +176,11 @@ def test_the_markdown_renderer_escapes_before_it_makes_any_tags() -> None:
     If this line ever moves after the replacements, both Chat and Code become
     injectable from model output at once.
     """
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
     body = text.split("function _mdInline", 1)[1].split("function mdToHtml", 1)[0]
 
     first = next(line.strip() for line in body.splitlines() if line.strip().startswith("s ="))
-    assert first == "s = esc(s);", f"escaping is no longer the first step: {first!r}"
+    assert first == "s = deps.esc(s);", f"escaping is no longer the first step: {first!r}"
     # Links are restricted to http(s), so `javascript:` never becomes an anchor.
     assert "(https?:" in body
 
@@ -189,7 +188,7 @@ def test_the_markdown_renderer_escapes_before_it_makes_any_tags() -> None:
 def test_the_shared_renderer_is_exported_without_assuming_a_window() -> None:
     """The markdown contract harness evaluates chat.html's script in a VM with no
     `window`; an unguarded assignment took that test down."""
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     line = next(ln for ln in text.splitlines() if "window.ThomasMarkdown =" in ln)
     # Both renderers: the block one for replies, the inline one for progress

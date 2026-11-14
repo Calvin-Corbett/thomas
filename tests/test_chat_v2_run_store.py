@@ -196,8 +196,8 @@ async def test_cancelled_handler_finalizes_failed_run_once_and_cancels_launcher(
         def __init__(self) -> None:
             self.calls: list[dict[str, object]] = []
 
-        def finish(self, *, ok: bool, usage=None) -> None:  # noqa: ANN001
-            self.calls.append({"ok": ok, "usage": usage})
+        def finish(self, *, ok: bool, usage=None, error=None) -> None:  # noqa: ANN001
+            self.calls.append({"ok": ok, "usage": usage, "error": error})
 
     recorder = _Recorder()
     lifecycle_ready = asyncio.Event()
@@ -220,7 +220,7 @@ async def test_cancelled_handler_finalizes_failed_run_once_and_cancels_launcher(
 
     lifecycle = state["lifecycle"]
     launcher = state["launcher"]
-    assert recorder.calls == [{"ok": False, "usage": {"total_tokens": 9}}]
+    assert recorder.calls == [{"ok": False, "usage": {"total_tokens": 9}, "error": "chat turn cancelled"}]
     assert isinstance(launcher, asyncio.Task) and launcher.cancelled()
     assert isinstance(lifecycle, ChatV2RunLifecycle)
     lifecycle.finish(ok=True)

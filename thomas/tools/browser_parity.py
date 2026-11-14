@@ -29,6 +29,11 @@ def telemetry_for(session_name: str) -> dict[str, Any]:
     return _TELEMETRY.setdefault(str(session_name or "default"), {"console": [], "network": [], "page": None})
 
 
+def forget_telemetry() -> None:
+    """Drop every session's recorded console and network rows, so a browser started later begins with none."""
+    _TELEMETRY.clear()
+
+
 def _push(rows: list[dict[str, Any]], row: dict[str, Any]) -> None:
     rows.append(row)
     if len(rows) > _TELEMETRY_KEEP:
@@ -149,6 +154,11 @@ class SensitiveSiteGuard(_Wrapped):
 
 
 class TelemetryOnOpen(_Wrapped):
+    def for_workspace(self, workspace: Any) -> Tool:
+        """The same wrapped tool for another run's folder, or this one if the tool inside has no folder."""
+        rebind = getattr(self._inner, "for_workspace", None)
+        return TelemetryOnOpen(rebind(workspace)) if callable(rebind) else self
+
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         try:
             name, _sess, page = await _session_page(args)
@@ -255,6 +265,7 @@ __all__ = [
     "SensitiveSiteGuard",
     "TelemetryOnOpen",
     "attach_telemetry",
+    "forget_telemetry",
     "install_browser_parity",
     "telemetry_for",
 ]

@@ -40,6 +40,9 @@ class _FakeClient:
         assert tools is None, "generation must not hand the model tools"
         return {"text": self.reply, "tool_calls": [], "usage": None}
 
+    async def close(self):
+        self.closed = True
+
 
 class TestCompanionGenerate(AioHTTPTestCase):
     def setUp(self) -> None:
@@ -72,9 +75,7 @@ class TestCompanionGenerate(AioHTTPTestCase):
         if reply is not None:
             client = type("_Client", (_FakeClient,), {"reply": reply})
         with mock.patch("thomas.core.llm_client.LLMClient", client):
-            return await self.client.post(
-                "/api/companion/v1/surface/generate", json={"description": description}
-            )
+            return await self.client.post("/api/companion/v1/surface/generate", json={"description": description})
 
     async def test_description_becomes_an_installed_surface(self):
         resp = await self._generate()
@@ -109,9 +110,7 @@ class TestCompanionGenerate(AioHTTPTestCase):
             json={"key": "glasses", "value": 3},
         )
         self.assertEqual(wrote.status, 200, await wrote.text())
-        read = await self.client.post(
-            f"/api/companion/v1/surface/{module_id}/storage/get", json={"key": "glasses"}
-        )
+        read = await self.client.post(f"/api/companion/v1/surface/{module_id}/storage/get", json={"key": "glasses"})
         self.assertEqual((await read.json())["value"], 3)
 
     async def test_repeat_builds_do_not_collide(self):
@@ -148,7 +147,7 @@ class TestGeneratedNameHandling(unittest.TestCase):
     def test_markup_is_stripped_from_names(self):
         from thomas.server.routes.companion_generate_aiohttp import _clean_title
 
-        self.assertNotIn("<", _clean_title('<img src=x onerror=alert(1)>Fit'))
+        self.assertNotIn("<", _clean_title("<img src=x onerror=alert(1)>Fit"))
         self.assertNotIn(">", _clean_title("<b>Fit</b>"))
         self.assertNotIn('"', _clean_title('say "hi"'))
 

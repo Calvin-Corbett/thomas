@@ -38,6 +38,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+from thomas.core.pause import paused
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -113,6 +115,7 @@ class InitiativeEngine:
         self._last_user_ts: float = time.monotonic()
         self._running: bool = False
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._executor_fn: Callable | None = None
         self._notify_fn: Callable | None = None
         self._last_summary_date: str | None = None
@@ -144,6 +147,7 @@ class InitiativeEngine:
         if self._running:
             return
         self._running = True
+        self._stopping.clear()
         self._thread = threading.Thread(
             target=self._poll_loop,
             daemon=True,
@@ -158,6 +162,7 @@ class InitiativeEngine:
 
     def stop(self) -> None:
         self._running = False
+        self._stopping.set()
 
     def record_user_message(self) -> None:
         """Call on every incoming user message to reset the idle clock."""
@@ -174,14 +179,15 @@ class InitiativeEngine:
     # ------------------------------------------------------------------
 
     def _poll_loop(self) -> None:
-        while self._running:
-            time.sleep(POLL_INTERVAL_S)
+        while self._running and not self._stopping.wait(POLL_INTERVAL_S):
             try:
                 self._tick()
             except Exception as e:
                 log.error("InitiativeEngine tick error: %s", e)
 
     def _tick(self) -> None:
+        if paused():
+            return
         self._maybe_daily_summary()
         if not self.is_idle():
             return

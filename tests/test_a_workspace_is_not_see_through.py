@@ -23,7 +23,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CHAT_HTML = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "chat.html"
+WEB = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web"
+CHAT_HTML = WEB / "chat.html"
+WORKSPACE_NAVIGATION_JS = WEB / "js" / "chat_workspace_navigation.js"
 
 
 def _frame_style() -> str:
@@ -64,7 +66,7 @@ def test_the_direct_workspace_frame_is_not_see_through_either() -> None:
     """The JS-created frame (mission / settings / my-stuff embeds) shares the
     same glass. It was left `background:transparent` when the markup frame was
     fixed, so those embeds sat on raw sprites."""
-    html = CHAT_HTML.read_text(encoding="utf-8")
+    html = WORKSPACE_NAVIGATION_JS.read_text(encoding="utf-8")
     match = re.search(r"frame\.style\.cssText = '([^']*)'", html)
     assert match, "the direct workspace frame creation is gone; rewrite this guard"
     style = match.group(1)

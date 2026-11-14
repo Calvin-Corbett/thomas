@@ -6,12 +6,13 @@ import asyncio
 import logging
 import os
 import time
+from contextlib import aclosing
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from thomas.agent.acceptance_runtime import effort_level, finish_contract, settle_contract
-from thomas.agent.completion_gate import GATE_BLOCK, evaluate_completion_gate
-from thomas.agent.harness_guard import guard_path, run_monolith_guard
+from thomas.agent.acceptance_runtime import effort_level, finish_contract, settle_contract, verification_workspace
+from thomas.agent.completion_gate import GATE_BLOCK, GATE_BLOCKED_ERROR, evaluate_completion_gate
+from thomas.agent.harness_guard import changed_paths, guard_path, run_monolith_guard
 from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.agent.verification_contract import apply_verification_plan, plan_for, verification_contract_enabled
 from thomas.core.config import load_config
@@ -82,18 +83,6 @@ async def handle_post_loop_completion(
     prune_window_func,
 ):
     """Post-loop validation, quality gates, and final event generation."""
-    # Cleanup: Auto-capture research into library if enabled
-    if prompt_text and state.text_response:
-        try:
-            self._auto_capture_research(
-                route=route,
-                query=prompt_text,
-                answer=state.text_response,
-                job_type=job_type,
-            )
-        except Exception as e:  # REVIEWED: log-and-continue
-            log.debug("Research auto-capture failed: %s", e)
-
     # Build token report
     usage_after = self._session_usage_snapshot()
     usage_obj = self._usage_delta(usage_before, usage_after)
@@ -189,6 +178,8 @@ async def handle_post_loop_completion(
             "If this repeats, narrow scope or lower memory/tool breadth to avoid oversized prompt rebuilds."
         )
 
+    workspace = verification_workspace(self)
+
     # Evaluate rules of road
     _low_intent_skip_quality = {"casual_chat", "personal_context", "assistant_meta", "general"}
     cfg_errors: list[str] = []
@@ -196,6 +187,8 @@ async def handle_post_loop_completion(
     if str(route.path or "") not in _low_intent_skip_quality:
         try:
             cfg_path = Path(os.environ.get("THOMAS_CONFIG") or "thomas.toml")
+            if not cfg_path.is_absolute():
+                cfg_path = workspace / cfg_path
             loaded_cfg = load_config(cfg_path)
             cfg_errors = loaded_cfg.validate()
             cfg_unknown = list(loaded_cfg.unknown_core_keys)
@@ -226,9 +219,18 @@ async def handle_post_loop_completion(
         require_guard
         and self.tools.get("shell.exec") is None
         and any(_is_write_tool(str(evt.get("name") or "")) for evt in combined_quality_events)
-        and guard_path(Path.cwd()).is_file()
+        and guard_path(workspace).is_file()
     ):
-        guard_receipt = await asyncio.to_thread(run_monolith_guard, Path.cwd())
+        # Judge the files this task changed, as the commit gate does, not old
+        # oversized files it never touched. Write events name their file; a
+        # multi-file patch does not, so git's view of changed files is added.
+        written = {
+            str(evt.get("path") or "")
+            for evt in combined_quality_events
+            if _is_write_tool(str(evt.get("name") or "")) and evt.get("path")
+        }
+        written |= changed_paths(workspace) or set()
+        guard_receipt = await asyncio.to_thread(run_monolith_guard, workspace, only_paths=written)
     rules_report = evaluate_rules(
         route_path=str(route.path or ""),
         prompt_text=prompt_text,
@@ -244,7 +246,7 @@ async def handle_post_loop_completion(
         strict_issue_ownership=bool(strict_issue_ownership),
         skill_required_checks=list(runtime_skills_payload.get("required_checks") or []),
         attempt=int(_quality_retry_count),
-        repo_root=Path.cwd(),
+        repo_root=workspace,
     )
     token_report["rules_of_road"] = rules_report
     token_report["verification_plan"] = verification_plan.to_payload()
@@ -277,7 +279,7 @@ async def handle_post_loop_completion(
         remediation_prompt = build_remediation_prompt(rules_report)
         if remediation_prompt:
             retry_job_type = str(job_type or rules_report.get("job_type") or "").strip().lower() or None
-            async for retry_event in self.run(
+            retry_events = self.run(
                 remediation_prompt,
                 mode=mode,
                 tools_policy=tools_policy,
@@ -286,8 +288,10 @@ async def handle_post_loop_completion(
                 job_type=retry_job_type,
                 _quality_retry_count=_quality_retry_count + 1,
                 _quality_carry_forward_events=combined_quality_events,
-            ):
-                yield retry_event
+            )
+            async with aclosing(retry_events):
+                async for retry_event in retry_events:
+                    yield retry_event
             return
 
     # Errors and exhausted pass budgets are incomplete outcomes. Never append a
@@ -310,7 +314,7 @@ async def handle_post_loop_completion(
     token_report["completion_gate"] = gate_decision.to_payload()
 
     if gate_decision.outcome == GATE_BLOCK:
-        block_error = f"Completion gate blocked AGENT_DONE: {gate_decision.reason}"
+        block_error = f"{GATE_BLOCKED_ERROR}: {gate_decision.reason}"
         if settlement.blocking and settlement.trailer:
             block_error += "\n" + settlement.trailer
         finish_contract(self, plan=verification_plan)
@@ -318,6 +322,10 @@ async def handle_post_loop_completion(
         state.error = block_error
         await emit_hook(self, HookEvent.FAILURE, {"error": block_error, "run_id": self._run_id})
         return
+
+    # Keep only accepted first-pass answers, before adding the acceptance trailer.
+    if prompt_text and state.text_response and not _quality_retry_count:
+        self._auto_capture_research(route=route, query=prompt_text, answer=state.text_response, job_type=job_type)
 
     # What was checked, what failed, what nobody checked - in the reply, except when the
     # reply IS the artifact (benchmark code output); the report always carries it.

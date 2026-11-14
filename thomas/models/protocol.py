@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 from thomas.core.config import ModelConfig
 from thomas.core.llm import LLMClient, LLMError
+from thomas.core.llm_slot import models
 from thomas.models.discovery import ModelsHandshake, handshake_models_async
 
 log = logging.getLogger(__name__)
@@ -138,7 +139,7 @@ async def run_tool_smoke_async(
         max_tokens=max(64, min(int(cfg.max_tokens or 256), 256)),
         timeout_s=max(float(cfg.timeout_s or 1.0), float(timeout_s)),
     )
-    llm = LLMClient(llm_cfg)
+    llm = models().open(llm_cfg, default=LLMClient)
     try:
         result = await asyncio.wait_for(
             llm.chat(_TOOL_SMOKE_MESSAGES, tools=_TOOL_SMOKE_SPEC),

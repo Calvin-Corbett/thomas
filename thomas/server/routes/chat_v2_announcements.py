@@ -35,20 +35,18 @@ from aiohttp import web
 
 from thomas.agent.response_tone import strip_sandbox_links
 from thomas.chat.conversation import ConversationManager
-from thomas.chat.session_store import SessionMeta, SessionStore
+from thomas.chat.session_store import SessionMeta, SessionStore, SessionUnreadable
 from thomas.core.file_access import file_access_refusal_remedy
 from thomas.server.chat_delegation_result_policy import result_with_policy_remedy
+from thomas.server.chat_delegation_runner_events import _repair_recorded
+from thomas.server.chat_delegation_worker_config import _safe_autonomy_level
+from thomas.server.chat_session_llm import announce_llm as _announce_llm
 from thomas.server.routes.chat_v2_keys import (
     APP_ANNOUNCE_LOCKS,
     APP_SESSION_LLM_CACHE,
     APP_SESSION_STORE,
 )
 from thomas.server.routes.chat_v2_support import _UNSUPPORTED_GAP_CLAIM_RE
-
-try:
-    from thomas.server.app_keys import APP_CONFIG
-except ImportError:
-    APP_CONFIG = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 
@@ -68,23 +66,6 @@ _ANNOUNCE_TERMINAL_ALIASES = frozenset({"done", "verified", "succeeded", "passed
 # It is terminal (so it is no longer retried as "not_terminal" forever) but not
 # a failure, which lands it on the existing unverified-completion skip.
 _ANNOUNCE_FAILED_STATES = frozenset({"failed", "abandoned", "error"})
-
-
-def _announce_llm(app: web.Application, sid: str) -> Any | None:
-    cache = app.get(APP_SESSION_LLM_CACHE) or {}
-    entry = cache.get(sid)
-    if entry is not None and getattr(entry, "llm", None) is not None:
-        return entry.llm
-    cfg = app.get(APP_CONFIG) if APP_CONFIG is not None else None
-    if cfg is None:
-        return None
-    try:
-        from thomas.core.llm_client import LLMClient
-
-        return LLMClient(cfg.get_model(getattr(cfg, "default_model", "") or None))
-    except (AttributeError, ImportError, LookupError, RuntimeError, TypeError, ValueError) as exc:
-        log.debug("announce LLM lookup failed for session %s: %s", sid, exc, exc_info=True)
-        return None
 
 
 def _announcement_lock_for(app: web.Application, sid: str) -> asyncio.Lock:
@@ -158,8 +139,16 @@ async def handle_announce_delegation(request: web.Request) -> web.Response:
     exec_id = str(request.match_info.get("execution_id", "") or "").strip()
     if not sid or not exec_id:
         return web.json_response({"ok": False, "error": "missing_ids"}, status=400)
-    async with _announcement_lock_for(app, sid):
-        return await _handle_announce_delegation_locked(app, sid, exec_id)
+    from thomas.server.routes.chat_v2_session_guard import session_turn_lock
+
+    turn_lock = await session_turn_lock(app, sid)
+    if turn_lock is None:
+        return web.json_response({"ok": False, "error": "session_guard_unavailable"}, status=503)
+    # Send-time persistence happens before the LLM lock. Hold the outer turn
+    # guard too, so an announcement cannot overwrite that pending user turn.
+    async with turn_lock:
+        async with _announcement_lock_for(app, sid):
+            return await _handle_announce_delegation_locked(app, sid, exec_id)
 
 
 async def _handle_announce_delegation_locked(app: web.Application, sid: str, exec_id: str) -> web.Response:
@@ -175,6 +164,29 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             return web.json_response({"ok": False, "error": "session_mismatch"}, status=403)
         if str(row.get("reported_to_chat_at") or "").strip():
             return web.json_response({"ok": True, "skipped": "already_reported"})
+        session_store: SessionStore = app[APP_SESSION_STORE]
+        try:
+            conversation = await session_store.load(sid) or ConversationManager()
+        except SessionUnreadable as exc:
+            # The saved chat is there but cannot be read right now. Writing a
+            # fresh one would replace it, so touch nothing -- not the chat, not
+            # the report stamp, so the announcement can be tried again.
+            log.error("announce left the conversation untouched for %s/%s: %s", sid, exec_id, exc)
+            return web.json_response({"ok": False, "error": "conversation_unreadable"}, status=503)
+        # The transcript survives execution-record cleanup and process changes.
+        # Recognize its receipt before classifying a missing row as still running.
+        if any(
+            isinstance(message.get("metadata"), dict) and message["metadata"].get("announce") == exec_id
+            for message in conversation.get_messages()
+        ):
+            if row:
+                task_bot_runtime.update_execution(
+                    exec_id,
+                    reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                )
+            return web.json_response({"ok": True, "skipped": "already_reported"})
+        if not row:
+            return web.json_response({"ok": False, "error": "execution_not_found"}, status=404)
         state = str(row.get("state") or "").lower()
         # "blocked" is NOT an ending, and this endpoint used to treat it as one.
         #
@@ -204,12 +216,17 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
         if not failed and receipt.get("ok") is not True:
             return web.json_response({"ok": True, "skipped": "unverified_completion"})
         runtime_profile = row.get("runtime_profile") if isinstance(row.get("runtime_profile"), dict) else {}
+        # Autopilot (L5) never asks the user to say go — it keeps retrying its
+        # own machinery until it has a finished result it deems good. Below
+        # Autopilot, a failure still ends the turn and may offer another run.
+        is_autopilot = _safe_autonomy_level(runtime_profile.get("autonomy_level")) >= 5
+        # A real fact, not a free-text model claim: was a repair record
+        # (record_issue) actually written for this failure? (fix round 1, I5)
+        repair_recorded = _repair_recorded(row.get("blocker"))
         proof = row.get("proof") if isinstance(row.get("proof"), dict) else {}
         artifacts = proof.get("artifacts") if isinstance(proof.get("artifacts"), list) else []
         if not failed and bool(runtime_profile.get("canvas")) and not artifacts:
             return web.json_response({"ok": True, "skipped": "canvas_without_verified_artifact"})
-        session_store: SessionStore = app[APP_SESSION_STORE]
-        conversation = await session_store.load(sid) or ConversationManager()
         progress_summary = str(row.get("progress_summary") or "").strip()
         summary = progress_summary or str(row.get("summary") or "").strip()
         task_title = str(row.get("summary") or "the task").strip() or "the task"
@@ -220,7 +237,16 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             if isinstance(item, dict) and str(item.get("name") or item.get("path") or "").strip()
         ]
         verified_answer = str(runtime_profile.get("max_verified_answer_text") or "").strip()
-        if not failed and bool(runtime_profile.get("max_answer_only")) and verified_answer:
+        if str(row.get("backend_type") or "") == "media_generation":
+            # The explicit Create menu need not have initialized a chat model.
+            # The receipt already describes a decoded file; presenting it must
+            # not depend on another model being connected or available.
+            note = (
+                "The media generation could not finish."
+                if failed
+                else "Your generated media is ready: " + ", ".join(f"`{name}`" for name in artifact_names) + "."
+            )
+        elif not failed and bool(runtime_profile.get("max_answer_only")) and verified_answer:
             # The Max crew's last draft is the exact candidate the fresh graders
             # approved. Present it verbatim; asking another ungraded model to
             # summarize would replace the audited result with a new one.
@@ -274,7 +300,7 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             ]
             bits.append(f"What you were doing: {task_title[:240]}.")
             if summary and failed:
-                bits.append(f"Failure: {summary[:300]}.")
+                bits.append(f"Failure: {summary[:300].rstrip('. ')}.")
                 # The 300-char cap can chop the file-access remedy off the end
                 # of the summary, so hand the model the lever explicitly. The
                 # deterministic guarantee lives below (_failed_note_with_policy_remedy);
@@ -320,17 +346,34 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                     "(do NOT say the lights are off, the message was sent, etc.)."
                 )
             else:
-                bits.append(
-                    "In one or two short sentences, proactively tell the user it is done and what is ready."
-                    if not failed
-                    else (
+                if not failed:
+                    instruction = (
+                        "In one or two short sentences, proactively tell the user it is done and what is ready."
+                    )
+                elif is_autopilot:
+                    # This note only runs once the worker has stopped for good, so
+                    # it must report that honestly rather than promise ongoing work
+                    # it is not doing (fix round 1, I4). "Recorded for repair" is
+                    # gated on repair_recorded, a real fact, not a free claim (I5).
+                    instruction = (
+                        "In one or two short sentences, say plainly what you tried, what is "
+                        "still left undone, and that it has stopped for now."
+                    )
+                    instruction += (
+                        " You may say a record of this was kept for the team to repair."
+                        if repair_recorded
+                        else " Do not claim anything was recorded for repair; nothing was."
+                    )
+                    instruction += " Do not ask whether to continue, and do not offer to run it once more."
+                else:
+                    instruction = (
                         "In one or two short sentences, be precise about where it stands: if the "
                         "failure text shows files WERE produced, say the result exists but a step "
                         "failed along the way so you can't fully vouch for it, and offer to "
                         "double-check or redo it. Never say nothing was done when files were made. "
                         "If nothing was produced, say it plainly and offer another run."
                     )
-                )
+                bits.append(instruction)
             note = await _generate_note(llm, system, " ".join(bits))
             # Only an ABSENT note falls back to a template. Thomas's own sentence is
             # never thrown away for what it says.
@@ -361,7 +404,10 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
             # what actually ran was existence/render verification, which never
             # reads the ask, so the fallback names exactly that and no more.
             if not note:
-                if failed:
+                if failed and is_autopilot:
+                    clean_summary = summary[:300].rstrip(". ")
+                    note = f"I couldn't finish {task_title} on Autopilot. Here is what failed: {clean_summary}."
+                elif failed:
                     note = f"I couldn't finish {task_title}. I can take another run at it."
                 elif artifact_names:
                     note = (
@@ -375,9 +421,7 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                         f"Done — {task_title}. Automatic checks passed; I didn't "
                         "separately check the result against your exact ask."
                     )
-            elif artifact_names and not any(
-                name.casefold() in note.casefold() for name in artifact_names
-            ):
+            elif artifact_names and not any(name.casefold() in note.casefold() for name in artifact_names):
                 note = note.rstrip() + " Ready: " + ", ".join(f"`{n}`" for n in artifact_names) + "."
         if failed:
             # A refused write's remedy sentence must survive into the sentence
@@ -389,17 +433,11 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
         # deliverable is attached below as an artifact card. (Same hygiene as the
         # classic AgentLoop and the V2 orchestrator reply paths.)
         note = strip_sandbox_links(note)
-        conversation = conversation.append_message("assistant", note, metadata={"announce": exec_id})
-        await session_store.save(sid, conversation, SessionMeta(session_id=sid), force=True)
-        task_bot_runtime.update_execution(
-            exec_id,
-            reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        )
         # Return the artifacts so the "here it is" bubble itself carries the
         # result — the user sees Thomas present it in the same reply, once, and
         # a playable/renderable one pops open. Reuse the delegation normalizer
         # so each artifact has a real preview URL + kind (raw proof.artifacts
-
+        # carries neither). (Calvin, 2026-07-20.)
         art_payload = []
         if not failed:
             try:
@@ -417,6 +455,25 @@ async def _handle_announce_delegation_locked(app: web.Application, sid: str, exe
                 ]
             except (ImportError, KeyError, TypeError, ValueError):
                 art_payload = []
+        conversation = conversation.append_message(
+            "assistant",
+            note,
+            metadata={"announce": exec_id, "artifacts": art_payload},
+        )
+        try:
+            meta = await session_store.load_meta(sid) or SessionMeta(session_id=sid)
+        except SessionUnreadable as exc:
+            # Same as the first read: a refusal is not a session with no settings, and saving a blank one would
+            # reset them. Touch nothing so the announcement can be tried again.
+            log.error("announce left the settings untouched for %s/%s: %s", sid, exec_id, exc)
+            return web.json_response({"ok": False, "error": "conversation_unreadable"}, status=503)
+        saved = await session_store.save(sid, conversation, meta, force=True)
+        if saved is False:
+            return web.json_response({"ok": False, "error": "conversation_save_failed"}, status=503)
+        task_bot_runtime.update_execution(
+            exec_id,
+            reported_to_chat_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        )
         return web.json_response({"ok": True, "message": note, "artifacts": art_payload})
     except (KeyError, LookupError, RuntimeError, OSError, TypeError, ValueError) as exc:
         log.debug("announce failed for %s/%s: %s", sid, exec_id, exc, exc_info=True)

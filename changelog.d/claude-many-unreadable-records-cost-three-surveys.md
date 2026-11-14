@@ -1,0 +1,3 @@
+### Fixed
+
+- **A server that cannot open some conversation records no longer spends its first 40 minutes re-reading all the others.** After every start, the server looks for work the restart interrupted. One record it could not open stopped that look at once, and the look began again from the first record, three times for each such record. On 2026-11-13 your own server could not open 126 records in the cage account's folder: it began the look 2168 times in one morning, used about a fifth of a processor while idle, and carried nothing on until it finished. Now one look reads every record and notes all the ones it could not open, so three looks are the most it takes, and a record that needed nothing is not read again unless its file changed.

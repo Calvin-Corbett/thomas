@@ -228,11 +228,11 @@ def _build_llm(root: Path, profile: str) -> Any | None:
     """Construct an LLMClient for ``profile`` (server->core import, guarded)."""
     try:
         from thomas.core.config import load_config
-        from thomas.core.llm_client import LLMClient
+        from thomas.core.llm_slot import models
 
         cfg = load_config(Path(root) / "thomas.toml")
         model_cfg = cfg.get_model(profile or None)
-        return LLMClient(model_cfg)
+        return models().open(model_cfg)
     except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError) as exc:
         log.warning("UI Studio: could not build LLM client: %s", exc)
         return None

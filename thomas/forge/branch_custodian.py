@@ -198,24 +198,18 @@ def subprocess_git_runner(repo_root: str) -> GitRunner:
     LIVE LANE -- requires a git binary and a real repository. Tests inject a
     fake instead, so every classification rule below is provable offline.
     """
-    import subprocess
+    from thomas.core.git_process import run_git
 
     def _run(args: Sequence[str]) -> str:
         cmd = ["git", "-C", repo_root, *args]
-        try:
-            proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=_GIT_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            log.warning("git failed: %s (%s)", shlex.join(cmd), exc)
-            raise BranchCustodianError(f"git invocation failed: {exc}") from exc
-        if proc.returncode != 0:
-            raise BranchCustodianError(f"git {' '.join(args)} exited {proc.returncode}: {proc.stderr.strip()}")
-        return proc.stdout
+        # Through run_git so _GIT_TIMEOUT_SECONDS is an upper bound rather than a
+        # hope. A custodian sweep is the caller with the longest timeout in the
+        # server (120 s), which made it the one most able to hold everything else.
+        result = run_git(["-C", repo_root, *args], timeout=float(_GIT_TIMEOUT_SECONDS))
+        if not result.ok:
+            log.warning("git failed: %s (%s)", shlex.join(cmd), result.message())
+            raise BranchCustodianError(f"git {' '.join(args)} failed: {result.message()}")
+        return result.stdout
 
     return _run
 

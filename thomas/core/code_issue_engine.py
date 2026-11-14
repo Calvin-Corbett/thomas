@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from thomas.core.pause import paused
+
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -160,6 +162,7 @@ class CodeIssueEngine:
 
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
@@ -176,12 +179,14 @@ class CodeIssueEngine:
         if self._running or not self._enabled:
             return
         self._running = True
+        self._stopping.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="thomas-code-issue")
         self._thread.start()
         log.info("CodeIssueEngine started (idle threshold %.0fs).", self._idle_threshold_s)
 
     def stop(self) -> None:
         self._running = False
+        self._stopping.set()
 
     def record_user_message(self) -> None:
         self._last_user_ts = time.monotonic()
@@ -232,14 +237,15 @@ class CodeIssueEngine:
         )
 
     def _loop(self) -> None:
-        while self._running:
-            time.sleep(self._poll_interval_s)
+        while self._running and not self._stopping.wait(self._poll_interval_s):
             try:
                 self._tick()
             except Exception as exc:
                 log.warning("CodeIssueEngine tick failed: %s", exc)
 
     def _tick(self) -> None:
+        if paused():
+            return
         if not self._enabled:
             return
         if not self.is_idle():

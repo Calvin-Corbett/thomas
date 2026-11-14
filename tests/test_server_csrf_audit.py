@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
+from thomas.server.runtime_plugins import APP_RUNTIME_PLUGINS
 
 
 def _iter_mutating_routes(app, *, prefixes: tuple[str, ...] | None = None) -> list[tuple[str, str]]:
@@ -58,6 +60,12 @@ def _iter_policy_snapshot_routes(payload: dict) -> list[tuple[str, str]]:
 
 
 class _BaseServerMutatingAudit(AioHTTPTestCase):
+    async def asyncSetUp(self) -> None:
+        """A row with startup hooks, such as the workspace one, joins the routes once they end, after the server is up."""
+        await super().asyncSetUp()
+        while any(row["state"] == "loading" for row in self.app[APP_RUNTIME_PLUGINS].report()["rows"]):
+            await asyncio.sleep(0.02)
+
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)

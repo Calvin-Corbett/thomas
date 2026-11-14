@@ -22,18 +22,25 @@ Driven by tests/web_node/chat_task_card_revisit_restore.mjs.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = REPO_ROOT / "thomas" / "server" / "web" / "chat.html"
 TURN_FLOW = REPO_ROOT / "thomas" / "server" / "web" / "js" / "chat_turn_flow.js"
+ACTIVITY_VIEW = REPO_ROOT / "thomas" / "server" / "web" / "js" / "chat_activity_view.js"
+ACTIVITY_ACTIONS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "chat_activity_actions.js"
 HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_task_card_revisit_restore.mjs"
 
 
 def _drive() -> dict[str, bool]:
     result = subprocess.run(
-        ["node", str(HARNESS), str(CHAT_HTML), str(TURN_FLOW)],
+        ["node", str(HARNESS), str(CHAT_HTML), str(TURN_FLOW), str(ACTIVITY_VIEW), str(ACTIVITY_ACTIONS)],
         capture_output=True,
         check=False,
         text=True,

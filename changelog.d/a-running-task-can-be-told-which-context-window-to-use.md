@@ -1,0 +1,4 @@
+### Changed
+
+- **A running task can be told which context window to work within.** You said 200,000 tokens felt small, that it should be the model's real limit, and that you should be able to change it on the fly. Thomas now accepts a window for a running task, in steps of 25,000 up to 2,000,000, and uses it as the window it really works within: how much it keeps before it compacts, and how much it sends. The panel will show the model's own number beside the one in force (the slider for it comes next). Thomas has no list of each model's real limit: the 200,000 is the default written into the model's profile, so the number you set is the way to say what the model can take.
+- **The run's recording code has its own file.** The context, usage and compaction helpers moved out of `run_control.py` into `run_metrics.py` to keep both under their size limit; nothing that used them changes.

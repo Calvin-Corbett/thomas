@@ -10,6 +10,10 @@ The route now exists: HEAD answers 200 when there are logs to export and 404
 when there are none (the button stays grey, truthfully); GET streams a zip of
 the server log, its rotations and the chat logs. Nothing outside the logs
 directory is ever packed.
+
+``thomas.server.rows.cooldown_and_logs`` is what puts that route on a real
+server. This names it because a check finds a test by what it imports or spells
+out, so a change to the row runs this file only through this line.
 """
 
 from __future__ import annotations

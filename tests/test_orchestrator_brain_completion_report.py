@@ -1,3 +1,16 @@
+"""Regression tests for reporting finished background work back into chat.
+
+The live bug (Calvin, 2026-06-16): a worker created `livecheck.txt`, the task
+card flipped to completed, but the chat agent kept saying "I don't have the
+result back." Root cause: the completion note was shown to the USER as a prefix
+but never injected into the MODEL's context, and it was only wired into the
+casual branch — so the model contradicted the delivered line, and any non-casual
+follow-up dropped the result entirely.
+
+These tests lock the fix: the completion is (a) injected into the model's
+context so it reports in its own voice, (b) delivered on every routing branch,
+and (c) reported exactly once.
+"""
 
 import types
 import unittest
@@ -180,7 +193,7 @@ class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
         task["reported_to_chat_at"] = "2026-06-16T00:00:00+00:00"
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch("thomas.marketplace.orchestrator.brain._mark_completion_reported") as mark,
+            patch("thomas.marketplace.orchestrator.background_completions._mark_completion_reported") as mark,
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),
         ):
             await _brain().process_message(
@@ -202,7 +215,7 @@ class TestDurableDedup(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
-            patch("thomas.marketplace.orchestrator.brain._mark_completion_reported") as mark,
+            patch("thomas.marketplace.orchestrator.background_completions._mark_completion_reported") as mark,
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),
         ):
             await _brain().process_message(
@@ -283,7 +296,7 @@ class TestModelOwnedCompletionMark(unittest.IsolatedAsyncioTestCase):
         with (
             patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
             patch(
-                "thomas.marketplace.orchestrator.brain._mark_completion_reported",
+                "thomas.marketplace.orchestrator.background_completions._mark_completion_reported",
                 side_effect=lambda eid: marked.append(eid),
             ),
             patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock(side_effect=_capture)),

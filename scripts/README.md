@@ -16,6 +16,42 @@ Perform specialized task (workboard management, release, checks, etc.)
 Report results or make changes
 ```
 
+## Which Launcher to Use
+
+- `run-ui.cmd` in the repo root runs `scripts/run-ui.ps1`, the canonical launcher. `launch-thomas.vbs` runs the same script without a console window.
+- `Thomas.vbs` is the icon that `python scripts/thomas_app.py` writes, along with the Desktop and Start Menu shortcuts that point at it. It opens the desktop shell (`desktop.cmd` runs that shell from a terminal). If the shell is not installed, or Windows will not start it, it opens Thomas in a browser window instead.
+- The installer (`installer/ThomasSetup.iss`) makes its own Thomas icons, which point at `launch-thomas.vbs`, and a `Thomas (Console)` icon that points at `run-ui.cmd`.
+- `scripts/create_shortcut.py` is the older, cross-platform shortcut maker; its Windows shortcut points at `run-ui.cmd`.
+
+### What a `Thomas.vbs` click can start
+
+On the default port, when it falls back to a browser window (the desktop shell is not installed, or Windows will not start it) and a connection to Thomas's port is refused, `Thomas.vbs` starts Thomas through `launch-thomas.vbs`, which runs `scripts/run-ui.ps1` hidden. In that fallback it does not start anything when something accepts the connection, even if that something is too busy to answer. The caged icon (`--caged`) and an icon for another port do not start a server this way.
+
+The desktop shell, which a click normally opens, has its own rule. It checks Thomas's health address, and if that check fails, including by taking longer than 2.5 seconds, it starts a Thomas server with `.venv\Scripts\python.exe` when that file exists and `THOMAS_NO_SPAWN_SERVER` is not 1 (the caged icon starts its scheduled task instead). It does not run `run-ui.ps1` or Boot Doctor.
+
+`run-ui.ps1` does more than start a server. A normal start can:
+
+- stop a Thomas server or tray agent it finds on the port it is about to use;
+- write the `thomas://` link for your Windows account under `HKCU\Software\Classes` (it tries this near the start of a run, before it looks at Python or `.venv`);
+- install Python with winget if neither `python` nor `py` is on your PATH;
+- build `.venv` again if `.venv\Scripts\python.exe` or `.venv\pyvenv.cfg` is missing, deleting an incomplete one first;
+- run `pip install` for Thomas's server packages if `aiohttp` or `httpx` cannot be imported;
+- start Ollama when `thomas.toml` points the default model at a local Ollama.
+
+If the server it starts comes up degraded, or does not come up healthy, `run-ui.ps1` also starts Boot Doctor (`scripts/bootdoctor.ps1`) in a hidden PowerShell window, without a question. (If no free port is found within 25 of the one it wants, it runs Boot Doctor's report step inside its own run instead, which is hidden too when `launch-thomas.vbs` started it.) With its defaults (auto repair and the model summary both on) Boot Doctor can:
+
+- stop a Thomas process that is listening on the port but failing its health check;
+- run `pip install -e .[server]` in `.venv` if `aiohttp` or `httpx` cannot be imported;
+- start a Thomas server of its own to test a repair, and leave it running;
+- when that test server exits without becoming healthy, add the likely cause and the last lines of its log to the report (it does not change any file in this folder for this);
+- when a model is configured, send it the reason, the findings and the repairs so far for a summary, which is a model call.
+
+When the server did not come up at all and is still down after those steps, and a model is configured, Boot Doctor also runs a model agent that can write to a fixed list of startup files and folders in this folder (including `scripts/run-ui.ps1` and the `thomas/core`, `thomas/server` and `thomas/agent` folders), for up to three rounds with a check after each. If Thomas is still down after that, the hidden window can stay open, waiting for input.
+
+When `runtime/setup/last_setup.txt` is missing it also runs `scripts/setup.ps1`, which can install Python, Node.js and Ollama with winget and the Codex command-line tool with npm, run `npm install` in `desktop/` (this downloads the Electron shell), change `default_model` in `thomas.toml`, write `runtime/setup/last_setup.txt`, and create the Thomas shortcuts on your Desktop and in your Start Menu (which also rewrites `assets/thomas.ico` and `Thomas.vbs`).
+
+So `Thomas.vbs` asks before a start that could rebuild `.venv` or run `setup.ps1`: when any of `.venv\Scripts\python.exe`, `.venv\pyvenv.cfg` and `runtime/setup/last_setup.txt` is missing, it shows a Yes/No question that lists what setup can do, defaults to No, and starts nothing on No; on Yes it runs `run-ui.ps1` in a PowerShell window that stays open. When all three exist it starts `run-ui.ps1` hidden and shows a short "Starting Thomas" notice; the items in the list above can still happen then, without a question, and so can the Boot Doctor steps if the server does not come up healthy. The question also says Boot Doctor may run, because that can follow a Yes too. If a `run-ui.ps1` of this folder began in the last half hour and nothing is serving yet, it asks "Start Thomas again anyway?" before starting another (No by default).
+
 ## Script Categories
 
 ### Workboard and Task Management

@@ -105,6 +105,7 @@
         'canvas_workspace_contract.js',
         'canvas_workspace_runtime.js',
         '048_ui_studio_canvas.js',
+        'marketplace_kernel.js',
     ];
 
     var basePath = '/static/js/runtime/';

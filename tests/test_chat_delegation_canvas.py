@@ -497,9 +497,7 @@ class CanvasDeadConnectionTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(canvas_worker, "_DEAD_SOCKET_S", 0.05):
             with tempfile.TemporaryDirectory() as d:
-                with patch(
-                    "thomas.server.chat_delegation_canvas.build_canvas_llm", return_value=llm
-                ):
+                with patch("thomas.server.chat_delegation_canvas.build_canvas_llm", return_value=llm):
                     with self.assertRaises(Exception) as caught:
                         await run_canvas_worker(
                             execution_id="exec-canvas-dead",

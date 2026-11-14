@@ -549,8 +549,8 @@ function buildEvolveJobSummaryMessage(job) {
             ? `Files: ${changedFiles.slice(0, 6).join(', ')}${changedFiles.length > 6 ? ', ...' : ''}`
             : '';
         const promoteLine = session.promotable
-            ? 'It is ready for review in Mission Control.'
-            : 'It is not promotable yet; review the run details in Mission Control.';
+            ? 'It is ready for review on the Agents page.'
+            : 'It is not promotable yet; review the run details on the Agents page.';
         return [headline, changedLine, fileLine, promoteLine].filter(Boolean).join('\n\n');
     }
     const error = job?.error && typeof job.error === 'object' ? job.error : {};
@@ -561,7 +561,7 @@ function buildEvolveJobSummaryMessage(job) {
     } else if (status === 'failed' || status === 'dead') {
         failureLead = `Evolve session ${sessionLabel} failed.`;
     }
-    return [failureLead, errorText, 'Mission Control has the run details.'].filter(Boolean).join('\n\n');
+    return [failureLead, errorText, 'The Agents page has the run details.'].filter(Boolean).join('\n\n');
 }
 
 async function refreshEvolveChatReplies({ sessionOverride = '', force = false } = {}) {

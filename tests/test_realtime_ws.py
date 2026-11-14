@@ -1,3 +1,9 @@
+"""The realtime socket on a bare app, through ``thomas.marketplace.realtime.routes``.
+
+On a real server ``thomas.server.rows.realtime`` registers these routes, and no test imports a row, so naming it here
+is how a change to the row reaches this file.
+"""
+
 import asyncio
 import unittest
 

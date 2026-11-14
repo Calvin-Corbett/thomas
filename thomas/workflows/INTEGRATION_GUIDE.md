@@ -240,27 +240,11 @@ result = await tool.execute(**params)
 
 ## Approval System Integration
 
-Connect human approvals to Thomas approval system:
-
-```python
-# In ApprovalExecutor.execute()
-from thomas.approvals import create_approval_request
-
-approval = await create_approval_request(
-    title=step_config.config.get("message"),
-    context={"run_id": run.run_id, "step_id": step_config.step_id},
-    timeout_seconds=step_config.config.get("timeout_seconds", 3600),
-)
-
-# Wait for approval
-result = await approval.wait_for_decision(timeout=...)
-
-return StepResult(
-    step_id=step_config.step_id,
-    status=StepStatus.COMPLETED if result.approved else StepStatus.FAILED,
-    output={"approved": result.approved},
-)
-```
+Thomas's approval broker is `ApprovalBroker` in `thomas/agent/approval.py`.
+The server keeps one as `app["approvals"]`; its `require()` waits for your
+decision on one tool call. `ApprovalExecutor` in `thomas/workflows/steps.py`
+is not connected to it: an approval step fails with
+"Approval system integration not yet implemented".
 
 ## Logging Integration
 

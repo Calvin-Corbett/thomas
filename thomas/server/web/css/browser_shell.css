@@ -2,12 +2,12 @@
  *
  * Loaded by chat.html after chat_shell.css; js/browser_shell.js builds the
  * DOM this styles. Everything rides the canonical tokens (tokens.css), so all
- * five themes carry through the tab strip, omnibox, bookmarks bar, side panel
- * and quick chat without any per-theme rules here.
+ * five themes carry through the tab strip, omnibox, bookmarks bar and side
+ * panel without any per-theme rules here.
  *
  * Layout contract (built at runtime by browser_shell.js):
  *   #tc-shell (column)
- *     #bt-titlebar   — app mark · tab strip · Ask Thomas · min/max/close
+ *     #bt-titlebar   — app mark · tab strip · min/max/close
  *     #bt-navrow     — back/fwd/reload · omnibox · model pill · profile
  *     #bt-bookmarks  — sidebar collapse · bookmarks · side-panel toggle
  *     .bt-row        — the original sidebar + main, unchanged inside
@@ -15,13 +15,21 @@
 
 /* ── Frame rows ─────────────────────────────────────────────────────── */
 .bt-row { flex: 1; min-height: 0; display: flex; position: relative; z-index: 1; }
+/* A Build tab on show: the chrome around it is Build's solid Dark too (the
+   tokens follow data-bt-active-mode in tokens.css), with no world behind it. */
+#tc-shell[data-bt-active-mode="code"] .tc-world { display: none !important; }
 
 #bt-titlebar { position: relative; z-index: 3; display: flex; align-items: flex-end; gap: 8px;
   padding: 3px 0 0 6px; background: color-mix(in srgb, var(--c-sidebar) 55%, transparent);
-  /* Frameless desktop window: the titlebar IS the drag region; everything
-     interactive on it opts back out. Inert in a plain browser. */
-  -webkit-app-region: drag; }
-#bt-titlebar button, #bt-titlebar #bt-tabstrip { -webkit-app-region: no-drag; }
+  /* Frameless desktop window: the titlebar moves the window, but through
+     browser_shell_tearoff.js and not a native drag region. A native region
+     swallows every pointer event on it, so a tab could never be dragged out
+     to tear off, and the tab strip (most of the bar) had to opt out of it,
+     which left the window nearly nothing to grab. */
+  user-select: none; }
+#bt-tabstrip.is-drop-target { box-shadow: inset 0 -2px 0 var(--c-accent); }
+.bt-tab.is-dragging { opacity: .72; cursor: grabbing; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); position: relative; z-index: 4; }
+#bt-tabstrip.is-reordering .bt-tab:not(.is-dragging) { pointer-events: none; }
 .bt-appmark { width: 20px; height: 20px; border-radius: 6px; background: var(--c-accent);
   display: flex; gap: 3px; align-items: center; justify-content: center; flex: 0 0 auto;
   margin: 0 2px 6px 4px; }
@@ -31,7 +39,7 @@
   scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
 #bt-tabstrip::-webkit-scrollbar { display: none; }
 .bt-tab { display: flex; align-items: center; gap: 8px; min-width: 118px; max-width: 208px;
-  flex: 0 1 auto; padding: 5px 7px 5px 10px; border-radius: 10px 10px 0 0; background: transparent;
+  flex: 0 1 auto; padding: 5px 7px 5px 10px; border-radius: 8px 8px 0 0; background: transparent;
   border: 1px solid transparent; border-bottom: none; color: var(--c-dim);
   font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; }
 .bt-tab:hover { background: var(--c-hover); }
@@ -60,11 +68,6 @@
 @keyframes bt-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .bt-light.working { animation: none; } }
 
-#bt-askthomas { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; align-self: center;
-  padding: 4px 11px; margin-bottom: 2px; border-radius: 999px; border: 1px solid var(--c-accent-line);
-  background: var(--c-accent-soft); color: var(--c-accent); font-family: var(--font-sans);
-  font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-#bt-askthomas:hover { filter: brightness(1.15); }
 .bt-wincluster { flex: 0 0 auto; display: flex; align-self: flex-start; }
 .bt-winbtn { width: 42px; height: 26px; display: grid; place-items: center; border: 0;
   background: transparent; color: var(--c-dim); cursor: pointer; }
@@ -72,7 +75,7 @@
 .bt-winbtn.close:hover { background: #e81123; color: #fff; }
 
 /* ── Nav row ────────────────────────────────────────────────────────── */
-#bt-navrow { position: relative; z-index: 3; display: flex; align-items: center; gap: 6px;
+#bt-navrow { position: relative; z-index: 5; display: flex; align-items: center; gap: 6px;
   padding: 4px 10px; background: color-mix(in srgb, var(--c-bg) 55%, transparent); }
 .bt-navbtn { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--c-border);
   background: transparent; color: var(--c-dim); display: grid; place-items: center;
@@ -94,8 +97,12 @@
   color: var(--c-accent-ink); display: grid; place-items: center; font-weight: 800;
   font-size: 12px; font-family: var(--font-sans); cursor: pointer; }
 
-/* The real model pill moves into the nav row; keep it compact. */
-#bt-navrow [data-model-switch] button { height: 30px; padding: 0 10px; font-size: 12px; }
+/* The real model pill moves into the nav row: one small pill showing the model
+   name in the page's sans. Direct children only: the dropdown under the pill
+   (#tc-model-menu) draws its own rows. The agent is chosen inside the dropdown. */
+#bt-navrow [data-model-switch] > button { height: 28px; padding: 0 12px !important; font-size: 12.5px !important; }
+/* The pill sits at the bar's right end, so its menu opens leftwards from it. */
+#bt-navrow [data-model-switch] > #tc-model-menu { left: auto; right: 0; }
 
 /* ── Profile dropdown ───────────────────────────────────────────────── */
 #bt-profmenu { display: none; position: absolute; right: 0; top: calc(100% + 8px); z-index: 60;
@@ -127,8 +134,10 @@
   background: color-mix(in srgb, var(--c-bg) 55%, transparent);
   overflow-x: auto; scrollbar-width: none; }
 #bt-bookmarks::-webkit-scrollbar { display: none; }
+/* The sidebar toggle (left end) and the side-panel toggle (right end) are a pair: one box, one glyph mirrored. */
 #bt-bookmarks #tc-sidebar-toggle { width: 26px !important; height: 26px !important;
-  border: 0 !important; flex: 0 0 auto; }
+  border: 0 !important; border-radius: 7px !important; color: var(--c-dim) !important; flex: 0 0 auto; }
+#bt-bookmarks #tc-sidebar-toggle:hover { background: var(--c-hover) !important; color: var(--c-text) !important; }
 .bt-bm { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px;
   font-size: 12px; font-weight: 500; color: var(--c-dim); cursor: pointer; background: transparent;
   border: 0; font-family: var(--font-sans); white-space: nowrap; flex: 0 0 auto; }
@@ -209,7 +218,7 @@ html[data-theme="light"] .bt-doc, html[data-theme="sandstone"] .bt-doc { color-s
 .bt-ntp-key kbd { font-family: var(--font-mono); font-size: 10.5px; padding: 2px 6px; border-radius: 5px;
   border: 1px solid var(--c-border-2); background: var(--c-surface); color: var(--c-text); }
 
-/* ── Side panel: context mode + Ask Thomas quick chat ───────────────── */
+/* ── Side panel: what is on this tab ────────────────────────────────── */
 #bt-sidepanel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 26;
   width: clamp(280px, 26vw, 380px); transform: translateX(100%);
   transition: transform .24s cubic-bezier(.4, 0, .2, 1);
@@ -227,48 +236,11 @@ html[data-theme="light"] .bt-doc, html[data-theme="sandstone"] .bt-doc { color-s
   color: var(--c-dim); display: grid; place-items: center; cursor: pointer; flex: 0 0 auto; }
 #bt-sp-close:hover { background: var(--c-hover); }
 #bt-sp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; }
-#bt-sidepanel.chat-mode #bt-sp-body { display: flex; flex-direction: column; }
 .bt-sp-row { display: flex; align-items: center; gap: 9px; padding: 8px 10px; margin-bottom: 4px;
   background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 9px;
   font-size: 12.5px; color: var(--c-text); }
 .bt-sp-row svg { color: var(--c-dim); flex: 0 0 auto; }
 .bt-sp-note { font-size: 12px; color: var(--c-dim); line-height: 1.55; padding: 4px 8px; }
-
-/* Quick chat (chat mode) */
-.bt-qc-ctx { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
-  padding: 6px 10px; border-radius: 9px; border: 1px solid var(--c-accent-line);
-  background: var(--c-accent-soft); color: var(--c-dim); font-size: 10.5px;
-  font-family: var(--font-mono); overflow: hidden; white-space: nowrap;
-  text-overflow: ellipsis; }
-.bt-qc-ctx svg { color: var(--c-accent); flex: 0 0 auto; }
-.bt-qc-ctx b { color: var(--c-text); font-family: var(--font-sans); }
-.bt-qc-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
-  gap: 9px; padding: 2px 2px 10px; }
-.bt-qc-u { align-self: flex-end; max-width: 85%; background: var(--c-user-bg);
-  color: var(--c-user-text); padding: 8px 12px; border-radius: 12px 12px 3px 12px;
-  font-size: 12.5px; line-height: 1.5; overflow-wrap: break-word; }
-.bt-qc-t { display: flex; gap: 8px; align-items: flex-start; max-width: 95%; }
-.bt-qc-t > span:last-child { font-size: 12.5px; line-height: 1.55; color: var(--c-text);
-  padding-top: 1px; min-width: 0; overflow-wrap: break-word; white-space: pre-wrap; }
-.bt-qc-err > span:last-child { color: var(--c-danger, #ff9a9a); }
-.bt-qc-status { font-family: var(--font-mono); font-size: 10px; color: var(--c-muted);
-  padding: 0 2px 4px; }
-.bt-qc-dots { display: inline-flex; gap: 4px; padding: 5px 0; }
-.bt-qc-dots span { width: 6px; height: 6px; border-radius: 999px; background: var(--c-muted);
-  animation: tc-dot 1.3s ease-in-out infinite; }
-.bt-qc-dots span:nth-child(2) { animation-delay: .2s; }
-.bt-qc-dots span:nth-child(3) { animation-delay: .4s; }
-.bt-qc-composer { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 7px; margin-top: 8px;
-  background: var(--c-composer-bg); border: 1px solid var(--c-border-2); border-radius: 13px;
-  padding: 8px 8px 8px 12px; box-shadow: var(--c-shadow); }
-.bt-qc-composer textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: none;
-  background: transparent; color: var(--c-text); font-family: var(--font-sans); font-size: 13px;
-  line-height: 1.5; max-height: 90px; }
-#bt-qc-send { width: 30px; height: 30px; border-radius: 9px; border: 0; flex: 0 0 auto;
-  background: var(--c-accent); color: var(--c-accent-ink); display: grid; place-items: center;
-  cursor: pointer; }
-#bt-qc-send:hover { filter: brightness(1.1); }
-#bt-qc-promote { flex: 0 0 auto; margin-bottom: 2px; font-size: 11.5px; }
 
 /* Focus visibility for everything the shell adds. */
 #bt-titlebar button:focus-visible, #bt-navrow button:focus-visible,
@@ -277,37 +249,100 @@ html[data-theme="light"] .bt-doc, html[data-theme="sandstone"] .bt-doc { color-s
 .bt-omnibox input:focus-visible, .bt-bigsearch input:focus-visible {
   outline: 2px solid var(--c-accent-line); outline-offset: 2px; }
 
-/* ── Search results ───────────────────────────────────────────────────────
- * A results page reads as one column of ranked answers, so the measure stays
- * narrow and the rows carry the weight. Everything here is theme-token based:
- * the page is ours, so it follows the app's theme rather than a search
- * engine's palette. */
-.bt-sr-page { max-width: 680px; margin: 0 auto; padding: 22px 24px 64px; }
-.bt-sr-head { display: flex; align-items: center; gap: 10px; margin: 0 0 18px; }
-.bt-sr-mark { width: 20px; height: 20px; border-radius: 6px; background: var(--c-accent); flex: none; }
-.bt-sr-q { font-family: var(--font-head); font-size: 17px; font-weight: 700; margin: 0;
-  color: var(--c-ink); overflow-wrap: anywhere; }
-
-/* The answer card sits above the links the way an overview does. */
-.bt-ai { border: 1px solid var(--c-line); border-left: 3px solid var(--c-accent);
-  border-radius: 10px; padding: 13px 15px; margin: 0 0 26px; background: var(--c-surface-2, transparent); }
-.bt-ai-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--c-accent); margin-bottom: 6px; }
-.bt-ai-body { font-size: 14px; line-height: 1.62; color: var(--c-ink); white-space: pre-wrap; }
-.bt-ai.is-quiet { border-left-color: var(--c-line); }
-.bt-ai.is-quiet .bt-ai-label, .bt-ai.is-quiet .bt-ai-body { color: var(--c-ink-3, var(--c-ink-2)); }
-/* Loading shows as a pulsing placeholder rather than a spinner, so the card
- * occupies its final height and the results below never jump. */
-.bt-ai.is-loading .bt-ai-body::after { content: ""; display: block; height: 44px;
-  border-radius: 6px; background: var(--c-line); opacity: .5; animation: bt-ai-pulse 1.4s ease-in-out infinite; }
+/* ── Thomas Search ──────────────────────────────────────────────────────
+ * A first-class browser page using the canonical tokens from tokens.css. */
+.bt-page:has(.bt-sr-page) { padding: 0; background: var(--c-bg); backdrop-filter: none; }
+.bt-sr-page { min-height: 100%; padding: 0 clamp(20px, 5vw, 72px) 80px;
+  background: radial-gradient(ellipse 65% 350px at 85% 0, var(--c-accent-soft), transparent 75%); }
+.bt-sr-top { display: flex; align-items: center; gap: 24px; max-width: 1080px;
+  margin: 0 auto; padding: 26px 0; border-bottom: 1px solid var(--c-border); }
+.bt-sr-brand { display: flex; align-items: center; gap: 10px; flex: none;
+  color: var(--c-text); font-family: var(--font-head); font-weight: 800;
+  font-size: 16px; letter-spacing: -.03em; }
+.bt-sr-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  width: 28px; height: 28px; border-radius: 8px; background: var(--c-accent); flex: none; }
+.bt-sr-mark i { width: 4px; height: 7px; border-radius: 2px; background: var(--c-accent-ink); }
+.bt-sr-brand small { padding: 4px 7px; border-radius: 5px; background: var(--c-accent-soft);
+  color: var(--c-accent); font: 700 10px var(--font-mono); letter-spacing: .03em; }
+.bt-sr-form { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+  margin: 0; padding: 5px 6px 5px 18px; min-height: 54px;
+  border: 1px solid var(--c-border-2); border-radius: 14px; background: var(--c-composer-bg);
+  box-shadow: var(--c-shadow); }
+.bt-sr-form:focus-within { border-color: var(--c-accent); }
+.bt-sr-form svg { flex: none; color: var(--c-muted); }
+.bt-sr-form input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none;
+  color: var(--c-text); font: 14px var(--font-sans); }
+.bt-sr-form button, .bt-sr-retry { border: 0; border-radius: 9px; padding: 10px 17px;
+  background: var(--c-accent); color: var(--c-accent-ink); font: 700 12px var(--font-sans);
+  cursor: pointer; white-space: nowrap; }
+.bt-sr-form button:hover, .bt-sr-retry:hover { filter: brightness(1.12); }
+.bt-sr-form button:focus-visible, .bt-sr-retry:focus-visible,
+.bt-sr-title:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
+.bt-sr-content { max-width: 1080px; margin: 0 auto; padding-top: 30px; }
+.bt-sr-eyebrow { margin: 0 0 8px; color: var(--c-accent); font: 700 11px var(--font-mono);
+  letter-spacing: .12em; text-transform: uppercase; }
+.bt-sr-q { max-width: 760px; margin: 0; color: var(--c-text); font: 700 clamp(23px, 3vw, 36px)/1.2 var(--font-head);
+  letter-spacing: -.035em; overflow-wrap: anywhere; }
+.bt-sr-summary { margin: 12px 0 28px; color: var(--c-dim); font-size: 12px; }
+.bt-sr-main { display: grid; grid-template-columns: minmax(0, 680px) minmax(240px, 1fr);
+  gap: clamp(28px, 5vw, 80px); align-items: start; }
+.bt-sr-list { min-width: 0; }
+.bt-sr-loading { padding: 14px 0; color: var(--c-dim); font-size: 13px; }
+.bt-sr { padding: 0 0 24px; margin: 0 0 24px; border-bottom: 1px solid var(--c-border); }
+/* A divider under the last result rules off nothing, and reads as a row that
+   failed to load. The list ends with the result, not with a line. */
+.bt-sr:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+.bt-sr-identity { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.bt-sr-avatar { flex: none; display: grid; place-items: center; width: 29px; height: 29px;
+  border: 1px solid var(--c-border-2); border-radius: 9px; background: var(--c-surface-2);
+  color: var(--c-dim); font-size: 12px; font-weight: 700; }
+.bt-sr-crumb { color: var(--c-dim); font-size: 12px; overflow-wrap: anywhere; }
+.bt-sr-title { display: inline-block; color: var(--c-accent); font: 650 19px/1.35 var(--font-head);
+  text-decoration: none; overflow-wrap: anywhere; }
+.bt-sr-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.bt-sr-snip { margin: 8px 0 0; color: var(--c-dim); font-size: 13px; line-height: 1.65;
+  overflow-wrap: anywhere; }
+.bt-sr-empty { padding: 26px; border: 1px solid var(--c-border); border-radius: 14px;
+  background: var(--c-surface); color: var(--c-dim); font-size: 13px; line-height: 1.5; }
+.bt-sr-empty strong { display: block; color: var(--c-text); font-size: 16px; }
+.bt-sr-empty p { margin: 8px 0 16px; }
+.bt-ai { position: sticky; top: 24px; border: 1px solid var(--c-border);
+  border-radius: 16px; padding: 20px; background: var(--c-surface-2); }
+.bt-ai-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.bt-ai-spark { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px;
+  border-radius: 8px; color: var(--c-accent); background: var(--c-accent-soft); font-size: 17px; }
+.bt-ai-label { color: var(--c-text); font-size: 13px; font-weight: 750; }
+.bt-ai-subtitle { color: var(--c-dim); font-size: 11px; margin-top: 3px; }
+.bt-ai-body { color: var(--c-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.bt-ai.is-quiet { border-color: var(--c-border); }
+.bt-ai.is-quiet .bt-ai-body { color: var(--c-dim); }
+.bt-ai.is-loading .bt-ai-body::after { content: ""; display: block; height: 65px;
+  border-radius: 7px; background: var(--c-border-2); opacity: .5; animation: bt-ai-pulse 1.4s ease-in-out infinite; }
 @keyframes bt-ai-pulse { 0%, 100% { opacity: .28; } 50% { opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { .bt-ai.is-loading .bt-ai-body::after { animation: none; } }
+@media (max-width: 860px) {
+  .bt-sr-top { flex-wrap: wrap; gap: 16px; }
+  .bt-sr-form { flex-basis: 100%; }
+  .bt-sr-main { grid-template-columns: minmax(0, 1fr); }
+  .bt-ai { position: static; grid-row: 1; }
+}
+@media (max-width: 540px) {
+  .bt-sr-page { padding-inline: 16px; }
+  .bt-sr-top { padding-top: 22px; }
+  .bt-sr-form { gap: 7px; padding-left: 12px; }
+  .bt-sr-form button { padding-inline: 10px; }
+}
 
-.bt-sr { margin: 0 0 24px; }
-.bt-sr-crumb { font-size: 12px; color: var(--c-ink-2); margin-bottom: 3px; overflow-wrap: anywhere; }
-.bt-sr-title { display: inline-block; font-size: 17px; line-height: 1.35; color: var(--c-accent);
-  text-decoration: none; overflow-wrap: anywhere; }
-.bt-sr-title:hover { text-decoration: underline; }
-.bt-sr-title:visited { opacity: .82; }
-.bt-sr-snip { font-size: 13px; line-height: 1.6; color: var(--c-ink-2); margin: 4px 0 0; overflow-wrap: anywhere; }
-.bt-sr-empty { font-size: 13px; color: var(--c-ink-2); }
+/* A tab's page is still starting: a quiet loading screen over the area, so nothing half-drawn or left over from the
+   home page shows through. It goes away the moment the page is ready. */
+.bt-doc-loading { position: absolute; inset: 0; z-index: 21; display: none; flex-direction: column; justify-content: space-between;
+  align-items: center; padding: 56px 24px 28px; background: var(--c-bg, #0b0d14); pointer-events: none; }
+.bt-doc-loading.is-active { display: flex; }
+.bt-doc-loading-col { display: grid; gap: 12px; width: min(760px, 100%); }
+.bt-doc-loading-col i { display: block; height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--c-surface-2, #171a26) 25%, var(--c-hover, #222637) 50%, var(--c-surface-2, #171a26) 75%); background-size: 200% 100%; animation: bt-doc-skeleton 1.4s linear infinite; }
+.bt-doc-loading-col i:nth-child(1) { width: 46%; } .bt-doc-loading-col i:nth-child(2) { width: 78%; } .bt-doc-loading-col i:nth-child(3) { width: 62%; }
+.bt-doc-loading-col span { margin-top: 6px; color: var(--c-dim, #8a90a6); font: 500 13px/1 var(--font-sans, system-ui); }
+.bt-doc-loading-composer { width: min(760px, 100%); height: 84px; border-radius: 20px; border: 1px solid var(--c-border-2, #262b3d); background: var(--c-surface, #11131c); }
+@keyframes bt-doc-skeleton { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .bt-doc-loading-col i { animation: none; } }

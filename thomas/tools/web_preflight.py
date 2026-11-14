@@ -41,6 +41,7 @@ INLINE_SCRIPT_RE = re.compile(
 )
 SCRIPT_SRC_RE = re.compile(r"\bsrc\s*=\s*(['\"])(?P<src>.*?)\1", re.IGNORECASE | re.DOTALL)
 THROW_RE = re.compile(r"\bthrow\s+(?:new\s+)?(?:Error|TypeError|RangeError|ReferenceError|SyntaxError|URIError)\b")
+PAGE_SUFFIXES = frozenset({".html", ".htm"})
 SMOKE_LINKED_ASSET_SUFFIXES = {".css", ".js", ".mjs", ".cjs"}
 SMOKE_DISCOVERY_MAX_HTML = 2000
 SMOKE_DISCOVERY_MAX_BYTES = 2 * 1024 * 1024
@@ -53,8 +54,24 @@ ORPHAN_SCAN_MAX_FILES = 2000
 # the start of every second pass on a Linux venv link copied onto Windows
 # (runtime/doppelganger/venvs/green/lib64, WinError 1920) -- the walk reached
 # it and `is_file()` raised before any pruning happened.
+# `.claude` holds this checkout's worktrees -- whole copies of the repository,
+# 36,000 files on the Thomas checkout -- and the caches hold nothing a page
+# could load.
 ORPHAN_SCAN_PRUNED_DIRS = frozenset(
-    {".git", "node_modules", ".thomas", "runtime", ".venv", "venv", "venvs", "__pycache__"}
+    {
+        ".git",
+        "node_modules",
+        ".thomas",
+        ".claude",
+        "runtime",
+        ".venv",
+        "venv",
+        "venvs",
+        "__pycache__",
+        ".ruff_cache",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
 )
 ORPHAN_SCAN_MAX_BYTES = 2 * 1024 * 1024
 
@@ -215,12 +232,19 @@ def javascript_syntax_error(source: str) -> str:
     return message[:200]
 
 
-def scan_project_files(root: Path):
+def scan_project_files(root: Path, suffixes: frozenset[str] | set[str] | None = None):
     """Regular files under ``root``, pruned folders never entered, a path that
-    cannot be stat-ed treated as absent rather than raising."""
+    cannot be stat-ed treated as absent rather than raising.
+
+    ``suffixes`` (lower-case, with the dot) filters by name BEFORE the stat.
+    The stat is what makes a broken link harmless, but on the Thomas checkout
+    it ran 56,000 times to keep 173 pages and cost four times the walk itself.
+    """
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in ORPHAN_SCAN_PRUNED_DIRS]
         for name in filenames:
+            if suffixes is not None and os.path.splitext(name)[1].lower() not in suffixes:
+                continue
             path = Path(dirpath) / name
             try:
                 if not path.is_file():
@@ -228,6 +252,18 @@ def scan_project_files(root: Path):
             except OSError:
                 continue
             yield path
+
+
+def project_pages(root: Path) -> list[Path]:
+    """Every HTML page under ``root``, in a stable order, dependency folders never entered.
+
+    Smoke discovery used to ``rglob`` the whole project for pages. On the Thomas
+    checkout that walked .venv, .git, node_modules and .thomas and took ten
+    minutes on 2026-10-31, failing every timeout the test suite allows; a user
+    project with a large node_modules would pay the same on every web check.
+    No page inside those folders is one Thomas built, so none is worth smoking.
+    """
+    return sorted(scan_project_files(root, PAGE_SUFFIXES))
 
 
 def orphaned_web_assets(cwd: str | Path, files: list[str]) -> list[str]:
@@ -521,7 +557,7 @@ def browser_smoke_files(cwd: str | Path, changed_files: list[str]) -> list[str]:
     ]
     claimed: set[Path] = set()
     if assets:
-        candidates = sorted({*root.rglob("*.html"), *root.rglob("*.htm")})
+        candidates = project_pages(root)
         for candidate in candidates[:SMOKE_DISCOVERY_MAX_HTML]:
             try:
                 if candidate.stat().st_size > SMOKE_DISCOVERY_MAX_BYTES:
@@ -591,8 +627,8 @@ def owners_by_mention(root: Path, assets: list[Path], already: set[Path]) -> set
     if not wanted:
         return set()
     names = {path.name for path in wanted}
-    scripts = sorted(p for p in root.rglob("*.js") if p.is_file() and p.resolve() not in wanted)
-    pages = sorted({*root.rglob("*.html"), *root.rglob("*.htm")})
+    scripts = sorted(p for p in scan_project_files(root, {".js"}) if p.resolve() not in wanted)
+    pages = project_pages(root)
 
     def mentions(path: Path, needles: set[str]) -> bool:
         try:

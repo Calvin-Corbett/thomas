@@ -26,6 +26,17 @@ _MUTATING_ACTIONS = {"preferences.set"}
 
 InlineActionReceipt = ActionReceipt
 
+# Words that make a free-form preference key read as one of Thomas's real
+# settings. Such a key is refused with a pointer to the owner's card: writing it
+# would change nothing, and saying it did would be false.
+_SETTING_WORDS = ("autonomy", "autopilot", "internet", "guardrail", "file_access", "file access", "network", "shell")
+
+
+def _names_a_real_setting(key: str) -> bool:
+    text = str(key or "").strip().lower().replace("-", "_")
+    spaced = text.replace("_", " ")
+    return any(word in text or word in spaced for word in _SETTING_WORDS)
+
 
 class ChatInlineOperator:
     """Execute only Thomas-owned, bounded actions with readback proof."""
@@ -49,9 +60,23 @@ class ChatInlineOperator:
         self._user_prompt = str(user_prompt or "")
         self._emit_event = emit_event
 
-    async def execute(self, *, action: str, key: str = "", value: Any = None) -> dict[str, Any]:
+    async def execute(self, *, action: str, key: str = "", value: Any = None, reason: str = "") -> dict[str, Any]:
         normalized = str(action or "").strip().lower()
         action_id = f"inline-{secrets.token_urlsafe(8)}"
+
+        if normalized == "settings.request_change":
+            return await self._request_setting_change(action_id, key, value, reason)
+        if normalized == "preferences.set" and _names_a_real_setting(key):
+            # Observed 2026-09-22: asked to go offline, Thomas wrote a free-form
+            # note "internet reach = off" and replied "Internet reach is now Off".
+            # Free-form preferences are notes; nothing reads them as a setting,
+            # so the reply was false. A real setting goes through the owner's card.
+            return await self._reject(
+                action_id,
+                normalized,
+                "That is one of Thomas's settings, not a preference note. Use settings.request_change: "
+                "it shows the owner a card, and only their approval changes it.",
+            )
 
         if normalized not in _ACTION_TO_TOOL:
             return await self._reject(
@@ -206,6 +231,33 @@ class ChatInlineOperator:
     def _extract_preference_value(result: dict[str, Any]) -> Any:
         data = result.get("data")
         return data.get("value") if isinstance(data, dict) else None
+
+    async def _request_setting_change(self, action_id: str, setting: str, value: Any, reason: str) -> dict[str, Any]:
+        """Show the owner a card asking to change one of Thomas's settings, and wait.
+
+        Nothing here changes a setting. The card is the announcement; a raised
+        limit then needs the owner's password, and the server enforces it
+        (thomas/server/dial_elevation.py). Allowed at every autonomy: asking is
+        not acting.
+        """
+        from thomas.tools.setting_request import SettingRequestTool
+
+        action = "settings.request_change"
+        await self._emit({"type": "operator_action", "state": "started", "action_id": action_id, "action": action})
+        result = await SettingRequestTool(session_id=self._session_id).execute(
+            {"setting": setting, "value": "" if value is None else str(value), "reason": reason}
+        )
+        receipt = InlineActionReceipt(
+            action_id=action_id,
+            session_id=self._session_id,
+            action=action,
+            ok=bool(result.ok),
+            evidence={"observed": result.data} if result.ok else {},
+            error=str(result.error or ""),
+        )
+        payload = receipt.to_dict()
+        await self._emit({"type": "operator_action", "state": "completed", **payload})
+        return payload
 
     async def _reject(self, action_id: str, action: str, error: str) -> dict[str, Any]:
         receipt = InlineActionReceipt(

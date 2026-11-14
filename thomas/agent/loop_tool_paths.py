@@ -16,7 +16,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from thomas.core.file_access import authorize_write, is_file_access_refusal
+from thomas.core.file_access import authorize_write, is_file_access_refusal, names_another_volume, path_is_inside
+from thomas.tools.fs_scope import Scope
 
 # Same anchor filesystem.WriteFileTool uses for its own ladder check, so the
 # sanitizer and the tool can never disagree about where "the project" is.
@@ -34,6 +35,21 @@ _WRITE_TOOL_PATH_KEYS = (
     "auth_path",
     "auth_payload_path",
 )
+
+
+def _root_of(sandbox_root: Path | None, scope: Scope | None) -> Path | None:
+    """The root a check judges against: the one passed, else the scope's, else none."""
+    if sandbox_root is None and scope is not None:
+        return Path(scope.root)
+    return sandbox_root
+
+
+def loop_sandbox_root(loop: Any) -> Path:
+    """The root a run's tool calls are judged against: its scope's root when it carries a Scope, else the configured one."""
+    scope = getattr(loop, "scope", None)
+    if isinstance(scope, Scope):
+        return Path(scope.root).resolve()
+    return Path(loop.config.tools.sandbox_path).resolve()
 
 
 def _declares_a_path_parameter(registry: Any, name: str) -> bool:
@@ -68,18 +84,31 @@ def _declares_a_path_parameter(registry: Any, name: str) -> bool:
     return any(key in properties for key in _WRITE_TOOL_PATH_KEYS)
 
 
+def _optional_empty_path_keys(registry: Any, name: str) -> frozenset[str]:
+    """Honor only registered tools' explicit, optional empty-path semantics."""
+    getter = getattr(registry, "get", None)
+    if not callable(getter):
+        return frozenset()
+    tool = getter(name)
+    keys = getattr(tool, "optional_empty_path_keys", ())
+    schema = getattr(tool, "parameters", None)
+    if not isinstance(keys, (tuple, frozenset)) or not isinstance(schema, dict):
+        return frozenset()
+    properties, required = schema.get("properties"), schema.get("required", [])
+    if not isinstance(properties, dict) or not isinstance(required, list):
+        return frozenset()
+    return frozenset(key for key in keys if key in _WRITE_TOOL_PATH_KEYS and key in properties and key not in required)
+
+
 def _absolute_path_within(path_text: str, root: Path) -> tuple[str | None, str | None]:
     """Accept an absolute path only when it resolves under ``root``."""
     try:
-        resolved = Path(path_text).expanduser().resolve()
         resolved_root = root.resolve()
+        outside = names_another_volume(path_text, resolved_root)
+        resolved = None if outside else Path(path_text).expanduser().resolve()
     except OSError as exc:
         return None, f"absolute path could not be resolved: {exc}"
-    try:
-        common = Path(os.path.commonpath([str(resolved_root), str(resolved)]))
-    except ValueError:
-        common = None
-    if common is None or common.resolve() != resolved_root:
+    if resolved is None or not path_is_inside(resolved, resolved_root):
         return None, (
             f"absolute paths are not allowed outside the sandbox root {resolved_root}; this path resolves outside it"
         )
@@ -92,6 +121,7 @@ def _validate_filesystem_path(
     sandbox_root: Path | None = None,
     benchmark_root: Path | None = None,
     file_access: int | None = None,
+    scope: Scope | None = None,
 ) -> tuple[str | None, str | None]:
     """(validated_path, error) for one path argument.
 
@@ -111,6 +141,7 @@ def _validate_filesystem_path(
     paths are rejected outright, keeping the benchmark lane and legacy callers
     byte-identical.
     """
+    sandbox_root = _root_of(sandbox_root, scope)
     if path_value is None:
         return None, "missing path value"
 
@@ -163,11 +194,7 @@ def _validate_filesystem_path(
             if not allowed:
                 return None, reason
             return str(resolved), None
-        try:
-            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(resolved)]))
-        except ValueError:
-            return None, "absolute path is outside the benchmark root"
-        if common.resolve() != benchmark_root.resolve():
+        if not path_is_inside(resolved, benchmark_root.resolve()):
             return None, "absolute path is outside the benchmark root"
         return str(resolved), None
 
@@ -195,11 +222,7 @@ def _validate_filesystem_path(
             candidate = (sandbox_root.resolve() / path_text).resolve()
         except OSError as exc:
             return None, f"path could not be resolved: {exc}"
-        try:
-            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(candidate)]))
-        except ValueError:
-            return None, "path is outside the benchmark root"
-        if common.resolve() != benchmark_root.resolve():
+        if not path_is_inside(candidate, benchmark_root.resolve()):
             return None, "path is outside the benchmark root"
 
     return path_text, None
@@ -298,7 +321,10 @@ def _sanitize_write_tool_path(
     benchmark_root: Path | None = None,
     file_access: int | None = None,
     protected_paths: list[str] | tuple[str, ...] | None = None,
+    optional_empty_path_keys: frozenset[str] = frozenset(),
+    scope: Scope | None = None,
 ) -> tuple[str | None, str | None]:
+    sandbox_root = _root_of(sandbox_root, scope)
     if not isinstance(args, dict):
         return None, "tool arguments must be an object"
 
@@ -312,6 +338,14 @@ def _sanitize_write_tool_path(
         path_value = args.get(key)
         if not isinstance(path_value, (str, os.PathLike)):
             return None, f"{key} must be a string or path-like value"
+        if key in optional_empty_path_keys:
+            if path_value == "":
+                continue
+            if isinstance(path_value, str) and not path_value.strip():
+                return (
+                    None,
+                    f"invalid {key}: whitespace-only paths are invalid; omit it or use an empty string for no output",
+                )
         checked_path, error = _validate_filesystem_path(
             path_value,
             sandbox_root=sandbox_root,
@@ -350,8 +384,10 @@ __all__ = [
     "_WRITE_TOOL_PATH_KEYS",
     "_fenced_by",
     "fenced_patch_target",
+    "loop_sandbox_root",
     "patch_target_paths",
     "_declares_a_path_parameter",
+    "_optional_empty_path_keys",
     "_sanitize_write_tool_path",
     "_validate_filesystem_path",
 ]

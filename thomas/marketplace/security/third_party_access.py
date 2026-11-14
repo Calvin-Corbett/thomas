@@ -114,41 +114,13 @@ class WindowsStepUpAuthProvider:
     def authorize(self, action: str, reason: str) -> AuthResult:
         if platform.system() != "Windows":
             return AuthResult(False, "windows_cred_ui", "windows", "wrong_platform")
-        try:
-            import win32api
-            import win32cred
-        except ImportError:
-            return AuthResult(False, "windows_cred_ui", "windows", "pywin32_missing")
+        # Thomas's one standard prompt: Windows' own sign-in, answer checked by
+        # Windows. This used to be its own copy of a credential box that treated
+        # OK as approval without checking what was typed.
+        from thomas.tools.windows_auth import verified_sign_in
 
-        target = f"THOMAS-STEP-UP:{str(action or '')[:60]}"
-        message = (
-            f"Thomas requires local authorization.\n\n"
-            f"Action: {action}\n\n"
-            f"Reason: {reason}\n\n"
-            "Enter your Windows credentials to continue."
-        )
-        flags = (
-            win32cred.CREDUI_FLAGS_GENERIC_CREDENTIALS
-            | win32cred.CREDUI_FLAGS_EXPECT_CONFIRMATION
-            | win32cred.CREDUI_FLAGS_COMPLETE_USERNAME
-        )
-        try:
-            username = win32api.GetUserName()
-        except Exception:
-            username = ""
-        try:
-            result, _username, _password, _saved = win32cred.CredUIPromptForCredentials(
-                target,
-                0,
-                username,
-                "",
-                False,
-                flags,
-                message,
-            )
-        except Exception:
-            return AuthResult(False, "windows_cred_ui", "windows", "auth_dialog_failed")
-        return AuthResult(result == 0, "windows_cred_ui", "windows", None if result == 0 else "auth_denied")
+        ok = verified_sign_in(action, reason)
+        return AuthResult(ok, "windows_cred_ui", "windows", None if ok else "auth_denied")
 
 
 class MacOSStepUpAuthProvider:

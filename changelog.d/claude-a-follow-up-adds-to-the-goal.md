@@ -1,0 +1,3 @@
+### Fixed
+
+- **A follow-up you send an Autopilot build now adds to its goal instead of replacing it.** You said the done check "takes my latest message as the whole goal and forgets what I asked for first" — a project the server restarted was sent "Carry on from where you stopped..." and from that turn on every continuation, resume and done check was aimed at "carry on" rather than the cleanup you had asked for. The goal is now everything you asked for in that conversation, oldest first, with a later message winning where two conflict, and the done check is told to judge the work against all of it: ask for A, say "carry on", say "also B", and the check holds the build to A and B.

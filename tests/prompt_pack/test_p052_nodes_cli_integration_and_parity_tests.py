@@ -189,5 +189,8 @@ def test_wiring_registers_under_thomas_cli_main() -> None:
     finally:
         if original is not None:
             sys.modules["thomas.cli.main"] = original
+            # `import a.b as x` reads this attribute, not sys.modules, and the re-import moved it. Left alone, a later
+            # stub landed on a copy nobody calls, and a test of the caged server started the real one.
+            sys.modules["thomas.cli"].main = original
         else:
             sys.modules.pop("thomas.cli.main", None)

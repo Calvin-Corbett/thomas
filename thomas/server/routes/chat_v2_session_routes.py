@@ -19,10 +19,11 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.chat.session_store import SessionStore
+from thomas.chat.session_store import SessionStore, SessionUnreadable
 from thomas.core import capture_context, task_bot_runtime
 from thomas.core.action_receipt import delegated_action_receipt
 from thomas.core.capture_context import CAPTURE_EXCEPTIONS
+from thomas.core.event_loop_offload import off_loop
 from thomas.marketplace.observability.session_log_events import truncate_payload
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 from thomas.server.chat_delegation import apply_task_update, session_active_delegations
@@ -102,7 +103,10 @@ async def handle_session_export(request: web.Request) -> web.Response:
     conversation = await session_store.load(sid)
     if conversation is None:
         return web.json_response({"error": "Session not found"}, status=404)
-    meta = await session_store.load_meta(sid)
+    try:
+        meta = await session_store.load_meta(sid)
+    except SessionUnreadable:
+        return web.json_response({"error": "Session settings could not be read right now"}, status=503)
     payload = {
         "schema_version": "thomas.chat.export.v1",
         "exported_at": datetime.now(UTC).isoformat(),
@@ -190,14 +194,61 @@ _INTERNAL_STEP_RE = _re.compile(
 )
 
 
-def _humanize_step_summary(summary: str) -> str:
+def _humanize_step_summary(summary: str, *, state: str = "") -> str:
     text = str(summary or "").strip()
     if not text:
         return ""
-    if _INTERNAL_STEP_RE.search(text):
+    # A failed step's summary IS the reason the run ended, not internal
+    # lifecycle chatter -- collapsing it through the same filter as an
+    # in-progress step threw the only answer on the card away. Live evidence
+    # (Ruling J, exec-349fa8edcf3b, 2026-09-23): "Background execution
+    # failed: Pass budget exhausted after 30 passes..." matched on
+    # "background execution" and the card showed "Getting started — failed"
+    # with no reason. Every other lifecycle step is still humanized; only a
+    # terminal failure's own text is exempt.
+    if str(state or "").strip().lower() != "failed" and _INTERNAL_STEP_RE.search(text):
         return "Getting started"
     # Strip any leading bracket tag like "[worker] " noise.
     return _re.sub(r"^\s*\[[^\]]+\]\s*", "", text).strip()
+
+
+# A Thomas-project transition marks itself "Build update: " so the humanizer
+# above leaves its real text alone -- "recording results" is a genuine update
+# from the Build run, not the lifecycle chatter that pattern is meant to catch.
+_BUILD_UPDATE_PREFIX = "Build update: "
+
+
+def _card_step_summary(raw: str, *, state: str = "") -> str:
+    """One recorded transition as the task card should READ it.
+
+    The marker is provenance for this function, not a sentence for the reader:
+    the card already heads its list with "Recorded in Build", so repeating it on
+    every line is chrome. What is left underneath is the update itself.
+    """
+    text = str(raw or "").strip()
+    if text.startswith(_BUILD_UPDATE_PREFIX):
+        return _re.sub(r"^\s*\[[^\]]+\]\s*", "", text[len(_BUILD_UPDATE_PREFIX) :]).strip()
+    return _humanize_step_summary(text, state=state)
+
+
+# A step's blocker is printed under its update verbatim, so the blockers the
+# runtime writes for its own bookkeeping cannot go out as they are.
+# ``cancel_execution`` records ``blocker="cancelled"`` beside the summary
+# "Stopped by you.", and the no-proof ending records ``blocker="no_evidence"``
+# beside a summary that already spells out that nothing verifiable was produced
+# (both in ``thomas/core/task_bot_runtime.py``). On the card those read
+# "Blocked: cancelled" and "Blocked: no_evidence" -- jargon, and in the first
+# case a stop the reader asked for dressed up as a blockage. Each one is already
+# said by the step's own ``state`` and ``summary``, so drop the token rather than
+# repeat it badly. A real blocker ("Pass budget exhausted after 30 passes") is
+# the only answer the card has for a stalled step and passes through untouched.
+_RUNTIME_BOOKKEEPING_BLOCKERS = frozenset({"cancelled", "canceled", "no_evidence"})
+
+
+def _card_step_blocker(raw: str) -> str:
+    """One recorded blocker as the task card should READ it."""
+    text = str(raw or "").strip()
+    return "" if text.lower() in _RUNTIME_BOOKKEEPING_BLOCKERS else text
 
 
 async def handle_delegation_detail(request: web.Request) -> web.Response:
@@ -223,7 +274,8 @@ async def handle_delegation_detail(request: web.Request) -> web.Response:
     for t in transitions:
         if not isinstance(t, dict):
             continue
-        summary = _humanize_step_summary(str(t.get("summary") or "").strip())
+        raw = str(t.get("summary") or "").strip()
+        summary = _card_step_summary(raw, state=str(t.get("state") or "").strip())
         if not summary or summary == last_summary:
             continue  # skip empties + collapse consecutive duplicates
         last_summary = summary
@@ -232,7 +284,7 @@ async def handle_delegation_detail(request: web.Request) -> web.Response:
                 "summary": summary,
                 "state": str(t.get("state") or "").strip(),
                 "actor": str(t.get("actor") or "").strip(),
-                "blocker": str(t.get("blocker") or "").strip(),
+                "blocker": _card_step_blocker(str(t.get("blocker") or "")),
                 "at": str(t.get("occurred_at") or "").strip(),
             }
         )
@@ -282,13 +334,25 @@ async def handle_session_delegations(
     active_delegations: Any = session_active_delegations,
 ) -> web.Response:
     sid = request.match_info["session_id"]
-    delegations = []
-    for raw in active_delegations(sid):
-        row = dict(raw or {})
-        if not isinstance(row.get("receipt"), dict):
-            row["receipt"] = delegated_action_receipt(row, session_id=sid).to_dict()
-        delegations.append(row)
-    return web.json_response({"session_id": sid, "delegations": delegations})
+
+    def _rows() -> list[dict[str, Any]]:
+        """The board scan plus a receipt per row. Blocking file I/O throughout.
+
+        Measured 2026-09-24 against a replica of the live board: 175-188 ms for a
+        session with no rows at all, 198-203 ms for 16, 419-446 ms for 28 -- and
+        0.77-1.64 s once the machine was busy. The Chat UI polls this while work
+        runs, so every poll took the whole server off the air for that long.
+        """
+        delegations = []
+        for raw in active_delegations(sid):
+            row = dict(raw or {})
+            if not isinstance(row.get("receipt"), dict):
+                row["receipt"] = delegated_action_receipt(row, session_id=sid).to_dict()
+            delegations.append(row)
+        return delegations
+
+    rows = await off_loop("chat.session_delegations_page", _rows)
+    return web.json_response({"session_id": sid, "delegations": rows})
 
 
 async def handle_cancel_delegation(

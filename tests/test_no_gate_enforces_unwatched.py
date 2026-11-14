@@ -24,6 +24,9 @@ BASELINE = Path(__file__).with_name("gate_selftest_baseline.json")
 _DEFAULT_SOURCES = (
     REPO_ROOT / ".pre-commit-config.yaml",
     REPO_ROOT / "scripts" / "crew" / "brief" / "commit.py",
+    # commit.py splices its hook-parity gates in from this module with a star import,
+    # so a reader of commit.py alone would not see them.
+    REPO_ROOT / "scripts" / "crew" / "brief" / "gate_parity.py",
     REPO_ROOT / ".github" / "workflows" / "gates.yml",
     REPO_ROOT / ".github" / "workflows" / "robustness-gates.yml",
     REPO_ROOT / "scripts" / "crew" / "land_checks.py",

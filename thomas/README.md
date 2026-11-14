@@ -92,9 +92,8 @@ Normal imports and focused modules are the default. In particular:
   modules such as `thomas/agent/loop_core.py` and
   `thomas/agent/loop_execution.py`.
 - `thomas/server/routes/chat_aiohttp.py` is a compatibility shim that imports
-  `thomas/server/routes/chat_aiohttp_handlers.py` and
   `thomas/server/routes/chat_aiohttp_helpers.py`; it does not own live route
-  registration.
+  registration. The V1 chat engine behind it is deleted.
 - `scripts/crew/tasks/manager.py` imports named modules under
   `scripts/crew/tasks/`.
 
@@ -184,7 +183,6 @@ in `plans/thomas/WORKBOARD.md` and must not be treated as application source.
 
 ## Repository Boundaries
 
-- `thomas/_archived/` is historical code, not a production edit target.
 - `thomas/_vendor/` contains vendored dependencies; do not rewrite or remove it
   as part of an unrelated feature.
 - A domain package containing only scaffolding is not proof of a live product

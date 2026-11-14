@@ -11,6 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from tests.sleep_support import skip_sleeps
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "scripts" / "crew" / "workboard") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts" / "crew" / "workboard"))
@@ -32,9 +34,7 @@ def test_atomic_write_retries_a_transient_replace_failure(tmp_path: Path, monkey
         return real_replace(self, target)
 
     monkeypatch.setattr(Path, "replace", flaky_replace)
-    import board_io
-
-    monkeypatch.setattr(board_io.time, "sleep", lambda _s: None)
+    skip_sleeps(monkeypatch)
 
     claim_utils._atomic_write(board, "new")
 
@@ -44,7 +44,6 @@ def test_atomic_write_retries_a_transient_replace_failure(tmp_path: Path, monkey
 
 
 def test_atomic_write_falls_back_to_in_place_when_the_replace_is_denied_for_good(tmp_path: Path, monkeypatch) -> None:
-    import board_io
     import claim_utils
 
     board = tmp_path / "WORKBOARD.md"
@@ -54,7 +53,7 @@ def test_atomic_write_falls_back_to_in_place_when_the_replace_is_denied_for_good
         raise OSError(0, "Access is denied", None, 5)
 
     monkeypatch.setattr(Path, "replace", denied)
-    monkeypatch.setattr(board_io.time, "sleep", lambda _s: None)
+    skip_sleeps(monkeypatch)
 
     claim_utils._atomic_write(board, "new")
 

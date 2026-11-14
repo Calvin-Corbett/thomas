@@ -53,7 +53,9 @@ def test_a_conversation_born_on_home_is_learned_and_its_row_focuses_home(shell) 
         " && document.querySelectorAll('#tc-thread .tc-bubble').length >= 2",
         timeout=20000,
     )
-    page.wait_for_function("() => document.querySelector('.bt-tab.is-pinned .bt-tab-title').textContent !== 'Chat'", timeout=5000)
+    page.wait_for_function(
+        "() => document.querySelector('.bt-tab.is-pinned .bt-tab-title').textContent !== 'Chat'", timeout=5000
+    )
     assert page.evaluate(HOME_TITLE) == "fresh one on home"
     page.click('#tc-chats [data-history-title="fresh one on home"]')
     page.wait_for_timeout(800)
@@ -76,17 +78,25 @@ def test_new_chat_on_a_busy_home_opens_a_blank_tab_not_a_copy(shell) -> None:
     assert page.evaluate(ACTIVE_TITLE) == "Chat"
     assert page.evaluate("() => document.getElementById('tc-thread').childElementCount") >= 2
     page.wait_for_function(
-        "() => !document.querySelector('.tc-mode-button[data-thomas-mode=chat]').hasAttribute('data-running')", timeout=20000
+        "() => !document.querySelector('.tc-mode-button[data-thomas-mode=chat]').hasAttribute('data-running')",
+        timeout=20000,
     )
 
 
 def test_the_home_pill_hides_off_home_and_a_document_shows_its_own(shell) -> None:
+    """The model pill used to be home's alone and each document showed its own.
+
+    Since c4fd45f4 (2026-09-07) the browser bar's pill is the one model selector for every tab: it stays
+    visible on a document tab (browser_shell.js shows it for every tab and mirrors a change into each loaded
+    document) and an embedded document hides its own pill (chat_shell.css, html.is-embedded) while keeping
+    its header.
+    """
     page = shell.page
     doc = shell.docs()[0]
     page.click(".bt-tab:nth-child(2)")
     page.wait_for_timeout(200)
-    assert page.evaluate(PILL) == "none"
-    assert doc.evaluate(PILL) != "none"
+    assert page.evaluate(PILL) != "none"
+    assert doc.evaluate(PILL) == "none"
     assert doc.evaluate("() => getComputedStyle(document.querySelector('main > header')).display") != "none"
     page.click(".bt-tab.is-pinned")
     page.wait_for_timeout(200)
@@ -107,14 +117,32 @@ def test_the_sidebar_folds_in_every_document_together(shell) -> None:
 
 
 def test_reload_on_home_refuses_to_close_the_other_tabs(shell) -> None:
+    """Reload on home used to refuse while other tabs were open, because a page reload would have closed them.
+
+    Since c4fd45f4 (2026-09-07) it reloads the Chat in place through window.ThomasChatSurface.reload: the
+    other tabs stay open and the Chat reads its history and models again. browser_shell.js calls that and,
+    when nothing has defined it, tells you "Chat is still starting"; chat.html never defined it until now.
+    """
     page = shell.page
     page.click(".bt-tab.is-pinned")
     before = page.evaluate(DOC_COUNT)
+    assert before >= 1, "the point is that other tabs are open"
+    assert page.evaluate("() => typeof window.ThomasChatSurface.reload") == "function"
+    models = "() => performance.getEntriesByType('resource').filter(e => e.name.includes('/api/models')).length"
+    asked = page.evaluate(models)
     page.click("#bt-reload")
-    page.wait_for_timeout(500)
+    page.wait_for_function(
+        f"() => performance.getEntriesByType('resource').filter(e => e.name.includes('/api/models')).length > {asked}",
+        timeout=10000,
+    )
+    page.wait_for_function(
+        "() => !document.getElementById('bt-reload').classList.contains('is-reloading')", timeout=10000
+    )
     assert page.evaluate(DOC_COUNT) == before
     notices = "() => Array.from(document.querySelectorAll('[role=status]')).map(e => e.textContent).join(' | ')"
-    assert "close every other tab" in page.evaluate(notices)
+    assert "still starting" not in page.evaluate(notices)
+    assert "could not be reloaded" not in page.evaluate(notices)
+    assert page.evaluate("() => document.querySelector('.bt-tab.is-pinned').classList.contains('is-active')") is True
 
 
 def test_chat_brings_a_home_carried_into_build_back(shell) -> None:

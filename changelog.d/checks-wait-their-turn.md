@@ -1,0 +1,2 @@
+### Fixed
+- Checks before your card finish again when many arrive at once. Checks were admitted side by side without a limit, and every one asked for the whole shared test pool: on 2026-10-23 six ran at once over sixteen places, none finished within its hour, and each was tried again up to 31 times with no hand-in for over three hours. A check now waits for its turn until it can have about six places of the pool, and two may always run side by side.

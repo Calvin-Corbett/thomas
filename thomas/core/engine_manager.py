@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -33,6 +34,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+class _AlivenessReading:
+    """What the engine list says about a loop that a plugin starts and stops. It reads the loop and never builds one."""
+
+    @staticmethod
+    def status_snapshot() -> dict[str, Any]:
+        loop = getattr(sys.modules.get("thomas.core.aliveness"), "_loop", None)
+        return {"running": bool(loop and loop.running), "cycles_completed": int(loop.ticks) if loop else 0}
 
 
 @dataclass
@@ -90,9 +100,14 @@ class EngineManager:
         self,
         executor_fn: Callable | None = None,
         notify_fn: Callable[[str], None] | None = None,
+        *,
+        aliveness: bool = True,
     ) -> dict[str, bool]:
         """
         Start all engines. Returns dict of {engine_name: success}.
+
+        ``aliveness=False`` leaves the sweep to the server, whose Plugins page starts and stops it. The engine list still
+        shows it.
         """
         self._notify_fn = notify_fn
         results = {}
@@ -104,7 +119,7 @@ class EngineManager:
         results["tool_factory"] = self._start_tool_factory()
 
         # 3. Aliveness sweep (cheap world sampling; records, never speaks)
-        results["aliveness"] = self._start_aliveness()
+        results["aliveness"] = self._start_aliveness() if aliveness else self._leave_aliveness_to_its_plugin()
 
         # 4. Initiative Engine (autonomous work when idle)
         results["initiative"] = self._start_initiative(executor_fn, notify_fn)
@@ -141,13 +156,13 @@ class EngineManager:
         """Stop all engines gracefully."""
         self._running = False
 
-        # Stop the aliveness sweep
-        try:
-            from thomas.core.aliveness import get_aliveness_loop
-
-            get_aliveness_loop().stop()
-        except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as exc:
-            log.debug("aliveness loop stop skipped: %s", exc)
+        # Stop the aliveness sweep, if there is one. Building a loop only to stop it would write its permission file.
+        loop = getattr(sys.modules.get("thomas.core.aliveness"), "_loop", None)
+        if loop is not None:
+            try:
+                loop.stop()
+            except (RuntimeError, OSError) as exc:
+                log.debug("aliveness loop stop skipped: %s", exc)
 
         # Stop initiative
         try:
@@ -392,6 +407,12 @@ class EngineManager:
             self._status[name] = EngineStatus(name=name, error=str(exc))
             return False
 
+    def _leave_aliveness_to_its_plugin(self) -> bool:
+        """List the sweep without starting it: the server's ``aliveness`` plugin does that, and reads the loop live."""
+        self._engines["aliveness"] = _AlivenessReading()
+        self._status["aliveness"] = EngineStatus(name="aliveness", details={"mode": "mute"})
+        return True
+
     @staticmethod
     def _aliveness_executor() -> Callable | None:
         """Return the mute-mode aliveness executor, or None when it is off.
@@ -399,6 +420,10 @@ class EngineManager:
         Off unless THOMAS_ALIVENESS_ENABLED is set. Nothing about the engine's
         behaviour changes for anyone who has not opted in.
         """
+        from thomas.core.aliveness_setting import is_enabled as setting_is_on
+
+        if not setting_is_on():  # before the import below: a Thomas with the loop off must not load it
+            return None
         try:
             from thomas.core.aliveness import build_initiative_executor, is_enabled
         except (ImportError, ModuleNotFoundError) as exc:

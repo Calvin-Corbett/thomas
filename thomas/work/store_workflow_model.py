@@ -18,7 +18,7 @@ WORKFLOW_TYPES = frozenset({"manual", "scheduled", "event"})
 _FOCUS_STATUSES = frozenset({"configuring", "active"})
 _TRIGGERS_BY_WORKFLOW_TYPE = {
     "manual": frozenset({"manual"}),
-    "scheduled": frozenset({"interval", "daily", "weekly"}),
+    "scheduled": frozenset({"once", "interval", "daily", "weekly"}),
     "event": frozenset({"event"}),
 }
 _REQUIRED_WORKFLOW_FIELDS = frozenset(

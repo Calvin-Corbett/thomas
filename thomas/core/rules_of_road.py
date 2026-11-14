@@ -67,7 +67,11 @@ _SHELL_MUTATING_RE = re.compile(
     r"\btruncate\b|\bdd\s|"
     r"\bRemove-Item\b|\bMove-Item\b|\bCopy-Item\b|"
     r"\bcp\b|\bmv\b|\brm\b|\bdel\b|\berase\b|"
-    r"\bgit\s+apply\b|\bgit\s+checkout\s+--|\bpatch\s|\bapply_patch\b|"
+    r"\bgit\s+apply\b|\bgit\s+checkout\s+--|\bgit\s+format-patch\b|"
+    r"(?:^\s*|[;&|(\n]\s*|\b(?:bash|sh)\s+-c\s+['\"]\s*|"
+    r"(?<!\w)(?:sudo|nice|time|xargs)\s+|(?<!\w)env(?:\s+\w+=[^\s]+)*\s+|"
+    r"(?<!\w)-exec\s+|\bcmd\s+/c\s+|\bpowershell\s+-Command\s+['\"]\s*|`)patch(?=\s|<|$)|"
+    r"\bpatch\s+-[\w-]|\bpatch\s*<|\bapply_patch\b|"
     r">>?\s*[^&\s|>]"  # redirection to a file (excludes 2>&1 / >&)
     r")",
     re.I,

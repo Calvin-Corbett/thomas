@@ -1,26 +1,13 @@
-import fs from 'node:fs';
-import vm from 'node:vm';
+import { installFeature, installInlineCore, installScript } from './chat_feature_fixture.mjs';
 
 const htmlPath = process.argv[2];
 if (!htmlPath) throw new Error('usage: node chat_message_model_attribution.mjs <chat.html>');
-const html = fs.readFileSync(htmlPath, 'utf8');
 
-function functionSource(name, nextName) {
-  const start = html.indexOf(`function ${name}(`);
-  let end = html.indexOf(`\n    function ${nextName}(`, start);
-  if (end < 0) end = html.indexOf(`\n    async function ${nextName}(`, start);
-  if (start < 0 || end < 0) throw new Error(`could not extract ${name}`);
-  return html.slice(start, end);
-}
-
-// A `state` with a selected model is deliberately present in the context. The
-// bug this guards was `state.modelLabel || 'GPT-5.6 Sol'` inside this function,
-// which credited every saved reply to whatever the picker happened to be showing.
-// If that reference ever comes back, `unknownIsNotInvented` below turns red --
-// the codex case alone would NOT catch it, because a truthy row model masks it.
+// Keep a conflicting picker choice present: unknown history must never borrow it.
 const context = { state: { modelLabel: 'GPT-5.6 Terra' } };
-vm.createContext(context);
-vm.runInContext(functionSource('mapRealMessages', 'refreshChats'), context);
+installInlineCore(context, htmlPath);
+installScript(context, htmlPath, 'chat_media_bridge.js');
+installFeature(context, htmlPath, 'history_view', ['mapRealMessages']);
 
 const turns = [
   { role: 'user', content: 'make me a game' },

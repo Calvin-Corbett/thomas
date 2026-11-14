@@ -46,8 +46,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 try:
     from scripts.crew.tasks import reactivate as task_reactivate
+    from scripts.crew.workboard import backstop_order, claim_evidence
     from scripts.crew.workboard import claim as workboard_claim
-    from scripts.crew.workboard import claim_evidence
     from scripts.crew.workboard import issue as workboard_issue
     from scripts.crew.workboard import message as workboard_message
     from scripts.forge.gates import workboard_claims as claims_gate
@@ -59,6 +59,7 @@ except ImportError:  # pragma: no cover
     from crew.workboard import message as workboard_message  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
+    from scripts.crew.workboard import backstop_order  # type: ignore
     from scripts.crew.workboard import issue as workboard_issue  # type: ignore
     from thomas.marketplace.observability import run_store  # type: ignore
 
@@ -299,7 +300,7 @@ def apply_evidence_sweep(
             continue
 
         annotated_summary = f"{item.get('summary')} [evidence expired: {reason}]"
-        ok_move, move_msg = workboard_issue.move_task_to_up_for_grabs(
+        ok_move, move_msg = backstop_order.move_task_to_up_for_grabs(
             workboard_path,
             task_id=task_id,
             reported_by=reported_by,

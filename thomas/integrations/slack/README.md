@@ -7,13 +7,9 @@ Complete asynchronous Slack workspace integration using the Slack Web API (v2).
 - **OAuth2 Authentication**: Full Slack OAuth v2 flow with token management
 - **Async/Await**: Built for Thomas's async event loop using `aiohttp`
 - **Message Operations**: Send, update, delete, search, and react to messages
-- **Channel Management**: List, create, archive, and manage channels
-- **User Management**: List users, manage presence and status, search by email
-- **File Operations**: Upload, download, and manage files
 - **Block Kit Support**: Rich message formatting with interactive blocks
 - **Error Handling**: Specific exception types for different error scenarios
 - **Rate Limiting**: Automatic retry-after header parsing
-- **Pagination**: Cursor-based pagination with automatic helpers
 
 ## Architecture
 
@@ -21,9 +17,6 @@ Complete asynchronous Slack workspace integration using the Slack Web API (v2).
 
 - **`integration.py`** (372 lines): Main `SlackIntegration` class with OAuth2 and connection management
 - **`messaging.py`** (433 lines): Message operations via `SlackMessaging`
-- **`channels.py`** (404 lines): Channel operations via `SlackChannels`
-- **`users.py`** (365 lines): User operations via `SlackUsers`
-- **`files.py`** (333 lines): File operations via `SlackFiles`
 
 ### Exception Types
 
@@ -49,9 +42,6 @@ pip install aiohttp
 ```python
 from thomas.integrations.slack import SlackIntegration
 from thomas.integrations.slack.messaging import SlackMessaging
-from thomas.integrations.slack.channels import SlackChannels
-from thomas.integrations.slack.users import SlackUsers
-from thomas.integrations.slack.files import SlackFiles
 
 # Create integration
 slack = SlackIntegration(
@@ -163,138 +153,6 @@ results = await messaging.search_messages(
 )
 ```
 
-### Channel Operations
-
-```python
-channels = SlackChannels(slack)
-
-# List channels (paginated)
-result = await channels.list_channels(
-    types="public_channel,private_channel",
-    limit=50,
-)
-
-# List all channels (auto-paginated)
-all_channels = await channels.list_all_channels()
-
-# Get channel info
-info = await channels.get_channel_info("C123456")
-
-# Get message history
-history = await channels.get_channel_history(
-    channel_id="C123456",
-    limit=100,
-)
-
-# Create channel
-new_channel = await channels.create_channel(
-    name="my-channel",
-    is_private=False,
-    description="Channel description",
-)
-
-# Set channel topic
-await channels.set_topic("C123456", "New topic")
-
-# List members
-members = await channels.list_members("C123456", limit=100)
-
-# Invite users
-await channels.invite_users("C123456", ["U123", "U456"])
-
-# Archive channel
-await channels.archive_channel("C123456")
-```
-
-### User Operations
-
-```python
-users = SlackUsers(slack)
-
-# List users
-result = await users.list_users(limit=100)
-
-# Get user profile
-user = await users.get_user("U123456")
-
-# Lookup by email
-user = await users.get_user_by_email("user@example.com")
-
-# Check presence
-presence = await users.get_presence("U123456")
-print(presence["presence"])  # "active" or "away"
-
-# Set status
-await users.set_status(
-    status_text="In a meeting",
-    status_emoji="calendar",
-    expiration_s=3600,  # Expires in 1 hour
-)
-
-# Clear status
-await users.clear_status()
-
-# Search users
-matches = await users.search_users("john")
-
-# Get helper info
-display_name = users.get_display_name(user)
-email = users.get_user_email(user)
-avatar = users.get_user_avatar(user)
-title = users.get_user_title(user)
-
-# Check user type
-is_active = users.is_user_active(user)
-is_bot = users.is_bot_user(user)
-is_app = users.is_app_user(user)
-```
-
-### File Operations
-
-```python
-files = SlackFiles(slack)
-
-# Upload file
-result = await files.upload_file(
-    channels=["C123456"],
-    file_path="/path/to/file.txt",
-    title="My File",
-    initial_comment="Check this out!",
-)
-
-# List files
-file_list = await files.list_files(
-    channel="C123456",
-    types="images",
-    count=20,
-)
-
-# Get file info
-file_info = await files.get_file_info("F123456")
-
-# Download file
-await files.download_file(
-    file_url="https://files.slack.com/...",
-    output_path="/tmp/downloaded_file.txt",
-)
-
-# Delete file
-await files.delete_file("F123456")
-
-# Get file URL
-url = await files.get_file_url("F123456")
-
-# Helper methods
-filename = files.get_file_name(file_obj)
-size = files.get_file_size(file_obj)
-mimetype = files.get_file_type(file_obj)
-preview = files.get_file_preview(file_obj)
-
-is_image = files.is_image_file(file_obj)
-is_text = files.is_text_file(file_obj)
-is_doc = files.is_document_file(file_obj)
-```
-
 ## Scopes
 
 Default scopes:
@@ -376,21 +234,6 @@ except SlackRateLimitError as e:
     print(str(e))  # "... retry after 5s"
 ```
 
-## Pagination
-
-Automatic pagination helpers are provided for list operations:
-
-```python
-# Manual pagination
-result = await channels.list_channels(limit=100)
-next_cursor = result.get("response_metadata", {}).get("next_cursor")
-
-# Auto-paginated (fetches all)
-all_channels = await channels.list_all_channels()
-all_members = await channels.list_all_members("C123456")
-all_users = await users.list_all_users()
-```
-
 ## Best Practices
 
 1. **Token Lifecycle**: Cache tokens in secrets, refresh when needed
@@ -399,20 +242,6 @@ all_users = await users.list_all_users()
 4. **Async Context**: Always await all async operations
 5. **Channel Names vs IDs**: Slack accepts both, IDs are more reliable
 6. **Message Timestamps**: Use for thread replies and message updates
-
-## Blocking APIs
-
-Some operations are blocking (e.g., file upload with multipart). The integration handles this through aiohttp's async file I/O:
-
-```python
-# Non-blocking file upload
-await files.upload_file(
-    channels=["C123456"],
-    file_path="/path/to/file.txt",
-)
-
-# Streams data asynchronously
-```
 
 ## Testing
 

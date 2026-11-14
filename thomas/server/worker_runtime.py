@@ -31,26 +31,37 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.kernel_wiring import build_agent_loop, resolve_tools_for_turn
 from thomas.agent.loop import AgentLoop
+from thomas.core import session_scope
 from thomas.core.config import AppConfig
 from thomas.core.events import EventType
+from thomas.core.kernel import late, seams
 from thomas.core.llm_client import LLMClient
+from thomas.core.llm_slot import models
 from thomas.core.token_economy import compute_max_passes, effective_effort
 from thomas.models.worker_overrides import resolve_override
-from thomas.server.app_keys import APP_CONFIG, APP_MEMORY, APP_SECRETS
+from thomas.server import green_checkout
+from thomas.server.app_keys import APP_CONFIG, APP_MEMORY, APP_SECRETS, APP_TOOLS
+from thomas.server.chat_app_keys import APP_CHAT_BUDGET_LEDGER
 from thomas.server.chat_budget_ledger import ChatBudgetError, ChatBudgetExceeded, budget_context, get_chat_budget_ledger
 from thomas.server.chat_budget_scope import scope_from_runtime_policy
+from thomas.server.chat_delegation_tool_receipts import tool_action_id
 from thomas.server.chat_runtime_policy import (
     ModelRuntimePolicy,
     PolicyToolRegistryView,
     model_endpoint_is_local,
     tool_policy_from_payload,
 )
+from thomas.server.issue_ledger import record_issue
+from thomas.server.model_credentials import embed_credentials
 from thomas.server.model_runtime_receipt import model_runtime_receipt
-from thomas.server.routes.chat_v2_keys import APP_CHAT_BUDGET_LEDGER
+from thomas.server.plugin_hook_bridge import make_plugin_hook_runner
+from thomas.server.praxis.quota import QuotaClassifier
 from thomas.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
+_QUOTA_CLASSIFIER = QuotaClassifier()
 
 
 def _session_usage_total(llm: Any) -> int:
@@ -61,43 +72,19 @@ def _session_usage_total(llm: Any) -> int:
 
 
 def _embed_secrets(model_cfg: Any, profile: str, secret_store: Any) -> Any:
-    """Return a copy of ``model_cfg`` with its API key / OAuth token embedded.
-
-    Provider-blind: a plain ``api_key_secret_name`` lookup for every provider,
-    plus the ChatGPT (``openai_codex``) OAuth token path.  Mirrors the server's
-    ``_model_cfg_with_secrets`` but takes ``secret_store`` explicitly instead of
-    closing over a module-level ``app`` (so it is importable from anywhere).
-    """
-    if model_cfg is None:
-        return None
-    cfg_copy = dataclasses.replace(model_cfg)
-    if secret_store is None:
-        return cfg_copy
-    secret_name = str(getattr(cfg_copy, "api_key_secret_name", "") or "").strip()
-    if secret_name:
-        api_key = secret_store.get(secret_name)
-        if api_key:
-            cfg_copy.api_key = api_key
-    provider = str(getattr(cfg_copy, "provider", "") or "").strip().lower().replace("-", "_")
-    if provider == "openai_codex":
-        try:
-            from thomas.server.openai_codex_oauth import access_token_from_store, has_openai_codex_token
-
-            name = str(profile or getattr(cfg_copy, "name", "") or "chatgpt")
-            access_token = access_token_from_store(secret_store, name)
-            if access_token:
-                cfg_copy.api_key = access_token
-            cfg_copy._openai_codex_token_ready = bool(access_token or has_openai_codex_token(secret_store, name))
-        # Reading a stored OAuth token: ImportError if the OAuth module is absent,
-        # OSError for the secret file, ValueError/TypeError/KeyError/AttributeError
-        # for a token blob or config object that is not the shape we expect. The
-        # worker then runs with whatever api_key the config already carried.
-        except (ImportError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-            log.debug("worker: failed to resolve openai_codex token for %s: %s", profile, exc)
-    return cfg_copy
+    """``model_cfg`` with its API key / OAuth token embedded; a key may live under the profile name."""
+    return embed_credentials(model_cfg, profile, secret_store, profile_name_fallback=True)
 
 
 def _resolve_profile(cfg: AppConfig, profile: str | None, role: str | None = None) -> str:
+    """Pick the model profile the worker should run, provider-blind.
+
+    Precedence (by design, chat is separate from the pipeline):
+      1. Per-specialist (role) override — the top model selector's per-agent
+         choice (e.g. "researcher -> Grok") wins over everything.
+      2. The chat's selected model — the pipeline default when no role override.
+      3. Global user preference / project default / any configured model.
+    """
     db_path = None
     try:
         from thomas.preferences.store import get_db_path
@@ -176,6 +163,43 @@ def _apply_tool_deny(tools: Any, deny: frozenset[str]) -> None:
                 log.warning("worker: could not unregister denied tool %s", name, exc_info=True)
 
 
+def _task_prompt_reminder() -> str:
+    """The hard file-tool rule, restated at the top of the task prompt.
+
+    Models weight the user turn more heavily than the system prompt (observed:
+    gpt-5.x ignores the system rule and reaches for Unix shell builtins like
+    `printf`/`mkdir -p`, which fail on Windows cmd.exe), so it is restated
+    here. `diff.create` is also named explicitly: workers offered it only in
+    the system prompt's "Editing Policy" kept rewriting existing files whole
+    from memory instead, truncating them once earlier tool arguments were
+    compacted out of context (self-fix evidence, 2026-09-24).
+    """
+    return (
+        "Reminder: change an EXISTING file with `diff.create` — it edits only the "
+        "part that changed and cannot truncate the rest of the file. Use "
+        "`fs.write_file` to create a file that does not exist yet, or to replace "
+        "one whole file when that is really what is intended (pass "
+        "replace_whole_file: true); on a file of at least 20 lines or 2,000 characters, "
+        "`fs.write_file` refuses a write that cuts more than 40% of its lines OR "
+        "characters, because rewriting a large file from memory is how truncations "
+        "happen. Write to a nested path to "
+        "make folders; never use shell commands like printf, echo, touch, cat, or "
+        "mkdir for files. Use `fs.list_dir` to list. "
+        "CRITICAL: when the task is to produce or change a file, document, game, "
+        "script, or app, you MUST actually CALL `diff.create` (existing file) or "
+        "`fs.write_file` (new file) with the real edit/contents. Do NOT paste the "
+        "code or text into your reply and tell the user to save it — pasting it "
+        "does NOT create or change the file, so the deliverable would not exist. "
+        "The tool call is the only thing that creates or changes it; make the "
+        "call first, then briefly say what you made. "
+        "Browser tools ARE available: when the task names `browser.open`, "
+        "`browser.extract`, or another browser tool, call those exact tools in the "
+        "requested order. Carry real returned values into later file writes; never "
+        "substitute placeholders. Preserve exact requested filenames and read back "
+        "the same file before finishing."
+    )
+
+
 async def run_agent_worker_events(
     app: Any,
     *,
@@ -198,6 +222,8 @@ async def run_agent_worker_events(
     memory_enabled: bool = True,
     tools_enabled: bool = True,
     runtime_policy: dict[str, Any] | None = None,
+    can_spawn: bool = True,
+    steering_queue: Any | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run the standard ``AgentLoop`` (full tools, workspace-confined) and yield
     bridge-style event dicts.
@@ -207,6 +233,9 @@ async def run_agent_worker_events(
     land in the workspace and escapes are blocked WITHOUT an ``os.chdir`` (which is
     process-global and would race across concurrent workers).
     """
+    # A card this run raises belongs to the chat that asked for the work, not to
+    # the per-attempt session bound for budgets (thomas/core/session_scope.py).
+    session_scope.set_chat_from_execution(str(execution_id or ""))
     yield {"type": "progress", "text": "Provider-native worker is initializing."}
 
     cfg: AppConfig = app[APP_CONFIG]
@@ -278,6 +307,8 @@ async def run_agent_worker_events(
     # (from the chat payload / UI toggle) wins when provided — so the user can dial
     # "let Thomas write to my PC" per session without editing config.
     effective_file_access = cfg.tools.file_access if file_access is None else int(file_access)
+    # A self-fix works in green, and green is its whole project (green_checkout).
+    effective_file_access = green_checkout.file_access_for(effective_file_access, work_dir)
     run_cfg = dataclasses.replace(
         cfg,
         tools=dataclasses.replace(
@@ -312,10 +343,45 @@ async def run_agent_worker_events(
                 ),
             ),
         )
-    from thomas.server.app_helpers import _build_tools  # lazy: avoid any app-bootstrap import cycle
+    tools = late.call(seams.TOOL_SET, run_cfg) if tools_enabled else ToolRegistry()
+    if tools_enabled:
+        from thomas.server.app_helpers import add_tools_rows_lent_the_server
 
-    tools = _build_tools(run_cfg) if tools_enabled else ToolRegistry()
+        add_tools_rows_lent_the_server(tools, app.get(APP_TOOLS), run_cfg.tools.sandbox_path)
+        tools = resolve_tools_for_turn(tools, allow_new=True)
     _apply_tool_deny(tools, override.tool_deny)
+
+    if tools_enabled and can_spawn:
+        # The lead can hand a self-contained piece to another agent. The child
+        # runs this same worker with `can_spawn=False`, so the recursion is one
+        # level by construction and not by a counter anyone has to check.
+        from thomas.server.agent_spawn_tool import register_spawn_tool
+
+        async def _run_child(title: str, brief: str) -> AsyncIterator[dict[str, Any]]:
+            async for child_event in run_agent_worker_events(
+                app,
+                prompt=brief,
+                instructions=instructions,
+                work_dir=work_dir,
+                profile=profile,
+                model_id=model_id,
+                reasoning_effort=reasoning_effort,
+                role=title,
+                effort=effort,
+                session_id=session_id,
+                execution_id=f"{execution_id or 'worker'}::{title}",
+                autonomy_level=autonomy_level,
+                file_access=file_access,
+                guardrails=guardrails,
+                guardrail_modes=guardrail_modes,
+                job_type=job_type,
+                memory_enabled=False,
+                runtime_policy=runtime_policy,
+                can_spawn=False,
+            ):
+                yield child_event
+
+        register_spawn_tool(tools, execution_id=str(execution_id or ""), run_child=_run_child)
 
     # Guardrails: resolve the effective policy (payload modes -> preset -> saved),
     # then enforce the two runtime-meaningful groups. `reach` prunes external tools;
@@ -369,8 +435,12 @@ async def run_agent_worker_events(
             yield {"type": "error", "error": str(exc), "retryable": False}
             return
 
-    llm = LLMClient(
+    from thomas.core.llm_request_admission import RoutedProviderAdmission
+
+    worker_admission = RoutedProviderAdmission(team=f"chat-worker:{execution_id or uuid.uuid4().hex}")
+    llm = models().open(
         model_cfg,
+        default=LLMClient,
         fallback_configs=fallbacks,
         failover_enabled=bool(model_policy.failover_enabled if model_policy is not None else cfg.failover.enabled)
         and bool(fallbacks),
@@ -385,6 +455,7 @@ async def run_agent_worker_events(
         request_overrides=(
             model_policy.request_overrides if model_policy is not None else dict(override.request_overrides or {})
         ),
+        request_admission=worker_admission,
     )
     llm_closed = False
 
@@ -392,7 +463,10 @@ async def run_agent_worker_events(
         nonlocal llm_closed
         if not llm_closed:
             llm_closed = True
-            await llm.close()
+            try:
+                await llm.close()
+            finally:
+                worker_admission.close()
 
     try:
         set_budget_scope = getattr(llm, "set_budget_scope", None)
@@ -402,7 +476,7 @@ async def run_agent_worker_events(
         llm.reset_runtime_trace()
 
         run_id = str(execution_id or f"worker:{uuid.uuid4().hex}")
-        agent = AgentLoop(
+        agent = build_agent_loop(
             run_cfg,
             llm,
             tools,
@@ -417,6 +491,12 @@ async def run_agent_worker_events(
             max_parallel_tools=tool_policy.max_parallel_tools if tool_policy is not None else None,
             tool_timeout_s=tool_policy.tool_timeout_s if tool_policy is not None else None,
             memory_retrieval_scope="thread",
+            # Background runs fired no plugin hooks at all until now: only the web
+            # chat path supplied a runner, so a plugin's view of Thomas depended on
+            # which surface happened to be executing (phase 3.2).
+            hook_runner=make_plugin_hook_runner(),
+            message_queue=steering_queue,
+            default=AgentLoop,
             non_coder_profile=bool(policy_payload.get("profile_type") == "non_coder"),
             profile_type=str(policy_payload.get("profile_type") or "adaptive"),
             review_depth=str(policy_payload.get("review_depth") or "adaptive"),
@@ -446,6 +526,8 @@ async def run_agent_worker_events(
         else:
             _base_nhm = None
         agent._no_human_mode_override = gatekeeper_no_human_mode(guardrails_state_eff.mode_for("gatekeeper"), _base_nhm)
+        # Check the contract where this worker's file tools write; never move the process working folder.
+        agent.verify_in_tool_workspace = True
     except Exception:
         log.exception("worker: agent runtime policy application failed")
         await close_llm_once()
@@ -464,6 +546,16 @@ async def run_agent_worker_events(
         applied_effort = effective_effort(effort, autonomy_level)
         effort_passes = compute_max_passes(applied_effort, run_cfg.max_agent_iterations)
         max_iters = effort_passes if override.max_iterations is None else min(effort_passes, override.max_iterations)
+        # Ruling W (fix round 1, C1): the Autopilot multiplier applies AFTER the
+        # per-model cap, not before. Multiplying compute_max_passes's own result
+        # let the cap win every time for a capped model -- the openai_codex/
+        # gpt-5.6-sol default (cap 30) measured min(3 * 400, 30) == 30, so the
+        # tripling never reached the live worker. On Autopilot (autonomy 5), a
+        # self-development worker's per-attempt budget is 3x whatever it would
+        # otherwise get, capped or not (90 for that model); the attempt count
+        # (_self_recovery_attempts) stays the runaway guard, untouched here.
+        if int(autonomy_level or 0) >= 5 and str(job_type or "").strip().lower() == "self_development":
+            max_iters *= 3
     except Exception:
         log.exception("worker: effort budget calculation failed")
         await close_llm_once()
@@ -474,22 +566,7 @@ async def run_agent_worker_events(
     # Unix shell builtins like `printf`/`mkdir -p`, which fail on Windows cmd.exe).
     # Restating the hard rule at the top of the task prompt makes it stick.
     if tools_enabled:
-        task_prompt = (
-            "Reminder: create and write files ONLY with the `fs.write_file` tool "
-            "(write to a nested path to make folders); never use shell commands like "
-            "printf, echo, touch, cat, or mkdir for files. Use `fs.list_dir` to list. "
-            "CRITICAL: when the task is to produce a file, document, game, script, or app, "
-            "you MUST actually CALL `fs.write_file` with the full contents. Do NOT paste the "
-            "code or text into your reply and tell the user to save it — pasting it does NOT "
-            "create the file, so the deliverable would not exist. The tool call is the only "
-            "thing that creates it; write the file first, then briefly say what you made. "
-            "Browser tools ARE available: when the task names `browser.open`, "
-            "`browser.extract`, or another browser tool, call those exact tools in the "
-            "requested order. Carry real returned values into later file writes; never "
-            "substitute placeholders. Preserve exact requested filenames and read back the "
-            "same file before finishing.\n\n"
-            f"{prompt}"
-        )
+        task_prompt = f"{_task_prompt_reminder()}\n\n{prompt}"
     else:
         task_prompt = (
             "This is an answer-only model pass. No tools are available or needed. "
@@ -509,15 +586,20 @@ async def run_agent_worker_events(
         attempts = runtime.get("attempts") if isinstance(runtime.get("attempts"), list) else []
         return runtime if any(str(attempt.get("status") or "") == "success" for attempt in attempts) else None
 
+    agent_events = None
     try:
-        async for event in agent.run(
+        # The model reads the reminder; the contract, routing and memory read the task. Judged with the reminder,
+        # `browser.open` and `browser.extract` became files the task "names as outputs", which no run could produce.
+        agent_events = agent.run(
             task_prompt,
+            intent_text=prompt,
             mode="auto",
             tools_policy="auto",
             token_economy=applied_effort,
             max_iterations=max_iters,
             job_type=job_type,
-        ):
+        )
+        async for event in agent_events:
             etype = event.type
             if etype == EventType.TEXT_DELTA:
                 text = str(event.data.get("text") or "")
@@ -526,7 +608,7 @@ async def run_agent_worker_events(
                     yield {"type": "text", "text": text}
             elif etype == EventType.TOOL_CALL_START:
                 name = str(event.data.get("tool_name") or event.data.get("name") or "tool")
-                yield {"type": "tool_start", "name": name}
+                yield {"type": "tool_start", "name": name, "call_id": str(event.data.get("tool_id") or "")}
             elif etype == EventType.TOOL_RESULT:
                 name = str(event.data.get("tool_name") or "tool")
                 # Preserve the tool's SUCCESS signal — previously dropped, so a tool
@@ -551,13 +633,51 @@ async def run_agent_worker_events(
                 yield {
                     "type": "tool_output",
                     "name": name,
+                    "call_id": str(event.data.get("tool_id") or ""),
+                    "action_id": tool_action_id(name, event.data.get("arguments"), workspace=work_dir),
                     "ok": ok,
                     "error": str(err or ""),
                     "result_text": result_text[:8000],
                 }
             elif etype == EventType.AGENT_ERROR:
-                # Transient/agent error — the delegation layer may retry this at L4.
-                yield {"type": "error", "error": str(event.data.get("error") or "worker failed"), "retryable": True}
+                # Keep provider status and reset hints structured. Raw response
+                # headers and API credentials must never enter the Build stream.
+                status = int(event.data.get("status") or 0)
+                error_event = {
+                    "type": "error",
+                    "error": str(event.data.get("error") or "worker failed"),
+                    "retryable": status != 401,
+                }
+                code = str(event.data.get("error_code") or "")
+                if status == 401:
+                    error_event["provider_status"] = status
+                if status == 429 or (code and status != 401):
+                    from thomas.core.llm_request_admission import admission_key
+
+                    credential = admission_key(llm.config)
+                    decision = _QUOTA_CLASSIFIER.observe(
+                        credential,
+                        status=status,
+                        error={"code": code},
+                        headers=event.data.get("response_headers") or {},
+                    )
+                    error_event.update(
+                        provider_status=status,
+                        provider_credential=credential,
+                        provider=str(getattr(llm.config, "provider", "") or ""),
+                        quota={"kind": decision.kind, "retry_at": decision.retry_at, "reason": decision.reason},
+                    )
+                # The chat is told only that the worker failed -- provider errors
+                # can carry detail that must not reach it -- so the real cause is
+                # kept in the local issue log. Three self-fix runs on 2026-09-22
+                # failed with nothing on record but "reported a retryable error".
+                record_issue(
+                    surface="chat-worker",
+                    kind="worker_error",
+                    message=error_event["error"],
+                    context={"execution_id": str(execution_id or ""), "status": status, "code": code},
+                )
+                yield error_event
                 return
             elif etype == EventType.AGENT_END:
                 # Abnormal terminal state (user interruption, or a denied /
@@ -585,26 +705,67 @@ async def run_agent_worker_events(
                     yield {"type": "model_runtime", "runtime": runtime}
                 yield {"type": "done"}
                 return
+            elif etype == EventType.STATUS:
+                # The loop's own plain-language status lines — "Received your
+                # update. Continuing this task.", "The provider asked Thomas to
+                # pause for 20.0s; work will resume automatically." — were
+                # dropped here with the diagnostic events below. So a steer that
+                # the loop genuinely accepted at its next safe boundary produced
+                # nothing the surface could show: the Work row stayed on "Update
+                # queued for this task" for the rest of the run, and a provider
+                # pause read as silence. Both are cases of "what's going on"
+                # being known and not said.
+                #
+                # Carried as `progress`, which the delegation layer already
+                # records on the execution and emits to the card, so this
+                # replaces the one status line rather than appending a row.
+                #
+                # Not every STATUS is addressed to a person. Two carry a
+                # structured diagnostic payload and a message written for the
+                # model or the log -- the envelope checkpoint ("Checkpoint 3:
+                # 12000 tokens used of 50000 - summarize progress so far and
+                # confirm remaining work.") and the mid-run check-in ("Check-in
+                # #2: 4 tool step(s), ~12,000 tokens, 90s since last check-in
+                # ..."). Promoting those would replace a meaningful line like
+                # "Using file.write..." with counters, which is the ugliness
+                # this change exists to remove. They stay in the log.
+                message = str(event.data.get("message") or "").strip()
+                if "constraint_checkpoint" in event.data:
+                    message = ""
+                checkin = event.data.get("checkin")
+                if isinstance(checkin, dict):
+                    # One exception: an acknowledgement gate stops the run dead.
+                    # Counters are noise, but a silent pause is worse.
+                    message = (
+                        "Thomas paused this task for a check-in and needs your acknowledgement to continue."
+                        if checkin.get("ack_required")
+                        else ""
+                    )
+                if message:
+                    yield {"type": "progress", "text": message}
             else:
                 # Lifecycle/diagnostic events (AGENT_START, AGENT_ITERATION,
-                # THINKING, SECURITY_FLAG, TOOL_CALL_*_DELTA, STATUS, ...) have no
+                # THINKING, SECURITY_FLAG, TOOL_CALL_*_DELTA, ...) have no
                 # consumer-facing payload here; log for debugging and continue.
                 log.debug("worker: ignoring unmapped agent event %s", getattr(etype, "name", etype))
         # A few AgentLoop early-return paths finish immediately after the provider
         # stream closes without yielding a terminal AgentEvent. The provider trace
-        # is complete by this point, so emit its receipt before the compatibility
-        # `done` event rather than losing valid per-pass attribution.
+        # is complete by this point, so emit its receipt before the error below
+        # rather than losing valid per-pass attribution.
         runtime = _successful_runtime_receipt()
         if runtime is not None:
             yield {"type": "model_runtime", "runtime": runtime}
-        # Loop ended without any terminal event (AGENT_DONE/ERROR/END). A few
-        # early-return paths inside the loop can do this; warn so it is debuggable,
-        # then finish as done so the task still terminates rather than hanging.
-        log.warning("worker: agent event stream ended without a terminal event; finishing as done")
-        yield {"type": "done"}
+        # A closed stream is not proof that the task completed. The parent may
+        # retry this child, but it must never count as accepted work.
+        log.error("worker: agent event stream ended without a terminal event")
+        yield {"type": "error", "error": "agent stream ended without a terminal result", "retryable": True}
     finally:
         try:
             if budget_scope is not None:
                 await budget_scope.reconcile_unscoped_usage(max(0, _session_usage_total(llm) - unscoped_usage_before))
         finally:
-            await close_llm_once()
+            try:
+                if callable(getattr(agent_events, "aclose", None)):
+                    await agent_events.aclose()
+            finally:
+                await close_llm_once()

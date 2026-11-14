@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.engineering_commands import GitAnalysisTool, ProjectStatsTool, RootedTool
 
 _log = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class SystemInfoTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class CodeComplexityTool(Tool):
+class CodeComplexityTool(RootedTool):
     name = "eng.code_complexity"
     category = "engineering"
     description = (
@@ -104,7 +105,9 @@ class CodeComplexityTool(Tool):
             from radon.complexity import cc_rank, cc_visit
         except ImportError:
             return ToolResult(ok=False, error="radon not installed (pip install radon)")
-        target = Path(args["path"])
+        target, refused = self._reach(args["path"], read=True)
+        if refused:
+            return refused
         min_grade = args.get("min_grade", "B").upper()
         grade_order = "ABCDEF"
         min_idx = grade_order.index(min_grade) if min_grade in grade_order else 1
@@ -135,7 +138,7 @@ class CodeComplexityTool(Tool):
         return ToolResult(ok=True, data=json.dumps(results[:50], indent=2))
 
 
-class DeadCodeTool(Tool):
+class DeadCodeTool(RootedTool):
     name = "eng.dead_code"
     category = "engineering"
     description = (
@@ -162,16 +165,21 @@ class DeadCodeTool(Tool):
             import vulture  # noqa: F401
         except ImportError:
             return ToolResult(ok=False, error="vulture not installed (pip install vulture)")
-        target = args["path"]
+        resolved, refused = self._reach(args["path"])
+        if refused is not None:
+            return refused
+        target = str(resolved)  # what the scope validated, never the raw text
         min_conf = args.get("min_confidence", 80)
         proc = await asyncio.create_subprocess_exec(
             "python",
             "-m",
             "vulture",
-            target,
             f"--min-confidence={min_conf}",
+            "--",
+            target,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=str(self._scope().root),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         output = stdout.decode("utf-8", errors="replace").strip()
@@ -185,7 +193,7 @@ class DeadCodeTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class SecurityScanTool(Tool):
+class SecurityScanTool(RootedTool):
     name = "eng.security_scan"
     category = "engineering"
     description = (
@@ -212,7 +220,10 @@ class SecurityScanTool(Tool):
             import bandit  # noqa: F401
         except ImportError:
             return ToolResult(ok=False, error="bandit not installed (pip install bandit)")
-        target = args["path"]
+        resolved, refused = self._reach(args["path"])
+        if refused is not None:
+            return refused
+        target = str(resolved)
         severity = args.get("severity", "MEDIUM").upper()
         sev_flag = {"LOW": "ll", "MEDIUM": "mm", "HIGH": "hh"}.get(severity, "mm")
         proc = await asyncio.create_subprocess_exec(
@@ -220,13 +231,15 @@ class SecurityScanTool(Tool):
             "-m",
             "bandit",
             "-r",
-            target,
             f"-{sev_flag}",
             "-f",
             "json",
             "--quiet",
+            "--",
+            target,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=str(self._scope().root),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         try:
@@ -262,7 +275,7 @@ class SecurityScanTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class ParseDocumentTool(Tool):
+class ParseDocumentTool(RootedTool):
     name = "eng.parse_document"
     category = "engineering"
     description = (
@@ -285,7 +298,9 @@ class ParseDocumentTool(Tool):
     }
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        fpath = Path(args["path"])
+        fpath, refused = self._reach(args["path"], read=True)
+        if refused:
+            return refused
         if not fpath.exists():
             return ToolResult(ok=False, error=f"File not found: {fpath}")
         suffix = fpath.suffix.lower()
@@ -332,7 +347,7 @@ class ParseDocumentTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FileTypeTool(Tool):
+class FileTypeTool(RootedTool):
     name = "eng.file_type"
     category = "engineering"
     description = (
@@ -351,7 +366,9 @@ class FileTypeTool(Tool):
     }
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        fpath = Path(args["path"])
+        fpath, refused = self._reach(args["path"], read=True)
+        if refused:
+            return refused
         if not fpath.exists():
             return ToolResult(ok=False, error=f"File not found: {fpath}")
         try:
@@ -396,7 +413,7 @@ class FileTypeTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class DependencyTreeTool(Tool):
+class DependencyTreeTool(RootedTool):
     name = "eng.dependency_tree"
     category = "engineering"
     description = (
@@ -416,7 +433,9 @@ class DependencyTreeTool(Tool):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         import ast
 
-        fpath = Path(args["path"])
+        fpath, refused = self._reach(args["path"], read=True)
+        if refused:
+            return refused
         if not fpath.exists():
             return ToolResult(ok=False, error=f"File not found: {fpath}")
         try:
@@ -484,7 +503,7 @@ class DependencyTreeTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class CodeFormatTool(Tool):
+class CodeFormatTool(RootedTool):
     name = "eng.format_code"
     category = "engineering"
     description = "Format Python code using ruff (fast, modern formatter). Can also fix lint issues and sort imports."
@@ -504,16 +523,20 @@ class CodeFormatTool(Tool):
     }
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        target = args["path"]
+        resolved, refused = self._reach(args["path"])
+        if refused is not None:
+            return refused
+        target = str(resolved)
         check_only = args.get("check_only", False)
         cmd = ["python", "-m", "ruff", "format"]
         if check_only:
             cmd.append("--check")
-        cmd.append(target)
+        cmd += ["--", target]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=str(self._scope().root),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         output = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
@@ -522,7 +545,7 @@ class CodeFormatTool(Tool):
         return ToolResult(ok=True, data=output.strip())
 
 
-class LintTool(Tool):
+class LintTool(RootedTool):
     name = "eng.lint"
     category = "engineering"
     description = (
@@ -544,15 +567,19 @@ class LintTool(Tool):
     }
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        target = args["path"]
+        resolved, refused = self._reach(args["path"])
+        if refused is not None:
+            return refused
+        target = str(resolved)
         cmd = ["python", "-m", "ruff", "check"]
         if args.get("fix"):
             cmd.append("--fix")
-        cmd.extend(["--output-format", "json", target])
+        cmd.extend(["--output-format", "json", "--", target])
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=str(self._scope().root),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         try:
@@ -661,7 +688,7 @@ class WebExtractTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class DetectEncodingTool(Tool):
+class DetectEncodingTool(RootedTool):
     name = "eng.detect_encoding"
     category = "engineering"
     description = (
@@ -683,7 +710,9 @@ class DetectEncodingTool(Tool):
             import chardet
         except ImportError:
             return ToolResult(ok=False, error="chardet not installed (pip install chardet)")
-        fpath = Path(args["path"])
+        fpath, refused = self._reach(args["path"], read=True)
+        if refused:
+            return refused
         if not fpath.exists():
             return ToolResult(ok=False, error=f"File not found: {fpath}")
         raw = fpath.read_bytes()[:100_000]  # Read up to 100KB
@@ -702,180 +731,40 @@ class DetectEncodingTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# Git advanced analysis
-# ---------------------------------------------------------------------------
-
-
-class GitAnalysisTool(Tool):
-    name = "eng.git_analysis"
-    category = "engineering"
-    description = (
-        "Advanced git repository analysis: file change frequency (churn), "
-        "contributor stats, and recent activity summary."
-    )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "repo_path": {
-                "type": "string",
-                "description": "Path to git repository. Default '.'.",
-            },
-            "analysis": {
-                "type": "string",
-                "description": "Type: 'churn' (most-changed files), 'contributors', 'recent'. Default 'recent'.",
-            },
-            "days": {
-                "type": "integer",
-                "description": "Look back N days. Default 30.",
-            },
-        },
-    }
-
-    async def execute(self, args: dict[str, Any]) -> ToolResult:
-        try:
-            import git as gitmodule
-        except ImportError:
-            return ToolResult(ok=False, error="GitPython not installed (pip install gitpython)")
-        repo_path = args.get("repo_path", ".")
-        analysis = args.get("analysis", "recent")
-        days = args.get("days", 30)
-        try:
-            gitmodule.Repo(repo_path)
-        except (gitmodule.InvalidGitRepositoryError, gitmodule.NoSuchPathError) as e:
-            return ToolResult(ok=False, error=str(e))
-        since = f"--since={days} days ago"
-        if analysis == "churn":
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                "-C",
-                repo_path,
-                "log",
-                since,
-                "--name-only",
-                "--pretty=format:",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            files: dict[str, int] = {}
-            for line in stdout.decode("utf-8", errors="replace").splitlines():
-                f = line.strip()
-                if f:
-                    files[f] = files.get(f, 0) + 1
-            top = sorted(files.items(), key=lambda x: x[1], reverse=True)[:20]
-            return ToolResult(ok=True, data=json.dumps([{"file": f, "changes": c} for f, c in top], indent=2))
-        elif analysis == "contributors":
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                "-C",
-                repo_path,
-                "shortlog",
-                "-sne",
-                since,
-                "HEAD",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            return ToolResult(ok=True, data=stdout.decode("utf-8", errors="replace").strip())
-        else:  # recent
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                "-C",
-                repo_path,
-                "log",
-                since,
-                "--oneline",
-                "-30",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            return ToolResult(ok=True, data=stdout.decode("utf-8", errors="replace").strip())
-
-
-# ---------------------------------------------------------------------------
-# Project health / stats
-# ---------------------------------------------------------------------------
-
-
-class ProjectStatsTool(Tool):
-    name = "eng.project_stats"
-    category = "engineering"
-    description = (
-        "Get quick stats about a project: line counts by language, file counts, largest files, and directory sizes."
-    )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "Path to project root. Default '.'.",
-            },
-        },
-    }
-
-    async def execute(self, args: dict[str, Any]) -> ToolResult:
-        root = Path(args.get("path", "."))
-        if not root.is_dir():
-            return ToolResult(ok=False, error=f"Not a directory: {root}")
-        ext_counts: dict[str, int] = {}
-        ext_lines: dict[str, int] = {}
-        largest: list = []
-        total_files = 0
-        skip = {".git", "__pycache__", "node_modules", ".mypy_cache", ".ruff_cache", "venv", ".venv"}
-        for fpath in root.rglob("*"):
-            if any(p in fpath.parts for p in skip):
-                continue
-            if not fpath.is_file():
-                continue
-            total_files += 1
-            ext = fpath.suffix.lower() or "(none)"
-            ext_counts[ext] = ext_counts.get(ext, 0) + 1
-            size = fpath.stat().st_size
-            largest.append((str(fpath), size))
-            if ext in (".py", ".js", ".ts", ".jsx", ".tsx", ".css", ".html", ".md"):
-                try:
-                    lines = len(fpath.read_bytes().split(b"\n"))
-                    ext_lines[ext] = ext_lines.get(ext, 0) + lines
-                except OSError:
-                    pass
-        largest.sort(key=lambda x: x[1], reverse=True)
-        return ToolResult(
-            ok=True,
-            data=json.dumps(
-                {
-                    "total_files": total_files,
-                    "files_by_type": dict(sorted(ext_counts.items(), key=lambda x: x[1], reverse=True)[:15]),
-                    "lines_by_type": dict(sorted(ext_lines.items(), key=lambda x: x[1], reverse=True)),
-                    "largest_files": [{"path": p, "size_kb": round(s / 1024, 1)} for p, s in largest[:10]],
-                },
-                indent=2,
-            ),
-        )
-
-
-# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
 
-def register_engineering_tools(registry) -> None:
-    """Register all engineering toolkit tools."""
+def _workspace_of(registry) -> Path | None:
+    """The workspace the file tools were registered with, or None when there are none."""
+    try:
+        root = getattr(registry.get("fs.read_file"), "_root", None)
+    except (AttributeError, TypeError):
+        return None
+    return root if isinstance(root, Path) else None
+
+
+def register_engineering_tools(registry, sandbox_root: Path | str | None = None) -> None:
+    """Register all engineering toolkit tools.
+
+    The path tools work inside ``sandbox_root``; without one they take the workspace the file tools were
+    registered with, and without that they keep the working folder.
+    """
+    root = sandbox_root if sandbox_root is not None else _workspace_of(registry)
     tools = [
         SystemInfoTool(),
-        CodeComplexityTool(),
-        DeadCodeTool(),
-        SecurityScanTool(),
-        ParseDocumentTool(),
-        FileTypeTool(),
-        DependencyTreeTool(),
-        CodeFormatTool(),
-        LintTool(),
+        CodeComplexityTool(root),
+        DeadCodeTool(root),
+        SecurityScanTool(root),
+        ParseDocumentTool(root),
+        FileTypeTool(root),
+        DependencyTreeTool(root),
+        CodeFormatTool(root),
+        LintTool(root),
         WebExtractTool(),
-        DetectEncodingTool(),
-        GitAnalysisTool(),
-        ProjectStatsTool(),
+        DetectEncodingTool(root),
+        GitAnalysisTool(root),
+        ProjectStatsTool(root),
     ]
     for tool in tools:
         registry.register(tool)

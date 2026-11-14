@@ -9,9 +9,27 @@ out of streamed Responses events.
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from typing import Any
 
 from thomas.core.llm_shared import LLMError, TokenUsage
+
+
+def _run_cache_key() -> str:
+    """A prompt-cache key for the run this call belongs to, when nothing set one ("" outside a run).
+
+    OpenAI sends requests with one key (or, without one, one opening of the prompt) to the same machines, about 15 a
+    minute each; past that they spill to machines without the cache. Every Build lead opens with the same system
+    prompt, so all of them shared one route, and on 2026-11-06 the token log showed 47.7% of gpt-6.1-sol's prompt
+    tokens served from cache. A run's calls each resend the run so far plus a little more, so one key per run keeps
+    each call on the machines that hold the call before it. Hashed: the key stays short and says nothing of the run.
+    """
+    import hashlib
+
+    from thomas.core import capture_context
+
+    run = capture_context.current()
+    return "thomas-run-" + hashlib.sha256(run.encode("utf-8")).hexdigest()[:24] if run else ""
 
 
 def _responses_content(value: Any) -> Any:
@@ -118,7 +136,10 @@ def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -
 
     instructions: list[str] = []
     out: list[dict[str, Any]] = []
-    for msg in messages:
+    # Reasoning is replayed only for steps after the last user message: the
+    # provider uses the current turn's reasoning, older turns' only cost tokens.
+    last_user = max((i for i, m in enumerate(messages) if isinstance(m, dict) and m.get("role") == "user"), default=-1)
+    for index, msg in enumerate(messages):
         if not isinstance(msg, dict):
             continue
         role = str(msg.get("role") or "").strip()
@@ -135,6 +156,8 @@ def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -
             continue
         if role == "assistant":
             tool_calls = msg.get("tool_calls")
+            if index > last_user:
+                out.extend(_reasoning_for_calls(owner, tool_calls))
             if content:
                 out.append({"role": "assistant", "content": content})
             if isinstance(tool_calls, list):
@@ -190,7 +213,7 @@ def _responses_input_from_messages(owner: Any, messages: list[dict[str, Any]]) -
     # request ("No tool output found for function call call_..." -> HTTP 400).
     # Trimming that keeps the assistant's tool-call message but drops the tool
     # result, or a parallel batch whose failed member never produced a result,
-    # leaves exactly that. It truncated the second pass of long multi-step runs on
+    # leaves exactly that. It killed the second pass of two Terminal-Bench runs on
     # 2026-09-04. Give every unanswered call a placeholder output right after it,
     # so the model still sees what it did and the request stays well-formed.
     answered = {str(item.get("call_id") or "") for item in reconciled if item.get("type") == "function_call_output"}
@@ -271,13 +294,22 @@ def _build_openai_codex_request(
     }
     if instructions:
         body["instructions"] = instructions
+    cache_key = str(getattr(owner.config, "_build_prompt_cache_key", "") or "") or _run_cache_key()
+    if cache_key:
+        body["prompt_cache_key"] = cache_key
     effort = str(getattr(owner.config, "reasoning_effort", "") or "").strip().lower()
     if effort:
         body["reasoning"] = {"effort": effort}
+    # store is false, so the only way the model keeps its chain of thought across
+    # tool steps is to get its reasoning back encrypted and replay it (see below).
+    body["include"] = ["reasoning.encrypted_content"]
     converted_tools = _responses_tools(owner, tools)
     if converted_tools:
         body["tools"] = converted_tools
         body["tool_choice"] = "auto"
+    from thomas.core import request_drift
+
+    request_drift.note(cache_key, converted_tools, instructions, input_items, model=str(owner.config.model or ""))
     return body
 
 
@@ -324,3 +356,51 @@ def _response_item(event_data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(item, dict):
             return item
     return {}
+
+
+# Reasoning items of recent responses, keyed by the call_id of each function call
+# that response made. The request builder sees only chat messages, which carry no
+# reasoning, so the client keeps the items here and puts them back in front of the
+# calls they led to. Call ids are unique per response, so one task can never be
+# handed another's reasoning; the map is bounded so a long session cannot grow it.
+_REASONING_KEEP = 64
+
+
+def _replayable_reasoning(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """The reasoning output item, trimmed to what the Responses API accepts back as input.
+
+    With ``store: false`` the provider keeps nothing, so an item without its
+    ``encrypted_content`` cannot be replayed (its id would point at nothing).
+    """
+    if str(item.get("type") or "") != "reasoning" or not item.get("encrypted_content"):
+        return []
+    kept: dict[str, Any] = {"type": "reasoning", "encrypted_content": item["encrypted_content"]}
+    if item.get("id"):
+        kept["id"] = item["id"]
+    summary = item.get("summary")
+    kept["summary"] = summary if isinstance(summary, list) else []
+    return [kept]
+
+
+def _remember_reasoning(owner: Any, items: list[dict[str, Any]], call_ids: list[str]) -> None:
+    """Record one response's reasoning against the first function call it produced."""
+    first_call = next((str(c) for c in call_ids if str(c or "").strip()), "")
+    if not items or not first_call:
+        return
+    store = getattr(owner, "_codex_reasoning_by_call", None)
+    if not isinstance(store, OrderedDict):
+        store = OrderedDict()
+        owner._codex_reasoning_by_call = store
+    store[first_call] = list(items)
+    while len(store) > _REASONING_KEEP:
+        store.popitem(last=False)
+
+
+def _reasoning_for_calls(owner: Any, tool_calls: Any) -> list[dict[str, Any]]:
+    """The reasoning recorded for an assistant step, found by its first call id."""
+    store = getattr(owner, "_codex_reasoning_by_call", None)
+    if not isinstance(store, OrderedDict) or not isinstance(tool_calls, list) or not tool_calls:
+        return []
+    first = tool_calls[0]
+    call_id = str(first.get("id") or "").strip() if isinstance(first, dict) else ""
+    return [dict(item) for item in store.get(call_id, [])]

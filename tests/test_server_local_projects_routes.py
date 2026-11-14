@@ -1,3 +1,8 @@
+"""The linked-projects routes through a whole server, which gets them from ``thomas.server.rows.workspace``.
+
+That row also holds the workspace and source note routes. This file does not import it, and a check finds it from here.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,9 +16,13 @@ from unittest.mock import Mock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
+from tests.plugin_view_fixture import RowsStartedFirst
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.session_store import SessionMeta
+from thomas.core import persistence
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
+from thomas.core.event_loop_offload import slowest_offloads
+from thomas.server import app_runtime_guard
 from thomas.server.app import create_app
 from thomas.server.routes import local_projects_aiohttp as local_projects
 from thomas.server.routes.chat_v2 import APP_SESSION_STORE
@@ -46,9 +55,8 @@ def _read_all_runtime_js() -> str:
     return corpus
 
 
-class TestServerLocalProjectsRoutes(AioHTTPTestCase):
+class TestServerLocalProjectsRoutes(RowsStartedFirst, AioHTTPTestCase):
     def setUp(self) -> None:
-        super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self._projects_root = Path(self._tmpdir.name) / "linked-projects"
         self._projects_root.mkdir(parents=True, exist_ok=True)
@@ -57,11 +65,18 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
             {
                 "THOMAS_HOME": self._tmpdir.name,
                 "THOMAS_STATE_DIR": self._tmpdir.name,
+                "THOMAS_STATE_FILE": str(Path(self._tmpdir.name) / "thomas_state.json"),
             },
         )
-        self._task_list_patch = patch.object(local_projects.task_bot_runtime, "list_executions", return_value=[])
+        # Persistence defaults are captured at import time; the test's temporary
+        # environment alone cannot redirect an already imported module.
+        self._persistence_path_patch = patch.object(
+            persistence, "_DEFAULT_STATE_FILE", Path(self._tmpdir.name) / "thomas_state.json"
+        )
+        self._task_list_patch = patch.object(local_projects.task_bot_runtime, "list_user_executions", return_value=[])
         self._task_get_patch = patch.object(local_projects.task_bot_runtime, "get_execution", return_value=None)
         self._state_dir_patch.start()
+        self._persistence_path_patch.start()
         self._task_list_patch.start()
         self._task_get_patch.start()
 
@@ -69,12 +84,16 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         try:
             self._task_get_patch.stop()
             self._task_list_patch.stop()
+            self._persistence_path_patch.stop()
             self._state_dir_patch.stop()
             self._tmpdir.cleanup()
         finally:
             super().tearDown()
 
     async def get_application(self):
+        # This suite mocks a launcher process; keep the background git guard from
+        # racing with that mock while testing the local-project routes.
+        self.enterContext(patch.object(app_runtime_guard, "_runtime_guard_refresh", return_value=None))
         cfg = AppConfig(
             models={"local": ModelConfig(name="local", model="dummy")},
             default_model="local",
@@ -91,6 +110,227 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
         return root
+
+    async def test_detail_scan_of_25_projects_does_not_block_other_requests(self):
+        roots = [self._write_project(f"team-{i}", {"index.html": "ready"}) for i in range(25)]
+        for root in roots:
+            imported = await self.client.post("/api/local/projects/import", json={"path": str(root)})
+            self.assertEqual(imported.status, 200)
+            if root == roots[0]:
+                project_id = (await imported.json())["project"]["id"]
+
+        entered = threading.Event()
+        release = threading.Event()
+        scan_threads = []
+        loop_thread = threading.get_ident()
+        original = local_projects._refresh_projects
+
+        def slow_refresh(app):
+            scan_threads.append(threading.get_ident())
+            entered.set()
+            release.wait(timeout=0.25)
+            return original(app)
+
+        try:
+            with patch.object(local_projects, "_refresh_projects", side_effect=slow_refresh):
+                detail = asyncio.create_task(self.client.get(f"/api/local/projects/{project_id}"))
+                self.assertTrue(await asyncio.to_thread(entered.wait, 2), "detail did not begin its scan")
+                health = await asyncio.wait_for(self.client.get("/api/health"), timeout=1)
+                self.assertEqual(health.status, 200)
+                release.set()
+                response = await detail
+                self.assertEqual(response.status, 200)
+                self.assertEqual((await response.json())["project"]["id"], project_id)
+                self.assertTrue(scan_threads)
+                self.assertNotIn(loop_thread, scan_threads)
+        finally:
+            release.set()
+
+    async def test_import_root_comparison_does_not_block_health(self):
+        first = self._write_project("root-one", {"index.html": "<h1>One</h1>"})
+        second = self._write_project("root-two", {"index.html": "<h1>Two</h1>"})
+        self.assertEqual((await self.client.post("/api/local/projects/import", json={"path": str(first)})).status, 200)
+        entered = threading.Event()
+        release = threading.Event()
+        loop_thread = threading.get_ident()
+        original_key = local_projects._project_root_key
+        comparison_threads = []
+
+        def slow_root_key(path):
+            comparison_threads.append(threading.get_ident())
+            entered.set()
+            release.wait(3)
+            return original_key(path)
+
+        try:
+            with patch.object(local_projects, "_project_root_key", side_effect=slow_root_key):
+                importing = asyncio.create_task(
+                    self.client.post("/api/local/projects/import", json={"path": str(second)})
+                )
+                self.assertTrue(await asyncio.to_thread(entered.wait, 2), "root comparison did not start")
+                health = await asyncio.wait_for(self.client.get("/api/health"), timeout=1)
+                self.assertEqual(health.status, 200)
+                release.set()
+                self.assertEqual((await importing).status, 200)
+                self.assertTrue(comparison_threads)
+                self.assertNotIn(loop_thread, comparison_threads)
+        finally:
+            release.set()
+
+    async def test_list_returns_saved_projects_while_scan_runs_and_new_project_does_not_wait(self):
+        root = self._write_project("already-here", {"index.html": "<h1>Here</h1>"})
+        imported = await self.client.post("/api/local/projects/import", json={"path": str(root)})
+        self.assertEqual(imported.status, 200)
+        saved = (await imported.json())["project"]
+        local_projects._cache_slot(self.app)["entry"] = None
+        entered = threading.Event()
+        release = threading.Event()
+        initial_stamp = local_projects._registry_stamp(self.app)
+        scanned_stamp = []
+
+        def slow_build(app):
+            scanned_stamp.append(local_projects._registry_stamp(app))
+            projects = local_projects._read_registry(app)
+            entered.set()
+            release.wait(5)
+            return projects + [{"id": "generated-late", "name": "Generated later", "generated": True}]
+
+        try:
+            with patch.object(local_projects, "_build_projects_catalogue", side_effect=slow_build):
+                first = await asyncio.wait_for(self.client.get("/api/local/projects"), timeout=1)
+                payload = await first.json()
+                await asyncio.wait_for(asyncio.to_thread(entered.wait, 1), timeout=2)
+                self.assertTrue(entered.is_set())
+                self.assertTrue(payload["refreshing"])
+                self.assertEqual([row["id"] for row in payload["projects"]], [saved["id"]])
+                created_root = self._write_project("new-project", {"index.html": "<h1>New</h1>"})
+                created = await asyncio.wait_for(
+                    self.client.post("/api/local/projects/import", json={"path": str(created_root)}), timeout=1
+                )
+                self.assertEqual(created.status, 200)
+                self.assertNotEqual(local_projects._registry_stamp(self.app), initial_stamp)
+                self.assertEqual(scanned_stamp, [initial_stamp])
+                during_scan = await asyncio.wait_for(self.client.get("/api/local/projects"), timeout=1)
+                during_scan_payload = await during_scan.json()
+                self.assertTrue(during_scan_payload["refreshing"])
+                self.assertIn(
+                    (await created.json())["project"]["id"],
+                    {row["id"] for row in during_scan_payload["projects"]},
+                )
+                release.set()
+                for _ in range(100):
+                    listed = await self.client.get("/api/local/projects")
+                    answer = await listed.json()
+                    if not answer["refreshing"]:
+                        break
+                    await asyncio.sleep(0.02)
+                self.assertFalse(answer["refreshing"], answer)
+                ids = {row["id"] for row in answer["projects"]}
+                self.assertIn((await created.json())["project"]["id"], ids, answer)
+                self.assertIn("generated-late", ids)  # the next scan can include generated cards
+        finally:
+            release.set()
+
+    async def test_catalogue_build_reports_its_slowest_call(self):
+        root = self._write_project("timed-project", {"index.html": "ready"})
+        imported = await self.client.post("/api/local/projects/import", json={"path": str(root)})
+        self.assertEqual(imported.status, 200)
+        slot = local_projects._cache_slot(self.app)
+        slot["entry"] = None
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_build(app):
+            started.set()
+            release.wait(2)
+            time.sleep(0.12)
+            return local_projects._read_registry(app)
+
+        try:
+            with patch.object(local_projects, "_build_projects_catalogue", side_effect=slow_build):
+                listing = await self.client.get("/api/local/projects")
+                self.assertEqual(listing.status, 200)
+                self.assertTrue(await asyncio.to_thread(started.wait, 2))
+                health = await asyncio.wait_for(self.client.get("/api/health"), timeout=1)
+                self.assertEqual(health.status, 200)
+                release.set()
+                await asyncio.wait_for(slot["task"], timeout=5)
+                self.assertIsNone(slot["task"])
+                receipts = {row["label"]: row for row in slowest_offloads()}
+                self.assertGreaterEqual(receipts["local_projects.catalogue_build"]["max_s"], 0.1)
+        finally:
+            release.set()
+
+    async def test_generated_project_lookup_does_not_hold_the_loop(self):
+        started = threading.Event()
+        release = threading.Event()
+        loop_thread = threading.get_ident()
+        worker_threads = []
+
+        def slow_lookup(project_id, *, index=0):
+            worker_threads.append(threading.get_ident())
+            started.set()
+            release.wait(2)
+            return None
+
+        try:
+            with patch.object(local_projects, "_find_generated_deliverable_project", side_effect=slow_lookup):
+                detail = asyncio.create_task(self.client.get("/api/local/projects/generated-missing"))
+                self.assertTrue(await asyncio.to_thread(started.wait, 2))
+                health = await asyncio.wait_for(self.client.get("/api/health"), timeout=1.5)
+                self.assertEqual(health.status, 200)
+                release.set()
+                response = await asyncio.wait_for(detail, timeout=2)
+                self.assertEqual(response.status, 404)
+                self.assertTrue(worker_threads)
+                self.assertNotIn(loop_thread, worker_threads)
+                receipts = {row["label"]: row for row in slowest_offloads()}
+                self.assertIn("local_projects.generated_lookup", receipts)
+        finally:
+            release.set()
+
+    async def test_stale_list_keeps_complete_cards_while_catalogue_rebuilds(self):
+        root = self._write_project("stable-card", {"index.html": "<h1>Stable</h1>"})
+        response = await self.client.post("/api/local/projects/import", json={"path": str(root)})
+        saved = (await response.json())["project"]
+        stamp = local_projects._registry_stamp(self.app)
+        complete = {**saved, "readiness": {"state": "ready-from-scan"}, "name": "Old name"}
+        generated = {"id": "generated-stable", "generated": True, "name": "Generated"}
+        slot = local_projects._cache_slot(self.app)
+        slot["entry"] = (time.monotonic() - 30, stamp, [complete, generated])
+        entered = threading.Event()
+        release = threading.Event()
+
+        def slow_build(app):
+            entered.set()
+            release.wait(5)
+            return [saved, generated]
+
+        try:
+            with patch.object(local_projects, "_build_projects_catalogue", side_effect=slow_build):
+                response = await asyncio.wait_for(self.client.get("/api/local/projects"), timeout=1)
+                payload = await response.json()
+                self.assertTrue(payload["refreshing"])
+                self.assertEqual(payload["projects"], [complete, generated])
+                await asyncio.wait_for(asyncio.to_thread(entered.wait, 1), timeout=2)
+                # A same-stamp request can arrive while the existing scan is still running.
+                slot["entry"] = (time.monotonic(), local_projects._registry_stamp(self.app), slot["entry"][2])
+                pending = await asyncio.wait_for(self.client.get("/api/local/projects"), timeout=1)
+                self.assertTrue((await pending.json())["refreshing"])
+                newcomer = self._write_project("new-card", {"index.html": "<h1>New</h1>"})
+                created = await asyncio.wait_for(
+                    self.client.post("/api/local/projects/import", json={"path": str(newcomer)}), timeout=1
+                )
+                response = await asyncio.wait_for(self.client.get("/api/local/projects"), timeout=1)
+                payload = await response.json()
+                self.assertTrue(payload["refreshing"])
+                cards = {row["id"]: row for row in payload["projects"]}
+                self.assertEqual(cards[saved["id"]]["readiness"], complete["readiness"])
+                self.assertEqual(cards[saved["id"]]["name"], saved["name"])
+                self.assertIn(generated, payload["projects"])
+                self.assertIn((await created.json())["project"], payload["projects"])
+        finally:
+            release.set()
 
     async def test_import_builds_project_dossier_and_layout_persists(self):
         project_root = self._write_project(
@@ -298,7 +538,7 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
 
         context_response = await self.client.patch(
             f"/api/local/projects/{project_a_id}/context",
-            json={"objective": "Ship Project A", "instructions": "Prefer slate blue."},
+            json={"objective": "Ship Project A", "instructions": "Prefer burnt orange."},
         )
         self.assertEqual(context_response.status, 200)
         attach = await self.client.post(
@@ -398,7 +638,7 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
         }
 
         with (
-            patch.object(local_projects.task_bot_runtime, "list_executions", return_value=[record]),
+            patch.object(local_projects.task_bot_runtime, "list_user_executions", return_value=[record]),
             patch.object(local_projects.task_bot_runtime, "get_execution", return_value=record),
             patch("thomas.server.routes.local_projects_generated.deliverable_kind", return_value="web"),
             patch(
@@ -415,6 +655,11 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
             self.assertEqual(listed.status, 200)
             body = await listed.json()
             rows = body.get("projects") or []
+            if body.get("refreshing"):
+                await asyncio.sleep(0.05)
+                listed = await self.client.get("/api/local/projects")
+                body = await listed.json()
+                rows = body.get("projects") or []
             self.assertEqual(len(rows), 1)
             project = rows[0]
             self.assertTrue(project.get("generated"))
@@ -507,9 +752,9 @@ def test_marketplace_uses_native_runtime_shell() -> None:
     # copy: the old app_runtime_primary.mjs bundle (since deleted) still carried
     # the original undecorated literal, and measuring it would have turned this
     # green while checking a bundle no page loads.
-    assert re.search(
-        r"moduleRenderMarketplaceSurface\(\s*moduleQueueList\s*\)", primary_runtime
-    ), "the marketplace branch no longer renders the native surface into moduleQueueList"
+    assert re.search(r"moduleRenderMarketplaceSurface\(\s*moduleQueueList\s*\)", primary_runtime), (
+        "the marketplace branch no longer renders the native surface into moduleQueueList"
+    )
     assert "[data-module-embedded-surface]" in primary_runtime
     assert "preferContentHeight: true" in primary_runtime
     assert "if (key === 'marketplace') return null;" in primary_runtime

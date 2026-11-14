@@ -1,0 +1,3 @@
+### Added
+
+- **The Thomas desktop app can be used from a program without your mouse or keyboard.** Its built-in bridge listed only web tabs, so no command could reach the Thomas page itself. It now names each window's Thomas page as `chrome` (or `chrome:<window>`), and it gains `type`, `key`, `fill`, `eval`, `screenshot`, `wait_for_text` and `close_window`. Screenshots always land in one folder, `thomas-shots` in the temp folder, whatever name a caller gives, and never overwrite an existing file. The startup router and `CLAUDE.md` now say to use Thomas this way, in the desktop app, and never on a port in a browser.

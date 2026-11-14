@@ -12,6 +12,9 @@ the HTTP layer:
 
 Each test injects a fresh :class:`PrReviewStore` so state never leaks between
 tests or from the process-wide singleton.
+
+These routes reach a server through ``thomas.server.rows.pr_review``. It is named here because no test imports a row,
+and a check finds tests by what they name, so a change to the row must run this file.
 """
 
 from __future__ import annotations
@@ -176,7 +179,7 @@ def test_comment_reply_and_resolve_thread_over_http():
 
         add = await client.post(
             f"/api/pr-review/reviews/{rid}/comments",
-            json={"hunk_id": hunk_id, "author": "test-user", "body": "ttl=None disables expiry"},
+            json={"hunk_id": hunk_id, "author": "calvin", "body": "ttl=None disables expiry"},
         )
         assert add.status == 201
         root = (await add.json())["comment"]
@@ -222,7 +225,7 @@ def test_approval_blocked_by_high_risk_blocking_comment_then_permitted():
             f"/api/pr-review/reviews/{rid}/comments",
             json={
                 "hunk_id": hunk["hunk_id"],
-                "author": "test-user",
+                "author": "calvin",
                 "body": "grant_permission(admin) is unreviewed",
                 "blocking": True,
             },
@@ -240,7 +243,7 @@ def test_approval_blocked_by_high_risk_blocking_comment_then_permitted():
         assert comment["comment_id"] in gated_review["blocking_reasons"][0]
         assert hunk["hunk_id"] in gated_review["blocking_reasons"][0]
 
-        blocked = await client.post(f"/api/pr-review/reviews/{rid}/approve", json={"approver": "test-user"})
+        blocked = await client.post(f"/api/pr-review/reviews/{rid}/approve", json={"approver": "calvin"})
         assert blocked.status == 409
         blocked_body = await blocked.json()
         assert blocked_body["error"] == "approval_blocked"
@@ -254,11 +257,11 @@ def test_approval_blocked_by_high_risk_blocking_comment_then_permitted():
         assert resolve.status == 200
         assert (await resolve.json())["review"]["can_approve"] is True
 
-        approved = await client.post(f"/api/pr-review/reviews/{rid}/approve", json={"approver": "test-user"})
+        approved = await client.post(f"/api/pr-review/reviews/{rid}/approve", json={"approver": "calvin"})
         assert approved.status == 200
         approved_body = await approved.json()
         assert approved_body["approved"] is True
-        assert approved_body["approved_by"] == "test-user"
+        assert approved_body["approved_by"] == "calvin"
         assert approved_body["review"]["blocking_reasons"] == []
 
     _run(scenario)

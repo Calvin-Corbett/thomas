@@ -4,7 +4,7 @@
   const state = {
     apps: [], accounts: [], connectors: [], activeApp: null, jobs: [], activeJob: null,
     messages: [], bindings: [], skills: [], automations: [], activity: [], workflows: [], activeWorkflowId: '',
-    stage: 'home', onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '', dashTab: '', dashTabBeforeChat: '',
+    stage: 'home', workWarnings: [], laneProposals: [], laneRail: [], onboardingPhase: 'goal_discovery', onboardingWorkflowId: '', onboardingSelectionUserTurn: 0, running: false, runState: 'idle', liveTasks: [], steeringBusy: '', actionBusy: false, formDirty: false, editing: false, editingAutomationId: '', creatingJobInApp: false, sessionId: '', error: '', dashTab: '', dashTabBeforeChat: '',
     structuredOnboardingState: { phase: 'goal_discovery', confirmed_goal: '', workflows: [], selected_workflow_id: '', selected_workflow_configured: false },
   };
   let reconcileTimer = null;
@@ -19,7 +19,7 @@
   const jobUrl = suffix => `${appUrl(`/jobs/${encodeURIComponent(state.activeJob.id)}`)}${suffix || ''}`;
 
   function resetStructuredOnboardingState() {
-    state.structuredOnboardingState = { phase: 'goal_discovery', confirmed_goal: '', workflows: [], selected_workflow_id: '', selected_workflow_configured: false };
+    state.structuredOnboardingState = { phase: 'goal_discovery', confirmed_goal: '', workflows: [], selected_workflow_id: '', selected_workflow_configured: false }; state.laneRail = [];
   }
 
   async function request(url, options) {
@@ -75,9 +75,9 @@
     };
   }
   function deriveName(text) {
-    const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
-    if (!cleaned) return 'New job';
-    return cleaned.split(/[.!?]/)[0].split(' ').slice(0, 7).join(' ').slice(0, 72) || 'New job';
+    const cleaned = String(text || '').replace(/\s+/g, ' ').trim(); if (!cleaned) return 'New job'; // below: first clause, seven words, never left hanging on "a" or "whose"
+    const words = cleaned.split(/[.!?:;]/)[0].trim().split(' ').slice(0, 7); while (words.length > 1 && /^(a|an|the|and|or|of|to|for|in|on|at|by|with|my|me|that|which|whose|is|are|from|so|then|if|when|into)$/i.test(words[words.length - 1])) words.pop();
+    return words.join(' ').replace(/[,\s]+$/, '').slice(0, 72) || 'New job';
   }
   function onboardingBrief() {
     return state.messages
@@ -147,10 +147,11 @@
   const {
     onboardingWorkflowCandidates,
     selectedOnboardingWorkflow,
-    onboardingConfigurationReady,
+    onboardingFinishReason,
     onboardingWorkflowDrafts,
     restoreOnboardingWorkflow,
     confirmedOnboardingGoal,
+    modelReportedConfigured,
     visibleOnboardingText,
     onboardingInstruction,
     messageRows,
@@ -167,11 +168,12 @@
     jobTabs,
     activeJobTab,
     jobHtml,
-    provisionOnboardedJob,
+    provisionOnboardedJob, persistOnboardingPhase,
   } = window.ThomasWorkSupport.create({
     state, esc, activeWorkflowFor, statusPill, safeArtifactHref,
-    onboardingBrief, jsonRequest, appUrl,
+    onboardingBrief, jsonRequest, appUrl, contextSettings,
   });
+  const steer = window.ThomasWorkModeSteer.create({ state, request, surface, render, isActive: () => adapterActive, generation: () => selectionGeneration });
 
   function showAllWork() {
     if (activeStreamController) activeStreamController.abort();
@@ -183,7 +185,7 @@
     state.jobs = [];
     state.messages = [];
     state.workflows = [];
-    state.activeWorkflowId = '';
+    state.activeWorkflowId = ''; state.liveTasks = []; state.runState = 'idle';
     state.sessionId = '';
     state.creatingJobInApp = false;
     state.onboardingPhase = 'goal_discovery';
@@ -245,9 +247,12 @@
   function render() {
     if (!adapterActive) return;
     const root = surface(); if (!root) return;
-    root.innerHTML = state.stage === 'onboarding' ? onboardingHtml() : state.stage === 'job' && state.activeJob ? jobHtml() : homeHtml();
+    steer.paintKeepingSteerDrafts(root, () => { root.innerHTML = state.stage === 'onboarding' ? onboardingHtml() : state.stage === 'job' && state.activeJob ? jobHtml() : homeHtml(); });
     if (state.error) root.insertAdjacentHTML('afterbegin', `<div class="tc-work-error" role="alert">${esc(state.error)}</div>`);
+    if (state.workWarnings.length) root.insertAdjacentHTML('afterbegin', `<div class="tc-work-error" role="alert">Work isolated the following untrusted app records; their stored data is preserved.<ul>${state.workWarnings.map(row => `<li>App ${esc(row.app_id)}, job ${esc(row.job_id || 'unknown')}, workflow ${esc(row.workflow_id || 'unknown')}: ${esc(row.reason)}</li>`).join('')}</ul></div>`);
     root.querySelectorAll('[data-work-create]').forEach(button => button.addEventListener('click', newConversation));
+    root.querySelectorAll('[data-work-proposal-approve]').forEach(button => button.addEventListener('click', () => { void safely(() => decideLaneProposal(button.dataset.workProposalApprove, 'approve')); }));
+    root.querySelectorAll('[data-work-proposal-reject]').forEach(button => button.addEventListener('click', () => { void safely(() => decideLaneProposal(button.dataset.workProposalReject, 'reject')); }));
     root.querySelector('[data-work-create-job]')?.addEventListener('click', newJobInApp);
     root.querySelectorAll('[data-work-app]').forEach(button => button.addEventListener('click', () => { void safely(() => openApp(button.dataset.workApp)); }));
     root.querySelector('[data-work-all-apps]')?.addEventListener('click', showAllWork);
@@ -303,14 +308,31 @@
     requestAnimationFrame(() => { const transcript = root.querySelector('.tc-work-transcript'); if (transcript) transcript.scrollTop = transcript.scrollHeight; });
   }
 
+  // Absence is not an error: a board that broke because the proposal route is
+  // missing would be a worse failure than a board that shows no proposals.
+  async function loadLaneProposals() {
+    try {
+      const data = await request('/api/work/lane-proposals');
+      return Array.isArray(data.proposals) ? data.proposals : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async function decideLaneProposal(proposalId, decision) {
+    const path = `/api/work/lane-proposals/${encodeURIComponent(proposalId)}/${decision}`;
+    await jsonRequest(path, 'POST', decision === 'approve' ? { approved_by: 'owner' } : { reason: 'Not now' });
+    state.laneProposals = await loadLaneProposals();
+    render();
+  }
+
   async function refresh() {
     try {
       const [apps, accounts, connectors] = await Promise.all([request('/api/work/apps'), request('/api/work/accounts'), request('/api/work/connectors')]);
-      state.apps = Array.isArray(apps.apps) ? apps.apps : [];
-      state.accounts = Array.isArray(accounts.accounts) ? accounts.accounts : [];
-      state.connectors = Array.isArray(connectors.connectors) ? connectors.connectors : [];
-      state.error = '';
-      if (state.activeApp) state.activeApp = state.apps.find(row => row.id === state.activeApp.id) || state.activeApp;
+      state.apps = Array.isArray(apps.apps) ? apps.apps : []; state.workWarnings = Array.isArray(apps.warnings) ? apps.warnings : []; state.accounts = Array.isArray(accounts.accounts) ? accounts.accounts : [];
+      state.connectors = Array.isArray(connectors.connectors) ? connectors.connectors : []; state.laneProposals = await loadLaneProposals(); state.error = '';
+      if (state.activeApp && state.workWarnings.some(row => row.app_id === state.activeApp.id)) { state.activeApp = null; state.activeJob = null; state.stage = 'home'; }
+      else if (state.activeApp) state.activeApp = state.apps.find(row => row.id === state.activeApp.id) || state.activeApp;
       host().renderHistory && host().renderHistory(); render();
     } catch (error) { state.error = error.message; render(); }
   }
@@ -318,7 +340,7 @@
   function renderHistory(root, query) {
     const term = String(query || '').trim().toLowerCase(); root.innerHTML = '';
     const apps = state.apps.filter(app => !term || `${app.name} ${app.goal}`.toLowerCase().includes(term) || Object.values(app.jobs || {}).some(job => `${job.name} ${job.goal}`.toLowerCase().includes(term)));
-    if (!apps.length) { root.innerHTML = `<div class="tc-mode-empty">${term ? 'No matching jobs.' : 'No jobs yet.'}</div>`; return; }
+    if (!apps.length) { root.innerHTML = `<div class="tc-mode-empty">${term ? 'No matching jobs.' : 'No jobs yet. Describe one in the box below.'}</div>`; return; }
     apps.forEach(app => {
       const heading = document.createElement('button'); heading.className = 'tc-work-history-app'; heading.innerHTML = `<span>${esc(app.name)}</span><small>${esc(app.status)}</small>`; heading.addEventListener('click', () => { void safely(() => openApp(app.id)); }); root.appendChild(heading);
       Object.values(app.jobs || {}).filter(job => job.status !== 'archived' && (!term || `${job.name} ${job.goal}`.toLowerCase().includes(term))).forEach(job => {
@@ -340,7 +362,7 @@
 
   async function openApp(id) {
     if (activeStreamController) activeStreamController.abort();
-    clearTimeout(reconcileTimer); reconcileTimer = null;
+    clearTimeout(reconcileTimer); reconcileTimer = null; state.liveTasks = []; state.runState = 'idle'; state.steeringBusy = '';
     const generation = ++selectionGeneration;
     const data = await request(`/api/work/apps/${encodeURIComponent(id)}`);
     const jobsData = await request(`/api/work/apps/${encodeURIComponent(id)}/jobs`);
@@ -372,7 +394,7 @@
 
   async function openJob(appId, jobId) {
     if (activeStreamController) activeStreamController.abort();
-    clearTimeout(reconcileTimer); reconcileTimer = null;
+    clearTimeout(reconcileTimer); reconcileTimer = null; state.liveTasks = []; state.runState = 'idle'; state.steeringBusy = '';
     const generation = ++selectionGeneration;
     const app = !state.activeApp || state.activeApp.id !== appId
       ? (await request(`/api/work/apps/${encodeURIComponent(appId)}`)).app
@@ -389,7 +411,7 @@
     state.messages = row ? (row.messages || []).map(message => ({ role: message.role, text: visibleWorkMessage(message) })) : [];
     state.bindings = bindings.bindings || []; state.skills = skills.skills || []; state.automations = automations.automations || []; state.activity = activity.activity || [];
     state.workflows = workflows.workflows || []; state.activeWorkflowId = String(workflows.active_workflow_id || '');
-    render(); host().renderHistory && host().renderHistory();
+    render(); host().renderHistory && host().renderHistory(); void steer.restoreRunningTasks(generation, state.sessionId);
     scheduleJobReconcile(generation, appId, jobId);
   }
 
@@ -409,12 +431,12 @@
 
   function newConversation() {
     if (activeStreamController) activeStreamController.abort();
-    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeApp = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = false; state.onboardingPhase = 'goal_discovery'; resetStructuredOnboardingState(); state.stage = 'onboarding'; state.error = ''; render();
+    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeApp = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.liveTasks = []; state.runState = 'idle'; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = false; state.onboardingPhase = 'goal_discovery'; resetStructuredOnboardingState(); state.stage = 'onboarding'; state.error = ''; render();
   }
 
   function newJobInApp() {
     if (activeStreamController) activeStreamController.abort();
-    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = true; state.onboardingPhase = 'goal_discovery'; resetStructuredOnboardingState(); state.stage = 'onboarding'; state.error = ''; render();
+    selectionGeneration += 1; clearTimeout(reconcileTimer); reconcileTimer = null; state.activeJob = null; state.messages = []; state.workflows = []; state.activeWorkflowId = ''; state.liveTasks = []; state.runState = 'idle'; state.onboardingWorkflowId = ''; state.onboardingSelectionUserTurn = 0; state.sessionId = ''; state.creatingJobInApp = true; state.onboardingPhase = 'goal_discovery'; resetStructuredOnboardingState(); state.stage = 'onboarding'; state.error = ''; render();
   }
 
   // Every onboarding flow gets ITS OWN chat session, namespaced per flow —
@@ -516,18 +538,17 @@
       selected_workflow: selected ? selected.name : '',
       selected_workflow_id: selected ? state.onboardingWorkflowId : '',
       selected_workflow_user_turn: selected ? state.onboardingSelectionUserTurn : 0,
-      selected_workflow_configured: onboardingConfigurationReady(candidates, selected),
+      // The turn is what the USER did; configured is the MODEL's judgement.
+      // Writing the composite back here fed the field its own value on restore.
+      selected_workflow_configured: modelReportedConfigured(),
     };
     if (state.creatingJobInApp) await persistJobDraft({ phase: nextPhase, ...phaseFields });
-    else {
-      const update = { phase: nextPhase, fields: phaseFields };
-      await jsonRequest(appUrl('/onboarding'), 'PATCH', update);
-    }
+    else await persistOnboardingPhase(nextPhase, phaseFields);
     state.onboardingPhase = nextPhase;
   }
 
   async function readChatStream(message, options) {
-    const response = await fetch('/api/v2/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: options.signal, body: JSON.stringify({ message, display_prompt: options.displayPrompt || undefined, session_id: state.sessionId || undefined, surface_mode: 'work', context_id: options.contextId, work_onboarding_state: options.workOnboardingState || undefined, ...contextSettings() }) });
+    const response = await fetch('/api/v2/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: options.signal, body: JSON.stringify({ message, display_prompt: options.displayPrompt || undefined, session_id: state.sessionId || undefined, surface_mode: 'work', context_id: options.contextId, work_onboarding_state: options.workOnboardingState || undefined, docs: options.files ? options.files.docs : undefined, images: options.files ? options.files.images : undefined, ...contextSettings() }) });
     if (!response.ok || !response.body) {
       const problemText = await response.text();
       let problem = {};
@@ -551,21 +572,21 @@
         if (['text', 'agent_text', 'delta', 'assistant_delta', 'message_delta'].includes(type)) {
           answer += String(event.text || event.delta || event.content || '');
           if (options.onDelta) options.onDelta(answer);
-        }
-        else if (type === 'work_onboarding_state' && event.state && typeof event.state === 'object') { if (options.onWorkOnboardingState) options.onWorkOnboardingState(event.state); }
+        } else if (type === 'delegation_started' || type === 'delegation_progress' || type === 'delegation_completed' || type === 'delegation_failed') { if (options.onTask) options.onTask(event); }
+        else if (type === 'work_onboarding_state' && event.state && typeof event.state === 'object') { if (options.onWorkOnboardingState) options.onWorkOnboardingState(event.state, event.lane); }
         else if (type === 'done') { state.sessionId = String(event.session_id || state.sessionId); if (!answer) answer = String(event.final || event.output_text || event.text || ''); }
         else if (type === 'error') throw new Error(event.error || 'Thomas reported an error');
       }
       if (part.done) break;
     }
-    return answer.trim() || 'I need one more detail before I can finish setting up this job.';
+    return answer.trim() || 'Thomas sent back an empty reply. Send your message again.';
   }
 
-  async function send(message) {
-    const text = String(message || '').trim(); if (!text || state.running) return;
-    // Typing NO LONGER throws you into the Chat tab. Chatting while looking
-    // at the data is the point of the peek strip — the reply lands there,
-    // above the composer, and the dashboard you were reading stays put.
+  async function send(message, context) {
+    const text = String(message || '').trim(); if (!text) return; const files = context && context.files ? context.files : { docs: (context && context.docs) || [], images: (context && context.images) || [] };
+    // Busy is a queue, never a drop: the composer clears on send, so a message refused here was simply gone.
+    if (state.running) { state.queuedSends = (state.queuedSends || []).concat([{ text, files, generation: selectionGeneration }]); render(); return; }
+    // Typing does not throw you into the Chat tab: the reply lands in the peek strip, above the composer.
     // Typing on the Work board starts onboarding with this text as the first
     // message. This must happen BEFORE the running flag is raised: the old
     // re-entrant send() hit its own running guard and silently dropped the
@@ -574,7 +595,7 @@
     const generation = selectionGeneration;
     const controller = new AbortController();
     activeStreamController = controller;
-    state.running = true; host().setBusy && host().setBusy(true); state.error = '';
+    state.running = true; state.runState = 'working'; state.liveTasks = []; state.steeringBusy = ''; host().setBusy && host().setBusy(true); state.error = '';
     try {
       if (state.stage === 'onboarding') {
         if (!await ensureOnboardingApp(text, generation)) return;
@@ -588,35 +609,35 @@
         // every past conversation in the app and bleeds it into new jobs.
         const contextId = `${state.activeApp.id}:onboarding:${state.sessionId}`;
         const pending = { role: 'assistant', text: '' }; state.messages.push(pending); render();
-        const answer = await readChatStream(instruction, { contextId, displayPrompt: text, workOnboardingState: state.structuredOnboardingState, signal: controller.signal, onWorkOnboardingState: value => { if (generation === selectionGeneration) { state.structuredOnboardingState = value; state.onboardingPhase = String(value.phase || state.onboardingPhase); state.onboardingWorkflowId = String(value.selected_workflow_id || ''); if (state.onboardingWorkflowId && !(state.onboardingSelectionUserTurn >= 1)) state.onboardingSelectionUserTurn = state.messages.filter(row => row.role === 'user').length; if (adapterActive) render(); } }, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
+        const answer = await readChatStream(instruction, { contextId, files, displayPrompt: text, workOnboardingState: state.structuredOnboardingState, signal: controller.signal, onTask: event => { if (generation === selectionGeneration) steer.recordLiveTask(event); }, onWorkOnboardingState: (value, lane) => { if (generation === selectionGeneration) { state.structuredOnboardingState = value; state.laneRail = (lane && Array.isArray(lane.rail)) ? lane.rail : state.laneRail; state.onboardingPhase = String(value.phase || state.onboardingPhase); state.onboardingWorkflowId = String(value.selected_workflow_id || ''); if (state.onboardingWorkflowId && !(state.onboardingSelectionUserTurn >= 1)) state.onboardingSelectionUserTurn = state.messages.filter(row => row.role === 'user').length; if (adapterActive) render(); } }, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
         if (generation !== selectionGeneration) return;
         pending.text = answer; await appendOnboarding('assistant', answer);
         await advanceOnboardingPhase();
       } else if (state.stage === 'job' && state.activeJob) {
         state.messages.push({ role: 'user', text }); render();
         const pending = { role: 'assistant', text: '' }; state.messages.push(pending); render();
-        const answer = await readChatStream(text, { contextId: `${state.activeApp.id}:${state.activeJob.id}`, signal: controller.signal, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
+        const answer = await readChatStream(text, { contextId: `${state.activeApp.id}:${state.activeJob.id}`, files, signal: controller.signal, onTask: event => { if (generation === selectionGeneration) steer.recordLiveTask(event); }, onDelta: value => { if (generation === selectionGeneration) { pending.text = value; if (adapterActive) render(); } } });
         if (generation !== selectionGeneration) return;
         pending.text = answer;
         await request(jobUrl('/history'), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message_count: state.messages.length, last_message_at: new Date().toISOString() }) });
       }
-      await refresh();
+      steer.finishRun(); await refresh();
     } catch (error) {
       if (generation !== selectionGeneration) return;
-      const last = state.messages[state.messages.length - 1];
+      state.runState = controller.signal.aborted ? 'stopped' : 'failed'; const last = state.messages[state.messages.length - 1];
       if (last && (last.role === 'assistant' || last.role === 'thomas') && !String(last.text || '').trim()) state.messages.pop();
       if (controller.signal.aborted) {
-        state.messages.push({ role: 'assistant', text: 'Stopped.' });
+        state.messages.push({ role: 'system', text: 'Stopped. Work Thomas already handed to a helper may keep going until that helper is stopped too.' });
         return;
       }
       // A failure is the UI reporting, not Thomas speaking: system rows render
       // as visible alerts and never count as conversation turns.
-      state.error = error.message; state.messages.push({ role: 'system', text: `I couldn't safely complete that Work turn: ${error.message}` });
+      state.error = error.message; state.messages.push({ role: 'system', text: `Thomas could not finish that: ${error.message}` });
     }
     finally {
       if (activeStreamController === controller) activeStreamController = null;
-      state.running = false;
-      host().setBusy && host().setBusy(false);
+      state.running = false; const next = (state.queuedSends || []).shift();
+      host().setBusy && host().setBusy(false); if (next) setTimeout(() => { if (next.generation === selectionGeneration) void send(next.text, { files: next.files }); else { state.queuedSends = []; state.error = `Not sent, because you opened something else first: “${next.text}”`; render(); } }, 0);
       if (adapterActive && generation === selectionGeneration) {
         render();
         host().renderHistory && host().renderHistory();
@@ -625,15 +646,13 @@
   }
 
   async function finishOnboarding() {
-    if (!state.activeApp) return;
+    if (!state.activeApp) return; render(); // the button reads "Saving your job…" for the dozen requests that follow
     const candidates = onboardingWorkflowCandidates();
-    if (state.onboardingPhase !== 'workflow_configuration' || candidates.length < 1 || candidates.length > 6) throw new Error('Thomas needs a workflow map (one to six workflows) before creating this job.');
     const requestedSelection = selectedOnboardingWorkflow(candidates);
-    if (!requestedSelection) throw new Error('Choose one named or numbered workflow before creating this job.');
-    if (!onboardingConfigurationReady(candidates, requestedSelection)) throw new Error('Answer at least one configuration question about the selected workflow before creating this job.');
+    // The same check that disables the panel's button, so a refused save says what the button says.
+    const finishReason = onboardingFinishReason(candidates, requestedSelection);
+    if (finishReason) throw new Error(finishReason);
     const confirmedGoal = confirmedOnboardingGoal();
-    if (!confirmedGoal) throw new Error('Thomas needs to confirm the job goal before creating workflows.');
-    if (!state.sessionId) throw new Error('The onboarding session is missing; continue the conversation once before retrying.');
     const firstUserMessage = (state.messages.find(row => row.role === 'user') || {}).text || '';
     const goal = confirmedGoal;
     const settings = contextSettings(); const jobSettings = { model_id: settings.model_id, profile: settings.profile, reasoning_effort: settings.reasoning_effort, autonomy: settings.autonomy_level, file_access: settings.file_access, memory: settings.memory, guardrails: settings.thomas_guardrails, token_economy: settings.token_economy };
@@ -660,7 +679,7 @@
     const selected = createdWorkflows.find(workflow => workflow.id === selectedDraft.id);
     if (selected && existingWorkflowData.active_workflow_id !== selected.id) await request(`${base}/workflows/${encodeURIComponent(selected.id)}/select`, { method: 'POST' });
     const setupFailures = await provisionOnboardedJob(data.job);
-    if (setupFailures.length) throw new Error(`Job setup is saved and can resume, but ${setupFailures.join(', ')} still needs attention.`);
+    if (setupFailures.length) throw new Error(`Your job is saved, but Thomas could not finish setting up its ${setupFailures.join(', ')}. Press the button again to retry.`);
     if (!state.creatingJobInApp) await jsonRequest(appUrl(), 'PATCH', { goal });
     if (state.creatingJobInApp) {
       const cleared = await jsonRequest(appUrl('/onboarding'), 'PATCH', { fields: { job_draft: {} } });
@@ -669,7 +688,7 @@
       await jsonRequest(appUrl('/onboarding'), 'PATCH', { phase: 'ready', state: 'ready', next_prompt: '' });
     }
     state.creatingJobInApp = false;
-    await refresh(); await openJob(state.activeApp.id, data.job.id);
+    await refresh(); await openJob(state.activeApp.id, data.job.id); state.actionNotice =`Job saved: “${data.job.name}”. This is its page.`; setTimeout(() => { state.actionNotice = ''; if (adapterActive) render(); }, 8000);
   }
 
   async function setJobStatus(action) { const data = await request(jobUrl(`/${action}`), { method: 'POST' }); state.activeJob = data.job; await refresh(); render(); }
@@ -707,6 +726,7 @@
     const kind = String(fields.trigger || 'manual');
     const detail = String(fields.detail || '').trim();
     let trigger = { type: kind };
+    if (kind === 'once') trigger.run_at = detail;
     if (kind === 'interval') trigger.every_seconds = Math.max(60, (parseInt(detail, 10) || 15) * 60);
     if (kind === 'daily') trigger = { type: kind, at: detail || '08:30', tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' };
     if (kind === 'weekly') trigger = { type: kind, at: detail || '08:30', tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', dow: [0, 1, 2, 3, 4] };
@@ -803,13 +823,12 @@
     if (peek()) peek().clear();
   }
 
-  async function enter() {
+  function enter() {
     adapterActive = true;
     clearTimeout(reconcileTimer);
     reconcileTimer = null;
     if (peek()) peek().onToggle(setChatExpanded);
     render();
-    await refresh();
     if (state.stage === 'job' && state.activeApp && state.activeJob) {
       scheduleJobReconcile(selectionGeneration, state.activeApp.id, state.activeJob.id);
     }

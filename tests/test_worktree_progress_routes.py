@@ -12,6 +12,9 @@ clock, no temp state on disk):
   * the critical path is reported as an explicit node list + total duration so
     the panel can visually distinguish it;
   * bad input is 4xx (400 malformed, 409 lifecycle conflict) -- never a 500.
+
+These routes reach a real server through the row ``thomas.server.rows.agent_panels``, and nothing imports a row, so
+that name is written here for a change to the row to find this file.
 """
 
 from __future__ import annotations

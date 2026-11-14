@@ -256,13 +256,22 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.tc-work-thinking {
-  max-width: 720px;
-  margin: 0 auto;
-  color: var(--c-muted);
-  font-size: 12px;
-  animation: tc-work-pulse 1.3s ease-in-out infinite;
-}
+.tc-work-live { max-width: 720px; margin: 14px auto; padding: 14px; border: 1px solid var(--c-accent-line); border-radius: 14px; background: var(--c-surface); color: var(--c-text); }
+.tc-work-live-header, .tc-work-live-task > div:first-child { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.tc-work-live-header { margin-bottom: 10px; }
+.tc-work-live-header [role="status"], .tc-work-live-badge { font-size: 11px; font-weight: 700; color: var(--c-muted); }
+.tc-work-live ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.tc-work-live-task { padding: 12px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-composer-bg); }
+.tc-work-live-task p { margin: 8px 0; color: var(--c-muted); overflow-wrap: anywhere; }
+.tc-work-live-task form { display: grid; gap: 7px; margin-top: 12px; }
+.tc-work-live-task label { font-size: 12px; font-weight: 700; }
+.tc-work-live-task form > div { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.tc-work-live-task textarea { min-width: 0; flex: 1 1 220px; resize: vertical; padding: 9px; border: 1px solid var(--c-border); border-radius: 8px; color: var(--c-text); background: var(--c-surface); font: inherit; }
+.tc-work-live-task button { min-height: 38px; padding: 8px 12px; border: 1px solid var(--c-accent-line); border-radius: 8px; color: var(--c-text); background: var(--c-accent-soft); cursor: pointer; }
+.tc-work-live-task small { color: var(--c-muted); }
+.tc-work-live-task [role="alert"] { color: var(--c-danger, #dc5d59); }
+.tc-work-live-task :is(textarea, button):focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.tc-work-live-task button:disabled { opacity: .6; cursor: wait; }
 /* Work has no composer of its own any more — .tc-work-composer and its
    send button were deleted with the second composer. Typing happens in the
    one shell composer at the bottom of the window, for every mode. */

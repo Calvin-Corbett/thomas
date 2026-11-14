@@ -1,4 +1,8 @@
-"""Tests for thomas.server.routes.search (FTS5 conversation search API)."""
+"""Tests for thomas.server.routes.search (FTS5 conversation search API).
+
+The routes register through the row in thomas.server.rows.search. Named here because a check finds tests by imports
+and dotted names, and no test imports a row, so a change to the row would not run these otherwise.
+"""
 
 import tempfile
 import unittest

@@ -24,6 +24,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from thomas.chat.session_slot import session_files
+from thomas.chat.session_store import SessionStore
+
 log = logging.getLogger(__name__)
 
 _HISTORY_CACHE_LIMIT = 512
@@ -71,8 +74,8 @@ async def delete_live_chat(app: Any, session_id: str) -> dict[str, Any]:
 
     from thomas.core import task_bot_runtime
     from thomas.server.app_keys import APP_MEMORY
+    from thomas.server.chat_app_keys import APP_SESSION_LLM_CACHE, APP_SESSION_STORE
     from thomas.server.chat_attachment_store import forget_chat_originals
-    from thomas.server.routes.chat_v2_keys import APP_SESSION_LLM_CACHE, APP_SESSION_STORE
     from thomas.server.routes.chat_v2_support import _evict_session_llm
 
     cached = (app.get(APP_SESSION_LLM_CACHE) or {}).get(session_id)
@@ -289,8 +292,17 @@ def build_chat_store(
     }
 
 
+def _stored_titles(directory: Path) -> dict[str, Any]:
+    """Names the title model gave chats (chat_titles.json beside the sessions); empty when there are none."""
+    try:
+        data = json.loads((directory.parent / "chat_titles.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _v2_sessions_as_chats(
-    sessions_dir: Path,
+    sessions_dir: SessionStore | Path,
     *,
     limit: int = 300,
     surface_mode: str = "",
@@ -304,13 +316,13 @@ def _v2_sessions_as_chats(
     two so real, current chats appear with their dates. (chat history fix, 2026-06-28)"""
     out: list[dict[str, Any]] = []
     try:
-        files = list(sessions_dir.glob("chat_*.json"))
+        files = session_files(sessions_dir)
     except OSError:
         return out
 
     # Deleted histories are not served from memory, and release their cache data.
     present = {path.absolute() for path in files}
-    directory = sessions_dir.absolute()
+    directory = (sessions_dir.path_of("").parent if isinstance(sessions_dir, SessionStore) else sessions_dir).absolute()
     with _history_cache_lock:
         for key in list(_history_cache):
             if key.parent == directory and key not in present:
@@ -323,6 +335,7 @@ def _v2_sessions_as_chats(
             return 0.0
 
     files.sort(key=_mtime, reverse=True)
+    named = _stored_titles(directory)
     result_limit = max(1, int(limit))
     for path in files:
         try:
@@ -358,6 +371,9 @@ def _v2_sessions_as_chats(
             continue  # empty / system-only session — nothing to show in the sidebar
         first_user = next((m["content"] for m in msgs if m["role"] == "user"), "")
         title = (first_user.strip().splitlines()[0][:60] if first_user.strip() else "New chat") or "New chat"
+        given = named.get(sid)
+        if isinstance(given, dict) and str(given.get("title") or "").strip():
+            title = str(given["title"]).strip()  # the title model's name beats the first line of the first prompt
         saved_at = data.get("saved_at")
         updated_ms = int(float(saved_at) * 1000) if isinstance(saved_at, (int, float)) else int(_mtime(path) * 1000)
         out.append(

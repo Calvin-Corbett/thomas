@@ -1,0 +1,4 @@
+### Fixed
+- **A task name with a colon, slash, quote or other character Windows refuses no longer breaks the plan tools.** The plan and problem folders were named straight from the task, so `manager.py --sync-plans` stopped with WinError 267 after the claim was already written. The folder name is made safe and the task keeps its name everywhere else.
+- **Releasing an agent's claim now drops all of its task rows, not just one.** An agent that moved its claim to a renamed task held two rows, so the release failed and the rows it left behind blocked every other agent's commit. A row that cannot be dropped is now reported instead of being skipped silently. Taking over someone else's claim still refuses when it cannot tell which row goes with which scope.
+- **Releasing a claim clears its plan and problem rows too.** They were left behind, and the next commit by anyone failed the plan gate on a stale Task Plans row until someone ran `--sync-plans` by hand.

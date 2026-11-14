@@ -1,9 +1,15 @@
+"""Notice which files in the live Thomas repository a worker changed.
+When the worker ran in a green copy, measure the change with git against
+that green copy's base.
+"""
+
 from __future__ import annotations
 
 import hashlib
 from pathlib import Path
 from typing import Any
 
+from thomas.core.event_loop_offload import off_loop
 from thomas.server.chat_delegation_deliverable import _worker_summary_line, _workspace_mtimes
 
 _LIVE_REPO_IGNORE_PREFIXES = (
@@ -17,7 +23,6 @@ _LIVE_REPO_IGNORE_PARTS: frozenset[str] = frozenset(
 )
 _LIVE_REPO_IGNORE_SUFFIXES = ("_test_results.jsonl",)
 _LIVE_REPO_WRITE_TOOLS = {"fs.write_file", "fs.write_protected_file"}
-
 
 
 def _live_repo_change_ignored(path: str) -> bool:
@@ -59,14 +64,62 @@ def _live_repo_workspace_mtimes(repo_root: Path) -> dict[str, tuple[int, str]]:
     return out
 
 
+def _changed_in_green(root: Path) -> list[str] | None:
+    """What a green differs by from the commit it started at, or None if *root*
+    is not a green. A retry re-measures its baseline from green, which already
+    holds the earlier attempt's work, so "since this attempt began" read as
+    nothing and a correct fix was thrown away (exec-8ef69b69fb68, 2026-09-22)."""
+    from thomas.server import green_checkout
+
+    try:
+        resolved = Path(root).resolve()
+        if resolved.parent != (green_checkout.green_root() / "work").resolve():
+            return None
+        green = green_checkout.find_green(resolved.name)
+        return None if green is None else green_checkout.changed_paths(green)
+    except (OSError, green_checkout.GreenUnavailable):
+        return None
+
+
 def _live_repo_files_changed_since(
     repo_root: Path, baseline: dict[str, tuple[int, str]], *, limit: int = 48
 ) -> list[str]:
+    in_green = _changed_in_green(repo_root)
+    if in_green is not None:
+        return sorted(p for p in in_green if not _live_repo_change_ignored(p))[:limit]
     after = _live_repo_workspace_mtimes(repo_root)
     changed = [
         rel for rel, marker in after.items() if baseline.get(rel) != marker and not _live_repo_change_ignored(rel)
     ]
     return sorted(changed)[:limit]
+
+
+async def attempt_change_baseline(
+    live_root: Path, work_dir: Path | None, *, in_live_repo: bool, attempt: int
+) -> tuple[list[str] | None, dict[str, Any]]:
+    """The picture one attempt starts from, measured in a worker thread.
+
+    Two reads of the whole work copy, and one of them opens and hashes every
+    byte it finds: measured on this checkout, 8,446 files and 98.2 MB, which a
+    native read-and-hash alone takes 1.67 s to get through. Both ran straight
+    on the server's event loop -- at the top of every attempt, and again when
+    the attempt finished -- so while Thomas worked on Thomas, Thomas stopped
+    answering. Same two questions, same functions, one thread that is not the
+    loop.
+
+    The functions are looked up as this module's globals deliberately:
+    ``chat_delegation._sync_runner_legacy_globals`` rebinds
+    ``_workspace_mtimes`` here, and tests patch it under that name.
+    """
+
+    def read() -> tuple[list[str] | None, dict[str, Any]]:
+        # One lookup, reused for the replan prompt: it is a git diff of the green.
+        green = _changed_in_green(live_root) if attempt > 1 or in_live_repo else None
+        if in_live_repo:
+            return green, _live_repo_workspace_mtimes(live_root)
+        return green, _workspace_mtimes(work_dir)
+
+    return await off_loop("delegation.attempt_baseline", read)
 
 
 def _live_repo_result_summary(result_text_parts: list[str], changed_files: list[str]) -> str:
@@ -75,17 +128,33 @@ def _live_repo_result_summary(result_text_parts: list[str], changed_files: list[
     files_str = ", ".join(shown)
     if len(changed_files) > len(shown):
         files_str += f" (+{len(changed_files) - len(shown)} more)"
-    base = f"Changed live Thomas files: {files_str}."
+    # The change is in green, not the running Thomas; saying "live" here told you
+    # a fix was in place when it was waiting for your approval.
+    base = f"Changed Thomas's code in a private copy: {files_str}. It reaches the running Thomas once you approve it."
     if worker_line and not all(name in worker_line for name in shown):
         return f"{base} {worker_line}"[:400]
     return base
 
 
-def _live_repo_change_requirement() -> str:
+# The visible header varies (N3: a green worker is told the truth), but the
+# idempotency check below uses this invariant tail instead, so either header
+# is recognised as "already added" regardless of which one is present.
+_LIVE_REPO_REQUIREMENT_TAIL = "is not complete until you modify at least one non-ignored, tracked source/test/doc file"
+
+
+def _live_repo_change_requirement(root: Path | None = None, *, in_green: bool | None = None) -> str:
+    """The completion requirement; *in_green* when the caller already looked it up."""
+    if in_green is None:
+        in_green = root is not None and _changed_in_green(root) is not None
+    header = (
+        "SELF-FIX COMPLETION REQUIREMENT: this self-fix run"
+        if in_green
+        else "LIVE REPO COMPLETION REQUIREMENT: this self-development task"
+    )
     return (
-        "LIVE REPO COMPLETION REQUIREMENT: this self-development task is not complete "
-        "until you modify at least one non-ignored, tracked source/test/doc file with "
-        "an allowed write tool such as fs.write_file. Pure inspection does not count. "
+        f"{header} {_LIVE_REPO_REQUIREMENT_TAIL} with "
+        "an allowed write tool such as diff.create (fs.write_file for a new file). "
+        "Pure inspection does not count. "
         "Ignored/generated files such as thomas_test_results.jsonl, runtime/, output/, "
         "library/, node_modules/, and cache directories do not count. If a protected runtime file "
         "is blocked, make the smallest relevant unprotected test/doc change or report "
@@ -93,9 +162,8 @@ def _live_repo_change_requirement() -> str:
     )
 
 
-def _with_live_repo_change_requirement(prompt: str) -> str:
-    marker = "LIVE REPO COMPLETION REQUIREMENT:"
+def _with_live_repo_change_requirement(prompt: str, root: Path | None = None, *, in_green: bool | None = None) -> str:
     text = str(prompt or "")
-    if marker in text:
+    if _LIVE_REPO_REQUIREMENT_TAIL in text:
         return text
-    return f"{text}\n\n{_live_repo_change_requirement()}"
+    return f"{text}\n\n{_live_repo_change_requirement(root, in_green=in_green)}"

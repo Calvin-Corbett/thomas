@@ -130,7 +130,7 @@ def test_orphaned_tool_call_gets_a_placeholder_output() -> None:
     """A function_call whose result was trimmed (or never produced) must not be sent alone.
 
     The Responses API answers HTTP 400 "No tool output found for function call" and the
-    whole pass dies.
+    whole pass dies - it did, twice, at the start of the remediation pass on Terminal-Bench.
     """
     owner = _Owner()
     messages = [

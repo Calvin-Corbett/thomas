@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
 from aiohttp import web
 
 from thomas.agent.approval import ApprovalBroker
+from thomas.server import dial_elevation
 
 # What a request body can realistically fail with. Only decode faults are the
 # client's fault and answerable with a 400; a transport failure is not.
@@ -110,6 +112,17 @@ def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -
             state = from_preset(preset)
         else:
             state = normalize_state(data)
+        # A saved policy is what every run without a preset falls back to, so a
+        # permissive group saved here is the Open dial by another door. It needs
+        # the same Hello approval, unless Open is already approved.
+        loosens = "permissive" in state.modes.values()
+        if loosens and dial_elevation.cap("guardrails", "open") != "open":
+            loop = asyncio.get_running_loop()
+            if not await loop.run_in_executor(None, dial_elevation.approve, "guardrails", "open"):
+                return web.json_response(
+                    {"ok": False, "error": "loosening a guardrail needs your approval at the password prompt"},
+                    status=403,
+                )
         saved = save_guardrails_policy(state)
         return web.json_response({"ok": True, "policy": saved.to_dict()})
 

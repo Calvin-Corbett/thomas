@@ -1,8 +1,13 @@
-"""Tests for thomas.server.routes.models_aiohttp (model/profile listing, version)."""
+"""Tests for thomas.server.routes.models_aiohttp (model/profile listing), and for the version route beside it.
+
+The model routes are the row ``thomas.server.rows.models``, which is why a change to that row runs this file.
+``tests/test_turning_models_off_touches_only_its_routes.py`` holds the row turning off and on.
+"""
 
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from aiohttp.test_utils import AioHTTPTestCase
 
@@ -51,6 +56,12 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
     """Test model/profile routes under local access mode."""
 
     def setUp(self) -> None:
+        # The server starts a background loop whose first pass runs git in a worker thread right at startup and then
+        # overwrites state["status"] a few hundred milliseconds later. A test that writes its own status races that
+        # pass and loses whenever the request is slow enough. These tests read the routes, not the guard, so the loop's
+        # refresh does nothing here; create_app's own refresh (a different binding) still fills the state once at boot.
+        self._loop_refresh = mock.patch("thomas.server.app_runtime_guard._runtime_guard_refresh", lambda app: {})
+        self._loop_refresh.start()
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self._prev_db_path, self._isolated_db_path = _set_isolated_prefs_db()
@@ -59,6 +70,7 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         try:
             super().tearDown()
         finally:
+            self._loop_refresh.stop()
             _restore_prefs_db(self._prev_db_path, self._isolated_db_path)
             self._tmpdir.cleanup()
 

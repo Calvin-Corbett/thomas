@@ -27,7 +27,8 @@
     "desktop.capture",
     "desktop.accessibility",
     "desktop.input",
-    "desktop.verify"
+    "desktop.verify",
+    "healthcheck"
   ],
   "tags": [
     "desktop",

@@ -1,19 +1,19 @@
+/* A run's own notes (planning, insight, done, stopped …): background, so dim,
+   with a small mono kind label and a quiet rule rather than an accent one. */
 .tc-code-event {
   max-width: 680px;
-  margin: 9px 0;
+  margin: 0;
   padding-left: 11px;
-  border-left: 2px solid var(--c-accent-line);
+  border-left: 2px solid var(--c-border-2);
   color: var(--c-dim);
   font-size: 13px;
   line-height: 1.55;
 }
-.tc-code-event strong { display: block; margin-bottom: 2px; color: var(--c-muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.tc-code-event strong { display: block; margin-bottom: 2px; color: var(--c-muted); font: 600 10px/1.4 var(--font-sans); }
 .tc-code-event span { white-space: pre-wrap; overflow-wrap: anywhere; }
-.tc-code-event.is-reason { border-color: #8f82ff; }
 .tc-code-event.is-error { border-color: var(--c-danger, #ff7777); color: var(--c-danger, #ffaaaa); }
 .tc-code-event.is-disconnected { border-color: var(--c-warn, #f2b35f); color: var(--c-warn, #f7ce91); }
 .tc-code-event.is-stopped { border-color: var(--c-muted); color: var(--c-muted); }
-.tc-code-turn.is-live .tc-code-message-head small::after { content: ' · working'; color: var(--c-accent); }
 
 .tc-code-progress-full,
 .tc-code-progress-history,
@@ -40,9 +40,6 @@
   font-weight: 620;
 }
 .tc-code-saved-activity > summary > span:last-child { color: var(--c-muted); font-size: 10px; }
-.tc-code-activity-summary { display: inline-flex; align-items: center; gap: 6px; }
-.tc-code-activity-summary i { color: var(--c-accent); font-size: 13px; }
-.tc-code-saved-activity.has-issues .tc-code-activity-summary i { color: var(--c-danger, #ff9a9a); }
 
 /* ---- The verdict --------------------------------------------------------
    This is the line that answers "did the thing I asked for actually work",
@@ -97,17 +94,18 @@
 .tc-code-run-report > .tc-code-technical-log { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
 
 .tc-code-technical-log { max-height: 380px; overflow: auto; margin-top: 6px; border: 1px solid var(--c-border); border-radius: 9px; }
-.tc-code-technical { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--c-border); color: var(--c-dim); }
-.tc-code-technical:last-child { border-bottom: 0; }
-.tc-code-technical > i { margin-top: 2px; color: var(--c-accent); font-size: 13px; }
-.tc-code-technical strong { display: block; color: var(--c-dim); font-size: 10.5px; }
-.tc-code-technical code { display: block; max-height: 84px; margin-top: 2px; overflow: auto; color: var(--c-muted); font: 10px/1.5 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tc-code-technical.is-error > i,
-.tc-code-technical.is-error strong { color: var(--c-danger, #ff9a9a); }
-.tc-code-tech-count { margin-left: 5px; color: var(--c-muted); font-weight: 600; }
+/* Legacy icon/body rows use a grid. Disclosure receipts own their layout below:
+   putting their summary in the icon column hides the agent/file preview. */
+.tc-code-technical:not(.tc-code-receipt) { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--c-border); color: var(--c-dim); }
+.tc-code-technical:not(.tc-code-receipt):last-child { border-bottom: 0; }
+.tc-code-technical:not(.tc-code-receipt) > i { margin-top: 2px; color: var(--c-accent); font-size: 13px; }
+.tc-code-technical:not(.tc-code-receipt) strong { display: block; color: var(--c-dim); font-size: 10.5px; }
+.tc-code-technical:not(.tc-code-receipt) code { display: block; max-height: 84px; margin-top: 2px; overflow: auto; color: var(--c-muted); font: 10px/1.5 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tc-code-technical:not(.tc-code-receipt).is-error > i,
+.tc-code-technical:not(.tc-code-receipt).is-error strong { color: var(--c-danger, #ff9a9a); }
 
 .tc-code-result-note { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
-.tc-code-result-note span { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--c-border); border-radius: 7px; padding: 4px 7px; color: var(--c-dim); font: 10.5px/1.2 var(--font-label, inherit); }
+.tc-code-result-note span { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--c-border); border-radius: 7px; padding: 4px 7px; color: var(--c-dim); font: 10.5px/1.2 var(--font-sans); }
 
 
 /* What Thomas made, opened IN THE CONVERSATION. Sending a result to a side
@@ -115,27 +113,16 @@
    in the thread, and Code is meant to be Chat that builds rather than
    dispatches. The thumbnail is the real page, so you can see what it is before
    deciding to open it. */
-.tc-code-artifacts { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }
-.tc-code-artifacts-head { font: 600 10.5px/1.2 var(--font-label, inherit); letter-spacing: .06em; text-transform: uppercase; color: var(--c-muted); }
+.tc-code-artifacts { margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .tc-code-artifact { display: flex; flex-direction: column; gap: 8px; }
 /* Was capped at 420px inside a column twice that wide, so the card sat in the
    left half with dead space beside it. It is the result of the whole run --
    let it use the room. */
 .tc-code-artifact-row { display: flex; align-items: stretch; gap: 7px; max-width: 680px; }
-.tc-code-artifact-pop { display: grid; place-items: center; width: 42px; flex: 0 0 auto; cursor: pointer;
-  border: 1px solid var(--c-border); border-radius: 12px; background: var(--c-surface); color: var(--c-dim); text-decoration: none; transition: all .14s; }
-.tc-code-artifact-pop:hover, .tc-code-artifact-pop:focus-visible { border-color: var(--c-accent); color: var(--c-text); }
-.tc-code-artifact-pop:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
-.tc-code-artifact-pop i { font-size: 16px; }
-.tc-code-artifact-save { display: grid; place-items: center; width: 42px; flex: 0 0 auto; cursor: pointer;
-  border: 1px solid var(--c-border-2); border-radius: 12px; background: var(--c-surface); color: var(--c-accent); }
-.tc-code-artifact-save:hover, .tc-code-artifact-save:focus-visible { border-color: var(--c-accent); }
-.tc-code-artifact-save:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
-.tc-code-artifact-save i { font-size: 17px; }
 .tc-code-artifact-open {
   display: flex; align-items: stretch; gap: 0; flex: 1; min-width: 0; padding: 0;
   text-align: left; cursor: pointer; overflow: hidden;
-  border: 1px solid var(--c-border-2); border-radius: 12px; background: var(--c-surface);
+  border: 1px solid var(--c-border-2); border-radius: 8px; background: transparent;
   color: var(--c-text); font: 13px/1.2 var(--font-sans, inherit);
   transition: border-color .14s ease;
 }
@@ -146,7 +133,7 @@
    for ~1200px wide was shown through a narrow keyhole -- the calculator came
    out as an unreadable vertical sliver, which read as "the thing it made looks
    squashed". Same idea as a browser tab preview: show the real proportions. */
-.tc-code-artifact-thumb { position: relative; width: 168px; height: 105px; flex: 0 0 auto; background: #fff; overflow: hidden; border-right: 1px solid var(--c-border); }
+.tc-code-artifact-thumb { position: relative; width: 150px; height: 94px; flex: 0 0 auto; background: #fff; overflow: hidden; border-right: 1px solid var(--c-border); }
 /* Scoped through .tc-code-artifacts on purpose. `.tc-code-artifact iframe` in
    unified_code_results.css -- the rule for the big INLINE preview -- forces
    `width: 100%; height: 230px`, and it ties this selector on specificity and
@@ -154,12 +141,12 @@
    a 167x230 portrait strip of a layout built for ~1200px, which is exactly why
    what Thomas made looked squashed in its own card. Measured, not guessed --
    the iframe computed to 167.429 x 230 while this rule asked for 1280 x 800. */
-.tc-code-artifacts .tc-code-artifact-thumb iframe { position: absolute; top: 0; left: 0; width: 1280px; height: 800px; border: 0; transform: scale(.13125); transform-origin: top left; pointer-events: none; }
-.tc-code-artifact-thumb.is-icon { display: grid; place-items: center; background: var(--c-accent-soft); }
-.tc-code-artifact-thumb.is-icon i { font-size: 26px; color: var(--c-accent); }
+.tc-code-artifacts .tc-code-artifact-thumb iframe { position: absolute; top: 0; left: 0; width: 1280px; height: 800px; border: 0; transform: scale(.1171875); transform-origin: top left; pointer-events: none; }
+.tc-code-artifact-thumb.is-icon { display: grid; place-items: center; background: var(--c-surface); }
+.tc-code-artifact-thumb.is-icon i { font-size: 26px; color: var(--c-muted); }
 .tc-code-artifact-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 13px; }
-.tc-code-artifact-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tc-code-artifact-verb { font-size: 11.5px; color: var(--c-muted); }
+.tc-code-artifact-name { color: var(--c-strong); font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-code-artifact-verb { font-size: 11.5px; color: color-mix(in srgb, var(--c-text) 45%, transparent); }
 .tc-code-artifact-stage { border: 1px solid var(--c-border-2); border-radius: 12px; overflow: hidden; background: #fff; }
 /* The result gets real room. A fixed tall frame inside a short transcript
    collapsed it to a 230px strip -- a game you cannot see is the problem this
@@ -297,104 +284,67 @@
 .tc-code-viewer-stage { flex: 1 1 auto; min-height: 0; background: #fff; }
 .tc-code-viewer-stage iframe { display: block; width: 100%; height: 100%; border: 0; }
 
-/* ==== The narrated run (prototype v3 -> real surface, 2026-08-10) ====
-   Thomas's words carry the run and sit at the left edge; receipts hang on a
-   railed vertical UNDER the sentence they back up, one line each, expanding
-   inline. The rail breaks whenever Thomas talks. */
-
-.tc-code-say {
-  font-size: 14.5px; line-height: 1.62; color: var(--c-text);
-  max-width: 680px; margin: 10px 0 4px;
-}
-
-.tc-code-receipts {
-  margin: 8px 0 10px 14px;
-  padding-left: 18px;
-  border-left: 2px solid color-mix(in srgb, var(--c-accent) 32%, transparent);
-  display: flex; flex-direction: column; gap: 5px;
-}
-
-.tc-code-receipt {
+/* ==== The conversation (Build redesign, 2026-10: design 3a / 4a-4c) ====
+   What you and Thomas say is bright, full weight; the work underneath is dim
+   and mono (work rows and cards: unified_code_cards.css). A Thomas turn is
+   his head, then everything else indented under it, 14px apart. */
+.tc-code-turn { margin: 0 0 14px; color: var(--c-text); font-size: 15px; line-height: 1.65; }
+/* Your message: one bubble at the column's RIGHT edge, no name over it, its
+   text left-aligned inside. Thomas's messages stay on the left. The copy shown
+   while it sends is wrapped (.tc-code-pending-user) because a direct child of
+   the transcript gets the column rule's !important inset instead. */
+.tc-code-turn.is-user {
+  width: fit-content;
+  max-width: min(100%, 540px);
+  margin-left: auto;
+  margin-right: 0;
+  text-align: left;
+  padding: 10px 14px;
   border: 1px solid var(--c-border);
-  background: var(--c-surface);
   border-radius: 10px;
-  max-width: 640px;
-  overflow: hidden;
+  background: var(--c-user-bg);
+  color: var(--c-strong);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.6;
 }
-.tc-code-receipt > summary {
-  list-style: none; cursor: pointer;
-  display: flex; align-items: center; gap: 9px;
-  padding: 7px 11px; font-size: 12.5px; color: var(--c-dim);
-}
-.tc-code-receipt > summary::-webkit-details-marker { display: none; }
-.tc-code-receipt > summary:hover { background: var(--c-surface-2); color: var(--c-text); }
-.tc-code-receipt > summary > i.ph { font-size: 14px; flex: none; color: var(--c-muted); }
-.tc-code-receipt > summary > strong { font-weight: 700; color: var(--c-text); flex: none; }
-.tc-code-receipt-preview {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; color: var(--c-muted);
-}
-.tc-code-receipt-chev { margin-left: auto; flex: none; transition: transform .18s; font-size: 11px; color: var(--c-muted); }
-.tc-code-receipt[open] .tc-code-receipt-chev { transform: rotate(180deg); }
-.tc-code-receipt > pre {
-  /* Full height when open — the page scrolls, never a box in a box. */
-  margin: 0; border-top: 1px solid var(--c-border);
-  padding: 10px 13px; font-size: 12px; line-height: 1.6;
-  color: var(--c-dim); font-family: var(--font-mono, ui-monospace, monospace);
-  white-space: pre-wrap; word-break: break-word;
-}
-.tc-code-receipt.is-error > summary > i.ph { color: var(--warn-ink, #ffb4a3); }
-.tc-code-receipt.is-error { border-color: color-mix(in srgb, #ff8f8f 35%, transparent); }
-
-.tc-code-avatar.is-anvil svg { width: 16px; height: 16px; fill: currentColor; display: block; }
-
-.tc-code-head-elapsed {
-  font-variant-numeric: tabular-nums;
-  color: var(--c-dim);
+/* Thomas's head sits on each prose block he writes (a note while he works, his
+   final reply), never on a turn or on a work row. */
+.tc-code-say > .tc-code-message-head,
+.tc-code-reply > .tc-code-message-head { gap: 9px; margin: 0 0 6px; }
+.tc-code-pending-user { display: block; }
+.tc-code-message-head strong { color: var(--c-strong); font-size: 13px; font-weight: 650; }
+.tc-code-message-head small { color: var(--c-muted); font: 500 11.5px/1.2 var(--font-sans); }
+.tc-code-avatar { border-radius: 7px; }
+.tc-code-avatar.is-anvil svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+/* Copy stays one hover away instead of sitting on every head. */
+.tc-code-turn .tc-code-copy { opacity: 0; transition: opacity .15s; }
+.tc-code-turn:hover .tc-code-copy, .tc-code-copy:focus-visible { opacity: 1; }
+.tc-code-turn-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding-left: 0; }
+#tc-code-live-events { display: flex; flex-direction: column; gap: 14px; }
+#tc-code-live-events[hidden], #tc-code-live-events:empty, #tc-code-live-technical:empty { display: none; }
+.tc-code-say,
+.tc-code-reply { margin: 0; color: var(--c-strong); font-size: 15px; font-weight: 500; line-height: 1.65; }
+.tc-code-say code,
+.tc-code-reply code {
+  padding: 1px 5px;
   border: 1px solid var(--c-border);
-  border-radius: 999px;
-  padding: 2px 9px;
-  margin-left: 6px;
+  border-radius: 4px;
+  background: var(--c-surface-2);
+  font-family: var(--font-code);
+  font-size: .86em;
 }
-
-.tc-code-receipt-count {
-  flex: none; font-size: 11px; font-weight: 800; color: var(--c-accent);
-  background: color-mix(in srgb, var(--c-accent) 14%, transparent);
-  border-radius: 999px; padding: 1px 7px;
-}
-.tc-code-receipts-more > summary {
-  list-style: none; cursor: pointer;
-  font-size: 12px; font-weight: 700; color: var(--c-muted);
-  padding: 5px 11px; border: 1px dashed var(--c-border); border-radius: 10px;
-  max-width: 640px;
-}
-.tc-code-receipts-more > summary::-webkit-details-marker { display: none; }
-.tc-code-receipts-more > summary:hover { color: var(--c-text); background: var(--c-surface-2); }
-.tc-code-receipts-more[open] > summary { margin-bottom: 5px; }
-.tc-code-receipts-more > .tc-code-receipt { margin-bottom: 5px; }
-
-/* Thomas talking must outrank the paperwork (owner, 2026-08-10: "the text
-   from thomas mid-run doesn't feel obvious enough"). Speech is bigger and
-   brighter with an accent tick; receipts sit smaller and dimmer under it;
-   the newest sentence carries a live cursor while the run is going. */
-.tc-code-say {
-  font-size: 15.5px; line-height: 1.66; color: var(--c-text);
-  font-weight: 500; margin: 18px 0 4px;
-}
-.tc-code-receipts { margin-left: 2px; padding-left: 21px; }
-.tc-code-receipt { background: rgba(255, 255, 255, .025); }
-.tc-code-receipt > summary { padding: 6px 11px; font-size: 12px; }
-.tc-code-receipt > summary > strong { font-weight: 650; color: var(--c-dim); }
-.tc-code-receipt > summary:hover > strong { color: var(--c-text); }
+.tc-code-reply.is-stopped { color: var(--c-dim); font-size: 13.5px; }
+.tc-code-reply.is-error { font-size: 14px; }
 
 /* He's talking RIGHT NOW: the newest sentence in a live turn breathes. */
-.tc-code-turn.is-live .tc-code-say:last-of-type::after {
+.tc-code-turn.is-live .tc-code-say:last-of-type .tc-code-say-text::after {
   content: "\258D"; margin-left: 3px; color: var(--c-accent);
   animation: tc-code-caret 1.1s steps(1) infinite;
 }
 @keyframes tc-code-caret { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .tc-code-turn.is-live .tc-code-say:last-of-type::after { animation: none; }
+  .tc-code-turn.is-live .tc-code-say:last-of-type .tc-code-say-text::after { animation: none; }
 }
 
 /* ==== round 3 (owner redlines, 2026-08-10 evening) ==== */
@@ -434,10 +384,10 @@
    so the run visibly COMES IN rather than appearing on repaint. */
 @keyframes tc-code-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 #tc-code-live-events .tc-code-say,
-#tc-code-live-events .tc-code-receipt { animation: tc-code-arrive .35s ease-out; }
+#tc-code-live-events .tc-code-work { animation: tc-code-arrive .35s ease-out; }
 @media (prefers-reduced-motion: reduce) {
   #tc-code-live-events .tc-code-say,
-  #tc-code-live-events .tc-code-receipt { animation: none; }
+  #tc-code-live-events .tc-code-work { animation: none; }
 }
 
 /* Verdict facts as cells, not a dot-joined sentence. */
@@ -452,55 +402,14 @@
 .tc-code-stat i { font-style: normal; font-size: 11.5px; color: var(--c-muted); }
 .tc-code-stat.is-prose { background: transparent; border-style: dashed; }
 
-/* The combined deliverable card: labeled actions in plain words. */
-.tc-code-artifact-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
-.tc-code-artifact-act {
-  border: 1px solid var(--c-border); border-radius: 9px; cursor: pointer;
-  background: transparent; color: var(--c-text);
-  font-family: inherit; font-size: 12.5px; font-weight: 700;
-  padding: 7px 13px; text-decoration: none; display: inline-flex; align-items: center;
-}
-.tc-code-artifact-act:hover { background: var(--c-surface-2); }
-.tc-code-artifact-act.is-primary { background: var(--c-accent); color: var(--c-accent-ink); border-color: transparent; font-weight: 800; }
-.tc-code-artifact-act.is-primary:hover { filter: brightness(1.08); }
-.tc-code-artifact-changes { margin-top: 8px; }
-.tc-code-artifact-changes > summary {
-  list-style: none; cursor: pointer; display: inline-block;
-  border: 1px solid var(--c-border); border-radius: 9px;
-  font-size: 12.5px; font-weight: 700; color: var(--c-text);
-  padding: 7px 13px;
-}
-.tc-code-artifact-changes > summary::-webkit-details-marker { display: none; }
-.tc-code-artifact-changes > summary:hover { background: var(--c-surface-2); }
-.tc-code-artifact-changes[open] > summary { margin-bottom: 7px; }
-.tc-code-change-row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12.5px; color: var(--c-dim);
-  border: 1px solid var(--c-border); border-radius: 8px;
-  padding: 7px 11px; margin-bottom: 4px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-}
-.tc-code-change-row i { color: var(--c-muted); }
-
 /* ==== round 4 (owner redlines, 2026-08-10 late) ==== */
 
-/* The chat is as wide as the composer now: inner elements stop capping
-   themselves below the 768 column, and the user's message stacks on top at
-   full width instead of floating offset to the right. */
-/* 2026-09-05, owner: my messages i put are huge and wide. Stacked on the left as
-   the August redline asked, but capped like Chat's own bubble. */
-.tc-code-turn.is-user {
-  width: fit-content !important;
-  max-width: min(78%, 640px) !important;
-  margin-left: 0 !important;
-  border-radius: 14px;
-}
+.tc-code-autopilot-note details > summary { color: var(--c-muted); }
 .tc-code-say,
-.tc-code-receipts,
-.tc-code-receipt,
 .tc-code-run-report,
 .tc-code-artifact-row,
 .tc-code-event { max-width: none; }
+.tc-code-run-report { margin: 0; }
 
 /* Scroll badge above the composer: words, not a mystery circle. Shows only
    when you are away from the newest content; click returns you there. */
@@ -516,20 +425,6 @@
 }
 .tc-code-jump-badge:hover { border-color: var(--c-accent); }
 .tc-code-jump-badge i { font-size: 13px; color: var(--c-accent); }
-
-/* The closing rule: the run's story above, the result below. */
-.tc-code-closing {
-  display: flex; align-items: center; gap: 14px;
-  margin: 28px 0 18px;
-}
-.tc-code-closing::before, .tc-code-closing::after {
-  content: ""; flex: 1; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--c-border-2, rgba(255,255,255,.15)), transparent);
-}
-.tc-code-closing-label {
-  flex: none; font-size: 11px; font-weight: 800; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--c-muted);
-}
 
 /* The controller button while Thomas is playing. */
 .tc-code-viewer-tools > button.is-playing { color: var(--c-accent); border-color: var(--c-accent); }
@@ -573,7 +468,7 @@
 }
 /* The finished verdict card. */
 .tc-code-playtest { margin: 12px; padding: 12px 14px; border: 1px solid var(--c-border); border-radius: 12px; background: rgba(10, 12, 23, .55); }
-.tc-code-playtest-head { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--c-text); margin-bottom: 8px; }
+.tc-code-playtest-head { font-size: 12px; font-weight: 800; color: var(--c-text); margin-bottom: 8px; }
 .tc-code-playtest-verdict { }
 .tc-code-playtest-line { font-size: 12.5px; color: var(--c-dim); margin-bottom: 4px; }
 .tc-code-playtest-line strong { color: var(--c-text); margin-right: 6px; }
@@ -602,7 +497,14 @@
 
 /* An error the run recovered from is a failed attempt, not an alarm. */
 .tc-code-attempt-note {
-  margin: 10px 0 2px;
+  margin: 0;
   font-size: 12px;
+  color: var(--c-muted);
+}
+
+/* "Worked for 2m 24s": one quiet line after the reply. */
+.tc-code-worked {
+  margin: 6px 0 0;
+  font: 12px/1.4 var(--font-sans, system-ui, sans-serif);
   color: var(--c-muted);
 }

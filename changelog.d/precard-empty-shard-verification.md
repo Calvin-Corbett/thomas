@@ -1,0 +1,4 @@
+### Fixed
+
+- Strengthen `tests/test_the_checkers_answer_rests_on_tests_that_ran.py` to require that a stray pytest config collecting zero cases leaves its selected file unrun and cannot count as completed proof. The original assertion passed against the unchanged `dev` runner but contradicted the stricter report-completeness safeguards in this change. The pinned-config control still requires the selected failing case to run.
+- Keep the real-pytest controls in that test file independent of unrelated machine-installed plugins by disabling their automatic loading only in the tiny child copies. Pytest still runs for real, including the proof runner's explicitly loaded collection plugin, so config pinning, empty collection, and per-file report coverage remain exercised without repeated external-plugin startup overhead.

@@ -104,6 +104,36 @@ def _extract_key_rules(guardrails_content: str) -> list[str]:
     return rules
 
 
+def _gate_count_sentence() -> str:
+    """Say which gates will actually run, for the path this agent will use.
+
+    This line used to read "Your commit will be checked by 35 pre-commit hooks",
+    a hardcoded number that was wrong twice over. Agents commit through
+    scripts/crew/brief/commit.py, which builds the commit with git plumbing --
+    write-tree, commit-tree, update-ref -- and plumbing fires NO git hook, so the
+    true count of pre-commit hooks on that path is zero. It runs its own registry
+    instead. Telling an agent that thirty-five hooks are watching, on a path where
+    none are, is the repository lying to the people working in it about their own
+    safety net.
+
+    Both numbers are counted rather than written down, because a hardcoded count
+    is what went stale in the first place.
+    """
+    try:
+        from scripts.crew.brief import commit as commit_tool
+
+        scoped = len(commit_tool.LOCAL_GATE_COMMANDS)
+    except (ImportError, AttributeError):  # pragma: no cover - briefing must never fail to render
+        return "Your commit is checked by the gate registry in scripts/crew/brief/commit.py. If any fail:"
+    return (
+        f"Your commit runs {scoped} gates from scripts/crew/brief/commit.py, which is how "
+        "agents commit here. It uses git plumbing, so pre-commit hooks do NOT fire on "
+        "that path -- .pre-commit-config.yaml applies to a plain git commit. "
+        "tests/test_a_hook_that_does_not_run_on_the_commit_path.py keeps the two in step. "
+        "If a gate fails:"
+    )
+
+
 def generate_briefing(*, modules: list[str], task: str = "") -> str:
     """Generate a focused briefing for the specified modules."""
     lines = []
@@ -206,11 +236,14 @@ def generate_briefing(*, modules: list[str], task: str = "") -> str:
     # Pre-commit reminder
     lines.append("## Before You Commit")
     lines.append("")
-    lines.append("Your commit will be checked by 35 pre-commit hooks. If any fail:")
+    lines.append(_gate_count_sentence())
     lines.append("1. Read the error message — it tells you exactly what's wrong.")
     lines.append("2. Fix your code, not the test or the hook.")
     lines.append("3. If you're stuck, ask the user.")
     lines.append("")
+    from scripts.crew.brief import landing_briefing
+
+    lines.extend(landing_briefing.section())
 
     return "\n".join(lines)
 

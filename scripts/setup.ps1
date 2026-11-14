@@ -321,7 +321,7 @@ function Test-OpenAICodexTokenConfigured {
 from thomas.server.openai_codex_oauth import _default_secret_store, has_openai_codex_token
 
 store = _default_secret_store()
-profiles = ("openai_codex", "chatgpt", None)
+profiles = ('openai_codex', 'chatgpt', None)
 raise SystemExit(0 if any(has_openai_codex_token(store, profile) for profile in profiles) else 1)
 "@
   $code = Invoke-NativeQuiet $PythonExe @("-c", $probe)

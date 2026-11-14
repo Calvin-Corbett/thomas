@@ -179,16 +179,24 @@ def _version_from_init_text(text: str) -> str:
     return str(m.group(1)).strip() if m else ""
 
 
-def _git_show_text(rev: str, rel_path: str) -> str | None:
-    proc = subprocess.run(
-        ["git", "show", f"{rev}:{rel_path}"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
+def _git_stdout(*args: str) -> str | None:
+    """Run one read-only git command in the repo; its stdout, or None when it fails."""
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
     if proc.returncode != 0:
         return None
     return proc.stdout
+
+
+def _git_show_text(rev: str, rel_path: str) -> str | None:
+    return _git_stdout("show", f"{rev}:{rel_path}")
 
 
 def _ref_sha(ref: str) -> str | None:
@@ -253,6 +261,18 @@ def _rev_parse(rev: str) -> str:
 
 
 def _branch_release_proof(current_py: str, current_init: str) -> str | None:
+    """Return a PASS note when the BRANCH already carries the release update.
+
+    The per-commit helper lane (--changed-file) used to demand pyproject.toml,
+    thomas/__init__.py, and CHANGELOG.md be dirty in EVERY product-surface
+    commit. Once a version bump landed, those files were clean, so every later
+    product commit through the sanctioned helper was structurally blocked (the
+    stranded-work catch-22, recurring on the workboard since 2026-06-26).
+    A branch that has ALREADY bumped the version and updated the changelog
+    relative to its merge-base with the canonical branch satisfies the gate's
+    actual contract; direct commits on the canonical branch still require the
+    release files in the change set. (Calvin approval, 2026-07-18.)
+    """
 
     base = _merge_base_with_canonical()
     if not base:
@@ -271,7 +291,7 @@ def _branch_release_proof(current_py: str, current_init: str) -> str | None:
     if current_py == prior_py or current_init == prior_init:
         return None
     diff = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...HEAD", "--", "CHANGELOG.md"],
+        ["git", "diff", "--name-only", f"{base}...HEAD", "--", "CHANGELOG.md", "changelog.d"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -279,7 +299,7 @@ def _branch_release_proof(current_py: str, current_init: str) -> str | None:
     changelog_changed = bool(str(diff.stdout or "").strip())
     if not changelog_changed:
         dirty = subprocess.run(
-            ["git", "diff", "--name-only", "--", "CHANGELOG.md"],
+            ["git", "diff", "--name-only", "--", "CHANGELOG.md", "changelog.d"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -288,6 +308,71 @@ def _branch_release_proof(current_py: str, current_init: str) -> str | None:
     if not changelog_changed:
         return None
     return f"release metadata already updated branch-wide ({prior_py} -> {current_py} since {base[:12]})"
+
+
+_VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+_RELEASE_TAG_RE = re.compile(r"^refs/tags/v(\d+)\.(\d+)\.(\d+)$")
+
+
+def _parse_version(text: str) -> tuple[int, int, int] | None:
+    """Parse `major.minor.patch` into integers; anything else is None (fail closed)."""
+    m = _VERSION_RE.match(str(text or "").strip())
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+
+def _last_released_version() -> tuple[int, int, int] | None:
+    """The version of the last RELEASE, or None when none can be found.
+
+    Highest well-formed `v<major>.<minor>.<patch>` tag, read with an exact
+    `refs/tags/` listing (no DWIM). Falling back to the version in
+    thomas/__init__.py at refs/remotes/origin/main (the public repo's main).
+    Read-only: this never writes to git.
+    """
+    tagged: list[tuple[int, int, int]] = []
+    for line in (_git_stdout("for-each-ref", "--format=%(refname)", "refs/tags/") or "").splitlines():
+        m = _RELEASE_TAG_RE.match(line.strip())
+        if m:
+            tagged.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+    if tagged:
+        return max(tagged)
+    main_sha = _ref_sha("refs/remotes/origin/main")
+    if main_sha is None:
+        return None
+    main_init = _git_show_text(main_sha, "thomas/__init__.py")
+    if main_init is None:
+        return None
+    return _parse_version(_version_from_init_text(main_init))
+
+
+def _pending_release_proof(changed_set: set[str], current_py: str, current_init: str) -> str | None:
+    """Return a PASS note when a release is pending and this change carries its notes.
+
+    The contract: a product change needs a changelog entry, and the project
+    version must be ahead of the last RELEASE (not ahead of the last push).
+    On the canonical branch the branch-wide proof cannot engage (the
+    merge-base is head), and pyproject.toml is a protected file the commit
+    tool cannot land, so once a bump is pending every later product commit
+    needs only its changelog entry. Once the release is cut and nobody has
+    bumped, the version is no longer ahead and the bump is demanded again.
+    Fails closed: malformed or disagreeing versions, no changelog entry in
+    THIS change set, or no known release all return None.
+    """
+    if current_py != current_init:
+        return None
+    version = _parse_version(current_py)
+    if version is None:
+        return None
+    if "CHANGELOG.md" not in changed_set:
+        return None
+    released = _last_released_version()
+    if released is None or version <= released:
+        return None
+    return (
+        f"release pending ({current_py} is ahead of the last release "
+        f"{'.'.join(str(n) for n in released)}); this change carries its changelog entry"
+    )
 
 
 def _check_release_hygiene_script() -> tuple[bool, str]:
@@ -352,6 +437,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 0
 
     changed_set = set(changed)
+    if any(p.startswith("changelog.d/") and p.endswith(".md") and not p.endswith("README.md") for p in changed_set):
+        changed_set.add("CHANGELOG.md")  # a per-agent fragment is the changelog update
     missing = sorted(REQUIRED_FILES - changed_set)
     violations: list[str] = []
 
@@ -360,10 +447,15 @@ def run(argv: Sequence[str] | None = None) -> int:
     current_py = _version_from_pyproject_text(py_text)
     current_init = _version_from_init_text(init_text)
 
+    release_pending = False
     if missing:
         branch_proof = _branch_release_proof(current_py, current_init) if resolved_base == "<manual>" else None
+        pending_proof = None if branch_proof else _pending_release_proof(changed_set, current_py, current_init)
         if branch_proof:
             print(f"Release update gate: note — {branch_proof}")
+        elif pending_proof:
+            release_pending = True
+            print(f"Release update gate: note — {pending_proof}")
         else:
             violations.append(
                 "product-surface changes require release updates; missing changed files: " + ", ".join(missing)
@@ -372,7 +464,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     base_py = _git_show_text(resolved_base, "pyproject.toml") if resolved_base != "<manual>" else None
     base_init = _git_show_text(resolved_base, "thomas/__init__.py") if resolved_base != "<manual>" else None
 
-    if base_py is not None and base_init is not None:
+    # A pending release already satisfies the version contract: the version is
+    # ahead of the last release, so "unchanged since this commit's base" is not a violation.
+    if not release_pending and base_py is not None and base_init is not None:
         try:
             prior_py = _version_from_pyproject_text(base_py)
         except (OSError, RuntimeError, ValueError, AttributeError, TypeError, ImportError, KeyError):

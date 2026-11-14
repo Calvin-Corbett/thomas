@@ -108,7 +108,7 @@ class TestTaskLedgerV2PublicContract(AioHTTPTestCase):
         processor: Callable[..., Any],
         **payload: Any,
     ) -> list[dict[str, Any]]:
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain.process_message", processor):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message", processor):
             response = await self.client.post(
                 "/api/chat",
                 json={

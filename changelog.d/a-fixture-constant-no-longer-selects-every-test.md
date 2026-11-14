@@ -1,0 +1,3 @@
+### Fixed
+
+- **Three modules no longer select every test just because `tests/conftest.py` mentions them.** Selection runs everything when a conftest reaches a changed module, since a fixture every test uses may change. `green_checkout.py` selected 1,994 test files because one fixture read a constant through it, and two other modules did the same because the conftest only asks whether they are loaded. The fixture now reads that constant from where it lives, and selection no longer counts asking `sys.modules` as depending on a module. `green_checkout.py` now selects 116 test files, `chat_delegation_session.py` 17 and `coding_agents/builtins.py` 2. A conftest that really reaches a changed module still selects everything.

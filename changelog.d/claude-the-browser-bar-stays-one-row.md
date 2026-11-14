@@ -1,0 +1,3 @@
+### Fixed
+
+- **The browser bar stays one row.** The Agent picker landed inside the model switch, and the browser shell cleared that wrapper's inline layout each time a tab became active, so it fell back to block and the picker wrapped under the model chip: the bar grew from 41 to 72 px. The shell now restores the wrapper's own flex layout (measured back at 43 px). Three sentences the Agent choice left untrue are corrected too: the launch journal records the agent as plain text rather than reading the agent list, the missing-key message names the model menu and Settings but not thomas.toml, and Build still starts a self-edit (Edit Thomas) run only on GPT.

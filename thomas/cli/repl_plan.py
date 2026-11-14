@@ -165,12 +165,13 @@ class PlanModeHandler:
             "Each step should be actionable and specific."
         )
 
+        from thomas.agent.kernel_wiring import build_agent_loop
         from thomas.agent.loop import AgentLoop
         from thomas.core.events import EventType
         from thomas.core.token_economy import normalize_token_economy_level
 
         session_id = str(getattr(self._repl, "_repl_session_id", "") or "repl").strip() or "repl"
-        agent = AgentLoop(
+        agent = build_agent_loop(
             config=self._repl.config,
             llm=self._repl._get_llm(),
             tools=self._repl.tools,
@@ -180,6 +181,7 @@ class PlanModeHandler:
             autonomy_level=1,  # Low autonomy for planning
             session_id=session_id,
             run_id=plan_id,
+            default=AgentLoop,
         )
 
         response_parts: list[str] = []

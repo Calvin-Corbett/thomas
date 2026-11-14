@@ -1,8 +1,17 @@
+"""The Marketplace routes on a real server, through the live table, since they moved into the catalog row.
+
+The row is ``thomas.server.rows.catalog``, and the routes it registers are in
+``thomas.server.routes.marketplace_catalog_aiohttp``, ``thomas.server.routes.plugin_hosting`` and
+``thomas.server.routes.standalone_app_aiohttp``. These tests build the app rather than import those modules, and a check
+finds tests by following imports and dotted names, so these names are how a change to the row runs this file.
+"""
+
 from __future__ import annotations
 
 import hashlib
 import io
 import json
+import re
 import tempfile
 import threading
 import unittest
@@ -18,6 +27,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
 from thomas.server.desktop_plugins import build_plugin_install_deep_link
+from thomas.server.stock_workspaces import STOCK_WORKSPACES
 
 ROOT = Path(__file__).resolve().parent.parent
 ACTIVE_TEST_PLUGIN_ID = "paper-trading"
@@ -213,17 +223,27 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         return out
 
     async def test_marketplace_plugin_catalog_route_returns_real_extension_packs(self):
+        # 93415742 removed the listings that made the old fixed minimum obsolete.
+        catalog = json.loads(_read_text("extensions/catalog.json"))
+        catalog_ids = {pack["id"] for pack in catalog["packs"]}
+        # Thomas's own five workspaces are listed as plugins too (thomas/server/stock_workspaces.py).
+        stock_ids = {f"thomas-{mode}" for mode in STOCK_WORKSPACES}
+        expected_ids = (catalog_ids - RETIRED_MARKETPLACE_IDS) | stock_ids
         resp = await self.client.get("/api/marketplace/plugins?limit=25")
         self.assertEqual(resp.status, 200)
         body = await resp.json()
         self.assertIs(body.get("ok"), True)
-        self.assertGreaterEqual(int(body.get("total") or 0), 480)
+        self.assertEqual(int(body.get("total") or 0), len(expected_ids))
         self.assertEqual(body.get("offset"), 0)
         self.assertEqual(body.get("limit"), 25)
         self.assertIsInstance(body.get("types"), list)
         plugins = body.get("plugins") or []
-        self.assertEqual(len(plugins), 25)
-        first = plugins[0] or {}
+        self.assertEqual(len(plugins), min(25, len(expected_ids)))
+        self.assertEqual({row["id"] for row in plugins}, expected_ids)
+        packs = [row for row in plugins if row["id"] not in stock_ids]
+        for row in packs:
+            self.assertIs(row.get("download_available"), (ROOT / "extensions" / row["id"]).is_dir())
+        first = packs[0] or {}
         self.assertTrue(str(first.get("id") or "").strip())
         self.assertTrue(str(first.get("name") or "").strip())
         self.assertTrue(str(first.get("category") or "").strip())
@@ -252,10 +272,24 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertFalse(RETIRED_MARKETPLACE_IDS & plugin_ids)
 
     async def test_marketplace_plugin_download_route_streams_real_extension_pack(self):
-        catalog_resp = await self.client.get("/api/marketplace/plugins?category=alerts&q=slack&limit=20")
+        # 93415742 removed the alerts/slack listing; use a catalog pack with all three files.
+        catalog_ids = {pack["id"] for pack in json.loads(_read_text("extensions/catalog.json"))["packs"]}
+        catalog_resp = await self.client.get("/api/marketplace/plugins?limit=2000")
         self.assertEqual(catalog_resp.status, 200)
         catalog_body = await catalog_resp.json()
-        plugin = next((row for row in (catalog_body.get("plugins") or []) if row.get("download_available")), None)
+        plugin = next(
+            (
+                row
+                for row in (catalog_body.get("plugins") or [])
+                if row.get("id") in catalog_ids
+                and row.get("download_available")
+                and all(
+                    (ROOT / "extensions" / row["id"] / name).is_file()
+                    for name in ("manifest.json", "hooks.py", "README.md")
+                )
+            ),
+            None,
+        )
         self.assertIsNotNone(plugin)
 
         plugin_id = str(plugin.get("id") or "")
@@ -673,13 +707,15 @@ def test_windows_launcher_registers_protocol_and_forwards_deep_links() -> None:
 
 
 def test_marketplace_has_single_backend_source_of_truth() -> None:
-    app_part03 = _read_text("thomas/server/app_part03.py")
+    # 449cf5dc deleted app_part03; the family then lived in the shell, and it is a row now.
+    row = _read_text("thomas/server/rows/catalog.py")
 
-    assert "register_marketplace_routes" not in app_part03
-    assert "routes.marketplace import" not in app_part03
-    assert "register_marketplace_catalog_routes" in app_part03
-    assert "register_plugin_hosting_routes" in app_part03
-    assert "register_life_manager_routes" in app_part03
+    assert not re.search(r"\bregister_marketplace_routes\b", row)
+    assert "routes.marketplace import" not in row
+    assert "register_marketplace_catalog_routes" in row
+    assert "register_plugin_hosting_routes" in row
+    assert "register_marketplace_catalog_routes" not in _read_text("thomas/server/app_routes_families.py")
+    assert "register_life_manager_routes" in _read_text("thomas/server/app_routes_companion.py")  # a live plugin now
     assert _exists("thomas/server/routes/marketplace_catalog_aiohttp.py")
 
 

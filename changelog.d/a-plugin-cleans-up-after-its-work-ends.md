@@ -1,0 +1,3 @@
+### Added
+
+- **A plugin can now clean up after its work has ended, not just before.** Turning a plugin off used to offer one place to act, and it ran before the wait for running work, so anything closed there could close under a request still in flight. A plugin can now add a step that runs once its running work and background tasks are over, with the plugin still plugged in. A request that was still on its way in when that cleanup starts gets a 404 instead of a half-closed plugin. If a cleanup step gets stuck, pressing off with force ends that step and the rest still run. Nothing you can see changes yet: this is the base for moving more of Thomas into plugins.

@@ -15,6 +15,8 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.server.app_keys import APP_MISSION_REQUIRE_STORE, APP_MISSION_WAKEUP_ENGINE
+
 from .mission_approvals import build_mission_approvals_handlers
 from .mission_autonomy_runtime import build_mission_autonomy_helpers
 from .mission_benchmark_routes import register_mission_benchmark_routes
@@ -23,16 +25,6 @@ from .mission_cron import build_mission_cron_handlers
 from .mission_support import _discover_repo_root
 from .mission_tasks import build_mission_task_handlers
 from .mission_workflows import build_mission_workflow_handlers
-
-APP_MISSION_REQUIRE_STORE = web.AppKey("mission_require_store", object)
-APP_MISSION_WAKEUP_ENGINE = web.AppKey("mission_wakeup_engine", object)
-
-
-async def _serve_mission_page(web_dir: Path) -> web.StreamResponse:
-    """Serve the mission.html page."""
-    from .mission_support import _serve_versioned_page
-
-    return _serve_versioned_page(web_dir / "mission.html")
 
 
 def register_mission_routes(
@@ -116,13 +108,7 @@ def register_mission_routes(
         _mission_approvals_payload,
     )
 
-    # Register all routes
-    async def mission_page(_request: web.Request) -> web.StreamResponse:
-        return await _serve_mission_page(web_dir)
-
-    existing_paths = {str(getattr(resource, "canonical", "") or "") for resource in app.router.resources()}
-    if "/mission" not in existing_paths:
-        app.router.add_get("/mission", mission_page)
+    # Register all routes. The page at /mission is the server's own, so it loads whatever this does.
     app.router.add_get("/api/mission/control", api_mission_control)
     app.router.add_get("/api/mission/content-hub", api_mission_content_hub)
     app.router.add_get("/api/mission/stream", api_mission_stream)

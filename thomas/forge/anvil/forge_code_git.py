@@ -18,14 +18,21 @@ import hashlib
 import logging
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from thomas.core.git_process import run_git
 from thomas.forge.anvil import forge_code_manifest
 
 log = logging.getLogger(__name__)
 
 # Default timeout (seconds) for a single git invocation.
 _DEFAULT_TIMEOUT = 30
+
+# How many files' diffs are read at the same time for one page of changes, and the page size at or under which they are
+# read one after another because starting threads would cost more than it saves.
+EVIDENCE_WORKERS = 6
+_SERIAL_FILES = 2
 
 
 class ForgeCodeGitError(RuntimeError):
@@ -43,28 +50,17 @@ def _run_git(root: str | Path, args: list[str], timeout: int = _DEFAULT_TIMEOUT)
     surface as a phantom changed file), so every reader below consumes ONLY
     stdout. Callers that report a *failure message* (revert) prefer stderr.
 
-    Never raises -- on any exception returns ``(1, "", str(exc))`` so callers can
-    treat a git failure as "non-zero with a message".
+    Never raises -- a git that cannot be spawned or does not finish inside its
+    bound comes back as "non-zero with a message", which is what every caller
+    below already handles. The bound is enforced by
+    :func:`thomas.core.git_process.run_git` rather than by ``subprocess.run``,
+    whose ``timeout`` does not bound the call at all when git is reached through
+    a launcher (that module's docstring has the measurements).
     """
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(root), *args],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            encoding="utf-8",
-            errors="replace",
-        )
-        return proc.returncode, (proc.stdout or ""), (proc.stderr or "")
-    # git must never crash the server. subprocess.run against the git binary fails
-    # in exactly three shapes: the process cannot be spawned (OSError -- git not on
-    # PATH, root not a directory, no fd/handle available), it runs but misbehaves
-    # (subprocess.SubprocessError, whose TimeoutExpired is the one that actually
-    # fires here), or its output cannot be decoded (UnicodeDecodeError, a ValueError
-    # subclass -- named because errors="replace" makes it unlikely, not impossible,
-    # and ValueError also covers an invalid argument combination).
-    except (OSError, subprocess.SubprocessError, UnicodeDecodeError, ValueError) as exc:
-        return 1, "", str(exc)
+    result = run_git(["-C", str(root), *args], timeout=float(timeout))
+    if result.timed_out:
+        return result.returncode, result.stdout, result.message()
+    return result.returncode, result.stdout, result.stderr
 
 
 def _parse_porcelain(output: str) -> list[tuple[str, str]]:
@@ -150,9 +146,7 @@ def has_history(root: str | Path) -> bool:
     return (Path(root) / ".git").exists()
 
 
-def snapshot(
-    root: str | Path, *, allow_without_history: bool = False, max_files: int | None = None
-) -> dict[str, str]:
+def snapshot(root: str | Path, *, allow_without_history: bool = False, max_files: int | None = None) -> dict[str, str]:
     """Return ``{path: status_and_content_fingerprint}`` for changed files.
 
     This is a point-in-time fingerprint of the working tree, used to later
@@ -300,11 +294,24 @@ def commit_run_snapshot(root: str | Path, *, run_id: str = "", reason: str = "")
         return {"committed": False, "commit": "", "reason": str(exc) or type(exc).__name__}
 
 
+def _same_content(before: str, now: str) -> bool:
+    """Ignore staging status only when both fingerprints prove equal bytes."""
+    if "\0" not in before or "\0" not in now:
+        return before == now
+    _before_status, before_digest = before.split("\0", 1)
+    _now_status, now_digest = now.split("\0", 1)
+    if before_digest.startswith("unreadable:") or now_digest.startswith("unreadable:"):
+        return before == now
+    return before_digest == now_digest
+
+
 def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
     """Return paths a run newly touched relative to ``snap``.
 
-    A path is included when it is changed *now* and is either absent from
-    ``snap`` or present with a different status/content fingerprint.
+    A path is included only when git reports it changed *now* and it was
+    absent from ``snap`` or its content fingerprint differs. A change of git
+    staging alone is not counted; an unreadable file still counts when its
+    status changes because its bytes cannot be confirmed.
     """
     if forge_code_manifest.is_manifest(snap):
         try:
@@ -313,7 +320,7 @@ def delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
             raise ForgeCodeGitError(str(exc)) from exc
     current = snapshot(root)
     snap = snap or {}
-    changed = [path for path, status in current.items() if snap.get(path) != status]
+    changed = [path for path, now in current.items() if path not in snap or not _same_content(snap[path], now)]
     return sorted(changed)
 
 
@@ -332,6 +339,15 @@ def project_delta_since(root: str | Path, snap: dict[str, str]) -> list[str]:
     ]
 
 
+def untracked_paths(root: str | Path) -> set[str]:
+    """Every path git currently reports as untracked, from ONE status read.
+
+    Exists so a caller asking about many files pays for one ``git status``
+    instead of one per file. See :func:`change_evidence`.
+    """
+    return {path for status, path in _status_entries(root) if status == "??"}
+
+
 def is_untracked(root: str | Path, file: str) -> bool:
     """True iff ``file`` currently appears as untracked (``??``) in git."""
     return any(status == "??" and path == file for status, path in _status_entries(root))
@@ -342,8 +358,12 @@ def file_is_dirty(root: str | Path, file: str) -> bool:
     return file in changed_files(root)
 
 
-def unified_diff(root: str | Path, file: str) -> str:
+def unified_diff(root: str | Path, file: str, *, untracked: set[str] | None = None) -> str:
     """Return a unified diff for ONE file, read from real git.
+
+    ``untracked`` lets a caller that already read git status pass the answer in
+    rather than making this function re-read it per file; omit it and the status
+    is read here, exactly as before.
 
     * tracked & modified -> ``git diff -- <file>`` (falling back to
       ``--cached`` when the worktree diff is empty but the change is staged).
@@ -357,7 +377,8 @@ def unified_diff(root: str | Path, file: str) -> str:
     # Every branch reads ONLY git's stdout. The unified-diff text the UI renders
     # must be pure ``git diff`` output -- git's stderr warnings (CRLF/LF, etc.)
     # are deliberately discarded so they never appear as bogus diff rows.
-    if is_untracked(root, file):
+    new_file = (file in untracked) if untracked is not None else is_untracked(root, file)
+    if new_file:
         # git treats the literal "/dev/null" as an empty file on every platform
         # (os.devnull would be "nul" on Windows, which git reads as a real
         # path). --no-index exits 1 because the files differ; the diff is on
@@ -383,8 +404,32 @@ def unified_diff(root: str | Path, file: str) -> str:
 
 
 def change_evidence(root: str | Path, files: list[str]) -> list[dict[str, object]]:
-    """Return fail-closed diff evidence for the requested changed files."""
-    return [{"file": file, "untracked": is_untracked(root, file), "diff": unified_diff(root, file)} for file in files]
+    """Return fail-closed diff evidence for the requested changed files.
+
+    Git status is read ONCE for the whole page. It used to be read twice per
+    file -- once for the ``untracked`` flag and again inside
+    :func:`unified_diff` -- so a page's cost grew with the number of files
+    twice over: 50 changed files meant about 100 full ``git status
+    --porcelain -uall`` scans plus the diffs, measured at 9.7-13.3 s for the
+    Code surface's CHANGED FILES list (5 files 0.60 s, 12 files 2.2-2.9 s).
+    The diffs are still read per file, because a diff IS per file; the status
+    never was.
+
+    The per-file diffs are independent reads, so a page of more than a few files reads them side by side
+    (:data:`EVIDENCE_WORKERS` at a time) and keeps the files in the order asked. They were read one after another,
+    and on 2026-11-06 a build with a few dozen files took 15 s to 40 s to open; the first failure still wins.
+    """
+    untracked = untracked_paths(root)
+
+    def one(file: str) -> dict[str, object]:
+        return {"file": file, "untracked": file in untracked, "diff": unified_diff(root, file, untracked=untracked)}
+
+    if len(files) <= _SERIAL_FILES:
+        return [one(file) for file in files]
+    with ThreadPoolExecutor(
+        max_workers=min(EVIDENCE_WORKERS, len(files)), thread_name_prefix="change-evidence"
+    ) as pool:
+        return list(pool.map(one, files))
 
 
 def _safe_target(root: str | Path, file: str) -> Path | None:

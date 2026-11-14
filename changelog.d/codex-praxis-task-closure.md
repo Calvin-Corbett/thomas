@@ -1,0 +1,1 @@
+- [Added] A direct-agent Praxis finish command that uses the scoped commit gates, checks claimed files for remaining edits, records commit evidence, and releases the claim only after completion.

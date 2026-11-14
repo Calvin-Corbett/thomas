@@ -321,17 +321,35 @@ def _validate_and_write(
             "blocked task `"
         ) and "must have an open/triaged entry in `## Issues / Blockers`" in str(message)
 
-    workboard_path.write_text(new_text, encoding="utf-8")
-    violations, _ = claims_gate.evaluate_claims(
-        workboard_path,
-        require_claims_to_have_active_task=require_claims_to_have_active_task,
-    )
-    if not require_claims_to_have_active_task:
-        violations = [item for item in violations if not _is_blocked_task_issue_violation(item)]
-    if violations:
-        workboard_path.write_text(original_text, encoding="utf-8")
-        return False, violations
-    return True, []
+    # Every board mutation in the repo funnels through here -- claims, tasks,
+    # issues, and every agent message. It used to write the whole file with no
+    # lock and, on a validation failure, write `original_text` back. Anything
+    # another agent had delivered in between was erased by that rollback, with
+    # no error and no ack. Measured on the live board 2026-09-09: it returned to
+    # a byte-identical earlier state and the message written in between was gone.
+    #
+    # The lock is board_io's, which is reentrant, so callers that already hold it
+    # (message sends, claim writes) nest instead of deadlocking. The snapshot
+    # check is what board_io.validated_update was written to do -- that function
+    # had zero callers, so the protection existed and was never wired up.
+    from scripts.crew.workboard import board_io
+
+    with board_io.file_lock():
+        if workboard_path.read_text(encoding="utf-8") != original_text:
+            return False, ["workboard changed during update; retry the operation"]
+        from scripts.crew.workboard import issue_up_for_grabs  # keeps the recurring audit backstop the last entry
+
+        workboard_path.write_text(issue_up_for_grabs.backstop_last(new_text), encoding="utf-8")
+        violations, _ = claims_gate.evaluate_claims(
+            workboard_path,
+            require_claims_to_have_active_task=require_claims_to_have_active_task,
+        )
+        if not require_claims_to_have_active_task:
+            violations = [item for item in violations if not _is_blocked_task_issue_violation(item)]
+        if violations:
+            workboard_path.write_text(original_text, encoding="utf-8")
+            return False, violations
+        return True, []
 
 
 def _set_task_status(lines: list[str], *, task_id: str, status: str) -> tuple[bool, str, dict[str, str] | None]:
@@ -607,101 +625,11 @@ def move_task_to_up_for_grabs(
     reported_by: str,
     summary: str | None,
 ) -> tuple[bool, str]:
-    original_text = workboard_path.read_text(encoding="utf-8")
-    lines = original_text.splitlines()
+    from scripts.crew.workboard import issue_up_for_grabs  # imports this module, so it is loaded on use
 
-    task_section_start, task_section_end = _find_active_tasks_section(lines)
-    bullet_idxs = _bullet_indices(lines, task_section_start, task_section_end)
-    task_idx: int | None = None
-    task_fields: dict[str, str] | None = None
-    task_key = _normalize_key(task_id)
-    for idx in bullet_idxs:
-        entry, fields, err = _parse_active_task_line(idx + 1, lines[idx])
-        if err:
-            return False, err
-        if entry is not None and _is_none_entry(entry):
-            continue
-        if not fields:
-            continue
-        if _normalize_key(fields["task_id"]) == task_key:
-            task_idx = idx
-            task_fields = dict(fields)
-            break
-
-    if task_idx is None or task_fields is None:
-        return False, f"active task `{task_id}` not found"
-
-    moved_task_id = task_fields["task_id"]
-    moved_agent = task_fields["agent"]
-    moved_scope = task_fields["scope"]
-    moved_summary = summary if summary else task_fields["summary"]
-    del lines[task_idx]
-
-    task_section_start, task_section_end = _find_active_tasks_section(lines)
-    _ensure_none_if_empty(lines, section_start=task_section_start, section_end=task_section_end)
-
-    remaining_tasks_for_agent = 0
-    task_section_start, task_section_end = _find_active_tasks_section(lines)
-    for idx in _bullet_indices(lines, task_section_start, task_section_end):
-        entry, fields, err = _parse_active_task_line(idx + 1, lines[idx])
-        if err:
-            return False, err
-        if entry is not None and _is_none_entry(entry):
-            continue
-        if fields and _normalize_key(fields["agent"]) == _normalize_key(moved_agent):
-            remaining_tasks_for_agent += 1
-
-    if remaining_tasks_for_agent == 0:
-        claim_section_start, claim_section_end = _find_claim_section(lines)
-        claim_remove: list[int] = []
-        for idx in _bullet_indices(lines, claim_section_start, claim_section_end):
-            entry, fields, err = _parse_claim_line(idx + 1, lines[idx])
-            if err:
-                return False, err
-            if entry is not None and _is_none_entry(entry):
-                continue
-            if fields and _normalize_key(fields["agent"]) == _normalize_key(moved_agent):
-                claim_remove.append(idx)
-        for idx in sorted(claim_remove, reverse=True):
-            del lines[idx]
-        claim_section_start, claim_section_end = _find_claim_section(lines)
-        _ensure_none_if_empty(lines, section_start=claim_section_start, section_end=claim_section_end)
-
-    grabs_section_start, grabs_section_end = _find_up_for_grabs_section(lines)
-    grab_idx: int | None = None
-    none_idxs: list[int] = []
-    for idx in _bullet_indices(lines, grabs_section_start, grabs_section_end):
-        entry, fields, err = _parse_up_for_grabs_line(idx + 1, lines[idx])
-        if err:
-            return False, err
-        if entry is not None and _is_none_entry(entry):
-            none_idxs.append(idx)
-            continue
-        if fields and _normalize_key(fields["task_id"]) == task_key:
-            grab_idx = idx
-            break
-
-    grab_line = _format_up_for_grabs(
-        task_id=moved_task_id,
-        scope=moved_scope,
-        summary=moved_summary,
-        reported_by=reported_by,
-        depends_on="none",
+    return issue_up_for_grabs.move_task_to_up_for_grabs(
+        workboard_path, task_id=task_id, reported_by=reported_by, summary=summary
     )
-    if grab_idx is not None:
-        lines[grab_idx] = grab_line
-    else:
-        for idx in sorted(none_idxs, reverse=True):
-            del lines[idx]
-            if idx < grabs_section_end:
-                grabs_section_end -= 1
-        lines.insert(grabs_section_end, grab_line)
-
-    new_text = "\n".join(lines) + ("\n" if original_text.endswith("\n") else "")
-    write_ok, violations = _validate_and_write(workboard_path, original_text, new_text)
-    if not write_ok:
-        return False, f"issue update rejected by gate: {'; '.join(violations)}"
-    return True, f"moved task `{moved_task_id}` to up-for-grabs"
 
 
 def run(argv: Sequence[str] | None = None) -> int:

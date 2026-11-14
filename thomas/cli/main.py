@@ -102,6 +102,13 @@ except Exception as e:
     log.warning("Failed to register parity commands: %s", e)
 
 try:
+    from thomas.cli.commands.plugins.p102_plugin_install_from_local_path import command as install_plugin_from_folder
+
+    cli.commands["plugins"].add_command(install_plugin_from_folder)
+except Exception as e:
+    log.warning("Failed to register plugin folder install command: %s", e)
+
+try:
     from thomas.cli.quality_ops import register_quality_ops
 
     register_quality_ops(cli)

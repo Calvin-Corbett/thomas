@@ -8,11 +8,13 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core.plugin_data import plugin_data_dir
 from thomas.server.app_keys import APP_CONFIG
 from thomas.server.desktop_plugins import is_plugin_enabled
 
 _STATE_VERSION = 1
-_STATE_RELATIVE_PATH = Path(".thomas") / "plugins" / "life-manager" / "state.json"
+# Saved outside the install folder, which install and uninstall delete: see thomas/core/plugin_data.py.
+_PLUGIN_ID = "life-manager"
 _COLLECTIONS = {"tasks", "agenda", "habits", "goals"}
 
 
@@ -26,7 +28,7 @@ def _safe_text(value: Any) -> str:
 
 def _state_path(app: web.Application) -> Path:
     config = app[APP_CONFIG]
-    return Path(config.memory.root_path) / _STATE_RELATIVE_PATH
+    return plugin_data_dir(config.memory.root_path, _PLUGIN_ID) / "state.json"
 
 
 def _default_state() -> dict[str, Any]:

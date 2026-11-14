@@ -4,7 +4,12 @@ import vm from 'node:vm';
 
 const supportPath = process.argv[2];
 const modePath = process.argv[3];
-if (!supportPath || !modePath) throw new Error('support and Work mode module paths are required');
+// The Work adapter words a refused steer through the shared table both steer
+// boxes read (js/steering_language.js), so the browser loads it first.
+const steeringPath = process.argv[4];
+// The Work card's live tasks and steer boxes, which the adapter creates at load.
+const steerPath = process.argv[5];
+if (!supportPath || !modePath || !steeringPath || !steerPath) throw new Error('support, Work mode, steering-language and Work steer module paths are required');
 
 const context = { window: {} };
 vm.createContext(context);
@@ -51,7 +56,17 @@ state.structuredOnboardingState.selected_workflow_id = 'owner-report';
 const selected = support.selectedOnboardingWorkflow(candidates);
 assert.equal(selected.name, 'Owner report');
 assert.equal(support.onboardingConfigurationReady(candidates, selected), false);
+// The model's claim alone is not readiness. Until 2026-09-08 it was: the check
+// returned selected_workflow_configured and that result was written back into
+// the same field, so the claim certified itself.
 state.structuredOnboardingState.selected_workflow_configured = true;
+assert.equal(
+  support.onboardingConfigurationReady(candidates, selected),
+  false,
+  'a model claim with no recorded user selection turn is not readiness',
+);
+// Selecting a workflow records the turn the user did it on; both halves now hold.
+state.onboardingSelectionUserTurn = state.messages.filter(row => row.role === 'user').length;
 assert.equal(support.onboardingConfigurationReady(candidates, selected), true);
 assert.equal(support.confirmedOnboardingGoal(), 'Process invoices safely.');
 
@@ -92,6 +107,12 @@ async function lifecycleFetch(url, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   requests.push({ url: String(url), method, signal: options.signal || null });
   if (url === '/api/v2/chat') return streamResponse();
+  if (String(url).endsWith('/delegations/task-1/steer')) return response({ ok: true, action: 'steer', execution_id: 'task-1' });
+  // The refusal the ledger actually sends when the task stopped running first.
+  if (String(url).endsWith('/delegations/task-stale/steer')) {
+    return response({ ok: false, error: "No running task matches reference 'task-stale'." }, 404);
+  }
+  if (String(url).endsWith('/delegations') && method === 'GET') return response({ delegations: [{ execution_id: 'task-restored', summary: 'Still running', state: 'running', last_progress: 'Checking files' }] });
   if (url === '/api/work/apps' && method === 'POST') {
     return response({ ok: true, app: { id: 'app-1', name: 'Process invoices', goal: '', onboarding: { fields: {} } } });
   }
@@ -125,16 +146,19 @@ const modeWindow = {
   location: { href: 'http://127.0.0.1:8899/' },
   confirm: () => true,
   ThomasWorkSupport: {
-    create: () => ({
+    create: options => ({
+      persistOnboardingPhase: context.window.ThomasWorkSupport.create(options).persistOnboardingPhase,
       onboardingWorkflowCandidates: () => [],
       selectedOnboardingWorkflow: () => null,
       onboardingConfigurationReady: () => false,
+      modelReportedConfigured: () => false,
       onboardingWorkflowDrafts: () => [],
       restoreOnboardingWorkflow: () => null,
       confirmedOnboardingGoal: () => '',
       visibleOnboardingText: String,
       onboardingInstruction: () => 'Understand and confirm the goal before mapping workflows.',
       messageRows: () => [],
+      liveTaskHtml: emptyHtml,
       homeHtml: emptyHtml,
       onboardingHtml: emptyHtml,
       connectorHtml: emptyHtml,
@@ -173,10 +197,12 @@ const modeContext = {
   clearTimeout() {},
 };
 vm.createContext(modeContext);
+vm.runInContext(fs.readFileSync(steeringPath, 'utf8'), modeContext, { filename: steeringPath });
+vm.runInContext(fs.readFileSync(steerPath, 'utf8'), modeContext, { filename: steerPath });
 const modeSource = fs.readFileSync(modePath, 'utf8');
 const instrumentedMode = modeSource.replace(
   /\n\}\)\(\);\s*$/,
-  '\n  window.__ThomasWorkModeTest = { state, enter, leave };\n})();',
+  '\n  window.__ThomasWorkModeTest = { state, enter, leave, readChatStream, ...steer, selectionGeneration: () => selectionGeneration };\n})();',
 );
 if (instrumentedMode === modeSource) throw new Error('could not instrument Work mode adapter');
 vm.runInContext(instrumentedMode, modeContext, { filename: modePath });
@@ -231,6 +257,110 @@ assert.equal(requests.filter(row => row.url === '/api/work/apps/app-1/jobs/job-1
 assert.equal(scheduledTimers.length, timersBeforeDraftRequeue + 1);
 modeState.formDirty = false;
 
+// Progress from the real chat stream is visible and steering reaches the
+// existing execution, not /api/v2/chat or a newly created job.
+const work = modeWindow.__ThomasWorkModeTest;
+const supportHtml = () => {
+  Object.assign(state, {
+    messages: modeState.messages, liveTasks: modeState.liveTasks, sessionId: modeState.sessionId,
+    running: modeState.running, runState: modeState.runState, steeringBusy: modeState.steeringBusy,
+  });
+  return support.messageRows() + support.liveTaskHtml();
+};
+modeState.running = true;
+modeState.runState = 'working';
+modeState.sessionId = 'session-1';
+work.recordLiveTask({ type: 'delegation_started', execution_id: 'task-1', title: 'Review invoices', last_progress: 'Reading inbox' });
+assert.match(supportHtml(), /Steer this running task/);
+assert.match(supportHtml(), /Reading inbox/);
+assert.equal(modeState.liveTasks[0].status, 'running');
+work.recordLiveTask({ type: 'delegation_progress', execution_id: 'task-1', last_progress: 'Checking attachments' });
+assert.match(supportHtml(), /Checking attachments/);
+const chatCount = requests.filter(row => row.url === '/api/v2/chat').length;
+const input = { value: 'Prioritize urgent invoices' };
+const button = { disabled: false };
+const note = { textContent: '' };
+const form = { querySelector: selector => ({ 'textarea': input, 'button[type="submit"]': button, '[data-work-steer-error]': note })[selector] || null };
+assert.equal(await work.steerRunningTask('task-1', form), undefined);
+assert.equal(requests.filter(row => row.url === '/api/v2/chat').length, chatCount);
+assert.equal(requests.filter(row => row.url === '/api/v2/chat/session/session-1/delegations/task-1/steer').length, 1);
+assert.match(supportHtml(), /Update queued for this task/);
+assert.equal(input.value, '');
+
+// A refused update says why in plain words, keeps what was typed, and survives
+// the next progress render -- the message used to be written straight into the
+// form node, so the following progress event erased it within a second.
+work.recordLiveTask({ type: 'delegation_started', execution_id: 'task-stale', title: 'Stale task', last_progress: 'Working' });
+const staleInput = { value: 'Change course' };
+const staleButton = { disabled: false };
+const staleNote = { textContent: '' };
+const staleForm = { querySelector: selector => ({ 'textarea': staleInput, 'button[type="submit"]': staleButton, '[data-work-steer-error]': staleNote })[selector] || null };
+await work.steerRunningTask('task-stale', staleForm);
+assert.match(staleNote.textContent, /^Update not applied: This task is no longer running/);
+assert.match(supportHtml(), /Update not applied: This task is no longer running/);
+assert.doesNotMatch(supportHtml(), /No running task matches reference/, 'the raw ledger sentence and its execution id stay out of the UI');
+assert.equal(staleButton.disabled, false, 'the update can be retried');
+assert.equal(staleInput.value, 'Change course', 'a failure does not throw away what was typed');
+assert.equal(modeState.steeringBusy, '');
+work.recordLiveTask({ type: 'delegation_progress', execution_id: 'task-stale', last_progress: 'Still working' });
+assert.match(supportHtml(), /Update not applied: This task is no longer running/, 'the reason survives the next progress render');
+work.recordLiveTask({ type: 'delegation_completed', execution_id: 'task-stale', last_progress: 'Done' });
+
+// Two tasks can run at once, and every progress line repaints the surface. Each
+// steer box keeps its own half-typed note across that repaint, with the caret
+// where it was -- only the first box used to be carried, so a note for the
+// second task was erased a second after it was typed.
+{
+  const steerBox = (id, value, disabled = false) => {
+    const textarea = { value, disabled, focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
+    return { dataset: { workSteer: id }, textarea, querySelector: selector => (selector === 'textarea' ? textarea : null), contains: node => node === textarea };
+  };
+  const before = [steerBox('task-a', 'Skip the archived invoices'), steerBox('task-b', 'Only the March batch'), steerBox('task-c', 'in flight', true)];
+  const caret = before[1].textarea;
+  const rootWith = forms => ({ querySelectorAll: selector => (selector === '[data-work-steer]' ? forms : []) });
+  modeContext.document.activeElement = caret;
+  const drafts = work.captureSteerDrafts(rootWith(before));
+  modeContext.document.activeElement = null;
+  // Array.from, not drafts.map: the adapter builds this list inside the vm
+  // realm, so its arrays carry that realm's Array.prototype and a strict
+  // deep-equal against a host literal fails on the prototype alone.
+  assert.deepEqual(Array.from(drafts, row => row.id), ['task-a', 'task-b', 'task-c']);
+  assert.deepEqual(Array.from(drafts, row => row.focused), [false, true, false]);
+  const after = [steerBox('task-a', ''), steerBox('task-b', ''), steerBox('task-c', '', true)];
+  work.restoreSteerDrafts(rootWith(after), drafts);
+  assert.equal(after[0].textarea.value, 'Skip the archived invoices');
+  assert.equal(after[1].textarea.value, 'Only the March batch', 'the second box keeps its own note');
+  assert.equal(after[1].textarea.focused, true, 'the caret goes back where it was');
+  assert.deepEqual(after[1].textarea.selection, [20, 20]);
+  assert.equal(after[0].textarea.focused, false);
+  assert.equal(after[2].textarea.value, 'in flight', 'a box showing "Sending…" still shows what is on its way');
+  assert.equal(after[2].textarea.focused, false, 'a disabled box is never focused');
+  // A repaint that drops a finished task must not restore its note somewhere else.
+  const onlyA = [steerBox('task-a', '')];
+  work.restoreSteerDrafts(rootWith(onlyA), drafts);
+  assert.equal(onlyA[0].textarea.value, 'Skip the archived invoices');
+}
+
+work.recordLiveTask({ type: 'delegation_completed', execution_id: 'task-1', last_progress: 'Done' });
+assert.match(supportHtml(), /tc-work-live-badge">completed/);
+assert.doesNotMatch(supportHtml(), /data-work-steer="task-1"/);
+work.recordLiveTask({ type: 'delegation_started', execution_id: 'task-2', title: 'Follow up' });
+work.recordLiveTask({ type: 'delegation_failed', execution_id: 'task-2', last_progress: 'Could not reach inbox' });
+assert.match(supportHtml(), /tc-work-live-badge">failed/);
+assert.doesNotMatch(supportHtml(), /data-work-steer="task-2"/);
+modeState.running = false;
+modeState.runState = 'completed';
+work.recordLiveTask({ type: 'delegation_started', execution_id: 'task-background', title: 'Finishing in background' });
+assert.match(supportHtml(), /data-work-steer="task-background"/, 'steering remains available after chat stream ends');
+assert.match(supportHtml(), /Task running/, 'delegation remains running independently of chat stream');
+modeState.liveTasks = [];
+await work.restoreRunningTasks(work.selectionGeneration(), 'session-1');
+assert.match(supportHtml(), /Still running/);
+assert.match(supportHtml(), /data-work-steer="task-restored"/);
+modeState.liveTasks = [];
+modeState.runState = 'failed';
+assert.match(supportHtml(), /Did not finish/);
+
 console.log(JSON.stringify({
   ok: true,
   structuredWorkflowState: true,
@@ -240,4 +370,9 @@ console.log(JSON.stringify({
   firstTurnHiddenCompletion: true,
   reconciliationExecuted: true,
   activeDraftRequeued: true,
+  workSteerSameTask: true,
+  workSteerRefusalExplained: true,
+  workSteerDraftsPerTask: true,
+  workProgressStates: true,
+  backgroundSteeringAndRestore: true,
 }));

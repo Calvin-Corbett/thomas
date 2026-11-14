@@ -24,8 +24,8 @@ and is redacted from ``repr``. Tests inject :class:`FakeChatTransport`, a
 hermetic recorder, so every verb is proven offline with no network.
 
 The four runtime seams are injected via :class:`ChatOpsSeams`. ``dispatch`` and
-``steer`` have real defaults wired to ``thomas.server.chat_delegation`` (an
-allowed integrations -> server edge). ``approve`` and ``merge`` are governed
+``steer`` have real defaults that reach chat by name (``thomas.core.kernel.late``),
+so this plugin does not import it. ``approve`` and ``merge`` are governed
 actions whose real implementations live in the ``forge`` tier, which the
 integrations tier may not import; the server layer (which *may* import forge)
 wires those callables in. Unwired governance seams raise a clear error rather
@@ -46,6 +46,9 @@ import os
 from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+
+from thomas.core.kernel import late
+from thomas.core.kernel import seams as kernel_seams
 
 from .integration import SlackIntegration
 from .messaging import SlackMessaging
@@ -313,9 +316,6 @@ class ChatOpsSeams:
         ``approve`` and ``merge`` are governed forge-tier actions the integrations
         tier may not import directly; pass them in (the server wires them).
         """
-        # Imported here (integrations -> server is an allowed edge) so the module
-        # stays importable without pulling the heavy server graph at import time.
-        from thomas.server.chat_delegation import apply_task_update, start_background_delegation
 
         async def _dispatch(
             prompt: str,
@@ -332,7 +332,8 @@ class ChatOpsSeams:
             async def _sink(_event: dict[str, Any]) -> None:
                 return None
 
-            return await start_background_delegation(
+            return await late.call(
+                kernel_seams.START_DELEGATION,
                 app,
                 session_id=session_id,
                 prompt=prompt,
@@ -344,7 +345,9 @@ class ChatOpsSeams:
             )
 
         def _steer(session_id: str, task_ref: str, instruction: str, **kwargs: Any) -> Any:
-            return apply_task_update(session_id, task_ref, instruction, repo_root=repo_root, **kwargs)
+            return late.call(
+                kernel_seams.STEER_DELEGATION, session_id, task_ref, instruction, repo_root=repo_root, **kwargs
+            )
 
         return cls(
             dispatch=_dispatch,

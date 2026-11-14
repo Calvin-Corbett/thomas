@@ -128,6 +128,7 @@ class TestMarketplaceRoutePolicy(AioHTTPTestCase):
             body = await response.json()
 
         rows = body.get("plugins") or []
-        ids = [str(row.get("id") or "") for row in rows]
+        # Thomas's own five workspaces are always listed (thomas/server/stock_workspaces.py); this is about the store's.
+        ids = [str(row.get("id") or "") for row in rows if not str(row.get("id") or "").startswith("thomas-")]
         self.assertEqual(ids, ["catalog-only-pack"])
-        self.assertEqual(body.get("total"), 1)
+        self.assertEqual(body.get("total"), 1 + len(rows) - len(ids))

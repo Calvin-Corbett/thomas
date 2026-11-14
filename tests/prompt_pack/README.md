@@ -1,5 +1,14 @@
-# Prompt pack tests
+# Prompt Pack Test Stubs
 
-Per-feature tests named `test_pNNN_<slug>.py`. Each one covers the success
-path, an invalid-input path, and the stable output contract for its feature
-(JSON shapes in particular).
+This folder holds per-prompt tests generated and merged through the catch-up pipeline.
+
+Naming convention:
+- `test_pNNN_<slug>.py`
+
+Current source prompt pack:
+- `docs/REFERENCE_CLI_CATCHUP_PROMPT_PACK_216_2026-02-20.md`
+
+Each prompt-owned test should validate:
+- success path
+- invalid input path
+- stable output contract (especially JSON shapes where applicable)

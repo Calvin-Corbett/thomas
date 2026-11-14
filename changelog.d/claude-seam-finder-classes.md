@@ -1,0 +1,3 @@
+### Added
+
+- **The seam finder reads a giant class by its methods.** Four of the remaining oversized files are one class each, which no cut between definitions can help. When a class is over the budget by itself the finder now reads its methods as units, with `self.<name>` as the edge, and reports the groups inside it; unittest's setUp and tearDown, which every test needs and no test names, come out shared. On the 1,680-line chat-delegation test class it finds three groups with zero crossings and setUp shared, which is the recipe for three classes on one base; on the REPL class, two groups with five crossings and three shared helpers.

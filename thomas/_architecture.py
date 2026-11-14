@@ -17,9 +17,9 @@ MODULES = {
     # -- CORE --stable foundations ------------------------------------------
     "core": {
         "tier": "core",
-        "depends_on": ["tools", "server", "marketplace"],
+        "depends_on": ["tools", "marketplace"],
         "health": "yellow",
-        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, workspace_sync_engine.py exceeds 840 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines, boot_doctor.py exceeds 1140 lines, llm_client.py exceeds 833 lines, system_map.py exceeds 800 lines",
+        "debt": "scheduler.py exceeds 900 lines, config.py exceeds 900 lines, rag_index.py exceeds 830 lines, agent_presence.py exceeds 1160 lines; core imports tools --should be inverted; TODO[batch-8]: core llm_client imports marketplace --hoist marketplace LLM provider interface into core to resolve this real layering inversion; core no longer imports server (the boot doctor takes the secret store as an argument from thomas.bootdoctor)",
         "description": "LLM client, persistence, config, events",
     },
     "agent": {
@@ -38,14 +38,14 @@ MODULES = {
             "benchmarks",
         ],
         "health": "yellow",
-        "debt": "swarm.py exceeds 1130 lines, loop_execution.py exceeds 1000 lines",
+        "debt": "swarm.py exceeds 1130 lines",
         "description": "Agent loop, tool execution, streaming, guidance",
     },
     "vault": {
         "tier": "core",
         "depends_on": [],
         "health": "scaffold",
-        "debt": "",
+        "debt": "scaffold-only; content migration deferred (see MIGRATION_PLAN.md). Target: consolidate agent guarded_tools (tool_runner), marketplace policy (policy package), breakglass scripts (breakglass package).",
         "description": "Runtime safety substrate -- policy, tool runner, breakglass (Tier 6 scaffold)",
     },
     "server": {
@@ -80,7 +80,7 @@ MODULES = {
             "notifications",
         ],
         "health": "yellow",
-        "debt": "routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines, app_routes_init.py exceeds 800 lines, routes/marketplace_catalog_aiohttp.py exceeds 1020 lines, routes/evolve_agent_routes.py exceeds 926 lines",
+        "debt": "routes/work.py exceeds 800 lines (the Work lane proposal routes tipped a file that sat exactly on the cap); routes/companion_aiohttp.py exceeds 850 lines, routes/asset_studio_aiohttp.py exceeds 1080 lines; TODO[batch-8]: server chat-plan-mode route imports cli --server should not depend on cli (cli is the consumer of server, not the other way); extract shared command-handling into core or expose via a thin interface; TODO[batch-8]: server discord-channels routes import integrations --server tier should not depend on ext tier; integrations should expose a server-facing interface or move shared code to core",
         "description": "aiohttp web server, API routing, static serving",
     },
     "cli": {
@@ -113,7 +113,7 @@ MODULES = {
             "preferences",
         ],
         "health": "yellow",
-        "debt": "repl.py exceeds 1810 lines, repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines",
+        "debt": "repl_runtime.py exceeds 1170 lines, parity_commands.py exceeds 1180 lines, _commands_base.py exceeds 930 lines, _commands_models.py exceeds 820 lines; cli->preferences is repl_runtime.py persisting a model choice, which previously went through thomas.server.model_preferences --the store moved, the caller did not change what it does",
         "description": "Click CLI commands and entry points",
     },
     "memory": {
@@ -133,7 +133,7 @@ MODULES = {
         "tier": "core",
         "depends_on": ["core", "tools"],
         "health": "yellow",
-        "debt": "_db.py exceeds 820 lines",
+        "debt": "_db.py exceeds 820 lines (over the 800-line soft cap; consider splitting the PreferencesStore methods from the module-level accessors)",
         "description": "User preferences persistence and API",
     },
     # -- EXTENSIONS --feature modules, isolated from each other ------------
@@ -141,14 +141,14 @@ MODULES = {
         "tier": "ext",
         "depends_on": ["core", "tools", "cli"],
         "health": "yellow",
-        "debt": "p001_browser_command_registry_scaffold.py exceeds 850 lines, p024_browser_error_normalization.py exceeds 845 lines",
+        "debt": "p015 imports cli --should be inverted; p001_browser_command_registry_scaffold.py exceeds 850 lines, p024_browser_error_normalization.py exceeds 845 lines",
         "description": "Browser automation and page capture",
     },
     "asset_studio": {
         "tier": "ext",
         "depends_on": ["core", "server", "integrations", "tools", "marketplace"],
         "health": "yellow",
-        "debt": "",
+        "debt": "connector_shims imports integrations for github/notion/figma normalization --consider extracting shared adapters to core",
         "description": "Creative asset generation and management",
     },
     "companion": {
@@ -161,14 +161,14 @@ MODULES = {
         "tier": "ext",
         "depends_on": ["core", "integrations", "tools", "marketplace"],
         "health": "yellow",
-        "debt": "",
+        "debt": "p096 imports integrations (ext->ext) --should extract shared code to core",
         "description": "Multi-channel messaging (Telegram, Discord, Slack)",
     },
     "integrations": {
         "tier": "ext",
         "depends_on": ["core", "agent", "tools", "server"],
         "health": "yellow",
-        "debt": "moltbook.py exceeds 830 lines",
+        "debt": "moltbook.py exceeds 830 lines (over the 800-line soft cap; needs split); TODO[batch-8]: discord-bridge-runtime imports server --add a server-side interface that integrations consume, instead of having integrations reach up into server",
         "description": "Third-party service connectors",
     },
     "realtime": {
@@ -226,7 +226,7 @@ MODULES = {
         "tier": "infra",
         "depends_on": ["core", "investigation", "integrations"],
         "health": "yellow",
-        "debt": "git_conflicts.py exceeds 1110 lines, browser.py exceeds 940 lines, ssh.py exceeds 860 lines, engineering.py exceeds 850 lines, database_commands.py exceeds 800 lines, filesystem.py exceeds 867 lines, context_review.py exceeds 811 lines",
+        "debt": "git_conflicts.py exceeds 1110 lines, ssh.py exceeds 860 lines, database_commands.py exceeds 800 lines, context_review.py exceeds 811 lines; TODO[batch-8]: moltbook tools imports integrations --infra tier should not depend on ext tier; either move shared adapter to core or invert via a tools-provider interface in integrations",
         "description": "Tool definitions, registry, sandbox",
     },
     # -- SUPPORT --smaller utility modules ---------------------------------
@@ -292,12 +292,6 @@ MODULES = {
         "health": "green",
         "description": "Human approvals and escalation flow",
     },
-    "intake": {
-        "tier": "support",
-        "depends_on": ["core", "tools"],
-        "health": "green",
-        "description": "Intake processing for external drops",
-    },
     "learning": {
         "tier": "support",
         "depends_on": ["core", "tools", "marketplace"],
@@ -314,7 +308,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "tools", "plugins", "server"],
         "health": "yellow",
-        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, orchestrator/brain.py exceeds 970 lines, doc_processing/extraction.py exceeds 801 lines",
+        "debt": "asset_studio/contracts.py exceeds 870 lines, autonomy/workflows.py exceeds 1050 lines, db_internals/query_parser.py exceeds 890 lines, observability/run_store.py exceeds 920 lines, doc_processing/extraction.py exceeds 801 lines; TODO[batch-8]: marketplace publisher imports server --factor HTTP push behind an interface so marketplace does not reach up into server (plugins dep is housekeeping: publisher legitimately interacts with plugin definitions)",
         "description": "Marketplace domain algorithms and utilities",
     },
     "markdown": {
@@ -333,7 +327,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "cli", "tools", "marketplace"],
         "health": "yellow",
-        "debt": "",
+        "debt": "p049 imports cli --should be inverted",
         "description": "Node/graph execution structures",
     },
     "notify": {
@@ -382,12 +376,12 @@ MODULES = {
         "tier": "infra",
         "depends_on": ["core", "tools", "agent", "desktop_operator", "preferences"],
         "health": "yellow",
-        "debt": "anvil/forge_code_self_edit.py exceeds 802 lines, anvil/evolve_verification.py exceeds 1133 lines, anvil/evolve.py exceeds 1335 lines, anvil/forge_code_projects.py exceeds 920 lines, anvil/native_orchestration.py exceeds 800 lines, anvil/run_report.py exceeds 835 lines",
+        "debt": "anvil/evolve_verification.py exceeds 1133 lines; Anvil desktop and agent dispatch adapters import desktop_operator and agent; anvil/native_orchestration.py exceeds 800 lines, anvil/run_report.py exceeds 835 lines",
         "description": "Praxis.Forge construction umbrella -- Anvil (self-mod / Doppelganger Protocol / Evolve runtime). Future sub-pieces: Gates, Intake, Publish.",
     },
     "work": {
         "tier": "support",
-        "depends_on": [],
+        "depends_on": ["core"],
         "health": "green",
         "description": "Durable Work apps, job-scoped memory, connectors, private skills, dashboards, and Mission delegation metadata",
     },
@@ -873,7 +867,7 @@ MODULES = {
     },
     "bootdoctor": {
         "tier": "support",
-        "depends_on": ["agent", "core", "tools"],
+        "depends_on": ["agent", "core", "server", "tools"],
         "health": "yellow",
         "description": "bootdoctor utilities",
     },
@@ -1079,7 +1073,7 @@ MODULES = {
         "tier": "support",
         "depends_on": ["core", "chat", "tools", "marketplace", "agent"],
         "health": "yellow",
-        "debt": "",
+        "debt": "TODO[batch-8]: orchestrator brain imports agent --orchestrator is support tier, agent is core; orchestrator may legitimately consume agent loop abstractions but the dependency direction inverts the tier ordering; consider an orchestrator-facing interface in agent",
         "description": "orchestrator utilities",
     },
     "os_kernel": {

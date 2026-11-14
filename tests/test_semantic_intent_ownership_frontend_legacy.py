@@ -54,14 +54,5 @@ def test_natural_language_cannot_switch_runtime_model() -> None:
     assert "Switch or list model profiles" in slash_source
 
 
-def test_legacy_chat_route_does_not_derive_task_contract_from_prompt() -> None:
-    route_source = _read("thomas/server/routes/chat_request_execution.py")
-    for forbidden in (
-        "thomas.agent.task_definition",
-        "should_activate_task_definition",
-        "derive_task_definition",
-        "augment_prompt_with_task_definition",
-        "evaluate_task_result",
-    ):
-        assert forbidden not in route_source
+def test_legacy_task_definition_module_stays_gone() -> None:
     assert not (ROOT / "thomas/agent/task_definition.py").exists()

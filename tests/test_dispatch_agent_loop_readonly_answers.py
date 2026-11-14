@@ -18,6 +18,18 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_a_cli_bash_ls_is_a_read_not_a_write import (
+    _dispatch as _dispatch_cli,
+)
+from tests.test_a_cli_bash_ls_is_a_read_not_a_write import (
+    _final as _cli_final,
+)
+from tests.test_a_cli_bash_ls_is_a_read_not_a_write import (
+    _tool_result as _cli_result,
+)
+from tests.test_a_cli_bash_ls_is_a_read_not_a_write import (
+    _tool_use as _cli_tool,
+)
 from thomas.forge.anvil.dispatch_agent_loop import dispatch_via_agent_loop
 from thomas.forge.anvil.forge_event_stream import FORGE_EVENT_KEY
 from thomas.server.routes.evolve_agent_runtime import _confirmed_conversation_reply
@@ -193,15 +205,82 @@ def test_transcript_verdict_still_rejects_an_attempted_edit() -> None:
     assert _confirmed_conversation_reply(text) is False
 
 
-def test_transcript_verdict_stays_strict_without_tool_names() -> None:
-    """tool_result carries no name, so a transcript of only those cannot prove
-    the run was read-only and keeps the previous behaviour."""
+def test_transcript_verdict_accepts_a_clean_unnamed_tool_result() -> None:
+    """A clean unnamed result is not evidence that the unknown call failed."""
     text = _transcript(
         {FORGE_EVENT_KEY: "tool_result", "text": "something"},
         {FORGE_EVENT_KEY: "final", "text": "An answer."},
     )
 
-    assert _confirmed_conversation_reply(text) is False
+    assert _confirmed_conversation_reply(text) is True
+
+
+@pytest.mark.parametrize(
+    ("calls", "expected"),
+    [
+        ([("shell.exec", True), ("shell.exec", False)], True),
+        ([("fs.write_file", True), ("shell.exec", False)], False),
+        ([("fs.read_file", True)], True),
+        ([("shell.exec", False), ("shell.exec", True)], False),
+        ([("fs.write_file", True), ("fs.write_file", False)], True),
+    ],
+)
+def test_all_three_verdict_sites_agree_on_recovery(repo: Path, calls: list[tuple[str, bool]], expected: bool) -> None:
+    events: list[dict] = []
+    cli_lines: list[str] = []
+    for index, (name, failed) in enumerate(calls):
+        events.extend(
+            [
+                {FORGE_EVENT_KEY: "tool", "name": name, "access": "read" if name == "fs.read_file" else "write"},
+                {FORGE_EVENT_KEY: "tool_result", "name": name, "is_error": failed},
+            ]
+        )
+        cli_name = {"shell.exec": "Bash", "fs.write_file": "Write", "fs.read_file": "Read"}[name]
+        cli_lines.extend(
+            [
+                _cli_tool(str(index), cli_name, {"command": "python -c 'pass'"} if cli_name == "Bash" else {}),
+                _cli_result(str(index), is_error=failed),
+            ]
+        )
+    events.append(_answer())
+    cli_lines.append(_cli_final())
+
+    in_process = _dispatch(repo, events)
+    cli = _dispatch_cli(repo, cli_lines)
+    transcript = _confirmed_conversation_reply(_transcript(*events), require_final=True)
+    assert (in_process.ok, cli.ok, transcript) == (expected, expected, expected), (
+        in_process.reason,
+        cli.reason,
+    )
+
+
+@pytest.mark.parametrize(
+    ("failed", "expected"),
+    [(False, True), (True, False)],
+)
+def test_all_three_verdict_sites_agree_on_unnamed_activity_after_reads(
+    repo: Path, failed: bool, expected: bool
+) -> None:
+    events = [
+        _tool("fs.read_file"),
+        {FORGE_EVENT_KEY: "tool_result", "name": "fs.read_file", "text": "VALUE = 1"},
+        {FORGE_EVENT_KEY: "tool_result", "is_error": failed},
+        _answer(),
+    ]
+    cli_lines = [
+        _cli_tool("read", "Read", {}),
+        _cli_result("read"),
+        _cli_result("orphan", is_error=failed),
+        _cli_final(),
+    ]
+
+    in_process = _dispatch(repo, events)
+    cli = _dispatch_cli(repo, cli_lines)
+    transcript = _confirmed_conversation_reply(_transcript(*events), require_final=True)
+    assert (in_process.ok, cli.ok, transcript) == (expected, expected, expected), (
+        in_process.reason,
+        cli.reason,
+    )
 
 
 def test_all_three_verdict_sites_agree_on_a_read_only_run(repo: Path) -> None:

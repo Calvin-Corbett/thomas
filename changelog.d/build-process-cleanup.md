@@ -1,0 +1,3 @@
+### Fixed
+
+- At the end of a Build run, Thomas asks the caged runner to stop that green project's recorded shell process group. The run report includes stopped and remaining process IDs when available; a responding runner reporting leftover or unknown process IDs fails the run. A green project with no recorded shell process group reports no processes left. When the runner is down in auto or off posture, cleanup reports no caged processes to end without failing an otherwise successful run; required posture still reports cleanup unavailable. Other projects' groups are not targeted. Runs outside green skip the caged job wait.

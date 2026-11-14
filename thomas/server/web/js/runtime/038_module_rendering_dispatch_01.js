@@ -609,9 +609,20 @@ function initModuleWorkspace() {
     }
 
     state.timerId = window.setInterval(() => {
+        // Re-rendering a workspace in a tab nobody is looking at is work no one
+        // can see; the shell marks hidden tab documents and doc_activity reads
+        // that mark. The refresh happens the moment the tab is shown again.
+        if (window.ThomasDocActivity && window.ThomasDocActivity.isPaused()) return;
         if (!MODULE_NAV_MODE_SET.has(sidebarNavMode)) return;
         moduleRender(sidebarNavMode);
     }, MODULE_REFRESH_INTERVAL_MS);
+
+    if (window.ThomasDocActivity) {
+        window.ThomasDocActivity.onChange((isPaused) => {
+            if (isPaused || !MODULE_NAV_MODE_SET.has(sidebarNavMode)) return;
+            moduleRender(sidebarNavMode);
+        });
+    }
 
     moduleRender('dashboard', { touch: false });
 }

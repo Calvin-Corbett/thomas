@@ -15,27 +15,46 @@
  * reason unified_code_mode.js reaches its own siblings that way -- captured once,
  * they would freeze whatever happened to be on window at create() time and make
  * load order a second ordering rule. chat.html must load this file first.
+ *
+ * Since the 2026-10 redesign the rows, STEPS card, proof card and the other
+ * pieces are drawn by unified_code_cards.js; this file still decides what each
+ * event IS and in what order a turn tells its story.
  */
 (function () {
   'use strict';
 
+  const CONTINUATION_PREFIX = 'Autopilot: continuing';
+  const STEER_LINE = 'Steering update: ';
+  // What a run's controls write: neither tool output nor prose, each its own
+  // card, and never folded by the narrative dedupe (two plan updates can carry
+  // the same "2 of 5 done" text and different steps).
+  const CARD_KINDS = new Set(['plan', 'stepnote', 'paused', 'resumed', 'steering', 'ask', 'answered']);
+
   function create(deps) {
     const {
-      MAX_VISIBLE_PROGRESS_EVENTS, MAX_PROGRESS_EVENT_CHARS, NARRATIVE_EVENT_KINDS, state, esc,
-      codeResults, surface, isInternalResultPath, safely, pushLiveEvent, render, send,
+      MAX_PROGRESS_EVENT_CHARS, NARRATIVE_EVENT_KINDS, state, esc,
+      codeResults, surface,
     } = deps;
 
     // Code-Thomas wears the anvil — he builds (owner, 2026-08-10). Chat keeps
     // its own avatar; this badge is Code mode's only.
     const ANVIL_SVG = '<svg viewBox="0 0 256 256" aria-hidden="true"><path d="M240 60h-92a12 12 0 0 0 0 24h6.6c-4 24.5-22.8 44-47 48.6C82.9 137.4 64 121.4 64 96V84h12a12 12 0 0 0 0-24H24a12 12 0 0 0 0 24h16v12c0 34.6 24.7 58.5 56 63.4v10.2c0 11-4.7 21.4-13 28.6l-18.9 16.5A12 12 0 0 0 72 236h112a12 12 0 0 0 7.9-21.1L173 198.4a38.2 38.2 0 0 1-13-28.6v-10.6c37.5-6 66.2-35 70.7-71.2H240a12 12 0 0 0 0-24Z"/></svg>';
 
-    function _safe(value) { return typeof value === 'string' ? value.trim() : ''; }
+    // Read at call time, like `codeResults`; a page without the cards says why
+    // instead of drawing a transcript with holes in it.
+    function cards() {
+      const api = window.ThomasCodeCards;
+      if (!api) throw new Error('unified_code_cards.js must load before the Build transcript renders');
+      return api;
+    }
+
+    // Which of a team's events the transcript shows (unified_code_agents.js); without it, all of them.
+    const rows = () => window.ThomasCodeAgentRows || null;
 
     function eventLabel(event) {
       const type = String(event.type || event.fc || 'activity').replace(/_/g, ' ');
       return String(event.text || event.message || event.name || event.tool || event.error || type);
     }
-
     function eventKind(event) {
       const kind = String(event.kind || event.fc || event.type || 'activity').toLowerCase();
       if (kind === 'reason') return 'Reasoning';
@@ -45,6 +64,9 @@
       if (kind === 'planning') return 'Planning';
       if (kind === 'steering') return 'Steering';
       if (kind === 'error') return 'Error';
+      // A reconnect is not a failure: the run went on, and the row says so.
+      if (kind === 'reconnected') return 'Reconnected';
+      if (kind === 'disconnected') return 'Connection lost';
       return kind.replace(/_/g, ' ');
     }
 
@@ -54,11 +76,11 @@
 
     function annotateTerminalEvent(event, tracker) {
       const kind = String(event.kind || event.fc || event.type || 'activity').toLowerCase();
-      if (kind === 'tool') {
-        tracker.name = isTerminalTool(event.name) ? String(event.name || 'terminal') : '';
-        if (tracker.name) { event.terminal = true; event.terminalTool = tracker.name; }
-      } else if (kind === 'tool_result' && tracker.name) {
-        event.terminal = true; event.terminalTool = tracker.name; tracker.name = '';
+      if (kind === 'tool' || kind === 'tool_result') {
+        const name = String(event.name || (kind === 'tool_result' && !event.agent_id ? tracker.name : '') || '');
+        const terminalTool = isTerminalTool(name) ? name : '';
+        if (terminalTool) { event.terminal = true; event.terminalTool = terminalTool; }
+        if (!event.agent_id) tracker.name = kind === 'tool' ? terminalTool : '';
       }
       return event;
     }
@@ -73,7 +95,11 @@
     }
 
     function isTechnicalEvent(event) {
-      return event.terminal === true || containsToolProtocol(event) || !NARRATIVE_EVENT_KINDS.has(eventType(event));
+      const kind = eventType(event);
+      // A helper's status, its one failure line and a team notice are quiet lines (unified_code_agents.js).
+      if (rows() ? rows().isLine(event) : (event.agent_id && /^agent_(?:spawned|status|event)$/.test(kind))) return false;
+      if (CARD_KINDS.has(kind)) return false;
+      return event.terminal === true || containsToolProtocol(event) || !NARRATIVE_EVENT_KINDS.has(kind);
     }
 
     // The very first read of a brand-new project is an existence check, not a
@@ -96,20 +122,7 @@
       return event;
     }
 
-    // One failure predicate for the whole file. There used to be two, and they
-    // disagreed: `eventHtml` asked `is_error === true`, while
-    // `groupedTechnicalEvents` asked `is_error === true || kind === 'error'`.
-    // `technicalHeading` sided with the second.
-    //
-    // So a live `error` event -- the shape `pushLiveEvent({ type: 'error' })`
-    // produces, which never sets `is_error` -- rendered the failure WORDS under a
-    // green `ph-check-circle`, and without the `is-error` class that colours the
-    // row. Seen on screen by opening a deliverable deep link whose task no longer
-    // exists: a green tick directly above the word "failed".
-    //
-    // Live-vs-saved is the axis that hid it. The grouped path was already right,
-    // so the finished transcript of the same run looked correct; only the run you
-    // were watching lied.
+    // Share one failure predicate so live error rows cannot show a success tick.
     function eventFailed(event, kind) {
       // The expected first read probe of an empty project is not a failure --
       // see flagExpectedProbe. Decided here so every consumer of "did this row
@@ -162,20 +175,24 @@
       // `meta` read "Verified the result". A meta event is a workspace action --
       // `pushLiveEvent({ type: 'meta', text: 'Kept index.html.' })` -- so keeping
       // or reverting a file announced itself as a verification of it.
-      if (kind === 'meta') return 'Workspace update';
+      if (kind === 'meta') return event.receipt === 'model' ? 'Model that answered' : 'Workspace update';
       return event.name ? humanToolHeading(event.name, `Result from ${event.name}`) : 'Tool result';
     }
 
     // "Result from fs.read_file" tells a non-technical reader nothing (owner,
     // 2026-08-10). The tool's own name still appears in the expanded body;
     // the ROW says what happened in words a person uses.
+    // diff.create is the str-replace EDIT, so it is named before the generic
+    // /diff/ rule; Claude's own tools are plain "Read"/"Write"/"Edit".
     const TOOL_HEADINGS = [
-      [/fs[._-]?read/i, 'Read a file'],
-      [/fs[._-]?write/i, 'Wrote a file'],
+      [/fs[._-]?read|(?:^|> )(?:read|view)$/i, 'Read a file'],
+      [/fs[._-]?write|(?:^|> )write$/i, 'Wrote a file'],
+      [/diff[._-]?create|apply_patch|str_replace|(?:^|> )(?:multi)?edit$/i, 'Edited a file'],
       [/fs[._-]?(list|dir)/i, 'Looked in a folder'],
       [/fs[._-]?(delete|remove)/i, 'Removed a file'],
       [/project_structure/i, 'Looked at the project layout'],
       [/search|grep|find/i, 'Searched the code'],
+      [/check[._-]?run|^run$/i, 'Ran a check'],
       [/diff/i, 'Compared changes'],
       [/shell|terminal|bash|powershell|cmd/i, 'Ran a terminal command'],
       [/http|fetch|web|download/i, 'Fetched from the web'],
@@ -184,24 +201,6 @@
     function humanToolHeading(name, fallback) {
       const match = TOOL_HEADINGS.find(([pattern]) => pattern.test(String(name || '')));
       return match ? match[1] : fallback;
-    }
-
-    function groupedTechnicalEvents(events) {
-      const groups = [];
-      const byKey = new Map();
-      events.forEach(event => {
-        const kind = eventType(event);
-        const heading = technicalHeading(event, kind);
-        const label = eventLabel(event);
-        const failed = eventFailed(event, kind);
-        const key = `${kind}\u0000${failed ? '1' : '0'}\u0000${heading}\u0000${label}`;
-        const existing = byKey.get(key);
-        if (existing) { existing.count += 1; return; }
-        const group = { kind, heading, label, failed, count: 1, name: _safe(event.name) };
-        groups.push(group);
-        byKey.set(key, group);
-      });
-      return groups;
     }
 
     function technicalSummary(events, ok) {
@@ -249,52 +248,58 @@
       return `${minutes}m ${seconds % 60}s`;
     }
 
-    function refreshElapsed() {
-      const label = surface()?.querySelector('[data-code-elapsed]');
-      if (label && state.running && state.runStartedAt) label.textContent = `Working · ${elapsedLabel(state.runStartedAt)}`;
-      // The Activity pill up top AND the live turn head carry the same clock
-      // (owner: "working up top needs the timer for how long next to it").
-      if (state.running && state.runStartedAt) {
-        const clock = elapsedLabel(state.runStartedAt);
-        surface()?.querySelectorAll('[data-code-elapsed-top]').forEach(node => { node.textContent = clock; });
-      }
+    // What every work row needs from this file: the ONE failure predicate (so
+    // a row's tint and its ✓/✕ cannot disagree with the counters), the
+    // plain-words heading its body opens with.
+    function workRowOptions(saved) {
+      return {
+        esc, saved, root: state && state.projectRoot,
+        failed: event => eventFailed(event),
+        heading: event => technicalHeading(event, eventType(event)),
+      };
     }
 
-    function eventHtml(event, saved, count) {
+    // A note that comes straight after the person's steer is Thomas answering
+    // them, so it keeps his name. Looks back past work rows only.
+    function answersSteer(event, context) {
+      const list = (context && context.list) || (state && state.liveEvents) || [];
+      let at = list.indexOf(event) - 1;
+      while (at >= 0 && isTechnicalEvent(list[at])) at -= 1;
+      return at >= 0 && eventType(list[at]) === 'steering';
+    }
+
+    function eventHtml(event, saved, context) {
       const kind = eventType(event);
+      const agentRow = window.ThomasCodeAgentRows?.render(event, esc, saved); if (agentRow) return agentRow;
+      // What a run's controls wrote (a plan, a pause, a read steer, a question
+      // and its answer) draws as its own card; null means "not one of those".
+      const card = cards().controlEventHtml(event, { esc, saved, answered: context && context.answered });
+      if (card !== null) return card;
       if (isTechnicalEvent(event)) {
-        // The prototype contract (owner, 2026-08-10): a receipt is ONE line a
-        // non-technical reader can parse — humanized verb, first line of the
-        // result, a chevron — and the full output lives behind the click,
-        // expanding inline (the page scrolls; no box-in-a-box).
-        const failed = eventFailed(event, kind);
-        const heading = technicalHeading(event, kind);
-        // eventLabel is called directly rather than through a shared `label`
-        // const: raw tool output must be ESCAPED here, while prose below is
-        // rendered as inline markdown, and tests/test_the_run_report_escapes_
-        // what_thomas_wrote.py reads this branch on its own to confirm the two
-        // never swap. A shared const hides the escaper from that check.
-        const preview = eventLabel(event).split('\n')[0].trim().slice(0, 96);
-        const times = Number(count) > 1 ? `<span class="tc-code-receipt-count">×${Number(count)}</span>` : '';
-        // The ROW speaks human ("Wrote a file"), because the raw tool id told
-        // the owner nothing. The tool that produced it is not thrown away:
-        // it rides the row as data + tooltip and heads the expanded body, so
-        // "which tool did this" stays answerable without cluttering the line.
-        const toolName = _safe(event.name);
-        const toolAttr = toolName ? ` data-code-tool="${esc(toolName)}" title="${esc(toolName)}"` : '';
-        const toolLine = toolName ? `<span class="tc-code-receipt-tool">${esc(toolName)}</span>` : '';
-        return `<details class="tc-code-receipt tc-code-technical${failed ? ' is-error' : ''}" data-code-kind="${esc(kind)}"${toolAttr}${saved ? ' data-saved="true"' : ''}><summary><i class="ph ${failed ? 'ph-warning' : 'ph-check-circle'}"></i><strong>${esc(heading)}</strong>${times}<span class="tc-code-receipt-preview">${esc(preview)}</span><i class="ph ph-caret-down tc-code-receipt-chev"></i></summary>${toolLine}<pre>${esc(eventLabel(event))}</pre></details>`;
+        // One dim row a person can read -- "Edited  app.js  +11 −2" -- with the
+        // full output behind the click (the page scrolls; no box-in-a-box).
+        // eventLabel is handed over as TEXT, and the card escapes it into a
+        // <pre>: raw tool output never goes through the markdown renderers the
+        // prose below uses (tests/test_the_run_report_escapes_what_thomas_wrote.py
+        // reads this branch on its own to confirm the two never swap).
+        return cards().workRowHtml(event, {
+          ...workRowOptions(saved), text: eventLabel(event), recheck: Boolean(context && context.recheck),
+        });
       }
       const label = eventLabel(event);
       if (kind === 'say' || kind === 'final') {
-        // Thomas's own words ARE the feed: no kind chip, full text, prominent.
-        // A note past the char cap still folds behind one disclosure so a
-        // single monster paragraph cannot swamp the run - normal speech is far
-        // under the cap and never folds.
+        // Two voices. A mid-run note is an UPDATE: quiet text, no name, nothing
+        // to decide. Thomas's name (accent blue) marks the few things that are
+        // him speaking: the closing reply, a problem, a question, and the answer
+        // to a message you sent while he worked. A note past the char cap still
+        // folds behind one disclosure so a monster paragraph cannot swamp the run.
+        const speaks = kind === 'final' || answersSteer(event, context);
+        const head = speaks ? cards().headHtml({ esc }) : '';
+        const voice = speaks ? 'tc-code-say is-speaker' : 'tc-code-say is-update';
         if (label.length > MAX_PROGRESS_EVENT_CHARS) {
-          return `<div class="tc-code-say" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}>${progressHtml(`${label.slice(0, 360).trimEnd()}…`)}<details class="tc-code-progress-full"><summary>Show full update</summary><span>${progressHtml(label)}</span></details></div>`;
+          return `<div class="${voice}" data-code-kind="${esc(kind)}"${saved ? ' data-saved="true"' : ''}>${head}<div class="tc-code-say-text">${progressHtml(`${label.slice(0, 360).trimEnd()}…`)}<details class="tc-code-progress-full"><summary>Show full update</summary><span>${progressBodyHtml(label)}</span></details></div></div>`;
         }
-        return `<div class="tc-code-say" data-code-kind="${esc(kind)}"${event.delta ? ' data-code-delta="true"' : ''}${saved ? ' data-saved="true"' : ''}>${progressHtml(label)}</div>`;
+        return `<div class="${voice}" data-code-kind="${esc(kind)}"${event.delta ? ' data-code-delta="true"' : ''}${saved ? ' data-saved="true"' : ''}>${head}<div class="tc-code-say-text">${progressBodyHtml(label)}</div></div>`;
       }
       const content = label.length <= MAX_PROGRESS_EVENT_CHARS
         ? `<span>${progressHtml(label)}</span>`
@@ -303,45 +308,45 @@
     }
 
     function interleavedActivityHtml(events, saved) {
-      // Chronological truth, prototype layout: narration sits at the left
-      // edge, consecutive receipts cluster on a railed vertical UNDER the
-      // sentence they back up, and the rail breaks whenever Thomas talks.
-      // Runs read the same file dozens of times back to back — consecutive
-      // receipts with the same row face merge into one row with a count, and
-      // a cluster longer than eight rows folds its middle behind one line.
-      const MAX_OPEN_RECEIPTS = 8;
+      // Chronological truth: Thomas's sentences in order, and the work rows
+      // that back each one up clustered UNDER it until he talks again. Inside a
+      // cluster the cards fold a call into its result and show every row
+      // (ThomasCodeCards.workRowsHtml); nothing is merged or hidden.
+      //
+      // A question and its answer are one thing: the answer folds into the ask
+      // card, which then reads as the compact "You chose: …" line.
+      const answers = new Map();
+      events.forEach(event => {
+        if (eventType(event) === 'answered' && event.question_id) answers.set(String(event.question_id), event);
+      });
+      const asked = new Set(events.filter(event => eventType(event) === 'ask' && event.question_id).map(event => String(event.question_id)));
       const parts = [];
       let cluster = [];
-      const receiptKey = event => {
-        const kind = eventType(event);
-        return `${technicalHeading(event, kind)}\0${eventFailed(event, kind) ? 1 : 0}\0${eventLabel(event).split('\n')[0].trim().slice(0, 96)}`;
-      };
+      // A check after the first one in the same story is a recheck: Thomas
+      // changed something and looked again.
+      let checksSeen = 0;
       const flush = () => {
         if (!cluster.length) return;
-        const merged = [];
-        cluster.forEach(event => {
-          const key = receiptKey(event);
-          const last = merged[merged.length - 1];
-          if (last && last.key === key) { last.count += 1; return; }
-          merged.push({ key, event, count: 1 });
+        const paired = cards().pairToolCalls(cluster);
+        const rechecks = new Set();
+        paired.forEach(event => {
+          if (cards().workRowFace(event).verb !== 'Checked') return;
+          if (checksSeen) rechecks.add(event);
+          checksSeen += 1;
         });
-        const rows = merged.map(entry => eventHtml(entry.event, saved, entry.count));
-        let body;
-        if (rows.length > MAX_OPEN_RECEIPTS) {
-          const hidden = rows.slice(3, rows.length - 2);
-          body = rows.slice(0, 3).join('')
-            + `<details class="tc-code-receipts-more"><summary>${hidden.length} more steps</summary>${hidden.join('')}</details>`
-            + rows.slice(rows.length - 2).join('');
-        } else {
-          body = rows.join('');
-        }
-        parts.push(`<div class="tc-code-receipts">${body}</div>`);
+        parts.push(cards().workRowsHtml(paired, {
+          ...workRowOptions(saved), textOf: eventLabel, recheck: event => rechecks.has(event),
+        }));
         cluster = [];
       };
       events.forEach(event => {
+        const kind = eventType(event);
+        if (kind === 'plan') return;  // the STEPS card, never an inline row
+        if (!saved && (kind === 'ask' || kind === 'answered')) return;  // live: the question's own slot
+        if (kind === 'answered' && asked.has(String(event.question_id || ''))) return;
         if (isTechnicalEvent(event)) { cluster.push(event); return; }
         flush();
-        parts.push(eventHtml(event, saved));
+        parts.push(eventHtml(event, saved, { list: events, answered: kind === 'ask' ? answers.get(String(event.question_id || '')) : null }));
       });
       flush();
       return parts.join('');
@@ -350,7 +355,7 @@
     function finalReplyEvent(events, turn) {
       const explicit = events.filter(event => eventType(event) === 'final').at(-1);
       if (explicit) return explicit;
-      if (turn && turn.ok) return events.filter(event => eventType(event) === 'say').at(-1) || null;
+      if (turn && turn.ok) return events.filter(event => eventType(event) === 'say' && !event.agent_id).at(-1) || null;
       return null;
     }
 
@@ -367,19 +372,23 @@
       // because it compares against the LAST final only, and this pair matched an
       // earlier one.
       //
-      // Deduped on the label rather than by dropping every non-last `final`,
-      // because the two finals in that run said different things and one of them
-      // was the only place its text appeared. Keeping the FIRST occurrence
-      // preserves the content and drops only the verbatim repeat.
-      //
-      // Technical events are exempt: repeated tool rows are the log, and
-      // collapsing them would hide real repetition rather than noise.
-      const seen = new Set();
-      const repeats = new Map();
-      const kept = events.filter(event => {
+      // Only a `final` whose text a `say` already carried is dropped, not every
+      // non-last `final`: the two finals in that run said different things and
+      // one of them was the only place its text appeared. Nothing else is
+      // merged -- a note said twice is shown twice, in order, like a tool row.
+      // A plan draws nothing inline, so it leaves the list here, and so does a
+      // helper's work (the drawer's), live and saved alike.
+      const said = new Set(events.filter(event => eventType(event) === 'say').map(event => eventSourceKey(event, eventLabel(event))));
+      const kept = (rows() ? rows().forTranscript(cards().withStepNotes(events)) : cards().withStepNotes(events)).filter(event => {
         if (event === finalEvent) return false;
-        if (finalText && eventType(event) === 'say' && eventLabel(event) === finalText) return false;
+        if (eventType(event) === 'final' && said.has(eventSourceKey(event, eventLabel(event)))) return false;
+        if (finalText && eventType(event) === 'say' && eventSourceKey(event) === eventSourceKey(finalEvent) && eventLabel(event) === finalText) return false;
+        // The engine's own closing summary ("dispatched via GPT (...)", "GPT replied without
+        // changing files") is bookkeeping, not part of the conversation: the proof card owns it.
+        if (eventType(event) === 'meta' && (event.terminal === true || /^\s*(?:dispatched via|GPT replied)/i.test(String(eventLabel(event) || '')))) return false;
         if (isTechnicalEvent(event)) return true;
+        if (eventType(event) === 'plan') return false;
+        if (CARD_KINDS.has(eventType(event))) return true;
         const label = String(eventLabel(event) || '').trim();
         // A row whose text only repeats its own heading says nothing. The stream's
         // `done` event carries the literal string "done", so every run grew a
@@ -389,83 +398,13 @@
         //
         // Keyed on the label adding nothing to its kind, not on the kind itself,
         // so a `done` event that ever carries real text still gets its row. Placed
-        // here rather than in narrativeActivityHtml because the LIVE feed does not
-        // go through that function -- it maps eventHtml straight off this list, so
-        // a filter over there fixed the saved transcript and left the live one
-        // untouched. This is the seam both paths share.
-        if (!label || label.toLowerCase() === String(eventKind(event) || '').trim().toLowerCase()) return false;
-        if (seen.has(label)) {
-          repeats.set(label, (repeats.get(label) || 1) + 1);
-          return false;
-        }
-        seen.add(label);
-        return true;
+        // here rather than in a saved-only renderer because the LIVE feed maps
+        // eventHtml straight off this list -- a filter anywhere else fixed the
+        // saved transcript and left the live one untouched. This is the seam both
+        // paths share.
+        return Boolean(label) && label.toLowerCase() !== String(eventKind(event) || '').trim().toLowerCase();
       });
-      // Keep the collapse, keep the count.
-      //
-      // The exemption above says repeated tool rows must survive because
-      // "collapsing them would hide real repetition rather than noise". That
-      // argument does not stop being true for the notes the OWNER reads. A run
-      // that announced "Running the test suite." five times looped five times;
-      // with the repeats dropped and nothing in their place it read as one clean
-      // step, and the clean step is the wrong story.
-      //
-      // So the feed stays short -- one row per distinct note -- and the row says
-      // how many times it happened. Annotated on a copy, never on the stored
-      // event, because this list is rendered repeatedly and mutating it would
-      // multiply the counter on every repaint.
-      if (!repeats.size) return kept;
-      return kept.map(event => {
-        const times = repeats.get(String(eventLabel(event) || '').trim());
-        return times ? { ...event, text: `${String(eventLabel(event) || '').trim()} ×${times}` } : event;
-      });
-    }
-
-    function narrativeActivityHtml(events, saved) {
-      const narrative = events.filter(event => !isTechnicalEvent(event));
-      const progressIndexes = narrative
-        .map((event, index) => ['insight', 'planning', 'say'].includes(eventType(event)) ? index : -1)
-        .filter(index => index >= 0);
-      if (progressIndexes.length <= MAX_VISIBLE_PROGRESS_EVENTS) {
-        return narrative.map(event => eventHtml(event, saved)).join('');
-      }
-      const visibleProgress = new Set([
-        progressIndexes[0],
-        ...progressIndexes.slice(-(MAX_VISIBLE_PROGRESS_EVENTS - 1)),
-      ]);
-      const hiddenProgress = progressIndexes.filter(index => !visibleProgress.has(index));
-      const hiddenAt = hiddenProgress[0];
-      return narrative.map((event, index) => {
-        if (index === hiddenAt) {
-          const rows = hiddenProgress.map(hiddenIndex => eventHtml(narrative[hiddenIndex], saved)).join('');
-          return `<details class="tc-code-progress-history"><summary>${hiddenProgress.length} earlier progress ${hiddenProgress.length === 1 ? 'note' : 'notes'}</summary><div>${rows}</div></details>`;
-        }
-        return hiddenProgress.includes(index) ? '' : eventHtml(event, saved);
-      }).join('');
-    }
-
-    function technicalActivityHtml(events, saved, ok) {
-      if (!events.length) return '';
-      const groups = groupedTechnicalEvents(events);
-      const rows = groups.map(group => {
-        const count = group.count > 1 ? `<span class="tc-code-tech-count">×${group.count}</span>` : '';
-        // Human heading, tool still named (owner redline 2026-08-10): the
-        // reader gets "Wrote a file", and "which tool" stays answerable.
-        const tool = group.name ? ` data-code-tool="${esc(group.name)}" title="${esc(group.name)}"` : '';
-        const toolTag = group.name ? `<span class="tc-code-receipt-tool">${esc(group.name)}</span>` : '';
-        return `<div class="tc-code-technical${group.failed ? ' is-error' : ''}" data-code-kind="${esc(group.kind)}"${tool}><i class="ph ${group.failed ? 'ph-warning' : 'ph-check-circle'}"></i><div><strong>${esc(group.heading)}${count}</strong>${toolTag}<code>${esc(group.label)}</code></div></div>`;
-      }).join('');
-      const issueCount = events.filter(event => eventFailed(event)).length;
-      // The warning icon and the has-issues tint belong to runs that FAILED.
-      // On an ok run the same errors are recovered attempts (see
-      // technicalSummary), and an alarm over a delivered result teaches the
-      // reader to ignore the alarm. Full detail stays behind Show details
-      // either way -- nothing is dropped, only labelled by outcome.
-      const alarming = issueCount > 0 && ok !== true;
-      const status = !saved && state.running && state.runStartedAt
-        ? `<span data-code-elapsed>Working · ${esc(elapsedLabel(state.runStartedAt))}</span>`
-        : 'Show details';
-      return `<details class="tc-code-saved-activity${alarming ? ' has-issues' : ''}"${saved ? ' data-saved="true"' : ''}><summary><span class="tc-code-activity-summary"><i class="ph ${alarming ? 'ph-warning' : 'ph-terminal-window'}"></i>${esc(technicalSummary(events, ok))}</span><span>${status}</span></summary><div class="tc-code-technical-log">${rows}</div></details>`;
+      return kept;
     }
 
     // A turn persisted before the store normalized transcript shapes can carry
@@ -484,34 +423,65 @@
       return String(raw || '');
     }
 
+    function eventSourceKey(event, label = '') {
+      return JSON.stringify(['agent_id', 'agent_title', 'agent_mode', 'model', 'team_id', 'parent_agent_id'].map(key => event[key] || '').concat(label));
+    }
+
+    // What a saved line keeps beyond its kind and text: who wrote it, and what
+    // the rows and cards read (times, paths, +/- counts, the ids tying a steer
+    // or an answer to its message). Malformed values stay out.
+    const KEPT_TEXT = ['agent_id', 'agent_title', 'agent_mode', 'model', 'receipt', 'team_id', 'parent_agent_id',
+      'agent_state', 'path', 'steer_id', 'question_id', 'question', 'answer', 'command', 'check'];
+    const KEPT_COUNTS = ['ts', 'added', 'removed', 'paused_ms'];
+    function keepFields(parsed, event) {
+      for (const key of KEPT_TEXT) if (typeof parsed[key] === 'string' && parsed[key].trim()) event[key] = parsed[key];
+      for (const key of KEPT_COUNTS) if (Number.isInteger(parsed[key]) && parsed[key] >= 0) event[key] = parsed[key];
+      for (const key of ['items', 'options']) if (Array.isArray(parsed[key])) event[key] = parsed[key];
+      if (typeof parsed.allow_free_text === 'boolean') event.allow_free_text = parsed.allow_free_text;
+      return event;
+    }
+
     function transcriptEvents(turn) {
       const events = [];
       const terminalTracker = { name: '' };
       // Tracks whether a tool_result has been seen yet, so only the FIRST one
       // can be flagged as the expected read probe of an empty project.
       let sawToolResult = false;
+      // When each step STARTED, by who ran it and which tool: the GPT engine
+      // writes a `tool_started` line ahead of a long step, and its time is what
+      // lets the result's row say how long the step took.
+      const starts = new Map();
+      const startKey = event => `${eventSourceKey(event)}\u0000${event.name || ''}`;
       transcriptText(turn).split('\n').forEach(raw => {
         const line = raw.trim(); if (!line) return;
         let parsed = null;
         if (line.startsWith('{')) {
           try { parsed = JSON.parse(line); } catch (error) { parsed = null; }
         }
-        const event = annotateTerminalEvent(parsed && parsed.fc ? { type: 'output', kind: parsed.fc, name: parsed.name || '', text: parsed.text || '', is_error: parsed.is_error === true, delta: parsed.delta === true } : { type: 'output', text: raw }, terminalTracker);
-        if (eventType(event) === 'tool_result') {
+        if (parsed && parsed.fc === 'tool_started') {
+          // A watcher's line: the step's result is its row. Only its clock is kept.
+          const started = keepFields(parsed, { name: parsed.name || '' });
+          if (started.ts != null) starts.set(startKey(started), started.ts);
+          return;
+        }
+        const event = parsed && parsed.fc ? { type: 'output', kind: parsed.fc, name: parsed.name || '', text: parsed.text || '', is_error: parsed.is_error === true, delta: parsed.delta === true } : { type: 'output', text: raw };
+        if (parsed?.fc) keepFields(parsed, event);
+        if (eventType(annotateTerminalEvent(event, terminalTracker)) === 'tool_result') {
           flagExpectedProbe(event, sawToolResult);
           sawToolResult = true;
+          if (starts.has(startKey(event))) { event.started_ts = starts.get(startKey(event)); starts.delete(startKey(event)); }
         }
         const previous = events[events.length - 1];
-        const priorSayText = events.filter(item => item.kind === 'say' && item.delta).map(item => item.text || '').join('');
-        if (event.kind === 'say' && event.delta && previous && previous.kind === 'say' && previous.delta) previous.text += event.text;
+        const priorSayText = events.filter(item => item.kind === 'say' && item.delta && eventSourceKey(event) === eventSourceKey(item)).map(item => item.text || '').join('');
+        if (event.kind === 'say' && event.delta && previous && previous.kind === 'say' && previous.delta && eventSourceKey(event) === eventSourceKey(previous)) previous.text += event.text;
         else if (event.kind === 'say' && !event.delta && priorSayText && eventLabel(event) === priorSayText) return;
-        else if (eventLabel(event) && (isTechnicalEvent(event) || !previous || event.kind !== previous.kind || eventLabel(event) !== eventLabel(previous))) events.push(event);
+        else if (eventLabel(event) && (isTechnicalEvent(event) || CARD_KINDS.has(event.kind) || !previous || eventSourceKey(event) !== eventSourceKey(previous) || event.kind !== previous.kind || eventLabel(event) !== eventLabel(previous))) events.push(event);
       });
       return events;
     }
 
     function failureSummary(turn, events) {
-      if (turn.ok) return String(turn.reason || '').trim() || 'Verified Code result';
+      if (turn.ok) return String(turn.reason || '').trim() || 'Verified Build result';
       const labels = events.map(eventLabel);
       // Checked BEFORE the verification branch, because a run that was cut off did
       // not "fail its repair attempts" -- it never got to finish them. Being
@@ -575,7 +545,7 @@
       // Measured on four consecutive runs of the same goal (15:42, 15:44, 15:46,
       // 15:48). Each recorded exactly three events -- Thomas stating its plan, the
       // project structure, "(empty directory)" -- then exited 1 with no error
-      // event at all. Every one of them told the owner "The Code task stopped
+      // event at all. Every one of them told the owner "The Build task stopped
       // before it finished." and nothing else, four times over, while `reason`
       // held "exited 1" the whole time.
       //
@@ -585,13 +555,27 @@
       // Still no invented cause -- there genuinely was not one.
       const ending = String((turn && turn.reason) || '').trim();
       return ending
-        ? `The Code task stopped before it finished — ${ending}, with no error recorded.`
-        : 'The Code task stopped before it finished.';
+        ? `The Build task stopped before it finished — ${ending}, with no error recorded.`
+        : 'The Build task stopped before it finished.';
     }
 
     function turnHtml(turn) {
-      if (turn.role === 'user') return `<article class="tc-code-turn is-user"><div>${esc(turn.text)}</div></article>`;
-      const changedCount = (turn.changed_files || []).filter(file => !isInternalResultPath(file)).length;
+      if (turn.role === 'user') {
+        const text = String(turn.text || '');
+        if (text.startsWith(CONTINUATION_PREFIX)) {
+          const title = text.split('\n', 1)[0].split(/\s+(?:toward|on) the goal\b/, 1)[0];
+          const secondParagraph = text.split('\n\n', 3)[1] || '';
+          const steer = secondParagraph.startsWith(STEER_LINE)
+            ? `<div class="tc-code-autopilot-steer">${esc(secondParagraph)}</div>` : '';
+          return `<aside class="tc-code-autopilot-note"><span>${esc(title)}</span>${steer}<details><summary>Full message</summary><div class="tc-code-autopilot-full">${esc(text)}</div></details></aside>`;
+        }
+        // Your words, in one bright bubble with no name over it: whose they are
+        // is plain from the bubble itself.
+        // What you attached sits above your words: live from the pending message, or remembered by name.
+        const strip = window.ThomasAttachmentStrip;
+        const attached = Array.isArray(turn.attachments) && turn.attachments.length ? turn.attachments : (strip ? strip.recall(text) : []);
+        return `<article class="tc-code-turn is-user">${strip ? strip.html(attached) : ''}<div class="tc-code-user-text">${esc(text)}</div></article>`;
+      }
       const events = transcriptEvents(turn);
       const finalEvent = finalReplyEvent(events, turn);
       const activityEvents = progressEvents(events, finalEvent);
@@ -609,26 +593,12 @@
         || /\bstopped (?:by you|for your steering update)\b/i.test(String(turn.reason || ''));
       let replySection;
       if (turn.ok) {
-        // Keep "passed Thomas's verification" -- it is EARNED where this fires,
-        // and I tried to remove it before understanding that.
-        //
-        // This fallback has two routes. The one that occurs is `staleLimitReply`:
-        // the model claims it could not act ("no files were changed and
-        // verification has not been claimed") while the same transcript carries
-        // BROWSER_SMOKE_OK and "engine checks passed" and the turn is ok with a
-        // changed file. The model's reply is simply wrong, engine evidence wins,
-        // and the claim is true. `proveEvidenceAndRefresh` pins exactly that.
-        //
-        // The other route -- ok with no `final` event at all -- would claim a
-        // verification on the strength of `turn.ok`, which is only exit 0 with
-        // files changed. Measured across 56 agent turns: 0 of 41 successful ones
-        // lacked a final event, so it does not happen today. If it ever does, the
-        // fix is to condition the wording on real passing evidence, NOT to drop
-        // it -- dropping it throws away the correction in the case that matters.
-        replySection = `<div class="tc-code-reply">${replyHtml(answer || 'Finished the requested changes and passed Thomas’s verification.')}</div>`;
+        // Do not infer verification from turn.ok; the report card owns check results.
+        const fallback = 'Finished the requested changes.';
+        replySection = replyBlockHtml(answer || fallback, { report: turn.report, ...cards().turnMeta(turn, events), copy: true });
       } else if (wasStopped) {
         // A stop the user asked for is not a failure and must not wear the red
-        // pipeline. This rendered through failureSummary -- "The Code task
+        // pipeline. This rendered through failureSummary -- "The Build task
         // stopped before it finished — stopped by you..." in error styling --
         // which scolded the reader for their own deliberate click. `is-stopped`
         // instead of `is-error`: unstyled today, which is exactly the neutral
@@ -639,7 +609,7 @@
         const note = reason
           ? `${reason.charAt(0).toUpperCase()}${reason.slice(1)}. Anything already changed is in Outputs with Keep/Revert.`
           : 'Stopped — you interrupted this run. Anything already changed is in Outputs with Keep/Revert.';
-        replySection = `${answer ? `<div class="tc-code-reply">${replyHtml(answer)}</div>` : ''}<div class="tc-code-reply is-stopped">${esc(note)}</div>`;
+        replySection = `${answer ? replyBlockHtml(answer, { report: turn.report, ...cards().turnMeta(turn, events), copy: true }) : ''}<div class="tc-code-reply is-stopped">${esc(note)}</div>`;
       } else {
         // NEVER suppress a produced answer. A run filed as failed whose
         // transcript nevertheless carries a `final` event with text rendered
@@ -651,45 +621,58 @@
         // alongside it, never instead of it.
         const failure = failureSummary(turn, events);
         replySection = answer
-          ? `<div class="tc-code-reply">${replyHtml(answer)}</div><div class="tc-code-reply is-error">${replyHtml(failure)}</div>`
-          : `<div class="tc-code-reply is-error">${replyHtml(failure)}</div>`;
+          ? `${replyBlockHtml(answer, { report: turn.report, ...cards().turnMeta(turn, events), copy: true })}<div class="tc-code-reply is-error">${replyHtml(failure)}</div>`
+          : `<div class="tc-code-reply is-error">${cards().headHtml({ esc })}<div class="tc-code-reply-text">${replyHtml(failure)}</div></div>`;
       }
+      // Design 4a's order: the work, dim, every row in order (nothing folds), the
+      // Verifier's card, the reply, what he made. Each prose block from Thomas
+      // carries its own head, so the turn has none of its own.
       const interleaved = interleavedActivityHtml(activityEvents, true);
-      const resultCount = (turn.artifacts || []).filter(artifact => !isInternalResultPath(artifact.file)).length;
-      // An error the run RECOVERED from is a failed attempt, not an issue.
-      // The old collapsed activity block carried that framing; the inline feed
-      // shows the red rows on their own, so without this line a successful run
-      // reads as alarming. Same wording, same honesty rule (guarded by
-      // test_a_failed_run_still_shows_the_answer_it_produced).
       const technicalEvents = activityEvents.filter(isTechnicalEvent);
+      // An error the run RECOVERED from is a failed attempt, not an issue. The
+      // rows show the red ones on their own, so without this line a successful
+      // run reads as alarming. Same wording, same honesty rule (guarded by
+      // test_a_failed_run_still_shows_the_answer_it_produced).
       const recoveredNote = technicalEvents.some(event => eventFailed(event))
-        ? `<div class="tc-code-attempt-note">${esc(technicalSummary(technicalEvents, turn.ok === true))}</div>`
-        : '';
-      // The turn ends in a CLOSING SECTION the owner can feel (2026-08-10):
-      // activity first, then the verdict and the change list, then a labelled
-      // horizontal rule — "this is the end of the reply" — and below it only
-      // the final words and the deliverable.
-      const changedList = (turn.changed_files || []).filter(file => !isInternalResultPath(file));
-      const changesBlock = changedList.length
-        ? `<details class="tc-code-artifact-changes"><summary>See every change · ${changedList.length} file${changedList.length === 1 ? '' : 's'}</summary><div>${changedList.map(file => `<span class="tc-code-change-row"><i class="ph ph-file-text" aria-hidden="true"></i>${esc(String(file))}</span>`).join('')}</div></details>`
-        : '';
-      const closingLabel = turn.ok ? 'Work completed' : (wasStopped ? 'Stopped here' : 'Run ended');
-      const closing = `<div class="tc-code-closing"><span class="tc-code-closing-label">${esc(closingLabel)}</span></div>`;
-      return `<article class="tc-code-turn is-agent"><div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : ANVIL_SVG}</span><strong>Thomas</strong><small>${esc(turn.model || 'Code')}</small><button class="tc-code-copy" data-code-copy-reply type="button" aria-label="Copy Thomas reply"><i class="ph ph-copy"></i></button></div><div class="tc-code-turn-body">${interleaved}${recoveredNote}${codeResults().runReportHtml(turn.report)}${changesBlock}${closing}${replySection}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}</div></article>`;
+        ? technicalSummary(technicalEvents, turn.ok === true) : '';
+      const plan = cards().newestPlan(events);
+      // A plan is the pinned STEPS card (top right); without one, the team's newest tally, one quiet line.
+      const steps = plan ? '' : (rows() ? rows().teamHtml(rows().latestTeamProgress(events), esc) : '');
+      const work = steps + interleaved + (recoveredNote ? `<div class="tc-code-attempt-note">${esc(recoveredNote)}</div>` : '');
+      // Fix it / Show the trace / Keep as is go under the reply that explains the
+      // failure (design 4c), so the report is asked for its card alone.
+      return `<article class="tc-code-turn is-agent" data-code-turn-key="${esc(turn.run_id || turn.ts || '')}"><div class="tc-code-turn-body">${work}${codeResults().runReportHtml(turn.report, { actions: false })}${replySection}${cards().workedLine(events, esc)}${cards().proofActionsHtml({ esc, report: turn.report })}${codeResults().artifactCardsHtml(turn, turn.run_id || turn.ts || '0')}</div></article>`;
     }
 
-    // Thomas writes markdown in his Code replies -- 16 of 17 real replies carry it
-    // -- and this surface printed it raw: "Built it as a standalone **Nova**
-    // calculator experience in `index.html`." The same prose in Chat renders
-    // properly, because Chat runs it through mdToHtml. Same model, same sentence,
-    // two treatments.
-    //
-    // Uses Chat's renderer rather than a second copy: `_mdInline` escapes first
-    // and only then introduces tags, so untrusted model text stays inert. The
-    // fallback is the plain escaper, which is what the Node contract harness gets
-    // -- it loads this module with no shell around it, so `window.ThomasMarkdown`
-    // is absent there and the reply must still render safely.
-    function replyHtml(text) {
+    // Thomas's answer: his head (tile and name, a dim meta line when there is
+    // one, and the copy button for a saved turn) over the rendered text.
+    function replyBlockHtml(text, { report, meta, metaTitle, copy } = {}) {
+      const head = cards().headHtml({ esc, meta, metaTitle, copy });
+      return `<div class="tc-code-reply">${head}<div class="tc-code-reply-text">${replyHtml(text, report)}</div></div>`;
+    }
+
+    // Reuse Chat's safe markdown renderer, escaping plainly if it is unavailable.
+    function replyHtml(text, report) {
+      let clean = String(text || '').replace(/^TITLE:[^\n]*(?:\n|$)/gim, '').replace(/^(?:DONE|NEXT):\s*/gim, '');
+      // The report card already lists missing evidence and grades the checks.
+      // Do not echo a second, potentially contradictory status in the reply.
+      if (report) {
+        clean = clean.replace(/^Unchecked \(no evidence either way\):[^\n]*(?:\n- [^\n]*)*/gim, '');
+        clean = clean.replace(/^Verification:[^\n]*(?:\n|$)/gim, '');
+      } else {
+        clean = clean.replace(/^Unchecked \(no evidence either way\):[ \t]*(.+)$/gim, (_match, claim) =>
+          `I haven't checked ${claim.trim().replace(/[.!?]+$/, '').replace(/^./, first => first.toLowerCase())} yet.`);
+        clean = clean.replace(/^Unchecked \(no evidence either way\):[ \t]*\r?\n((?:- [^\n]*\r?\n?)+)/gim,
+          (_match, items) => items.trim().replace(/^- /gm, 'I haven\'t checked: '));
+      }
+      clean = clean.replace(/\bVerification:\s*/gi, '');
+      // The engine reads the closing EVIDENCE:/VERIFY: lines from the reply, so they
+      // stay in it; the person is shown prose only. A stray ::: fence line is dropped.
+      clean = clean.replace(/^[ \t]*`?(?:EVIDENCE|VERIFY):.*$/gim, '').replace(/^[ \t]*:{3,}[ \t\w-]*$/gm, '').replace(/\n{3,}/g, '\n\n');
+      text = clean.trim();
+      // The reply is one markdown block through the display kernel: same HTML as before, and the words if it cannot draw.
+      const display = typeof window !== 'undefined' && window.ThomasDisplay;
+      if (display && text && display.has('markdown')) return display.renderBlocks([display.blocks.markdown(text)]);
       const markdown = typeof window !== 'undefined' && window.ThomasMarkdown;
       if (markdown && typeof markdown.mdToHtml === 'function') return markdown.mdToHtml(text);
       return esc(text);
@@ -710,6 +693,20 @@
       return esc(text);
     }
 
+    // A pasted diff or file in an update can run to hundreds of lines and bury
+    // the narrative around it. A fenced block longer than FOLD_CODE_LINES folds
+    // behind its own disclosure; shorter blocks and all prose render as before.
+    // split() with a capture group puts the fences at the odd indexes.
+    const FOLD_CODE_LINES = 12;
+    function progressBodyHtml(text) {
+      return String(text || '').split(/(```[\s\S]*?```)/).map((part, index) => {
+        if (index % 2 === 0) return part ? progressHtml(part) : '';
+        const lines = part.split('\n').length - 2;
+        if (lines <= FOLD_CODE_LINES) return progressHtml(part);
+        return `<details class="tc-code-progress-full"><summary>Show ${lines} lines of code</summary>${progressHtml(part)}</details>`;
+      }).join('');
+    }
+
     // A blank Code surface used to be one line of encouragement above 700px of
     // empty space -- measured on a 1920x1080 screen, the hero sat at the top and
     // nothing else occupied the view down to the composer. It told you to
@@ -728,6 +725,8 @@
     ];
 
     function emptyStateHtml() {
+      // A slideshow of how Thomas is doing, with the starters as its last slide (unified_code_home.js).
+      if (window.ThomasCodeHome) return window.ThomasCodeHome.html(esc, CODE_STARTERS, window.ThomasIcons ? window.ThomasIcons.face('build', 15) : ANVIL_SVG);
       const cards = CODE_STARTERS.map(s => `<button class="tc-code-starter" type="button" data-code-starter="${esc(s.text)}">
       <i class="ph ${s.icon}" aria-hidden="true"></i>
       <span class="tc-code-starter-title">${esc(s.title)}</span>
@@ -768,24 +767,23 @@
         area.remove();
       }
       if (button) {
-        const icon = button.querySelector('i');
         button.title = copied ? 'Copied' : 'Copy failed';
         button.setAttribute('aria-label', button.title);
-        if (icon && copied) icon.className = 'ph ph-check';
+        button.textContent = copied ? 'Copied' : 'Copy';
         setTimeout(() => {
           button.title = 'Copy reply';
           button.setAttribute('aria-label', 'Copy reply');
-          if (icon) icon.className = 'ph ph-copy';
+          button.textContent = 'Copy';
         }, 1400);
       }
       return copied;
     }
 
     return {
-      eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed,
-      eventHtml, finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
-      elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents,
-      flagExpectedProbe, interleavedActivityHtml, emptyStateHtml, copyReplyText,
+      eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent,
+      eventHtml, finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml, replyBlockHtml,
+      elapsedLabel, transcriptEvents, transcriptText, flagExpectedProbe, interleavedActivityHtml,
+      emptyStateHtml, copyReplyText, workRowOptions,
     };
   }
 

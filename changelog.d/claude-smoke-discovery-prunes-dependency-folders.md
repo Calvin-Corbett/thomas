@@ -1,0 +1,3 @@
+### Fixed
+
+- **Smoke discovery no longer walks dependency folders.** Finding the pages that load a changed asset used to read every HTML file under the project, including `.venv`, `.git`, `node_modules`, `.thomas` and the worktree copies under `.claude`; on the Thomas checkout the two globs alone took 92 s and one web check took ten minutes, failing every test timeout, and a project with a large `node_modules` paid the same on every web check. Both globs now go through the pruned project walk the orphan scan already used, filtered by suffix before any stat, so the same check finishes in under four seconds. A page in a normal folder is still found; one inside `node_modules` is not.

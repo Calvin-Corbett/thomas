@@ -170,6 +170,13 @@ def compute_max_passes(level: Any, base_iterations: int | None) -> int:
 
     Returns:
         Clamped number of passes.
+
+    An Autopilot self-development multiplier used to live here, applied
+    before the caller's per-model cap -- so for a capped model (the
+    openai_codex/gpt-5.6-sol default caps at 30) the cap won every time and
+    the multiplier never reached the live worker (fix round 1, C1: Ruling W).
+    That multiplier now lives in thomas/server/worker_runtime.py, applied to
+    ``max_iters`` AFTER the cap.
     """
     applied = normalize_token_economy_level(level)
     multiplier = _PASS_MULTIPLIERS[applied]

@@ -1,4 +1,4 @@
-// What a Code project folder is CALLED, and the chip that says it.
+// What a Build project folder is CALLED, and the chip that says it.
 //
 // Split out of unified_code_mode.js, which had grown past the 1500-line ceiling
 // in thomas/_architecture.py. This is a real seam rather than a line-count
@@ -85,17 +85,30 @@
   // catalogue. Failure is silent on purpose -- every name here has a folder
   // basename behind it, so an unreachable catalogue costs specificity, not
   // correctness.
+  const NAMES_KEY = 'thomas_project_names_v1';
   async function loadProjectNames() {
-    let projects;
+    // Names seen last time are used at once, so the project chip does not read as a folder name and then change.
+    if (!loadProjectNames.primed) {
+      loadProjectNames.primed = true;
+      try {
+        const saved = JSON.parse(localStorage.getItem(NAMES_KEY) || '[]');
+        if (Array.isArray(saved) && saved.length) {
+          saved.forEach(pair => rememberProjectName(pair[0], pair[1]));
+          updateProjectButton();
+        }
+      } catch (error) { /* an unreadable copy is ignored */ }
+    }
+    let data;
     try {
       const response = await fetch('/api/local/projects');
       if (!response.ok) return false;
-      const data = await response.json();
-      projects = Array.isArray(data && data.projects) ? data.projects : null;
+      data = await response.json();
     } catch (error) { return false; }
-    if (!projects) return false;
-    projects.forEach(project => rememberProjectName(project.root_path, project.request_title || project.name));
+    if (!Array.isArray(data && data.projects)) return false;
+    data.projects.forEach(project => rememberProjectName(project.root_path, project.request_title || project.name));
+    try { localStorage.setItem(NAMES_KEY, JSON.stringify(data.projects.slice(0, 300).map(project => [project.root_path, project.request_title || project.name]))); } catch (error) { /* just not remembered */ }
     updateProjectButton();
+    if (data.refreshing) setTimeout(loadProjectNames, 800);
     return true;
   }
 
@@ -147,7 +160,25 @@
     return base;
   }
 
+  // Build's header: the project chip, then the task's name as plain text. An
+  // empty field hides itself (chat.html shows the slot only in Build).
+  function updateBuildHeader() {
+    const header = document.getElementById('tc-code-header');
+    if (!header || typeof header.querySelector !== 'function') return;
+    const conversation = state.conversation || {};
+    const row = (state.conversations || []).find(item => item.id === state.activeId) || {};
+    const fill = (selector, text) => {
+      const node = header.querySelector(selector);
+      if (node && node.textContent !== text) node.textContent = text;
+    };
+    fill('[data-code-header-project]', state.projectRoot ? projectDisplayLabel() : '');
+    // The same short name the sidebar row shows (its model-named title), not the raw first request.
+    const named = state.activeId ? window.ThomasSidebarHistory?.displayTitle?.(state.activeId) : '';
+    fill('[data-code-header-title]', state.activeId ? String(named || row.title || conversation.title || '') : '');
+  }
+
   function updateProjectButton() {
+    updateBuildHeader();
     const button = document.getElementById('tc-code-project-btn');
     if (!button) return;
     const span = document.getElementById('tc-code-project-label');
@@ -185,14 +216,50 @@
       closeSource, esc, finishBusy, host, lifecycle, loadConversation, loadTree, openStream,
       pushLiveEvent, recordError, recordPreferenceWarning, refresh, render, safely,
     } = deps;
+    let recoveredPoll = null;
+
+    function showRecoveredPraxis(status, cid) {
+      const recovery = status && status.praxis_recovered;
+      if (status?.running === true || !recovery || recovery.lead_attached !== false || !recovery.run_id) return false;
+      if (recoveredPoll) clearTimeout(recoveredPoll);
+      recoveredPoll = null;
+      state.runId = recovery.run_id;
+      state.runStatus = 'disconnected';
+      state.liveEvents = state.liveEvents.filter(event => event.praxis_recovered !== true);
+      pushLiveEvent({ type: 'disconnected', praxis_recovered: true,
+        text: 'Thomas restarted during this task. Its helper steps from before the restart are shown below. The main thread stopped, so start a new Build run to continue.' });
+      const agents = Array.isArray(recovery.agents) ? recovery.agents : [];
+      agents.forEach(agent => pushLiveEvent({
+        type: 'agent_status', kind: 'agent_status', praxis_recovered: true,
+        agent_id: agent.agent_id, agent_title: agent.title, agent_mode: agent.kind,
+        agent_state: agent.state, model: agent.model_used,
+        text: agent.state === 'interrupted' ? 'Interrupted on restart; needs a new Build run.' : `Recovered helper · ${agent.attempts || 0} attempt(s)`,
+      }));
+      render();
+      // The lead has stopped, but its recovered read-only children can still
+      // change state. Poll only their status; never reopen the lead stream.
+      const terminal = new Set(['completed', 'failed', 'stopped', 'cancelled', 'interrupted']);
+      if (agents.some(agent => !terminal.has(agent.state))) {
+        const poll = async () => {
+          if (state.activeId !== cid || state.runId !== recovery.run_id || state.running) return;
+          try {
+            const response = await fetch(`/api/evolve/agent/status?conversation_id=${encodeURIComponent(cid)}`);
+            if (response.ok && showRecoveredPraxis(await response.json(), cid)) return;
+          } catch (_) { /* A transient status failure can clear on the next poll. */ }
+          recoveredPoll = setTimeout(poll, 2000);
+        };
+        recoveredPoll = setTimeout(poll, 2000);
+      }
+      return true;
+    }
 
     // Parallel runs (Codex-style): switching away from a RUNNING conversation
     // parks it — the backend keeps working, and opening that conversation again
-    // reattaches via its run_id + cursor (same machinery as reload-resume).
+    // reattaches via its run_id (same machinery as reload-resume).
     function parkActiveRun() {
       if (!state.running || !state.activeId || !state.runId) return;
       state.parkedRuns = state.parkedRuns || {};
-      state.parkedRuns[state.activeId] = { runId: state.runId, startedAt: state.runStartedAt || Date.now(), cursor: state.eventCursor || 0 };
+      state.parkedRuns[state.activeId] = { runId: state.runId, startedAt: state.runStartedAt || Date.now() };
       closeSource();
       state.running = false;
       host().setBusy && host().setBusy(false);
@@ -203,24 +270,27 @@
         // A live run no longer blocks switching — it parks and keeps running.
         if (state.running) {
           if (!state.runId) {
-            recordError(null, 'Wait for this Code task to start before switching.');
+            recordError(null, 'Wait for this Build task to start before switching.');
             return false;
           }
           parkActiveRun();
         }
         return true;
       }
-      recordError(null, 'Finish the pending Code approval or steering update before switching.');
+      recordError(null, 'Finish the pending Build approval or steering update before switching.');
       return false;
     }
 
     function clearContextState() {
+      if (recoveredPoll) clearTimeout(recoveredPoll);
+      recoveredPoll = null;
       closeSource();
       // Cleared BEFORE finishBusy, which repaints the project chip: leaving the
       // outgoing conversation's id in place made that repaint describe a task
       // that is already gone. At this point nothing is bound, and the chip has to
       // be allowed to say so.
       state.activeId = '';
+      state.openingConversationId = '';
       state.conversation = null;
       finishBusy();
       state.liveEvents = [];
@@ -254,26 +324,33 @@
     // on the server) — the per-conversation half of reload-resume.
     async function reattachRunFor(cid) {
       if (state.running || state.finishing || state.activeId !== cid) return false;
+      const token = lifecycle().contextToken(state);
       const parked = (state.parkedRuns || {})[cid];
       let status;
       try {
         const response = await fetch(`/api/evolve/agent/status?conversation_id=${encodeURIComponent(cid)}`);
         status = await response.json();
       } catch (error) { return false; }
-      if (state.activeId !== cid) return false;
+      if (!lifecycle().contextMatches(state, token) || state.running || state.finishing) return false;
       if (!status || status.running !== true || !status.run_id) {
         if (parked) delete state.parkedRuns[cid];
+        if (showRecoveredPraxis(status, cid)) return true;
         return false;
       }
       lifecycle().adoptRunIdentity(state, status.run_id);
-      if (parked && parked.runId === status.run_id && parked.cursor) state.eventCursor = parked.cursor;
+      lifecycle().registerRunProof(state, cid, status.run_id);
+      // The stream replays from the start, as a reload does, not from where the
+      // park left off: clearContextState emptied the feed, and the run's
+      // controls start over for it -- a `paused` or `ask` frame from before the
+      // park is the only record that the run is held, or waiting on you.
+      state.eventCursor = 0;
       if (parked) delete state.parkedRuns[cid];
       state.running = true;
       state.runStatus = 'working';
       const startedRaw = (status.session || {}).started_at;
       state.runStartedAt = (parked && parked.startedAt) || (Number(startedRaw) ? Number(startedRaw) * 1000 : Date.parse(String(startedRaw || ''))) || Date.now();
       host().setBusy && host().setBusy(true);
-      pushLiveEvent({ type: 'disconnected', text: 'Reattached — this task kept running in the background.' });
+      pushLiveEvent({ type: 'reconnected', text: 'Reconnected. This task kept running in the background.' });
       render();
       openStream();
       return true;
@@ -283,9 +360,13 @@
       if (!canSwitchContext()) return false;
       const epoch = state.contextEpoch + 1;
       state.contextEpoch = epoch;
+      // The task on screen goes at once; the new one's page is drawn the moment the server answers.
+      state.openingConversationId = '__new__';
+      render();
       const context = host().getContext ? host().getContext() : {};
       const historyChoice = String((options && options.historyChoice) || '').trim();
       const newProjectName = String((options && options.newProjectName) || '').trim();
+      const selfEdit = options?.selfEdit === true;
       // Inherit only a root somebody PICKED, never the folder of whatever
       // conversation happened to be on screen. state.projectRoot follows every
       // open, so inheriting it bound each new task into the previous task's
@@ -297,8 +378,8 @@
       // from localStorage travels WITHOUT it, so a leftover task folder saved by
       // an older session is declined server-side and the task gets its own.
       const pickFlag = requestedRoot && (explicitPick || state.chosenProjectPicked) ? 'picked' : undefined;
-      const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, project_choice: pickFlag, history_choice: historyChoice || undefined, new_project_name: newProjectName || undefined, ...lifecycle().requestSettings(context) }) });
-      const data = await response.json();
+      const response = await fetch('/api/evolve/agent/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_root: requestedRoot || undefined, project_choice: pickFlag, history_choice: historyChoice || undefined, new_project_name: newProjectName || undefined, self_edit: selfEdit, project_identity: selfEdit ? 'thomas-source' : undefined, self_edit_scope: selfEdit ? options.selfEditScope : undefined, ...lifecycle().requestSettings(context) }) }).catch(error => { if (epoch === state.contextEpoch) { state.openingConversationId = ''; render(); } throw error; });
+      const data = await response.json().catch(error => { if (epoch === state.contextEpoch) { state.openingConversationId = ''; render(); } throw error; });
       // A folder with no version history is a QUESTION, not a failure. Throwing
       // here is what made 117 of this user's 121 projects unopenable: the menu
       // closed, the chip never changed, and the only explanation went to a log.
@@ -310,10 +391,12 @@
           projectLabel: String(projectLabel || ''),
         };
         state.historyChoiceBusy = false;
+        if (epoch === state.contextEpoch) state.openingConversationId = '';
         render();
         return false;
       }
-      if (!response.ok || !data.ok) throw new Error(data.error || 'Could not create Code task.');
+      if (!response.ok || !data.ok) { if (epoch === state.contextEpoch) { state.openingConversationId = ''; render(); } }
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Could not create Build task.');
       state.pendingHistoryChoice = null;
       if (epoch !== state.contextEpoch) return false;
       clearContextState();
@@ -322,7 +405,7 @@
       state.projectRoot = data.conversation.project_root || requestedRoot;
       rememberProjectName(state.projectRoot, projectLabel);
       updateProjectButton();
-      if (explicitPick) {
+      if (explicitPick && !selfEdit) {
         // Only a real pick becomes the sticky default for future tasks -- and
         // only real picks reach localStorage, so a task-born folder can no
         // longer install itself as every later session's destination.
@@ -371,16 +454,18 @@
       return newConversation(data.path);
     }
 
-    // Reload-resume (Codex parity): a Code run in progress must survive a page
+    // Reload-resume (Codex parity): a Build run in progress must survive a page
     // reload — on entering Code mode, reattach to the backend's running run
     // instead of showing a dead surface while the agent keeps working.
     async function adoptOrphanRun() {
       if (state.running || state.finishing) return false;
+      const token = lifecycle().contextToken(state);
       let status;
       try {
         const response = await fetch('/api/evolve/agent/status');
         status = await response.json();
       } catch (error) { return false; }
+      if (!lifecycle().contextMatches(state, token) || state.running || state.finishing) return false;
       if (!status || status.running !== true || !status.run_id) return false;
       const session = status.session && typeof status.session === 'object' ? status.session : {};
       const cid = String(session.conversation_id || '');
@@ -403,17 +488,29 @@
           const stored = JSON.parse(localStorage.getItem(SURFACE_STORE_KEY) || 'null');
           wasHere = Boolean(stored && String(stored.codeConversationId || '') === cid);
         } catch (error) { wasHere = false; }
+        // The snapshot is shared by every tab, so it proves only that SOME tab was on this run. A Build tab the
+        // browser shell opened with no conversation of its own (tab_mode=code without forge_code) is a new build by
+        // construction -- the shell reopens a tab's own conversation itself -- and adopting here made every New build
+        // pressed during a run open one more tab showing that same run.
+        const address = String(window.location?.search || '');
+        if (/[?&]tab_mode=code(&|$)/.test(address) && !/[?&]forge_code=/.test(address)) wasHere = false;
         if (!wasHere && state.activeId !== cid) return false;
       }
       if (cid && state.activeId !== cid) {
-        try { await loadConversation(cid); } catch (error) {}
+        // Loading owns its selection epoch and reattaches its own run. A late
+        // global status response must neither steal a newer selection nor open
+        // a second stream after that conversation has already reconnected.
+        const opening = loadConversation(cid);
+        const epoch = state.contextEpoch;
+        const loaded = await opening;
+        return !!loaded && state.contextEpoch === epoch && state.activeId === cid && state.running;
       }
       lifecycle().adoptRunIdentity(state, status.run_id);
       state.running = true;
       state.runStatus = 'working';
       if (!state.runStartedAt) state.runStartedAt = Date.parse(String(session.started_at || '')) || Date.now();
       host().setBusy && host().setBusy(true);
-      pushLiveEvent({ type: 'disconnected', text: 'Reattached — Thomas kept working through the reload.' });
+      pushLiveEvent({ type: 'reconnected', text: 'Reconnected. Thomas kept working through the reload.' });
       render();
       openStream();
       return true;
@@ -459,7 +556,7 @@
     function restoreProjectPreference() {
       try {
         // Migration (v2, 2026-07-19): earlier sessions auto-stored the Thomas source
-        // repo as the Code project, so every new conversation silently edited the
+        // repo as the Build project, so every new conversation silently edited the
         // product tree. The v1 migration cleared it once, but a later run re-saved
         // the repo path (scratch resolved into the repo when the server runs from
         // it). v2 re-clears, and we additionally refuse a stored root that looks
@@ -471,7 +568,7 @@
         }
         const storedRoot = localStorage.getItem('thomas_code_project_root') || '';
         // Heuristic client guard: a path ending in the Thomas package folder is the
-        // source repo — never use it as a scratch Code project.
+        // source repo — never use it as a scratch Build project.
         state.projectRoot = /[\\/](thomas|thomas-dev)[\\/]?$/i.test(storedRoot) ? '' : storedRoot;
         if (!state.projectRoot && storedRoot) { try { localStorage.removeItem('thomas_code_project_root'); } catch (e) {} }
         // Restored, not picked: it goes to the server WITHOUT the pick flag, so a
@@ -487,7 +584,7 @@
         // tooltip showed a different project's path).
         rememberProjectName(state.projectRoot, localStorage.getItem('thomas_code_project_label') || '');
       }
-      catch (error) { recordError(error, 'The saved Code project could not be loaded.'); }
+      catch (error) { recordError(error, 'The saved Build project could not be loaded.'); }
     }
 
     return {
@@ -523,7 +620,7 @@
   // screen when the reload was asked for.
   //
   // Restore: on boot, if the reader arrived with NO explicit destination (no
-  // query, no hash) and the snapshot says a Code conversation was open, write
+  // query, no hash) and the snapshot says a Build conversation was open, write
   // `?forge_code=<cid>` into the URL via history.replaceState. That is the
   // exact deep link unified_code_mode.js consumes at DOMContentLoaded — and
   // chat.html loads THIS file first, so this listener runs before that
@@ -543,7 +640,7 @@
     if (key !== 'chat' && key !== 'code' && key !== 'work') return null;
     return {
       mode: key,
-      // A Chat or Work surface must not drag a stale Code conversation along:
+      // A Chat or Work surface must not drag a stale Build conversation along:
       // restoring it would move the reader somewhere they had already left.
       codeConversationId: key === 'code' ? String(codeConversationId || '') : '',
     };

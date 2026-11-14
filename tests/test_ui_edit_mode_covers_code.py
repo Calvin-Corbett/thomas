@@ -5,6 +5,12 @@ editor, and Code was the one that never registered: zero `data-ui-id` in
 `unified_code_mode.js`, and `#tc-mode-surface` -- the container Code renders
 into -- carried no identity either, so in Code mode you could move the box that
 holds Code but nothing inside it.
+
+The regions are drawn in `unified_code_surface.js` and `stageUiAiEdit` lives in
+`chat_workspace_navigation.js` since the 2026-09-20 consolidation. This file
+went on reading the old places: three of its tests failed for that reason and
+two passed with nothing to check, so the steer form's lost edit-mode policy
+went unnoticed.
 """
 
 from __future__ import annotations
@@ -13,7 +19,8 @@ import re
 from pathlib import Path
 
 WEB = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web"
-CODE_JS = WEB / "js" / "unified_code_mode.js"
+CODE_JS = WEB / "js" / "unified_code_surface.js"
+NAVIGATION_JS = WEB / "js" / "chat_workspace_navigation.js"
 CHAT_HTML = WEB / "chat.html"
 
 
@@ -26,14 +33,19 @@ def _regions() -> dict[str, str]:
     found = {}
     for match in re.finditer(r'data-ui-id="(code\.[a-z.]+)"[^>]*?data-ui-policy="([^"]+)"', text):
         found[match.group(1)] = match.group(2)
+    # A file with no regions makes every loop below pass without checking anything.
+    assert found, f"no code.* region with a policy in {CODE_JS.name}; the regions moved"
     return found
 
 
 def test_codes_meaningful_regions_are_registered() -> None:
     regions = _regions()
 
-    for identity in ("code.transcript", "code.activity", "code.outputs", "code.files", "code.steer"):
+    # The in-transcript steer form left in the 2026-10 Build redesign: a message
+    # you queue above the composer carries its own Steer button now.
+    for identity in ("code.transcript", "code.activity", "code.outputs", "code.files"):
         assert identity in regions, f"{identity} is not registered with the shared editor"
+    assert "code.steer" not in regions
 
 
 def test_every_registered_region_is_named_for_a_person() -> None:
@@ -46,12 +58,17 @@ def test_every_registered_region_is_named_for_a_person() -> None:
 
 
 def test_destructive_controls_are_protected() -> None:
-    """The safety rules require it: Stop kills a running build, Checkpoint
-    commits, and Approve authorises. None of them should be drag targets."""
+    """The safety rules require it: Checkpoint commits, and Approve authorises.
+    None of them should be drag targets. (Stop is the composer's primary button
+    since the 2026-10 redesign -- #tc-send, a fixed control in chat.html -- so
+    the surface no longer draws a Stop of its own.)"""
     regions = _regions()
 
-    for identity in ("code.action.stop", "code.action.checkpoint", "code.approval"):
+    for identity in ("code.action.checkpoint", "code.approval"):
         assert regions.get(identity) == "protected", f"{identity} must be protected"
+    assert "code.action.stop" not in regions
+    send = next(line for line in CHAT_HTML.read_text(encoding="utf-8").splitlines() if 'id="tc-send"' in line)
+    assert 'data-ui-policy="control"' in send
 
 
 def test_movable_regions_declare_their_limits() -> None:
@@ -78,9 +95,12 @@ def test_an_ai_edit_from_code_stays_in_code() -> None:
     change one of its own regions threw you into Chat and handed the request to
     the dispatcher instead of to the surface that builds."""
     html = CHAT_HTML.read_text(encoding="utf-8")
-    body = html.split("function stageUiAiEdit", 1)[1].split("\n    window.addEventListener", 1)[0]
+    assert "window.addEventListener('thomas:ui-ai-edit-request', stageUiAiEdit);" in html
+    source = NAVIGATION_JS.read_text(encoding="utf-8")
+    body = source.split("function stageUiAiEdit", 1)[1].split("\n    }\n", 1)[0]
     code_only = "\n".join(line for line in body.splitlines() if not line.strip().startswith("//"))
 
     assert "state.surfaceMode === 'code'" in code_only
     index = code_only.index("state.surfaceMode === 'code'")
     assert "showChat()" not in code_only[:index], "Code must be handled before the fallback to Chat"
+    assert "showChat()" in code_only[index:], "the scan stopped before the fallback to Chat"

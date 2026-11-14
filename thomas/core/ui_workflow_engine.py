@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from thomas.core.pause import paused
 from thomas.core.ui_effects_catalog import EFFECTS_CATALOG
 from thomas.core.ui_review import review_ui_edits as run_ui_review
 
@@ -154,6 +155,7 @@ class UIWorkflowEngine:
 
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
@@ -170,12 +172,14 @@ class UIWorkflowEngine:
         if self._running or not self._enabled:
             return
         self._running = True
+        self._stopping.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="thomas-ui-workflow")
         self._thread.start()
         log.info("UIWorkflowEngine started (idle threshold %.0fs).", self._idle_threshold_s)
 
     def stop(self) -> None:
         self._running = False
+        self._stopping.set()
 
     def record_user_message(self) -> None:
         self._last_user_ts = time.monotonic()
@@ -307,14 +311,15 @@ class UIWorkflowEngine:
         )
 
     def _loop(self) -> None:
-        while self._running:
-            time.sleep(self._poll_interval_s)
+        while self._running and not self._stopping.wait(self._poll_interval_s):
             try:
                 self._tick()
             except (RuntimeError, OSError, ValueError, TypeError) as exc:
                 log.warning("UIWorkflowEngine tick failed: %s", exc)
 
     def _tick(self) -> None:
+        if paused():
+            return
         if not self._enabled:
             return
         if not self.is_idle():
@@ -741,10 +746,7 @@ class UIWorkflowEngine:
         return rows, {"provider": "pexels", "ok": True, "count": len(rows)}
 
     def _fetch_json(self, url: str, *, headers: dict[str, str]) -> tuple[dict[str, Any], str | None]:
-        request_headers = {
-            "User-Agent": "thomas-ui-workflow-engine/1.0",
-            "Accept": "application/json",
-        }
+        request_headers = {"User-Agent": "thomas-ui-workflow-engine/1.0", "Accept": "application/json"}
         request_headers.update(headers or {})
         req = urllib.request.Request(url=url, headers=request_headers, method="GET")
         # These are small JSON metadata responses; cap the read so a hostile or

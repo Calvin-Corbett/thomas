@@ -62,7 +62,7 @@ Preferred format:
 ```text
 THOMAS_PRIVATE
 reason: Local deployment notes; not part of the public baseline.
-owner: maintainer
+owner: Calvin
 ```
 
 Preferred format in Python:

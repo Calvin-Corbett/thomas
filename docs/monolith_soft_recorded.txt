@@ -1,0 +1,7 @@
+scripts/crew/brief/bootstrap_claim.py 724
+scripts/crew/workboard/worker.py 718
+tests/stress/chatgpt_parity_probes.py 747
+thomas/core/ui_workflow_engine.py 714
+thomas/desktop_operator/runtime.py 715
+thomas/forge/anvil/evolve.py 707
+thomas/server/chat_delegation.py 701

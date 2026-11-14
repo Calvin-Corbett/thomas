@@ -1,0 +1,3 @@
+### Changed
+
+- **The sidebar's short thread names can now be turned off and on while Thomas runs.** The one route the sidebar asks for them, `POST /api/chats/title`, moved out of the server's fixed list into a row called Short names for long threads, which ships on, so nothing changes until you turn it off. While it is off the sidebar keeps the names threads already have, titles it made earlier stay in your browser, and it asks once when the list loads, gets an error and carries on, so nothing repeats. The server answers 405 and not 404 in that state, because the chat routes beside it already match that path. A server started with the row off never loads the route's code. A request still waiting on the model when you turn it off finishes first, and Stop now cuts it off.

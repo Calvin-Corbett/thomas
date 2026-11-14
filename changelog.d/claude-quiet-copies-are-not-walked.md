@@ -1,0 +1,3 @@
+### Fixed
+
+- **Starting a Thomas project no longer waits minutes while every old copy of his source is read file by file.** Thomas keeps one copy of his source for each project. On 2026-11-13 there were 228 of them, and 211 had not been touched for three days. The list of projects and every project start walked every file of every copy to see what each was changing: the server spent a whole processor on it all day, and a new team began 6 to 10 minutes after you asked for it. A copy is now walked only while a run is working in it or was in it lately. An older copy keeps its answer until its records show a run was in it again, and is read again about once an hour at most.

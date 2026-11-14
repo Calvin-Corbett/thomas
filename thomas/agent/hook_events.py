@@ -133,7 +133,7 @@ def category_for_name(name: str) -> HookEventCategory | None:
     return None
 
 
-async def emit_hook(loop: Any, event: HookEvent, payload: dict[str, Any]) -> None:
+async def emit_hook(loop: Any, event: HookEvent, payload: dict[str, Any]) -> dict[str, Any]:
     """Dispatch a hook-surface event via the loop's plugin-hook invoker.
 
     Resolves ``loop._run_plugin_hook`` defensively so any loop-like object works;
@@ -142,13 +142,21 @@ async def emit_hook(loop: Any, event: HookEvent, payload: dict[str, Any]) -> Non
     misbehaving plugin can never break the turn. Fires the canonical name first,
     then any legacy alias, so both new and pre-existing subscribers observe the
     event.
+
+    Returns the payload as the hooks left it. The canonical dispatch feeds the
+    alias dispatch, so a subscriber on either name sees what the other did
+    rather than two isolated views of the original.
     """
 
     invoker = getattr(loop, "_run_plugin_hook", None)
     if invoker is None:
-        return
+        return payload
+    current = payload
     for name in event_names_for(event):
-        await invoker(name, payload)
+        result = await invoker(name, current)
+        if isinstance(result, dict):
+            current = result
+    return current
 
 
 async def bridge_guardrails_event(loop: Any, evt_type: str, payload: dict[str, Any]) -> None:

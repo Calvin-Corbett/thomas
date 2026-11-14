@@ -1,3 +1,17 @@
+"""A tab switch is only ever a hide, proven in a browser.
+
+Calvin's invariant (2026-09-01): one live DOM per tab. Switching shows and hides
+persistent containers; drafts, scroll and in-flight streams survive; nothing
+re-mounts on a switch. The chat page cannot give a second conversation its own
+thread, so a second conversation is a second chat page in its own frame, hidden
+with visibility and inert. Every assertion here is a computed style, an object
+identity or a request count, never text presence: a whole surface can render
+into an invisible element and pass a text check.
+
+Driven against ``tests/web_fixtures/thomas_chat_fixture.py``: the real chat page
+and the real shell scripts, every API stubbed, and a reply that drips for three
+seconds so a bubble can be watched growing inside a HIDDEN tab.
+"""
 
 from __future__ import annotations
 
@@ -27,7 +41,7 @@ def shell():
 
 
 def open_row(shell, title: str, ready: int):
-    shell.page.click(f'#tc-chats [data-history-title="{title}"]')
+    shell.page.click(f'#tc-chats [data-history-title="{title}"]', modifiers=["Control"])  # asks for a tab of its own
     shell.page.wait_for_function(
         f"() => document.querySelectorAll('iframe.bt-doc.is-ready').length >= {ready}", timeout=20000
     )
@@ -46,8 +60,15 @@ def test_a_sidebar_row_opens_its_own_document_and_leaves_home_untouched(shell) -
     assert page.evaluate("() => document.querySelector('aside.tc-sidebar').inert") is True
     doc = shell.docs()[0]
     doc.wait_for_function("() => document.getElementById('tc-thread').childElementCount > 0", timeout=20000)
-    assert doc.evaluate("() => getComputedStyle(document.querySelector('[data-model-switch]')).display") != "none"  # its own pill
-    assert page.evaluate("() => getComputedStyle(document.querySelector('[data-model-switch]')).display") == "none"  # home's pill hides off home
+    assert (
+        doc.evaluate("() => getComputedStyle(document.querySelector('[data-model-switch]')).display") == "none"
+    )  # embedded controls yield to the global selector
+    assert (
+        page.evaluate("() => getComputedStyle(document.querySelector('[data-model-switch]')).display") != "none"
+    )  # one selector stays visible for every tab
+    assert doc.evaluate("() => window.ThomasModelSelection.current()") == page.evaluate(
+        "() => window.ThomasModelSelection.current()"
+    )
     assert page.evaluate("() => document.getElementById('tc-thread').childElementCount") == home_thread_before
     assert page.evaluate(ACTIVE_TITLE) == "Beta"
     assert page.evaluate(TAB_TITLES) == ["Alpha", "Beta"]  # home learned its restored conversation

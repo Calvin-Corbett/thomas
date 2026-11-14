@@ -43,6 +43,9 @@ class EventType(Enum):
     # System events
     THINKING = "thinking"
     STATUS = "status"
+    # The exact model the provider said answered a call, which is not the name
+    # the call asked for. A Build turn records it (build_model_receipt.py).
+    MODEL_REPORTED = "model_reported"
 
     # ── Task dispatch events (chat → workboard pipeline) ──────────
     # These are emitted by the dispatch-first chat architecture.
@@ -96,8 +99,8 @@ class AgentEvent:
         )
 
     @staticmethod
-    def tool_call_end(tool_id: str, **kw: Any) -> AgentEvent:
-        return AgentEvent(type=EventType.TOOL_CALL_END, data={"tool_id": tool_id}, **kw)
+    def tool_call_end(tool_id: str, arguments: Any = "", **kw: Any) -> AgentEvent:
+        return AgentEvent(type=EventType.TOOL_CALL_END, data={"tool_id": tool_id, "arguments": arguments}, **kw)
 
     @staticmethod
     def tool_start(tool_id: str, tool_name: str, args: dict[str, Any], **kw: Any) -> AgentEvent:
@@ -159,6 +162,10 @@ class AgentEvent:
     @staticmethod
     def status(message: str, **kw: Any) -> AgentEvent:
         return AgentEvent(type=EventType.STATUS, data={"message": message}, **kw)
+
+    @staticmethod
+    def model_reported(model: str, **kw: Any) -> AgentEvent:
+        return AgentEvent(type=EventType.MODEL_REPORTED, data={"model": model}, **kw)
 
     # ── Task dispatch event factories ─────────────────────────────
 

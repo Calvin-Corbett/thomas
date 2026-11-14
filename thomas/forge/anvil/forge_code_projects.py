@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
+import os
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from thomas.core.git_process import GitResult, run_git
 
 log = logging.getLogger(__name__)
 
@@ -16,31 +19,35 @@ class ForgeCodeProjectError(ValueError):
     """Raised when a requested Forge Code project is not a usable repository."""
 
 
-def _git(args: list[str], *, cwd: Path | str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+def _git(args: list[str], *, cwd: Path | str, timeout: int = 15) -> GitResult:
     """Run git against a folder the user explicitly chose.
+
+    Returns a :class:`~thomas.core.git_process.GitResult`, which carries the same
+    ``returncode``/``stdout``/``stderr`` every caller here already reads, and
+    unlike ``subprocess.run`` actually comes back inside ``timeout``.
 
     ``safe.directory`` is set for that one invocation, and only that one. Git
     refuses to read a repository whose directory is owned by a different OS
     account -- "detected dubious ownership" -- which protects you from a hostile
-    repo dropped on a shared machine. On this user's box the whole F:\\DevHub
-    tree carries a SID from a previous Windows install, so every project on that
-    drive was unreadable: the folder could not be inspected, could not be
-    initialised, and could not be opened. Two of their real projects live there.
+    repo dropped on a shared machine. On your machine the whole F:\\DevHub tree
+    carries a SID from a previous Windows install, so every project on that drive
+    was unreadable: the folder could not be inspected, could not be initialised,
+    and could not be opened. Two of your real projects live there.
 
     Naming the exact path scopes the trust to the folder the user just picked,
     and touches no global git config. It is not a blanket `safe.directory=*`,
     and it never runs against a path the user did not choose.
     """
     root = str(cwd)
-    return subprocess.run(
-        ["git", "-c", f"safe.directory={root}", *args],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        encoding="utf-8",
-        errors="replace",
-    )
+    return run_git(["-c", f"safe.directory={root}", *args], cwd=root, timeout=float(timeout))
+
+
+class ForgeCodeInspectionUnavailable(ForgeCodeProjectError):
+    """The source or selected project's git state could not be determined."""
+
+
+class _ThomasSourceNotRepository(Exception):
+    """A definitive result that must not populate the found-path cache."""
 
 
 class ForgeCodeHistoryRequired(ForgeCodeProjectError):
@@ -98,10 +105,10 @@ def validate_project_root(
         # git is still asked whenever there is no .git here, which is the only
         # case where the answer can be a PARENT repository.
         return candidate
-    try:
-        proc = _git(["rev-parse", "--show-toplevel"], cwd=candidate)
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise ForgeCodeProjectError("project_root could not be inspected") from exc
+    proc = _git(["rev-parse", "--show-toplevel"], cwd=candidate)
+    if proc.spawn_failed or proc.timed_out:
+        # Git did not give an answer about this folder.
+        raise ForgeCodeInspectionUnavailable("project_root could not be inspected")
     if proc.returncode != 0 or not proc.stdout.strip():
         if allow_without_history:
             # Chosen deliberately: work here with no undo. The directory itself
@@ -121,34 +128,56 @@ def validate_project_root(
 
 
 def thomas_source_repo_root() -> Path | None:
-    """Absolute git-toplevel of Thomas's OWN source checkout, if it is one.
+    """Thomas's source checkout, None outside git, or an inspection error.
 
     Code runs must NEVER be pointed here: a "make me a game" ask would write
     into the product tree and its change-attribution/Revert UI would sweep up
     unrelated edits. Used as a hard safety net that rejects this path.
+
+    A successful lookup is cached for the life of the process, because this
+    package's import location cannot move while it is running. Measured 2026-09-24:
+    62-68 ms of subprocess per call, and a chat turn asks four times -- so a
+    constant was being rediscovered, on the event loop, on every message.
+
+    Only a found path is cached. A definitive non-repository result returns
+    None without caching; timeouts, failed spawns and inconclusive results raise.
     """
     try:
-        import thomas
-
-        pkg = Path(thomas.__file__).resolve().parent  # .../thomas
-        proc = subprocess.run(
-            ["git", "-C", str(pkg.parent), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            return Path(proc.stdout.strip()).resolve()
-    except (OSError, subprocess.SubprocessError, ImportError, ValueError):
+        return _found_thomas_source_repo_root()
+    except _ThomasSourceNotRepository:
         return None
-    return None
+    except (ImportError, OSError, ValueError, TypeError) as exc:
+        raise ForgeCodeInspectionUnavailable("Thomas source root could not be inspected") from exc
+
+
+@lru_cache(maxsize=1)
+def _found_thomas_source_repo_root() -> Path:
+    import thomas
+
+    pkg = Path(thomas.__file__).resolve().parent
+    try:
+        result = run_git(["-C", str(pkg.parent), "rev-parse", "--show-toplevel"], timeout=15.0)
+        if result.timed_out or result.spawn_failed:
+            raise ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+        if result.returncode != 0:
+            if "not a git repository" in result.stderr.lower():
+                raise _ThomasSourceNotRepository
+            raise ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+        if not result.output():
+            raise ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+        return Path(result.output()).resolve()
+    except (OSError, ValueError, TypeError) as exc:
+        raise ForgeCodeInspectionUnavailable("Thomas source root could not be inspected") from exc
 
 
 def thomas_owned_root() -> Path:
-    """The ~/.thomas tree: folders Thomas itself creates and manages."""
-    return (Path.home() / ".thomas").expanduser()
+    """The ~/.thomas tree: folders Thomas itself creates and manages.
+
+    ``THOMAS_OWNED_ROOT`` names it instead when the server runs as another account:
+    the caged Thomas runs as the cage account but builds in your projects.
+    """
+    override = os.environ.get("THOMAS_OWNED_ROOT", "").strip()
+    return Path(override).expanduser() if override else (Path.home() / ".thomas").expanduser()
 
 
 def is_thomas_owned(path: str | Path) -> bool:
@@ -192,27 +221,16 @@ def ensure_git_repo(path: str | Path) -> bool:
         raise ForgeCodeProjectError("project folder could not be created") from exc
     if (candidate / ".git").exists():
         return False
-    try:
-        # The directory is passed as the working directory, never as a
-        # positional argument. git parses a leading "--" as an option, so a
-        # folder literally named --template=<dir> would become one -- and that
-        # option copies hooks out of the named directory, which then run on the
-        # next git command. Naming a folder cannot be allowed to choose a flag.
-        proc = subprocess.run(
-            ["git", "init", "--initial-branch=main"],
-            cwd=str(candidate),
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise ForgeCodeProjectError("project folder could not be prepared for editing") from exc
+    # The directory is passed as the working directory, never as a positional
+    # argument. git parses a leading "--" as an option, so a folder literally
+    # named --template=<dir> would become one -- and that option copies hooks out
+    # of the named directory, which then run on the next git command. Naming a
+    # folder cannot be allowed to choose a flag.
+    proc = run_git(["init", "--initial-branch=main"], cwd=str(candidate), timeout=15.0)
+    if proc.spawn_failed:
+        raise ForgeCodeProjectError("project folder could not be prepared for editing")
     if proc.returncode != 0:
-        raise ForgeCodeProjectError(
-            f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}"
-        )
+        raise ForgeCodeProjectError(f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}")
     _seal_initial_commit(candidate)
     return True
 
@@ -250,14 +268,11 @@ def initialize_history(path: str | Path) -> Path:
 
     if (candidate / ".git").exists():
         return candidate
-    try:
-        proc = _git(["init", "--initial-branch=main"], cwd=candidate)
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise ForgeCodeProjectError("project folder could not be prepared for editing") from exc
+    proc = _git(["init", "--initial-branch=main"], cwd=candidate)
+    if proc.spawn_failed:
+        raise ForgeCodeProjectError("project folder could not be prepared for editing")
     if proc.returncode != 0:
-        raise ForgeCodeProjectError(
-            f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}"
-        )
+        raise ForgeCodeProjectError(f"project folder could not be prepared for editing: {proc.stderr.strip()[:200]}")
     _seal_initial_commit(candidate)
     return candidate
 
@@ -281,24 +296,17 @@ def _seal_initial_commit(root: Path) -> None:
         "-c",
         "commit.gpgsign=false",
     ]
-    try:
-        head = _git(["rev-parse", "--verify", "HEAD"], cwd=root)
-        if head.returncode == 0:
-            return  # already has history
-        _git([*identity, "add", "-A"], cwd=root, timeout=30)
-        _git(
-            [
-                *identity,
-                "commit",
-                "--allow-empty",
-                "-m",
-                "Baseline: contents before Thomas opened this project",
-            ],
-            cwd=root,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover - defensive
-        log.warning("could not seal a baseline commit in %s: %s", root, exc)
+    head = _git(["rev-parse", "--verify", "HEAD"], cwd=root)
+    if head.returncode == 0:
+        return  # already has history
+    _git([*identity, "add", "-A"], cwd=root, timeout=30)
+    sealed = _git(
+        [*identity, "commit", "--allow-empty", "-m", "Baseline: contents before Thomas opened this project"],
+        cwd=root,
+        timeout=30,
+    )
+    if not sealed.ok:  # pragma: no cover - defensive
+        log.warning("could not seal a baseline commit in %s: %s", root, sealed.message())
 
 
 _PROJECT_NAME_SAFE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_"
@@ -310,9 +318,7 @@ _PROJECT_NAME_SAFE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345
 # That never mattered while folder names came from a name box; it matters now
 # that the name comes from whatever the person typed as their task.
 _WINDOWS_RESERVED_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL"}
-    | {f"COM{digit}" for digit in "0123456789"}
-    | {f"LPT{digit}" for digit in "0123456789"}
+    {"CON", "PRN", "AUX", "NUL"} | {f"COM{digit}" for digit in "0123456789"} | {f"LPT{digit}" for digit in "0123456789"}
 )
 
 # Long enough to recognise the task, short enough to stay a folder name.
@@ -625,11 +631,9 @@ def rename_task_born_for_first_message(
         return root
 
     try:
-        registry = _load_registry(catalog_root)
-        row = registry.get(str(conversation_id or ""))
-        if row is not None:
-            row["project_root"] = str(renamed)
-            _write_registry(catalog_root, registry)
+        from thomas.forge.anvil import forge_code_conversations as conversations
+
+        conversations.rebind_project_root(catalog_root, conversation_id, renamed)
     except OSError:
         # A registry that still points at the old path would strand the
         # conversation, so the rename is rolled back rather than half-kept.
@@ -700,7 +704,7 @@ def create_named_project(name: str) -> Path:
 
 def shared_scratch_root() -> Path:
     """Where the one shared drawer lives, without creating it."""
-    return (Path.home() / ".thomas" / "code_scratch").expanduser()
+    return thomas_owned_root() / "code_scratch"
 
 
 def is_shared_scratch(path: str | Path | None) -> bool:
@@ -735,188 +739,31 @@ def default_scratch_project(catalog_root: str | Path) -> Path:
     "Choose project folder" click away.
     """
 
-    scratch = (Path.home() / ".thomas" / "code_scratch").expanduser()
+    scratch = shared_scratch_root()
     try:
         scratch.mkdir(parents=True, exist_ok=True)
         if not (scratch / ".git").exists():
             # cwd rather than a positional path, for the same reason as
             # ensure_git_repo: a directory name must never be able to act as a
             # git option.
-            proc = subprocess.run(
-                ["git", "init", "--initial-branch=main"],
-                cwd=str(scratch),
-                capture_output=True,
-                text=True,
-                timeout=15,
-                encoding="utf-8",
-                errors="replace",
-            )
+            proc = run_git(["init", "--initial-branch=main"], cwd=str(scratch), timeout=15.0)
             if proc.returncode != 0:
                 raise ForgeCodeProjectError(f"scratch project git init failed: {proc.stderr.strip()[:200]}")
     except OSError as exc:
         raise ForgeCodeProjectError("scratch project directory could not be created") from exc
     resolved = validate_project_root(scratch, fallback=scratch)
     repo = thomas_source_repo_root()
-    if repo is not None and resolved == repo:
+    if resolved == repo:
         # Scratch somehow still resolved to the Thomas repo (e.g. HOME is inside
         # the checkout). Fail loudly rather than silently editing the product.
         raise ForgeCodeProjectError("scratch project resolved to the Thomas source repo; refusing")
     return resolved
 
 
-def _registry_path(catalog_root: str | Path) -> Path:
-    directory = Path(catalog_root) / ".thomas" / "evolve" / "agent"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / "project_registry.json"
+def __getattr__(name: str) -> Any:
+    """The conversation registry now lives in forge_code_conversations; its names resolve here too."""
+    from thomas.forge.anvil import forge_code_conversations
 
-
-def _load_registry(catalog_root: str | Path) -> dict[str, dict[str, Any]]:
-    path = _registry_path(catalog_root)
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError):
-        return {}
-    if not isinstance(payload, dict):
-        return {}
-    return {str(cid): row for cid, row in payload.items() if isinstance(row, dict)}
-
-
-def _write_registry(catalog_root: str | Path, registry: dict[str, dict[str, Any]]) -> None:
-    path = _registry_path(catalog_root)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
-
-
-def bind_conversation(
-    catalog_root: str | Path,
-    conversation_id: str,
-    project_root: str | Path,
-    *,
-    settings: dict[str, Any] | None = None,
-    allow_without_history: bool = False,
-) -> dict[str, Any]:
-    """Persist the selected repository and settings for one Code conversation.
-
-    ``allow_without_history`` has to be threaded through: the caller has already
-    resolved the root and, for a folder opened deliberately without undo, this
-    second validation would otherwise reject what was just accepted.
-    """
-
-    cid = str(conversation_id or "").strip()
-    if not cid:
-        raise ForgeCodeProjectError("conversation_id is required")
-    root = validate_project_root(
-        project_root,
-        fallback=catalog_root,
-        allow_without_history=allow_without_history,
-    )
-    registry = _load_registry(catalog_root)
-    row = {"project_root": str(root), "settings": dict(settings or {})}
-    registry[cid] = row
-    _write_registry(catalog_root, registry)
-    # Binding is the moment Thomas commits to writing its bookkeeping under
-    # this root (conversation transcripts land in <root>/.thomas/...), so it is
-    # the moment to keep that bookkeeping out of the project's git status.
-    shield_thomas_dir(root)
-    return dict(row)
-
-
-def update_conversation_settings(
-    catalog_root: str | Path,
-    conversation_id: str,
-    settings: dict[str, Any],
-) -> dict[str, Any] | None:
-    registry = _load_registry(catalog_root)
-    row = registry.get(str(conversation_id or ""))
-    if row is None:
-        return None
-    row["settings"] = dict(settings)
-    _write_registry(catalog_root, registry)
-    return dict(row)
-
-
-def conversation_metadata(catalog_root: str | Path, conversation_id: str) -> dict[str, Any] | None:
-    row = _load_registry(catalog_root).get(str(conversation_id or ""))
-    return dict(row) if row is not None else None
-
-
-def conversation_project(catalog_root: str | Path, conversation_id: str) -> Path:
-    """Return a validated bound project, falling back for legacy conversations."""
-
-    row = conversation_metadata(catalog_root, conversation_id)
-    selected = row.get("project_root") if row else catalog_root
-    return validate_project_root(selected, fallback=catalog_root)
-
-
-def conversation_roots(catalog_root: str | Path) -> list[Path]:
-    """Return unique, still-valid roots that may hold Code conversations."""
-
-    roots: list[Path] = []
-    candidates: list[str | Path] = [catalog_root]
-    candidates.extend(
-        row.get("project_root", "") for row in _load_registry(catalog_root).values() if row.get("project_root")
-    )
-    for candidate in candidates:
-        try:
-            root = validate_project_root(candidate, fallback=catalog_root)
-        except ForgeCodeProjectError:
-            continue
-        if root not in roots:
-            roots.append(root)
-    return roots
-
-
-def resolve_conversation_root(catalog_root: str | Path, conversation_id: str) -> Path:
-    """The root a conversation's file is ACTUALLY in, not the one it is filed under.
-
-    ``conversation_project`` answers from the registry, and falls back to the
-    catalog root when a conversation has no row. Plenty have none -- they were
-    written straight into a project by a path that never called
-    ``bind_conversation`` -- so that fallback names a folder the file is not in,
-    and every read through it comes back empty.
-
-    An empty read is the dangerous part: it is indistinguishable from "this
-    conversation has nothing in it", so callers treat it as a fact rather than a
-    miss. Measured on this workspace, the CLI's multi-turn history did exactly
-    that -- ``history_turns(repo_root, cid)`` returned 0 turns for **110 of 113**
-    conversations that have real turns, and the caller's own comment described
-    the empty result as the normal no-history case.
-
-    So this checks the binding first and then walks the same roots the Code
-    history endpoint walks. The conversation id itself is the check: a root that
-    does not hold the file is skipped, and if none does, the binding is returned
-    unchanged so the caller's own not-found handling still runs.
-    """
-
-    catalog = Path(catalog_root)
-    bound = conversation_project(catalog, conversation_id)
-    if not conversation_id:
-        return bound
-    if _conversation_file(bound, conversation_id).is_file():
-        return bound
-    for root in conversation_roots(catalog):
-        if root != bound and _conversation_file(root, conversation_id).is_file():
-            return root
-    return bound
-
-
-def _conversation_file(root: Path, conversation_id: str) -> Path:
-    """Where a conversation's JSON lives under ``root``.
-
-    Kept beside the resolver rather than imported from ``forge_code_store``:
-    this module sits UNDER the store in the import order, and reaching upward
-    for one path join would invert that for no benefit. The layout is asserted
-    against the store's own resolver in
-    ``tests/test_forge_code_projects.py`` so the two cannot drift apart.
-    """
-
-    return Path(root) / ".thomas" / "evolve" / "agent" / "conversations" / f"{conversation_id}.json"
-
-
-def forget_conversation(catalog_root: str | Path, conversation_id: str) -> None:
-    registry = _load_registry(catalog_root)
-    if registry.pop(str(conversation_id or ""), None) is not None:
-        _write_registry(catalog_root, registry)
+    if name in forge_code_conversations.NAMES:
+        return getattr(forge_code_conversations, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

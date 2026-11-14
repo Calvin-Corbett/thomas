@@ -3,7 +3,8 @@
 Covers the three pillars:
   * ledger ``update`` produces a correct row set for a fixture repo with N
     worktrees (and writes both artifacts);
-  * the creation gate blocks at the dirty ceiling and on a keyword collision;
+  * the creation gate blocks at the ceiling of IDLE dirty worktrees and on a
+    keyword collision, and never counts a worktree someone is working in;
   * the detector flags an over-ceiling repo.
 
 The fixtures build *real* git repositories with real worktrees, so the tests
@@ -98,6 +99,15 @@ def _commit_old(wt_path: Path, days: int) -> None:
     _git(wt_path, "commit", "-m", "old work", env={"GIT_AUTHOR_DATE": old, "GIT_COMMITTER_DATE": old})
 
 
+def _make_idle_dirty(wt_path: Path) -> None:
+    """Uncommitted work nobody has touched for hours: a day-old commit, a file changed 3h ago."""
+    _commit_old(wt_path, days=1)
+    scratch = wt_path / "scratch.txt"
+    scratch.write_text("abandoned work\n", encoding="utf-8")
+    hours_ago = (datetime.now(timezone.utc) - timedelta(hours=3)).timestamp()
+    os.utime(scratch, (hours_ago, hours_ago))
+
+
 def _write_governance(root: Path, *, max_dirty: int) -> None:
     (root / "agent_safety.toml").write_text(
         f"[worktree_governance]\nmax_dirty_worktrees = {max_dirty}\nstale_days = 7\n",
@@ -169,7 +179,7 @@ def test_creation_gate_blocks_at_ceiling(tmp_path):
     main = _init_repo(tmp_path / "repo")
     _write_governance(main, max_dirty=1)
     dirty_wt = _add_worktree(main, tmp_path / "wt-one", "feat/one")
-    _make_dirty(dirty_wt)
+    _make_idle_dirty(dirty_wt)
 
     gate = _load_gate()
     decision = gate.evaluate_creation(main, "brand-new-thing")
@@ -200,6 +210,48 @@ def test_creation_gate_passes_when_clean(tmp_path):
     assert not decision.blocked_reasons
 
 
+# ── 2b. Live work is not debt ──────────────────────────────────────────────────
+# AGENTS.md forbids starting work in a dirty checkout, so the way an agent gets a
+# clean tree is its own worktree. When every worktree with changes counted toward
+# the ceiling, five agents at work in five worktrees refused the sixth -- and the
+# shared checkout was dirty too, so an agent following the rules had nowhere left
+# to start.
+
+
+def test_a_worktree_someone_is_working_in_is_not_merge_debt(tmp_path):
+    main = _init_repo(tmp_path / "repo")
+    _write_governance(main, max_dirty=1)
+    live_wt = _add_worktree(main, tmp_path / "wt-live", "feat/live")
+    _commit_old(live_wt, days=1)
+    _make_dirty(live_wt)  # a file changed just now, on top of a day-old commit
+
+    ledger = worktree_ledger.collect(main)
+    live = next(row for row in ledger.rows if row.branch == "feat/live")
+
+    assert live.dirty is True
+    assert live.active is True
+    assert ledger.debt_count == 0
+    assert ledger.over_ceiling is False
+    assert _load_gate().evaluate_creation(main, "brand-new-thing").allowed is True
+    assert worktree_debt.run(["--root", str(main)]) == 0
+
+
+def test_the_ceiling_counts_only_the_worktrees_nobody_is_working_in(tmp_path):
+    main = _init_repo(tmp_path / "repo")
+    _write_governance(main, max_dirty=2)
+    _make_idle_dirty(_add_worktree(main, tmp_path / "wt-idle", "feat/idle"))
+    live_wt = _add_worktree(main, tmp_path / "wt-live", "feat/live")
+    _commit_old(live_wt, days=1)
+    _make_dirty(live_wt)
+
+    ledger = worktree_ledger.collect(main)
+
+    assert ledger.dirty_count == 2
+    assert ledger.debt_count == 1
+    assert ledger.over_ceiling is False
+    assert _load_gate().evaluate_creation(main, "brand-new-thing").allowed is True
+
+
 # ── 3. Detector ────────────────────────────────────────────────────────────────
 
 
@@ -207,7 +259,7 @@ def test_detector_flags_over_ceiling(tmp_path):
     main = _init_repo(tmp_path / "repo")
     _write_governance(main, max_dirty=1)
     dirty_wt = _add_worktree(main, tmp_path / "wt-one", "feat/one")
-    _make_dirty(dirty_wt)
+    _make_idle_dirty(dirty_wt)
 
     report = worktree_debt.assess_debt(main)
     assert report.over_ceiling is True

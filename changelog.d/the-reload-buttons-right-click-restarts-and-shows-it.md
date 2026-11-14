@@ -1,0 +1,4 @@
+### Changed
+
+- Right-clicking the reload button now offers one thing, Restart server, with a real icon, and it lights up under your pointer. A left click already reloads the tab, so "Reload this tab" is gone from the menu. You said: "All it should do when you right-click is say restart the server ... when you hover over it, it should ... highlight it so you can tell, and when you click on it, it needs to be ... some kind of indication".
+- Pressing Restart server shows a strip under the toolbar with what is happening: what Thomas is waiting for (runs, how many checks are running) and for how long, when he is stopping and starting again, and when he is back and on which commit, after which the tab reloads itself. Nothing gives up on a clock: a restart waits for running checks as long as they take. It says "the restart did not begin" only when Thomas keeps answering as before and reports no restart.

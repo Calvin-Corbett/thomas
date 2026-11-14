@@ -7,8 +7,7 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.server.app_keys import APP_SECRETS
-from thomas.server.routes.work import APP_WORK_STORE
+from thomas.server.app_keys import APP_SECRETS, APP_WORK_STORE
 from thomas.server.work_connector_registry import WorkConnectorExecutionError, bind_work_connector_tools
 from thomas.server.work_google_connector import GoogleWorkspaceConnectorExecutor
 from thomas.work import WorkStore

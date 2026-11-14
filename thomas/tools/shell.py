@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.cage_shell import CagedResult, run_caged
+from thomas.tools.cage_shell import posture as cage_posture
+from thomas.tools.cage_shell import runner_alive as cage_runner_alive
 from thomas.tools.filesystem import _safe_path
 from thomas.tools.shell_spool import (
     OUTCOME_HUNG,
@@ -42,6 +45,19 @@ _GIT_TOPOLOGY_MUTATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "git branch mutation",
     ),
 )
+
+
+def _caged_result(caged: CagedResult, command: str, timeout: float) -> ToolResult:
+    """The caged runner's answer, in the shape the model already reads."""
+    who = f" (ran as {caged.ran_as})" if caged.ran_as else ""
+    if caged.outcome == "timeout":
+        return ToolResult(ok=False, data=caged.output, error=f"Command timed out after {timeout:g}s: {command}")
+    if caged.outcome in {"invalid", "error", "no_runner"}:
+        return ToolResult(ok=False, data=caged.output, error=f"The caged shell could not run it{who}: {caged.output}")
+    body = caged.output or "(no output)"
+    if caged.returncode != 0:
+        return ToolResult(ok=False, data=body, error=f"Exit code {caged.returncode}{who}")
+    return ToolResult(ok=True, data=body)
 
 
 def _git_topology_mutation_reason(command: str) -> str | None:
@@ -131,10 +147,46 @@ class ShellTool(Tool):
             if not cwd.exists() or not cwd.is_dir():
                 return ToolResult(ok=False, error=f"cwd is not a directory: {rel}")
 
+        # The cage. A protected file is behind a card and a password, but a
+        # shell used to write whatever this process could -- one `git checkout`
+        # put a protected file back on 2026-09-22. So the command runs as the
+        # caged account, which can read and execute the repo and cannot write
+        # Thomas's own code. No pattern list decides this; the OS does.
+        stance = cage_posture()
+        if stance != "off":
+            if cage_runner_alive():
+                caged = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    functools.partial(run_caged, command, cwd=str(cwd), timeout_s=float(timeout)),
+                )
+                return _caged_result(caged, command, float(timeout))
+            if stance == "required":
+                return ToolResult(
+                    ok=False,
+                    error=(
+                        "The caged shell is required and its runner is not answering, so this "
+                        "command did not run. Nothing was executed with the owner's own account. "
+                        "Start the runner (scripts/cage/shell_runner.py, as the agent account) "
+                        "or ask the owner to change [tools] cage_shell."
+                    ),
+                )
+
         # Use appropriate shell for the platform
+        shell_cmd: list[str] | str
         if sys.platform == "win32":
-            shell_cmd = ["cmd", "/c", command]
+            # The whole line, handed to cmd.exe as typed. It used to be
+            # ["cmd", "/c", command], and subprocess joins an argv list with
+            # list2cmdline, which escapes the inner quotes as \" -- an escape
+            # cmd.exe does not understand. Every command containing a quote
+            # arrived mangled: measured 2026-09-22, `python -c "print(7*6)"`
+            # answered "is not recognized" rather than 42, and
+            # `git log --format="%s"` kept the quotes in its own output.
+            # Nothing about what may be run changes; this is the same shell
+            # reading the same string, the way a person typing it would.
+            shell_cmd = command
         else:
+            # Already correct on POSIX: exec takes argv directly, so the command
+            # reaches bash as one argument with nothing re-parsing its quotes.
             shell_cmd = ["bash", "-c", command]
 
         # Spooled runner: streams output incrementally (no blocking
@@ -148,7 +200,9 @@ class ShellTool(Tool):
             run_spooled_command,
             shell_cmd,
             cwd=str(cwd),
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            # UTF-8 both ways, as the caged runner does: shell_spool decodes UTF-8, and a
+            # Python child on a Windows pipe otherwise writes cp1252 ("→" killed it).
+            env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
             timeout=float(timeout),
             idle_timeout=self._idle_timeout,
             hang_retries=self._hang_retries,

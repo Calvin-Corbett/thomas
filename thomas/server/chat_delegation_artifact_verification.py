@@ -7,6 +7,7 @@ results.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,9 @@ def verification_scope_label(
     return label
 
 
+log = logging.getLogger(__name__)
+
+
 def _hidden_completion_review_passes(
     prompt: str,
     work_dir: Path | None,
@@ -77,6 +81,7 @@ def _hidden_completion_review_passes(
     failed_tools: list[str],
     *,
     succeeded_tools: list[str] | None = None,
+    tool_receipts: list[Any] | None = None,
 ) -> bool:
     """Review only actual file/readback/tool evidence before completion."""
 
@@ -118,12 +123,32 @@ def _hidden_completion_review_passes(
         for tool in failed_tools
         if str(tool) and str(tool) not in recovered and str(tool) not in optional_failures
     ]
+    # Receipts are what the worker actually did, observed rather than narrated.
+    # The caller has passed them since 11e35e95 (2026-09-04) while this signature
+    # never accepted them, so every delegated run reaching this line died with
+    # "unexpected keyword argument 'tool_receipts'" and the user was told
+    # "Background execution failed: TypeError".
+    #
+    # When they are present they REPLACE the heuristic above. That heuristic
+    # forgives a failed tool whenever some other tool succeeded and a file
+    # exists, which is coarse; the log decides per tool from the events it
+    # actually saw. Evidence beats inference, so the log wins when there is one.
+    receipt_failures: list[str] | None = None
+    if tool_receipts is not None:
+        try:
+            receipt_failures = list(tool_receipts.unrecovered_failures(list(failed_tools)))
+        except (AttributeError, TypeError) as exc:  # a log that is not one
+            log.warning("tool receipts could not judge recovery, falling back: %s", exc)
+            receipt_failures = None
+    if receipt_failures is not None:
+        unrecovered_failures = receipt_failures
     evidence: dict[str, Any] = {
         "summary": str(summary or ""),
         "created_files": list(created_files),
         "failed_tools": list(failed_tools),
         "unrecovered_failed_tools": unrecovered_failures,
         "missing_or_empty": missing_or_empty,
+        "recovery_judged_by": "receipts" if receipt_failures is not None else "heuristic",
     }
 
     from thomas.marketplace.orchestrator import adversarial_review
@@ -135,7 +160,11 @@ def _hidden_completion_review_passes(
 
     review = adversarial_review.review_deliverable(
         evidence,
-        {"verified": bool(verified_candidate), "artifact_count": len(created_files)},
+        {
+            "verified": bool(verified_candidate),
+            "artifact_count": len(created_files),
+            "recovery_judged_by": "receipts" if receipt_failures is not None else "heuristic",
+        },
         scorer=_score,
         budget_ok=True,
     )

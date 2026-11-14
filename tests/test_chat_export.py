@@ -1,14 +1,25 @@
-"""A conversation can leave Thomas as a file the person owns (frontier parity: ChatGPT and Claude export)."""
+"""A conversation can leave Thomas as a file the person owns (frontier parity: ChatGPT and Claude export).
+
+The two routes turn off and on with the row in ``thomas.server.rows.chat_export``. This file drives the export handler
+through ``thomas.server.routes.chat_export_routes``, which that row registers. The row's other route file,
+``thomas.server.routes.chat_branch_routes``, imports that one and is tested in ``tests/test_chat_branch.py``. A change
+to the row or to either file runs both.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from pathlib import Path
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from thomas.chat.session_store import SessionStore
+from thomas.core.event_loop_offload import reset_offload_receipts, slowest_offloads
+from thomas.server.routes import chat_export_routes
 from thomas.server.routes.chat_export_routes import render_markdown, setup_chat_export_routes
 
 
@@ -48,7 +59,7 @@ def test_export_routes_serve_markdown_and_json_and_refuse_bad_ids(tmp_path: Path
     sessions.mkdir()
     (sessions / "chat_0123456789abcdef.json").write_text(json.dumps(_session()), encoding="utf-8")
     app = web.Application()
-    setup_chat_export_routes(app, sessions_dir=sessions, require_api_access=lambda _r: None)
+    setup_chat_export_routes(app, store=SessionStore(sessions), require_api_access=lambda _r: None)
 
     async def scenario():
         async with TestClient(TestServer(app)) as client:
@@ -67,6 +78,53 @@ def test_export_routes_serve_markdown_and_json_and_refuse_bad_ids(tmp_path: Path
     asyncio.run(scenario())
 
 
+def test_slow_chat_export_does_not_block_other_teams(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "chat_0123456789abcdef.json"
+    path.write_text(json.dumps(_session()), encoding="utf-8")
+    app = web.Application()
+    setup_chat_export_routes(app, store=SessionStore(tmp_path))
+
+    async def health(_request):
+        return web.json_response({"ok": True})
+
+    app.router.add_get("/health", health)
+    original = chat_export_routes._prepare_export
+    entered = threading.Event()
+
+    def slow_prepare(*args, **kwargs):
+        entered.set()
+        time.sleep(0.18)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(chat_export_routes, "_prepare_export", slow_prepare)
+    reset_offload_receipts()
+
+    async def scenario() -> float:
+        async with TestClient(TestServer(app)) as client:
+            export = asyncio.create_task(client.get("/api/chats/chat_0123456789abcdef/export?format=md"))
+            try:
+                assert await asyncio.to_thread(entered.wait, 3)
+                started = time.perf_counter()
+                health = await asyncio.wait_for(client.get("/health"), timeout=0.12)
+                lag = time.perf_counter() - started
+                assert health.status == 200
+                assert (await health.json())["ok"] is True
+                result = await export
+                assert result.status == 200
+                assert (await result.text()).startswith("# Tea or coffee")
+                return lag
+            finally:
+                if not export.done():
+                    export.cancel()
+                    await asyncio.gather(export, return_exceptions=True)
+
+    lag = asyncio.run(scenario())
+    assert lag < 0.12
+    receipt = next(row for row in slowest_offloads() if row["label"] == "chat_export.build")
+    assert receipt["calls"] == 1
+    assert receipt["max_s"] >= 0.18
+
+
 def test_the_sidebar_id_is_the_session_id_and_the_file_is_its_digest(tmp_path: Path) -> None:
     """The sidebar row carries the raw v2 session id; the file is chat_<sha256[:16]>.json.
 
@@ -81,7 +139,7 @@ def test_the_sidebar_id_is_the_session_id_and_the_file_is_its_digest(tmp_path: P
     digest = hashlib.sha256(sid.encode()).hexdigest()[:16]
     (tmp_path / f"chat_{digest}.json").write_text(json.dumps(session), encoding="utf-8")
     app = web.Application()
-    setup_chat_export_routes(app, sessions_dir=tmp_path, require_api_access=lambda _r: None)
+    setup_chat_export_routes(app, store=SessionStore(tmp_path), require_api_access=lambda _r: None)
 
     async def scenario():
         async with TestClient(TestServer(app)) as client:
@@ -113,7 +171,7 @@ def test_html_export_is_a_self_contained_read_only_page_with_escaped_text(tmp_pa
     sessions.mkdir()
     (sessions / "chat_0123456789abcdef.json").write_text(json.dumps(session), encoding="utf-8")
     app = web.Application()
-    setup_chat_export_routes(app, sessions_dir=sessions, require_api_access=lambda _r: None)
+    setup_chat_export_routes(app, store=SessionStore(sessions), require_api_access=lambda _r: None)
 
     async def scenario():
         async with TestClient(TestServer(app)) as client:

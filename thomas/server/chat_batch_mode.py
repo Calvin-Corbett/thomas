@@ -103,14 +103,7 @@ async def maybe_execute_batch_chat(
 
     client: Any = None
     try:
-        try:
-            from thomas.server import app as server_app
-
-            client_cls = getattr(server_app, "OpenAICompatBatchClient", OpenAICompatBatchClient)
-        except Exception:
-            client_cls = OpenAICompatBatchClient
-
-        client = client_cls(model_cfg)
+        client = OpenAICompatBatchClient(model_cfg)
         await send(
             {
                 "type": "route",
