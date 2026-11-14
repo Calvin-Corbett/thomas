@@ -8,7 +8,7 @@ Primary goals:
 - keep outputs deterministic so cross-run and cross-agent comparisons are reliable
 
 Scope notes:
-- tests in `tests/prompt_pack/` cover per-feature contracts
+- tests in `tests/prompt_pack/` and `tests/test_agent_comparison_suite.py` are the main competitive/comparison layers
 - Thomas can execute these tests locally; competitor products (for example Claude Code) are external systems and must be run separately in their own environment, then compared using shared metrics/artifacts
 
 

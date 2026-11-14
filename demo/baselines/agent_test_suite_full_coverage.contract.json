@@ -791,8 +791,8 @@
       "category": "browser_and_operator_ux",
       "benchmark_family": "browser_and_operator_ux",
       "test_mode": "dynamic",
-      "title": "Browser workflow corpus validity tests.",
-      "description": "Browser workflow corpus validity tests.",
+      "title": "Browser action execution tests.",
+      "description": "Browser action execution tests.",
       "priority": "p1",
       "implementation_state": "implemented",
       "implementation_mode": "contract_rule_v1"
@@ -802,8 +802,8 @@
       "category": "browser_and_operator_ux",
       "benchmark_family": "browser_and_operator_ux",
       "test_mode": "dynamic",
-      "title": "Browser workflow runtime execution tests.",
-      "description": "Browser workflow runtime execution tests.",
+      "title": "Browser artifact capture tests.",
+      "description": "Browser artifact capture tests.",
       "priority": "p1",
       "implementation_state": "implemented",
       "implementation_mode": "contract_rule_v1"

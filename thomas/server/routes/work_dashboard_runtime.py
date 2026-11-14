@@ -18,6 +18,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from thomas.server.routes.work_llm_helpers import _build_llm, _extract_json
+
 # A work_store lookup that fails because the job is absent or unreadable.
 # The store arrives injected (typed Any), so its concrete error class cannot
 # be named here; these are the shapes "not found / not readable" takes.
@@ -62,38 +64,6 @@ real work and 3-8 realistic starter rows the user can edit in place. Design
 1-3 widgets that fit the domain; use representative example numbers when live
 data isn't wired yet; metrics without live data use value "—". Every job
 should look visibly different."""
-
-
-def _build_llm(root: Path, profile: str) -> Any | None:
-    """Construct an LLMClient (server->core import, guarded)."""
-    try:
-        from thomas.core.config import load_config
-        from thomas.core.llm_client import LLMClient
-
-        cfg = load_config(Path(root) / "thomas.toml")
-        model_cfg = cfg.get_model(profile or None)
-        return LLMClient(model_cfg)
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError) as exc:
-        log.warning("Work dashboard: could not build LLM client: %s", exc)
-        return None
-
-
-def _extract_json(text: str) -> dict[str, Any] | None:
-    raw = str(text or "").strip()
-    if not raw:
-        return None
-    fence = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw, re.DOTALL)
-    if fence:
-        raw = fence.group(1)
-    else:
-        start, end = raw.find("{"), raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            raw = raw[start : end + 1]
-    try:
-        data = json.loads(raw)
-        return data if isinstance(data, dict) else None
-    except json.JSONDecodeError:
-        return None
 
 
 def job_design_context(app: dict[str, Any], job: dict[str, Any], workflows: list[dict[str, Any]]) -> str:
@@ -362,7 +332,7 @@ def fenced_paths_for(project_root: Path | str) -> list[str]:
     THOMAS_REDESIGN_EXEMPT_AGENTS (comma list) in the server's own environment
     names agents whose claims are not fenced; nothing a client sends can.
     """
-    from thomas.server.routes.ui_redesign_runtime import board_fenced_paths
+    from thomas.core.board_fence import board_fenced_paths
 
     board = Path(project_root) / "plans" / "thomas" / "WORKBOARD.md"
     try:
@@ -409,7 +379,7 @@ def register_work_dashboard_routes(
         if request_profile:
             return request_profile
         try:
-            from thomas.server.routes.canvas_studio_routes import _resolve_default_profile
+            from thomas.server.canvas_studio_shared import _resolve_default_profile
 
             return _resolve_default_profile(root)
         except (ImportError, OSError, ValueError, TypeError, AttributeError):

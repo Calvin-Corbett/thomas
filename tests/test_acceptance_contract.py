@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from thomas.core import acceptance_contract as ac
+from thomas.core.verify_command_policy import whole_suite_pytest
 
 PROMPT = """A cargo airline's flight dispatch planner has been producing incorrect results.
 
@@ -152,6 +154,22 @@ def test_no_paths_no_data_no_commands_still_yields_a_contract(tmp_path: Path) ->
     kinds = {it.kind for it in items}
     assert ac.KIND_COMPILES in kinds and ac.KIND_REQUIREMENT in kinds
     assert ac.contract_prompt_block(items).startswith("--- Acceptance Contract ---")
+
+
+def test_the_finish_instruction_asks_for_the_tests_this_work_changed_not_the_whole_suite(tmp_path: Path) -> None:
+    """2026-10-07: six Build teams at once ended with `VERIFY: python -m pytest`, the whole ~13k-test suite, because
+    "exits 0 only if the task is complete" read as "run everything". What a team is told names the tests instead."""
+    items = ac.build_contract("make me a snake game that must open in the browser", tmp_path)
+    block = ac.contract_prompt_block(items, require_finish=True)
+    assert ac.FINISH_INSTRUCTION in block
+    text = ac.FINISH_INSTRUCTION.lower()
+    assert "name the tests that cover what this work changed" in text
+    assert "do not run the whole test suite" in text
+    assert "only if the task is complete" not in text
+    examples = [span for span in re.findall(r"`([^`]+)`", ac.FINISH_INSTRUCTION) if "pytest" in span]
+    assert examples and not any(whole_suite_pytest(span) for span in examples), examples
+    assert "`EVIDENCE: <" in ac.FINISH_INSTRUCTION and "`VERIFY: <" in ac.FINISH_INSTRUCTION
+    assert "a reply without it, or whose command fails, is not finished" in text
 
 
 def test_flag_is_on_by_default_and_zero_turns_it_off(monkeypatch) -> None:

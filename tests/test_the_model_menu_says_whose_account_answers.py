@@ -23,6 +23,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = ROOT / "thomas" / "server" / "web" / "chat.html"
 
@@ -35,12 +37,10 @@ def _shell() -> str:
     reader so no assertion below has to remember.
     """
 
-    text = CHAT_HTML.read_text(encoding="utf-8", errors="replace")
+    text = read_chat_sources(CHAT_HTML)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
-    return "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("//")
-    )
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//"))
 
 
 def test_the_account_line_is_rendered_not_merely_defined() -> None:
@@ -50,12 +50,10 @@ def test_the_account_line_is_rendered_not_merely_defined() -> None:
     # matches the DEFINITION, and the assertion passes with the call removed --
     # the exact "built but never called" state that buried this feature.
     assert re.search(r"(?<!function )refreshAccountLine\(\);", shell), (
-        "refreshAccountLine is defined but never called, so the menu shows no "
-        "account even when one is signed in"
+        "refreshAccountLine is defined but never called, so the menu shows no account even when one is signed in"
     )
     assert 'id="tc-model-account"' in shell, (
-        "the account element is gone from the menu markup, so the builder has "
-        "nothing to fill"
+        "the account element is gone from the menu markup, so the builder has nothing to fill"
     )
 
 
@@ -101,8 +99,7 @@ def test_the_lookup_is_cached_per_profile() -> None:
 
     shell = _shell()
     assert "accountByProfile" in shell, (
-        "the per-profile cache is gone, so opening the menu fires a status "
-        "request every time it renders"
+        "the per-profile cache is gone, so opening the menu fires a status request every time it renders"
     )
     assert re.search(r"hasOwnProperty\.call\(accountByProfile", shell), (
         "the cache is no longer consulted before fetching. A plain truthiness "

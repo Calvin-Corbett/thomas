@@ -16,6 +16,13 @@ from thomas.cli.repl_slash import (
     suggest_slash_commands,
 )
 from thomas.cli.repl_state import ReplUiState
+from thomas.preferences.model_prefs import read_user_model_preferences
+
+
+@pytest.fixture(autouse=True)
+def own_preferences(tmp_path, monkeypatch) -> None:
+    """/model saves your choice for real. In the file a process shares, a later test's Build ran the model chosen here."""
+    monkeypatch.setenv("THOMAS_DB_PATH", str(tmp_path / "preferences.db"))
 
 
 class _DummySlashRuntime(ThomasREPLRuntimeMixin):
@@ -264,6 +271,17 @@ async def test_handle_slash_model_profile_matching_is_case_insensitive() -> None
     assert handled is True
     assert runtime._current_model == "Local"
     assert runtime.config.models["Local"].model == "gpt-local"
+
+
+@pytest.mark.asyncio
+async def test_a_model_chosen_here_is_saved_in_this_tests_own_file(tmp_path) -> None:
+    runtime = _DummySlashRuntime(command_plan=[], arg_plan=[])
+    runtime.config = type("Config", (), {"models": {"codex": type("Model", (), {"model": "gpt-codex"})()}})()
+
+    await runtime._handle_slash("/model codex")
+
+    assert read_user_model_preferences(user_id="default")[0] == "codex"
+    assert (tmp_path / "preferences.db").is_file()
 
 
 @pytest.mark.asyncio

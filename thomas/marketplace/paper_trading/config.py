@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from thomas.core.plugin_data import plugin_data_dir
 from thomas.marketplace.paper_trading._exceptions import LiveTradingBlocked
 from thomas.marketplace.paper_trading._types import RiskRules
 
@@ -29,7 +30,7 @@ ALLOWED_BROKER_HOSTS = ("paper-api.alpaca.markets", "data.alpaca.markets")
 # A host that contains "api.alpaca.markets" but NOT "paper" is the live endpoint.
 _LIVE_TRADING_HOST = "api.alpaca.markets"
 
-_PLUGIN_RELATIVE = Path(".thomas") / "plugins" / "paper-trading"
+_PLUGIN_ID = "paper-trading"
 _CREDENTIALS_FILE = "credentials.json"
 _STATE_FILE = "state.json"
 
@@ -99,8 +100,7 @@ def resolve_data_dir(explicit: Path | str | None = None) -> Path:
     try:
         from thomas.core.config import load_config
 
-        root = load_config().memory.root_path
-        return Path(root) / _PLUGIN_RELATIVE
+        root = Path(load_config().memory.root_path)
     # Importing the core config module, reading thomas.toml off disk (a TOML/JSON
     # decode error is a ValueError subclass), and walking .memory.root_path. A
     # config that will not load must not stop the plugin from resolving a data
@@ -108,7 +108,10 @@ def resolve_data_dir(explicit: Path | str | None = None) -> Path:
     # and should surface rather than silently relocate the owner's state file.
     except (ImportError, OSError, ValueError, TypeError, AttributeError, LookupError):
         log.debug("core config unavailable; using the ~/.thomas paper-trading dir", exc_info=True)
-        return Path.home() / _PLUGIN_RELATIVE
+        root = Path.home()
+    # Outside the install folder, which install and uninstall delete. Not inside the try: a saved file that cannot
+    # be moved must fail here, not send the engine to an empty folder somewhere else.
+    return plugin_data_dir(root, _PLUGIN_ID)
 
 
 def _positive(value: float, default: float) -> float:

@@ -3,12 +3,43 @@
 
   function create({
     state, esc, activeWorkflowFor, statusPill, safeArtifactHref,
-    onboardingBrief, jsonRequest, appUrl,
+    onboardingBrief, jsonRequest, appUrl, contextSettings = () => ({}),
   }) {
+    async function persistOnboardingPhase(phase, fields) {
+      const phases = ['goal_discovery', 'workflow_mapping', 'workflow_configuration', 'ready'];
+      const persisted = state.activeApp.onboarding?.phase || 'goal_discovery';
+      const currentIndex = Math.max(0, phases.indexOf(persisted));
+      const targetIndex = phases.indexOf(phase);
+      const steps = targetIndex > currentIndex ? phases.slice(currentIndex + 1, targetIndex + 1) : [phase];
+      for (const step of steps) {
+        const result = await jsonRequest(appUrl('/onboarding'), 'PATCH', { phase: step, fields: { ...fields, phase: step } });
+        state.activeApp.onboarding = { ...state.activeApp.onboarding, ...result.onboarding, phase: step };
+      }
+    }
+
     function receiptSummary(value) {
       if (!value || typeof value !== 'object') return '';
       const selected = value.artifact || value.reference || value.output || value.summary || value.message || value.error;
       return String(selected || '').trim().slice(0, 180);
+    }
+
+    function runArtifacts(lastRun) {
+      if (!lastRun || lastRun.status !== 'succeeded') return [];
+      const result = lastRun.result || {};
+      const stages = [...(Array.isArray(result.workers) ? result.workers : []),
+        ...(Array.isArray(result.steps) ? result.steps : [])];
+      const candidates = [...(Array.isArray(result.artifacts) ? result.artifacts : []),
+        ...stages.flatMap(stage => Array.isArray(stage.artifacts) ? stage.artifacts : [])];
+      const seen = new Set();
+      return candidates.filter(item => {
+        const href = item && safeArtifactHref(item.url);
+        if (!href || seen.has(href)) return false;
+        seen.add(href); return true;
+      }).map(item => ({ title: item.name || item.path || 'Download result', reference: item.url }));
+    }
+
+    function artifactLinks(rows) {
+      return rows.map(row => { const href = safeArtifactHref(row.reference); return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(row.title)}</a>` : `<span title="Unsafe result link blocked">${esc(row.title)}</span>`; }).join('');
     }
 
     function onboardingWorkflowCandidates() {
@@ -28,6 +59,8 @@
     }
 
     function restoreOnboardingWorkflow(fields) {
+      const previousWorkflowId = state.onboardingWorkflowId;
+      const previousSelectionTurn = Math.max(0, Number(state.onboardingSelectionUserTurn || 0));
       const persistedWorkflows = Array.isArray(fields.workflow_drafts) ? fields.workflow_drafts : [];
       state.structuredOnboardingState = {
         phase: String(fields.phase || state.onboardingPhase || 'goal_discovery'),
@@ -40,15 +73,58 @@
       const savedWorkflowId = String(fields.selected_workflow_id || '');
       const savedIndex = drafts.findIndex(draft => draft.id === savedWorkflowId);
       state.onboardingWorkflowId = savedIndex >= 0 ? drafts[savedIndex].id : '';
-      state.onboardingSelectionUserTurn = Math.max(0, Number(fields.selected_workflow_user_turn || 0));
+      // A turn this browser recorded for THIS selection is still a real user
+      // action even when the server has not stored it -- a PATCH that failed, or
+      // an app saved before the field existed. Restoring 0 over it would erase
+      // the click and, now that readiness depends on it, lock the wizard.
+      const restoredSelectionTurn = Math.max(0, Number(fields.selected_workflow_user_turn || 0));
+      const keepsPreviousSelection = Boolean(previousWorkflowId) && previousWorkflowId === state.onboardingWorkflowId;
+      state.onboardingSelectionUserTurn = restoredSelectionTurn || (keepsPreviousSelection ? previousSelectionTurn : 0);
+    }
+
+    // Whether the selected workflow is CONFIGURED is a semantic judgement and the
+    // model owns it -- runtime code must never infer it from prose. What the
+    // browser owns is a different fact: the turn at which the user chose. Both
+    // are required, and neither stands in for the other.
+    //
+    // Until 2026-09-08 this read selected_workflow_configured === true and its
+    // result was written straight back into selected_workflow_configured by
+    // advanceOnboardingPhase. It read as the browser verifying the model's claim
+    // about its own work; it re-read that claim, so the verdict WAS the thing it
+    // was meant to judge, and the Finish button was unlocked by the assertion
+    // that it should be unlocked.
+    function modelReportedConfigured() {
+      return state.structuredOnboardingState?.selected_workflow_configured === true;
+    }
+
+    // Set from state.messages when the user clicks a workflow or names exactly
+    // one in a message (unified_work_mode.js), and restored from the persisted
+    // selected_workflow_user_turn. Zero means no user action was ever recorded.
+    function selectionCameFromTheUser() {
+      return Number(state.onboardingSelectionUserTurn || 0) >= 1;
     }
 
     function onboardingConfigurationReady(candidates, selected = selectedOnboardingWorkflow(candidates)) {
-      return Boolean(selected && state.structuredOnboardingState?.selected_workflow_configured === true);
+      return Boolean(selected) && selectionCameFromTheUser() && modelReportedConfigured();
     }
 
     function confirmedOnboardingGoal() {
       return String(state.structuredOnboardingState?.confirmed_goal || '').trim();
+    }
+
+    function onboardingFinishReason(candidates = onboardingWorkflowCandidates(), selected = selectedOnboardingWorkflow(candidates)) {
+      if (state.running) return 'Wait for Thomas to finish the current reply.';
+      if (!state.activeApp) return 'Describe the job you want Thomas to create.';
+      const configurationPhase = state.onboardingPhase === 'workflow_configuration';
+      if (!configurationPhase || candidates.length < 1 || candidates.length > 6) return 'Confirm the goal and choose a workflow to configure.';
+      if (!selected) return 'Choose one workflow from the options below.';
+      if (!confirmedOnboardingGoal()) return 'Confirm the goal for this job with Thomas.';
+      // Distinguishable and recoverable: an app whose selection turn was never
+      // recorded must say so, or re-selecting would never occur to anyone.
+      if (!selectionCameFromTheUser()) return 'Choose the workflow again so the selection is recorded.';
+      if (!modelReportedConfigured()) return 'Finish configuring the selected workflow with Thomas.';
+      if (!state.sessionId) return 'Continue the conversation once to restore the job session.';
+      return '';
     }
 
     function visibleOnboardingText(value) {
@@ -66,7 +142,8 @@
     }
 
     function onboardingInstruction(jobName, turn) {
-      return `Continue Work onboarding for "${jobName}" at follow-up ${turn}. Use the structured Work onboarding state supplied by the browser, call work_onboarding_update once with your current semantic decisions, then ask at most one useful question or explain the next explicit choice. Never encode state in prose. When the structured state already carries selected_workflow_id, that workflow IS selected - keep configuring it and never ask for another click.`;
+      const controls = JSON.stringify(contextSettings());
+      return `Continue Work onboarding for "${jobName}" at follow-up ${turn}. Current Tools controls for this turn: ${controls}. These are the current UI settings; unlisted settings are unknown. work_onboarding_update only records goal and workflow configuration; it cannot change autonomy, model, or any Tools setting. Never claim those settings changed or were saved by that tool, and never treat a requested setting in conversation as the current setting. If a requested setting differs from these controls, explain the mismatch and direct the user to the existing Tools control (Tools > Autonomy for autonomy) before saving; do not claim the requested change was applied. Use the structured Work onboarding state supplied by the browser, call work_onboarding_update once with your current semantic decisions, then ask at most one useful question or explain the next explicit choice. Never encode state in prose. When the structured state already carries selected_workflow_id, that workflow IS selected - keep configuring it and never ask for another click. Once the selected workflow has all necessary details, mark selected_workflow_configured true and direct the user to the panel's "Create job & continue this flow" button. That button saves the job at every autonomy setting, including Assist; do not suggest raising autonomy to save it. Until that button is used, describe the job as configured, not saved. If details are missing, explain what is still needed.`;
     }
 
     // Work has no composer of its own. The shell composer at the bottom of
@@ -85,17 +162,37 @@
     // the two-line summary sitting over a dashboard.
     function peekRows() {
       const visible = state.messages.filter(row => row.role !== 'system');
+      // A message waiting its turn shows in the strip too, or it would look lost until the reply ends.
+      const queued = (Array.isArray(state.queuedSends) ? state.queuedSends : []).map(row => ({ role: 'user', text: `${row.text} (queued: sends when Thomas finishes this reply)` }));
       return visible.slice(-2).map(row => ({
         role: row.role,
         text: visibleOnboardingText(row.text || row.content || ''),
-      })).filter(row => row.text);
+      })).filter(row => row.text).concat(queued);
+    }
+
+    function liveTaskHtml() {
+      const tasks = Array.isArray(state.liveTasks) ? state.liveTasks : [];
+      if (!tasks.length && !state.running && !['failed', 'stopped'].includes(state.runState)) return '';
+      const status = tasks.some(task => task.status === 'running') ? 'Task running' : state.runState === 'failed' ? 'Did not finish' : state.runState === 'stopped' ? 'Stopped' : state.running ? 'Working' : 'Completed';
+      const rows = tasks.map(task => {
+        const running = task.status === 'running';
+        const title = esc(task.title || 'Task');
+        return `<li class="tc-work-live-task"><div><strong>${title}</strong><span class="tc-work-live-badge">${esc(task.status || 'running')}</span></div><p>${esc(task.detail || (running ? 'Starting…' : 'No update available.'))}</p>${running && task.id && state.sessionId ? `<form data-work-steer="${esc(task.id)}" aria-label="Steer ${title}"><label for="tc-work-steer-${esc(task.id)}">Steer this running task</label><div><textarea id="tc-work-steer-${esc(task.id)}" name="message" placeholder="Tell Thomas what to change…" rows="2" required ${state.steeringBusy === task.id ? 'disabled' : ''}></textarea><button type="submit" ${state.steeringBusy === task.id ? 'disabled' : ''}>${state.steeringBusy === task.id ? 'Sending…' : 'Apply update'}</button></div><small>Applies to this task, not a new job.</small><span data-work-steer-error role="alert">${esc(task.steerError || '')}</span></form>` : ''}</li>`;
+      }).join('');
+      return `<section class="tc-work-live" aria-label="Live task progress"><div class="tc-work-live-header"><strong>Task progress</strong><span role="status">${status}</span></div>${tasks.length ? `<ul>${rows}</ul>` : '<p>Thomas is getting started…</p>'}</section>`;
     }
 
     function messageRows() {
       if (!state.messages.length) {
         if (state.stage === 'onboarding') return `<div class="tc-work-welcome"><span class="tc-work-orb">T</span><div><strong>What job do you want Thomas to own?</strong><p>Describe the outcome in your own words. Thomas will ask one useful question at a time and build the job with you.</p></div></div>`;
-        return `<div class="tc-work-welcome"><span class="tc-work-orb">T</span><div><strong>Continue this job with Thomas.</strong><p>The selected workflow, connector identities, learned decisions, and results stay private to this job while the conversation remains shared across its workflows.</p></div></div>`;
+        return `<div class="tc-work-welcome"><span class="tc-work-orb">T</span><div><strong>Continue this job with Thomas.</strong><p>This job keeps its own workflow, accounts, what it has learned and its results. This conversation is shared by all of its workflows.</p></div></div>`;
       }
+      // What you sent while Thomas was still answering waits here, in view, and goes out when the reply ends.
+      const queued = (Array.isArray(state.queuedSends) ? state.queuedSends : []).map(row => `<article class="tc-work-message is-user is-queued"><div class="tc-work-message-body"><div class="tc-work-message-role">You · queued</div><div>${esc(row.text)}</div><small class="tc-work-muted">Sends when Thomas finishes this reply.</small></div></article>`).join('');
+      return queued ? `${sentRows()}${queued}` : sentRows();
+    }
+
+    function sentRows() {
       return state.messages.map(row => {
         // System rows are the UI reporting (a failed action, a routed note):
         // render them as visible alerts, never as Thomas or the user speaking.
@@ -103,6 +200,91 @@
         const isThomas = row.role === 'assistant' || row.role === 'thomas';
         return `<article class="tc-work-message is-${isThomas ? 'thomas' : 'user'}">${isThomas ? thomasAvatar() : ''}<div class="tc-work-message-body"><div class="tc-work-message-role">${isThomas ? 'Thomas' : 'You'}</div><div>${isThomas ? inlineMarkdown(visibleOnboardingText(row.text || row.content || '')) : esc(row.text || row.content || '')}</div></div></article>`;
       }).join('');
+    }
+
+    // Thomas asking before it changes one of its own gates. The evidence that
+    // produced the ask is shown with it: an ask you cannot check is not a
+    // question, it is a notification with buttons.
+    function laneProposalEvidence(evidence) {
+      const row = evidence || {};
+      const parts = [];
+      if (Number(row.checked_count) > 0) parts.push(`checked ${Number(row.checked_count)} times`);
+      parts.push(Number(row.fired_count) > 0 ? `stopped something ${Number(row.fired_count)} times` : 'never stopped anything');
+      if (Number(row.waived_count) > 0) parts.push(`you overrode it ${Number(row.waived_count)} times`);
+      return parts.join(' · ');
+    }
+
+    function laneProposalsHtml() {
+      const rows = Array.isArray(state.laneProposals) ? state.laneProposals : [];
+      if (!rows.length) return '';
+      const cards = rows.map(row => {
+        const verb = row.kind === 'retire' ? 'Drop this check' : 'Add this check';
+        return `<article class="tc-work-proposal"><div class="tc-work-proposal-body"><strong>${esc(verb)}: ${esc(row.gate_id)}</strong><p>${esc(row.rationale)}</p><small>${esc(laneProposalEvidence(row.evidence))}</small></div><div class="tc-work-proposal-actions"><button class="tc-work-primary" data-work-proposal-approve="${esc(row.id)}" ${state.actionBusy ? 'disabled' : ''}>Approve — needs your tap</button><button data-work-proposal-reject="${esc(row.id)}" ${state.actionBusy ? 'disabled' : ''}>Not now</button></div></article>`;
+      }).join('');
+      const heading = rows.length === 1 ? 'Thomas found something to change' : `Thomas found ${rows.length} things to change`;
+      return `<section class="tc-work-proposals" aria-label="Gate change proposals"><div class="tc-work-proposals-head"><strong>${esc(heading)}</strong><span>Approving opens your Windows sign-in. Nothing changes until you do.</span></div>${cards}</section>`;
+    }
+
+    // The step rail. Until 2026-09-08 the wizard drew
+    //   const phaseIndex = Math.max(0, phases.indexOf(state.onboardingPhase));
+    //   <span class="${phaseIndex >= 0 ? 'is-done' : ''}">1 . Goal</span>
+    // -- Math.max floored the index at 0, so `phaseIndex >= 0` was ALWAYS true
+    // and step one read as done the instant the wizard opened, before any goal
+    // existed. Steps two and three then lit from the model's own phase claim.
+    //
+    // The rail now arrives from the server, computed on the same ledger the
+    // gates run on, so what the user sees and what actually blocks cannot
+    // disagree. A rail derived separately would drift from the gates it depicts.
+    const RAIL_LABELS = {
+      passed: 'done',
+      open: 'in progress',
+      locked: 'not started',
+      blocked: 'blocked',
+      waived: 'skipped, not verified',
+    };
+
+    // Shown until the server's rail arrives on the first turn. Without it the
+    // wizard would open with no steps at all, which is a worse answer than the
+    // always-lit bar this replaced: the user could not see the shape of the job.
+    // States are honest -- the first step is open, the rest are not started.
+    const DEFAULT_RAIL = [
+      { id: 'goal_discovery', name: 'Goal', state: 'open', unmet: [] },
+      { id: 'workflow_mapping', name: 'Workflow map', state: 'locked', unmet: [] },
+      { id: 'workflow_configuration', name: 'Configure one', state: 'locked', unmet: [] },
+    ];
+
+    // What a step is waiting for, in words a person can act on. The server
+    // sends "<check id>: <field> is empty"; the id and the field name are the
+    // checker's own vocabulary and used to be printed as they came. A step
+    // waiting on a choice you have since made says nothing: the rail only
+    // refreshes on Thomas's next turn, and until then its reason is out of date.
+    function railReason(raw) {
+      const text = String(raw || '').replace(/^[a-z0-9]+(?:-[a-z0-9]+)*:\s*/i, '');
+      if (!text) return '';
+      if (/selected_workflow_id is empty/i.test(text)) return state.onboardingWorkflowId ? '' : 'Choose one of the workflows below.';
+      const goal = /confirmed_goal is \d+ chars(?:, (needs at least \d+))?/i.exec(text);
+      if (goal) return goal[1] ? `Tell Thomas more about what you want done (${goal[1]} characters).` : 'Tell Thomas more about what you want done.';
+      const mapped = /workflows has 0 entries(?:, (needs [\d.]+))?/i.exec(text);
+      if (mapped) return mapped[1] ? `Thomas has not laid out the workflows yet (${mapped[1]}).` : 'Thomas has not laid out the workflows yet.';
+      return text.replace(/_/g, ' ');
+    }
+
+    function stepRailHtml(rail) {
+      const rows = Array.isArray(rail) && rail.length ? rail : [];
+      if (!rows.length) return '';
+      const items = rows.map((row, index) => {
+        const stepState = String(row.state || 'locked');
+        const label = RAIL_LABELS[stepState] || stepState;
+        const reason = Array.isArray(row.unmet) && row.unmet.length ? railReason(row.unmet[0]) : '';
+        return `<li class="tc-work-rail-step is-${esc(stepState)}"><span class="tc-work-rail-mark" aria-hidden="true"></span><span class="tc-work-rail-text"><strong>${index + 1} · ${esc(row.name || row.id)}</strong><small>${esc(label)}</small>${reason ? `<small class="tc-work-rail-why">${esc(reason)}</small>` : ''}</span></li>`;
+      }).join('');
+      const waived = rows.filter(row => String(row.state) === 'waived').length;
+      // A skipped step is the loudest thing on the rail. Momentum must not
+      // become amnesia: a run that waived something can never look clean.
+      const banner = waived
+        ? `<p class="tc-work-rail-waived" role="status">${waived} step${waived === 1 ? '' : 's'} skipped without being verified.</p>`
+        : '';
+      return `<ol class="tc-work-rail" aria-label="Job steps">${items}</ol>${banner}`;
     }
 
     function homeHtml() {
@@ -113,26 +295,24 @@
         const workflow = activeWorkflowFor(job);
         const canRun = workflow && workflow.type === 'manual' && workflow.status === 'active' && workflow.automation_id;
         const action = job.status === 'paused' ? 'resume' : 'pause';
-        return `<article class="tc-work-app-card"><button class="tc-work-card-open" data-work-card-open data-work-app-id="${esc(app.id)}" data-work-job-id="${esc(job.id)}"><span class="tc-work-app-icon"><i class="ph ph-briefcase"></i></span><strong>${esc(job.name)}</strong><p>${esc(job.goal)}</p><small>${esc(app.name)}${workflow ? ` · ${esc(workflow.name)}` : ' · map workflows'}</small></button><footer>${statusPill(job.status)}<div class="tc-work-card-controls"><button data-work-card-status="${action}" data-work-app-id="${esc(app.id)}" data-work-job-id="${esc(job.id)}" aria-label="${action} ${esc(job.name)}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-${action === 'pause' ? 'pause' : 'play'}"></i></button><button data-work-card-run data-work-app-id="${esc(app.id)}" data-work-job-id="${esc(job.id)}" data-work-workflow-id="${esc(workflow ? workflow.id : '')}" ${canRun && !state.actionBusy ? '' : 'disabled'} title="${canRun ? 'Run this workflow once through Mission' : 'Finish and activate one manual workflow first'}"><i class="ph ph-lightning"></i> Run once</button></div></footer></article>`;
+        return `<article class="tc-work-app-card"><button class="tc-work-card-open" data-work-card-open data-work-app-id="${esc(app.id)}" data-work-job-id="${esc(job.id)}"><span class="tc-work-app-icon"><i class="ph ph-briefcase"></i></span><strong>${esc(job.name)}</strong><p>${esc(job.goal)}</p><small>${esc(app.name)}${workflow ? ` · ${esc(workflow.name)}` : ' · no workflow chosen yet'}</small></button><footer>${statusPill(job.status)}<div class="tc-work-card-controls"><button data-work-card-status="${action}" data-work-app-id="${esc(app.id)}" data-work-job-id="${esc(job.id)}" aria-label="${action} ${esc(job.name)}" ${state.actionBusy ? 'disabled' : ''}><i class="ph ph-${action === 'pause' ? 'pause' : 'play'}"></i></button><button data-work-card-run data-work-app-id="${esc(app.id)}" data-work-job-id="${esc(job.id)}" data-work-workflow-id="${esc(workflow ? workflow.id : '')}" ${canRun && !state.actionBusy ? '' : 'disabled'} title="${canRun ? 'Run this workflow once, now' : 'Finish setting up one manual workflow first'}"><i class="ph ph-lightning"></i> Run once</button></div></footer></article>`;
       }).join('');
       const title = state.activeApp ? state.activeApp.name : 'All Work';
-      const subtitle = state.activeApp ? state.activeApp.goal : 'Durable jobs with their own workflows, connector identities, memory, skills, and Mission-backed runs.';
+      const subtitle = state.activeApp ? state.activeApp.goal : 'Jobs Thomas keeps doing for you. Each job has its own steps, accounts, memory and run history.';
       const createAttribute = state.activeApp ? 'data-work-create-job' : 'data-work-create';
-      return `<div class="tc-mode-panel tc-work-home"><div class="tc-mode-hero"><div>${state.activeApp ? '<button class="tc-work-back" data-work-all-apps><i class="ph ph-arrow-left"></i> All Work</button>' : '<div class="tc-mode-kicker">Work · jobs Thomas can keep improving</div>'}<h1 class="tc-mode-title">${esc(title)}</h1><p class="tc-mode-subtitle">${esc(subtitle)}</p></div><button class="tc-work-primary" ${createAttribute}><i class="ph ph-plus"></i> Create job</button></div><div class="tc-work-app-grid">${cards}<button class="tc-work-app-card is-create" ${createAttribute}><span class="tc-work-app-icon"><i class="ph ph-plus"></i></span><strong>Create a new job</strong><p>Define the goal first. Thomas will map the job into workflows, then help configure one flow at a time.</p></button></div></div>`;
+      // With no jobs the page used to be a title and one card: nothing said
+      // what a job is or what to type. One sentence and two examples do.
+      const firstJob = rows.length || state.activeApp ? '' : '<section class="tc-work-card" role="note"><header><span><i class="ph ph-briefcase"></i> No jobs yet</span></header><p class="tc-work-muted">A job is something you want done more than once, for example “Every Monday, summarize my unread email” or “Check each morning that my site is up, and tell me if it is not”. Describe yours in the box below, or press Create job. Thomas asks a few questions and sets it up with you.</p></section>';
+      return `<div class="tc-mode-panel tc-work-home"><div class="tc-mode-hero"><div>${state.activeApp ? '<button class="tc-work-back" data-work-all-apps><i class="ph ph-arrow-left"></i> All Work</button>' : '<div class="tc-mode-kicker">Work · jobs Thomas can keep improving</div>'}<h1 class="tc-mode-title">${esc(title)}</h1><p class="tc-mode-subtitle">${esc(subtitle)}</p></div><button class="tc-work-primary" ${createAttribute}><i class="ph ph-plus"></i> Create job</button></div>${laneProposalsHtml()}${firstJob}<div class="tc-work-app-grid">${cards}<button class="tc-work-app-card is-create" ${createAttribute}><span class="tc-work-app-icon"><i class="ph ph-plus"></i></span><strong>Create a new job</strong><p>Define the goal first. Thomas will map the job into workflows, then help configure one flow at a time.</p></button></div></div>`;
     }
 
     function onboardingHtml() {
-      const userTurns = state.messages.filter(row => row.role === 'user').length;
-      const thomasTurns = state.messages.filter(row => row.role === 'assistant' || row.role === 'thomas').length;
       const candidates = onboardingWorkflowCandidates();
       const selected = selectedOnboardingWorkflow(candidates);
-      // One workflow is a legitimate map for a simple job (the model contract
-      // allows one to six); demanding three made onboarding unfinishable.
-      const ready = state.activeApp && state.onboardingPhase === 'workflow_configuration' && candidates.length >= 1 && candidates.length <= 6 && selected && onboardingConfigurationReady(candidates, selected) && userTurns >= 4 && thomasTurns >= userTurns && !state.running;
-      const phases = ['goal_discovery', 'workflow_mapping', 'workflow_configuration'];
-      const phaseIndex = Math.max(0, phases.indexOf(state.onboardingPhase));
+      const finishReason = onboardingFinishReason(candidates, selected);
+      const finishControl = `<div><button class="tc-work-primary" data-work-finish ${state.actionBusy ? 'disabled' : finishReason ? 'disabled aria-describedby="tc-work-finish-reason"' : ''}>${state.actionBusy ? 'Saving your job…' : 'Create job & continue this flow'}</button>${finishReason ? `<p class="tc-work-muted" id="tc-work-finish-reason" role="status">${esc(finishReason)}</p>` : ''}</div>`;
       const workflowChoices = candidates.map(row => `<button type="button" data-work-select-workflow="${esc(row.id)}" class="${selected && selected.id === row.id ? 'is-selected' : ''}"><strong>${esc(row.name)}</strong><span>${esc(row.purpose)}</span></button>`).join('');
-      return `<div class="tc-mode-panel tc-work-panel"><div class="tc-mode-hero tc-work-compact"><div><button class="tc-work-back" data-work-cancel-onboarding><i class="ph ph-arrow-left"></i> All Work</button><div class="tc-mode-kicker">Work onboarding · ${esc(state.activeApp ? state.activeApp.name : 'new job')}</div><h1 class="tc-mode-title">Define the job before the machinery.</h1><p class="tc-mode-subtitle">Thomas starts with the outcome, maps the job into separate workflows, then configures only the flow you choose.</p></div>${ready ? '<button class="tc-work-primary" data-work-finish>Create job & continue this flow</button>' : ''}</div><section class="tc-work-onboarding"><div class="tc-work-progress"><span class="${phaseIndex >= 0 ? 'is-done' : ''}">1 · Goal</span><span class="${phaseIndex >= 1 ? 'is-done' : ''}">2 · Workflow map</span><span class="${phaseIndex >= 2 ? 'is-done' : ''}">3 · Configure one</span></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${state.running ? '<div class="tc-work-thinking" role="status">Thomas is thinking about the next useful question…</div>' : ''}</div>${candidates.length ? `<div class="tc-work-onboarding-map" role="group" aria-label="Choose one workflow"><strong>${selected ? `Selected: ${esc(selected.name)}` : 'Choose one workflow'}</strong><div>${workflowChoices}</div></div>` : ''}</section></div>`;
+      return `<div class="tc-mode-panel tc-work-panel"><div class="tc-mode-hero tc-work-compact"><div><button class="tc-work-back" data-work-cancel-onboarding><i class="ph ph-arrow-left"></i> All Work</button><div class="tc-mode-kicker">New job · ${esc(state.activeApp ? state.activeApp.name : 'not named yet')}</div><h1 class="tc-mode-title">Tell Thomas what you want done.</h1><p class="tc-mode-subtitle">Thomas asks about the result you want, lays the job out as separate workflows, then sets up the one you pick.</p></div>${finishControl}</div><section class="tc-work-onboarding">${stepRailHtml(state.laneRail && state.laneRail.length ? state.laneRail : DEFAULT_RAIL)}<div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${liveTaskHtml()}</div>${candidates.length ? `<div class="tc-work-onboarding-map" role="group" aria-label="Choose one workflow"><strong>${selected ? `Selected: ${esc(selected.name)}` : 'Choose one workflow'}</strong><div>${workflowChoices}</div></div>` : ''}</section></div>`;
     }
 
     function connectorHtml() {
@@ -151,16 +331,25 @@
       return `<section class="tc-work-card"><header><span><i class="ph ph-plugs-connected"></i> Connectors</span><small>${state.bindings.length} bound</small></header>${accounts || '<p class="tc-work-muted">Choose an installed Thomas connector. The identity stays visible, so several accounts from one provider remain distinct.</p>'}<form id="tc-work-account-form" class="tc-work-mini-form"><select name="provider" aria-label="Installed connector provider">${options}</select><input name="label" aria-label="Account label" required placeholder="Account label"><input name="identity" aria-label="Email or account identity" required placeholder="Email or identity"><input name="credential" type="password" autocomplete="off" aria-label="Connector credential" placeholder="Credential (optional)"><button>Add account</button></form></section>`;
     }
 
+    function automationDetail(trigger) {
+      const kind = trigger.type || 'manual';
+      if (kind === 'interval') return String(Number(trigger.every_seconds || 900) / 60);
+      if (kind === 'event') return trigger.event_name || '';
+      if (kind === 'once') return trigger.run_at || '';
+      return trigger.at || '';
+    }
+
     function automationHtml() {
       const rows = state.automations.map(row => {
         const trigger = row.trigger || {}; const kind = trigger.type || 'manual'; const delegation = (row.delegation || {}).state || 'not_deployed';
         const deployLabel = { armed: 'Armed', deployed: 'Deployed', running: 'Running', queued: 'Queued', awaiting_approval: 'Awaiting approval' }[delegation] || 'Deploy';
-        const detail = kind === 'interval' ? Math.max(1, Math.round(Number(trigger.every_seconds || 900) / 60)) : kind === 'event' ? trigger.event_name || '' : trigger.at || '';
-        if (state.editingAutomationId === row.id) return `<form class="tc-work-mini-form tc-work-automation-edit" data-work-automation-edit="${esc(row.id)}"><input name="name" aria-label="Automation name" required value="${esc(row.name)}"><select name="trigger" aria-label="Automation trigger"><option value="manual" ${kind === 'manual' ? 'selected' : ''}>Manual</option><option value="interval" ${kind === 'interval' ? 'selected' : ''}>Every N minutes</option><option value="daily" ${kind === 'daily' ? 'selected' : ''}>Daily</option><option value="weekly" ${kind === 'weekly' ? 'selected' : ''}>Weekdays</option><option value="event" ${kind === 'event' ? 'selected' : ''}>On event</option></select><input name="detail" aria-label="Schedule or event detail" value="${esc(detail)}" placeholder="15, 08:30, or event name"><label class="tc-work-check"><input type="checkbox" name="requires_approval" ${(row.mission_template || {}).requires_approval ? 'checked' : ''}> Require approval</label><button>Save</button><button type="button" data-work-automation-edit-cancel>Cancel</button></form>`;
+        const detail = automationDetail(trigger);
+        if (state.editingAutomationId === row.id) return `<form class="tc-work-mini-form tc-work-automation-edit" data-work-automation-edit="${esc(row.id)}"><p class="tc-work-muted">Saving stops any active run or schedule. Deploy again after saving.</p><input name="name" aria-label="Automation name" required value="${esc(row.name)}"><select name="trigger" aria-label="Automation trigger"><option value="manual" ${kind === 'manual' ? 'selected' : ''}>Manual</option><option value="once" ${kind === 'once' ? 'selected' : ''}>Once</option><option value="interval" ${kind === 'interval' ? 'selected' : ''}>Every N minutes</option><option value="daily" ${kind === 'daily' ? 'selected' : ''}>Daily</option><option value="weekly" ${kind === 'weekly' ? 'selected' : ''}>Weekdays</option><option value="event" ${kind === 'event' ? 'selected' : ''}>On event</option></select><input name="detail" aria-label="Schedule or event detail" value="${esc(detail)}" placeholder="Minutes, HH:MM, ISO date/time, or event"><label class="tc-work-check"><input type="checkbox" name="requires_approval" ${(row.mission_template || {}).requires_approval ? 'checked' : ''}> Require approval</label><button ${state.actionBusy ? 'disabled' : ''}>${state.actionBusy ? 'Saving…' : 'Save'}</button><button type="button" data-work-automation-edit-cancel ${state.actionBusy ? 'disabled' : ''}>Cancel</button></form>`;
         const approval = (row.mission_template || {}).requires_approval ? ' · approval required' : ''; const lastRun = (row.delegation || {}).last_run || {}; const receipt = receiptSummary(lastRun.result) || receiptSummary(lastRun.error);
-        return `<div class="tc-work-list-row"><div><strong>${esc(row.name)}</strong><small>${esc(kind)} · ${esc(delegation.replace(/_/g, ' '))}${approval}${receipt ? ` · ${esc(receipt)}` : ''}</small></div><div class="tc-work-row-actions"><button data-work-automation-edit-open="${esc(row.id)}">Edit</button><button data-work-automation-toggle="${esc(row.id)}">${row.enabled ? 'Disable' : 'Enable'}</button><button class="is-danger" data-work-automation-delete="${esc(row.id)}">Delete</button><button data-work-deploy="${esc(row.id)}" ${!row.enabled || ['deployed', 'armed', 'running', 'queued', 'awaiting_approval'].includes(delegation) ? 'disabled' : ''}>${deployLabel}</button></div></div>`;
+        const downloads = artifactLinks(runArtifacts(lastRun));
+        return `<div class="tc-work-list-row"><div><strong>${esc(row.name)}</strong><small>${esc(kind)} · ${esc(delegation.replace(/_/g, ' '))}${approval}${receipt ? ` · ${esc(receipt)}` : ''}</small>${downloads ? `<div class="tc-work-artifacts">${downloads}</div>` : ''}</div><div class="tc-work-row-actions"><button data-work-automation-edit-open="${esc(row.id)}" ${state.actionBusy ? 'disabled' : ''}>Edit</button><button data-work-automation-toggle="${esc(row.id)}">${row.enabled ? 'Disable' : 'Enable'}</button><button class="is-danger" data-work-automation-delete="${esc(row.id)}">Delete</button><button data-work-deploy="${esc(row.id)}" ${!row.enabled || ['deployed', 'armed', 'running', 'queued', 'awaiting_approval'].includes(delegation) ? 'disabled' : ''}>${deployLabel}</button></div></div>`;
       }).join('');
-      return `<section class="tc-work-card"><header><span><i class="ph ph-clock-countdown"></i> Automations</span><small>runs through Mission</small></header>${rows || '<p class="tc-work-muted">Create a manual, scheduled, or event workflow. Deployment delegates to Thomas Mission instead of creating a second scheduler.</p>'}<form id="tc-work-automation-form" class="tc-work-mini-form"><input name="name" aria-label="Automation name" required placeholder="Automation name"><select name="trigger" aria-label="Automation trigger"><option value="manual">Manual</option><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="weekly">Weekdays</option><option value="event">On event</option></select><input name="detail" aria-label="Schedule or event detail" placeholder="15, 08:30, or event name"><label class="tc-work-check"><input type="checkbox" name="requires_approval"> Require approval before actions</label><button>Add automation</button></form></section>`;
+      return `<section class="tc-work-card"><header><span><i class="ph ph-clock-countdown"></i> Automations</span><small>run by Thomas's job queue</small></header>${rows || '<p class="tc-work-muted">Add an automation to run this job by hand, on a schedule, or when something happens. Deploy hands it to the job queue.</p>'}<form id="tc-work-automation-form" class="tc-work-mini-form"><input name="name" aria-label="Automation name" required placeholder="Automation name"><select name="trigger" aria-label="Automation trigger"><option value="manual">Manual</option><option value="once">Once</option><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="weekly">Weekdays</option><option value="event">On event</option></select><input name="detail" aria-label="Schedule or event detail" placeholder="Minutes, HH:MM, ISO date/time, or event"><label class="tc-work-check"><input type="checkbox" name="requires_approval"> Require approval before actions</label><button>Add automation</button></form></section>`;
     }
 
     function skillsHtml() {
@@ -259,11 +448,12 @@
 
     function chatTabHtml() {
       const job = state.activeJob;
-      const artifacts = (job.dashboard && job.dashboard.artifacts || []).map(row => { const href = safeArtifactHref(row.reference); return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(row.title)}</a>` : `<span title="Unsafe result link blocked">${esc(row.title)}</span>`; }).join('');
+      const artifacts = artifactLinks([...(job.dashboard && job.dashboard.artifacts || []),
+        ...(state.automations || []).flatMap(row => runArtifacts((row.delegation || {}).last_run))]);
       // Typing happens in the shell composer below; this tab is purely for
       // reading and going deep. The id is the FLIP animation's target when
       // the peek strip grows into it.
-      return `<section class="tc-work-conversation" id="tc-work-conversation" data-ui-id="work.job.conversation" data-ui-label="Job conversation" data-ui-policy="move resize"><div class="tc-work-conversation-label"><span class="tc-work-message-avatar" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('work', 15) : ''}</span><div><strong>Thomas</strong><small>Working inside ${esc(job.name)}</small></div><button type="button" class="tc-work-collapse-chat" data-work-collapse-chat aria-label="Collapse the conversation"><i class="ph ph-caret-down"></i></button></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${state.running ? '<div class="tc-work-thinking" role="status">Thomas is working in this job…</div>' : ''}</div></section>${artifacts ? `<section class="tc-work-artifacts" data-ui-id="work.job.artifacts" data-ui-label="Job results"><h3>Results</h3>${artifacts}</section>` : ''}`;
+      return `<section class="tc-work-conversation" id="tc-work-conversation" data-ui-id="work.job.conversation" data-ui-label="Job conversation" data-ui-policy="move resize"><div class="tc-work-conversation-label"><span class="tc-work-message-avatar" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('work', 15) : ''}</span><div><strong>Thomas</strong><small>Working inside ${esc(job.name)}</small></div><button type="button" class="tc-work-collapse-chat" data-work-collapse-chat aria-label="Collapse the conversation"><i class="ph ph-caret-down"></i></button></div><div class="tc-work-transcript" role="log" aria-live="polite" aria-relevant="additions text" aria-busy="${state.running ? 'true' : 'false'}">${messageRows()}${liveTaskHtml()}</div></section>${artifacts ? `<section class="tc-work-artifacts" data-ui-id="work.job.artifacts" data-ui-label="Job results"><h3>Results</h3>${artifacts}</section>` : ''}`;
     }
 
     function setupTabHtml() {
@@ -304,7 +494,7 @@
         ? `<button data-work-workflow-run="${esc(selected.id)}"><i class="ph ph-lightning"></i> Run once</button>`
         : '';
       const triggerOptions = selected && selected.type === 'scheduled'
-        ? '<select name="trigger" aria-label="Trigger"><option value="daily">Daily</option><option value="weekly">Weekdays</option><option value="interval">Every N minutes</option></select><input name="detail" required placeholder="08:30 or 15">'
+        ? '<select name="trigger" aria-label="Trigger"><option value="daily">Daily</option><option value="weekly">Weekdays</option><option value="once">Once</option><option value="interval">Every N minutes</option></select><input name="detail" required placeholder="08:30 or 15">'
         : selected && selected.type === 'event'
           ? '<input type="hidden" name="trigger" value="event"><input name="detail" required placeholder="Event name">'
           : '<input type="hidden" name="trigger" value="manual">';
@@ -343,19 +533,27 @@
       return results.flatMap((result, index) => result.status === 'rejected' ? [actions[index][0]] : []);
     }
     return {
+      persistOnboardingPhase,
       onboardingWorkflowCandidates,
       selectedOnboardingWorkflow,
       onboardingConfigurationReady,
       onboardingWorkflowDrafts,
       restoreOnboardingWorkflow,
       confirmedOnboardingGoal,
+      stepRailHtml,
+      laneProposalsHtml,
+      modelReportedConfigured,
+      selectionCameFromTheUser,
+      onboardingFinishReason,
       visibleOnboardingText,
       onboardingInstruction,
       messageRows,
+      liveTaskHtml,
       homeHtml,
       onboardingHtml,
       connectorHtml,
       automationHtml,
+      automationDetail,
       skillsHtml,
       dashboardHtml,
       activityHtml,

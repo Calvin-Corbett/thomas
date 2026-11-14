@@ -8,8 +8,7 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.server.routes.work import APP_WORK_STORE
-from thomas.work import WorkNotFoundError, WorkStore
+from thomas.server.app_keys import APP_WORK_STORE
 
 
 @dataclass(slots=True)
@@ -41,6 +40,8 @@ def resolve_work_private_context(
     # three-part transient namespace. Neither is an existing job context.
     if len(parts) != 2 or not all(parts):
         return ""
+    from thomas.work import WorkNotFoundError, WorkStore
+
     store = app.get(APP_WORK_STORE)
     if not isinstance(store, WorkStore):
         raise WorkContextError("Work job context is unavailable", 503)

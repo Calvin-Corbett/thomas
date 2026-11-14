@@ -31,17 +31,21 @@ from thomas.core.web_asset_policy import safe_web_path
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.web_preflight import first_unresolved_root_link
 
-try:  # the browser driver is optional; without it the tool says how to install it
-    from playwright.async_api import Error as PlaywrightError
-except ImportError:  # pragma: no cover - exercised only where playwright is absent
 
-    class PlaywrightError(Exception):
-        """Stand-in so the except clauses below stay specific without the driver."""
+class _NoDriverError(Exception):
+    """Stand-in so the except clauses below stay specific without the browser driver."""
 
 
-# What a headless session can raise: the driver's own errors, the OS refusing
-# to launch, the session's own clock, and a step that names a bad value.
-_PLAYTEST_ERRORS = (PlaywrightError, OSError, RuntimeError, ValueError, TypeError, asyncio.TimeoutError)
+def _playtest_errors() -> tuple[type[BaseException], ...]:
+    """What a headless session can raise: the driver's own errors, the OS refusing to launch, the session's own
+    clock, and a step that names a bad value. The driver (~0.25 s to import) is optional and is only loaded when an
+    except clause actually has an error to match, so booting Thomas never pays for it."""
+    try:
+        from playwright.async_api import Error as PlaywrightError
+    except ImportError:  # pragma: no cover - exercised only where playwright is absent
+        PlaywrightError = _NoDriverError  # noqa: N806
+    return (PlaywrightError, OSError, RuntimeError, ValueError, TypeError, asyncio.TimeoutError)
+
 
 ORIGIN_HOST = "thomas-playtest.invalid"
 ORIGIN = f"http://{ORIGIN_HOST}"
@@ -235,7 +239,7 @@ class WebPlaytestTool(Tool):
                 ok=False,
                 error=f"playtest exceeded {int(SESSION_SECONDS)}s and was cut off; what it saw before that:\n{seen}",
             )
-        except _PLAYTEST_ERRORS as exc:  # the browser's failure is the result
+        except _playtest_errors() as exc:  # the browser's failure is the result
             return ToolResult(ok=False, error=f"playtest could not run: {type(exc).__name__}: {exc}")
         return ToolResult(ok=True, data=data, duration_ms=(time.monotonic() - started) * 1000.0)
 
@@ -317,7 +321,7 @@ class WebPlaytestTool(Tool):
                         break
                     try:
                         outcome = await self._run_step(page, step, shot_dir, index)
-                    except _PLAYTEST_ERRORS as exc:
+                    except _playtest_errors() as exc:
                         # The step's failure is a fact about the page; the steps
                         # before it saw real things, and one failed click must
                         # not throw them away.
@@ -428,7 +432,7 @@ class WebPlaytestTool(Tool):
     async def _paint_line(self, page: Any) -> str:
         try:
             stats = await page.evaluate(_CANVAS_JS)
-        except _PLAYTEST_ERRORS:  # a page mid-navigation has no canvases to read
+        except _playtest_errors():  # a page mid-navigation has no canvases to read
             return ""
         parts = []
         for row in stats or []:
@@ -457,7 +461,7 @@ class WebPlaytestTool(Tool):
         try:
             png = await page.locator(canvas_id).first.screenshot(timeout=5000)
             image = Image.open(io.BytesIO(png)).convert("RGB")
-        except _PLAYTEST_ERRORS + (OSError,):
+        except _playtest_errors() + (OSError,):
             return "not readable (WebGL); the canvas could not be photographed"
         small = image.resize((max(1, image.width // 4), max(1, image.height // 4)))
         colours = small.getcolors(small.width * small.height) or []

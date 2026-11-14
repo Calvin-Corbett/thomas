@@ -141,11 +141,33 @@ $readOnlyPaths = @(
 )
 foreach ($p in $readOnlyPaths) {
     if (-not (Test-Path $p)) { Write-Warning "  skip (missing): $p"; continue }
-    Invoke-Icacls @($p, "/setowner", $OwnerUser, "/T", "/C")
+    # (OI)(CI) are CONTAINER-ONLY inheritance flags, and /T only means anything for
+    # a directory. Applied to a FILE they grant nothing - and because /grant:r
+    # REPLACES that principal's ACEs, the file is left with an EMPTY DACL, which
+    # nobody can read, including you.
+    #
+    # This list mixes both kinds ($readOnlyPaths holds scripts\forge\gates and
+    # .git\hooks alongside agent_safety.toml and .git\config), so the flags have to
+    # be chosen per path. Measured 2026-09-19 before this fix: agent_safety.toml,
+    # .git\config and commit_master.py all became unreadable, and git started
+    # reporting "warning: unable to access '.git/config': Permission denied".
+    $isDir = (Get-Item -LiteralPath $p).PSIsContainer
+    if ($isDir) {
+        $ownerAce = "${OwnerUser}:(OI)(CI)F"
+        $agentAce = "${AgentUser}:(OI)(CI)RX"
+        $systemAce = "SYSTEM:(OI)(CI)F"
+        $scope = @("/T", "/C")
+    } else {
+        $ownerAce = "${OwnerUser}:F"
+        $agentAce = "${AgentUser}:RX"
+        $systemAce = "SYSTEM:F"
+        $scope = @("/C")
+    }
+    Invoke-Icacls (@($p, "/setowner", $OwnerUser) + $scope)
     Invoke-Icacls @($p, "/inheritance:r")
-    Invoke-Icacls @($p, "/grant:r", "${OwnerUser}:(OI)(CI)F", "/T", "/C")
-    Invoke-Icacls @($p, "/grant:r", "${AgentUser}:(OI)(CI)RX", "/T", "/C")
-    Invoke-Icacls @($p, "/grant:r", "SYSTEM:(OI)(CI)F", "/T", "/C")
+    Invoke-Icacls (@($p, "/grant:r", $ownerAce) + $scope)
+    Invoke-Icacls (@($p, "/grant:r", $agentAce) + $scope)
+    Invoke-Icacls (@($p, "/grant:r", $systemAce) + $scope)
     Write-Host "  read-only -> $p" -ForegroundColor Green
 }
 

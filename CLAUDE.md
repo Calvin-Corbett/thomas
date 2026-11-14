@@ -4,7 +4,7 @@ Read AGENTS.md immediately. Every rule in that file applies to you.
 
 ## Claude-specific rules
 
-- You MUST tag every commit with `Thomas-Agent: claude` in the commit message trailer.
+- You MUST commit through the native Thomas commit tools and MUST NOT write reserved Thomas trailers yourself. `Thomas-Agent` is one of the nine reserved names in `scripts/crew/brief/commit_integrity.py`; the tools generate and verify that whole block exactly once, and `validate_caller_message` refuses a message that already contains one (`caller message contains reserved Thomas trailer(s)`, `blocker_class: broken_repo_tool`). Every commit still ends up tagged `Thomas-Agent: claude` — the tool puts it there. Trailers that are NOT reserved are still yours to write, and sometimes you must: `Thomas-Protected-Files-Approved` and `Co-Authored-By` are both accepted.
 - You MUST run the agent startup router before doing any work:
   `python scripts/crew/brief/startup_router.py --summary "<task summary>"`
 - You MUST NOT create files matching `*_part*.py` or `*.part*.py`. This is a monolith split pattern that is banned. If a file is too large, refactor it into separate modules with normal Python imports.
@@ -13,13 +13,38 @@ Read AGENTS.md immediately. Every rule in that file applies to you.
 - You MUST NOT commit with `--no-verify`. Pre-commit hooks exist for a reason.
 - You MUST run `ruff check` on any Python file you modify before committing.
 
-## Public writing
+## How to write about Calvin in anything public
 
-Follow the public-content rules in AGENTS.md. Describe product behavior and use fictional examples.
+Commit messages, CHANGELOG entries, PR titles and descriptions, and release notes
+are public and effectively permanent — a merged PR keeps its commit list on GitHub
+forever. Calvin reads these long after they are written, and has found himself
+described in them without knowing it. When your text refers to the person who owns
+this project:
+
+- **Write to him in the second person** — "you", "your". Not "the owner", not
+  "the user", not his name in the third person.
+- **Never characterize his ability, background, or knowledge.** No "is not a
+  programmer", "non-technical", "cannot read code", "did not understand". Describe
+  what the software did and what it failed to show. That is the finding; the person
+  is not.
+- **Quote him directly when it is evidence.** His actual words about what he wanted
+  are the clearest justification a change can have. Quote the request, never a
+  judgement about the requester.
+- **Do not infer pronouns.** They have not been stated. If a third-person reference
+  is genuinely unavoidable, use they/them.
+- The same rule applies to anything else that leaves this machine: issue text,
+  plan files that get published, and generated docs.
+
+## How to use Thomas as a user (owner rule, 2026-11-08)
+
+Use the real Thomas desktop app, driven through its built-in agent bridge
+(`desktop/main.js` `startBridge()`; port and token in `runtime/browser_profile/bridge.json`).
+Never open Thomas on a port in a browser or the Browser pane, and never take the owner's mouse.
+The desktop app starts other things that must be tested too.
 
 ## What Thomas is
 
-Thomas is an AI workspace with Chat, Build, Work, and optional domain integrations. Before extending a module, identify a real caller and relevant tests. Preserve the plugin system and avoid treating an unconfigured integration as a working feature.
+Thomas is an AI-first workspace platform. `thomas/marketplace/` holds domain modules — most were generated in a single burst on 2026-03-23, never had a focused commit afterward, and were never invoked in real usage despite being wired into the tool registry on every boot. Being reachable from that registry was mistaken for being used, and this rule protected that mistake for six months. The marketplace *product feature* is a different thing and is unaffected: the installable-plugin system (`extensions/`, `/api/marketplace/*`). A new domain module needs a caller and a test before it lands. Code with no caller is not a feature, it is debt — flag it, don't protect it.
 
 ## Architecture in 30 seconds
 
@@ -29,7 +54,7 @@ Thomas is an AI workspace with Chat, Build, Work, and optional domain integratio
 - `thomas/cli/` — CLI and REPL.
 - `thomas/tools/` — Tool definitions and registry.
 - `thomas/memory/` — Conversation and context stores.
-- Everything else under `thomas/` — Domain modules. Confirm a module has a caller and a test before extending it.
+- Everything else under `thomas/` — Marketplace domain modules. Most are burst-generated and unused (see "What Thomas is" above); treat them as debt, not as furniture. Before extending one, check it has a real caller.
 
 ## Branch awareness (required — prevents duplicate work)
 

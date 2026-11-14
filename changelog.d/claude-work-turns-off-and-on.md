@@ -1,0 +1,3 @@
+### Changed
+
+- **Mission Control and Work turn off and on from Plugins in Settings.** Turning them off takes away all 76 of their routes, stops the engine Mission Control started and closes its store, and ends a benchmark you had running. Mission Control and Work still open but say they are offline, your queued jobs and your Work jobs stay saved, and turning them back on does not start the engine again: it is built the next time a job is made or the autopilot is set up, so queued jobs wait until then. Turning them off waits for a job the engine is running to finish. The Mission Control page now belongs to the server, so it loads whichever way you set them.

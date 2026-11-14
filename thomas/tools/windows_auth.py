@@ -20,6 +20,8 @@ import platform
 import time
 from dataclasses import dataclass, field
 
+from thomas.core.owner_wait import awaiting_owner
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -122,55 +124,64 @@ class WindowsAuthGate:
     # ------------------------------------------------------------------
 
     def _show_windows_dialog(self, action_description: str, reason: str) -> bool:
-        try:
-            import pywintypes
-            import win32api
-            import win32cred
-        except ImportError:
-            log.error("WindowsAuthGate: pywin32 not installed. Run: pip install pywin32")
-            return False
+        return verified_sign_in(action_description, reason)
 
-        target = f"THOMAS-AUTH:{action_description[:60]}"
-        message = (
-            f"Thomas needs your authorization:\n\n"
-            f"{action_description}\n\n"
-            f"{reason}\n\n"
-            f"Enter your Windows PIN or password to proceed."
-        )
 
-        flags = (
-            win32cred.CREDUI_FLAGS_GENERIC_CREDENTIALS
-            | win32cred.CREDUI_FLAGS_EXPECT_CONFIRMATION
-            | win32cred.CREDUI_FLAGS_COMPLETE_USERNAME
-        )
+def sign_in_answer(action_description: str, reason: str) -> str:
+    """Windows' own sign-in, answered as approved, cancelled (you pressed Cancel) or failed.
 
-        try:
-            username = win32api.GetUserName()
-        except (OSError, pywintypes.error):
-            username = ""
+    "failed" is a prompt that could not be shown, or a sign-in Windows did not accept. Only "cancelled" is your
+    answer: a caller must never take "failed" as a no from you.
 
-        # pywin32's seventh argument is the CREDUI_INFO structure, as a dict.
-        # Passing the message text there raised ``TypeError: CREDUI_INFO must
-        # be a dict`` before any dialog appeared, and that TypeError escaped
-        # the gate, so no native authorization ever reached the user.
-        ui_info = {"MessageText": message, "CaptionText": "Thomas authorization"}
-        try:
-            result, _username, _password, _saved = win32cred.CredUIPromptForCredentials(
-                target,  # TargetName
-                0,  # AuthError (0 = no prior error)
-                username,  # UserName
-                "",  # Password
-                False,  # Save
-                flags,  # Flags
-                ui_info,  # UiInfo (CREDUI_INFO)
+    Until 2026-10-09 every one of these came back as False, and the self-change promoter declined a change on a
+    mistyped PIN. The prompt sets ``cancelled`` only for Cancel (scripts/breakglass_auth.py)."""
+    if platform.system() != "Windows":
+        log.warning("sign_in_answer: not on Windows -- not asked: %s", action_description)
+        return "failed"
+    try:
+        from scripts.breakglass_auth import _run_windows_credential_prompt
+    except ImportError as exc:
+        log.error("sign_in_answer: the Windows sign-in prompt is unavailable: %s", exc)
+        return "failed"
+    try:
+        # While the prompt is open the asking worker is waiting on you, not stuck.
+        with awaiting_owner():
+            result = _run_windows_credential_prompt(
+                prompt_caption="Thomas", prompt_message=f"{action_description}\n\n{reason}"
             )
-            # result == 0 means ERROR_SUCCESS (user confirmed)
-            return result == 0
-        except (OSError, TypeError, ValueError, pywintypes.error) as e:
-            # A prompt that cannot be shown is a denial, never a crash in the
-            # tool that asked for it.
-            log.error("WindowsAuthGate: dialog error: %s", e)
-            return False
+    except (OSError, RuntimeError, ValueError, TypeError, AttributeError) as exc:
+        # A prompt that cannot be shown is never an approval, and never a crash in the tool that asked for it.
+        log.error("sign_in_answer: the sign-in prompt failed: %s", exc)
+        return "failed"
+    if bool(getattr(result, "ok", False)):
+        return "approved"
+    if bool(getattr(result, "cancelled", False)):
+        return "cancelled"
+    log.warning("sign_in_answer: Windows did not accept the sign-in: %s", getattr(result, "message", ""))
+    return "failed"
+
+
+def verified_sign_in(action_description: str, reason: str) -> bool:
+    """Thomas's one password prompt: Windows' own sign-in, and the answer is checked.
+
+    Until 2026-09-22 this gate showed ``CredUIPromptForCredentials`` with
+    GENERIC credentials and treated OK as approval without ever checking what
+    was typed. Any password -- or none -- approved a protected write. The box
+    looked like a password check and was not one.
+
+    This is the sign-in the break-glass path already used:
+    ``CredUIPromptForWindowsCredentialsW``, which takes your PIN, fingerprint,
+    face or password, with the answer then checked by Windows (``LsaLogonUser``,
+    falling back to ``LogonUserW``). It stays Windows' own box on purpose. It is
+    the only one that accepts a PIN, and Thomas's code never sees what you type,
+    so a misbehaving Thomas can neither capture it nor fake the answer. Every
+    Thomas approval uses this one prompt, captioned "Thomas", so there is one
+    thing to recognise.
+
+    It answers True only for a sign-in Windows accepted (:func:`sign_in_answer` is "approved"); Cancel, a sign-in
+    Windows did not accept, and a prompt that could not be shown are all False here.
+    """
+    return sign_in_answer(action_description, reason) == "approved"
 
 
 # Prompt content is never regex-scanned or pre-rejected here. Provider policy

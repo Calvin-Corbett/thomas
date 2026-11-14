@@ -8,13 +8,15 @@ Everything here is hermetic: no network, no wall clock. The route layer's
 process-wide :class:`RunProjection` is replaced per test with a fresh instance
 driven by an injected ``FakeClock``, and every event carries an explicit
 timestamp, so all four rendered values are exactly predictable.
+
+These routes reach a real server through the row ``thomas.server.rows.agent_panels``, and nothing imports a row, so
+that name is written here for a change to the row to find this file.
 """
 
 from __future__ import annotations
 
 import json
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 
 from aiohttp import web
@@ -31,8 +33,6 @@ SNAPSHOT_URL = "/api/run-telemetry/snapshot"
 EVENTS_URL = "/api/run-telemetry/events"
 TARGET_URL = "/api/run-telemetry/target"
 RESET_URL = "/api/run-telemetry/reset"
-
-PANEL_PATH = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js" / "run_telemetry_panel.js"
 
 
 class FakeClock:
@@ -321,43 +321,6 @@ class TestRemoteAccessControl(RunTelemetryRoutesTestCase):
     async def test_ingest_requires_a_token(self) -> None:
         resp = await self.client.post(EVENTS_URL, json={"kind": "turn_finished", "timestamp": 1.0})
         self.assertEqual(resp.status, 401)
-
-
-class TestPanelContract(unittest.TestCase):
-    """The shipped panel is the surface that renders the four values."""
-
-    def setUp(self) -> None:
-        self.source = PANEL_PATH.read_text(encoding="utf-8")
-
-    def test_panel_defines_the_documented_mount_global(self) -> None:
-        self.assertTrue(PANEL_PATH.is_file(), f"missing panel: {PANEL_PATH}")
-        self.assertIn("window.mountRunTelemetryPanel = function (containerEl", self.source)
-
-    def test_panel_is_a_classic_script_not_a_module(self) -> None:
-        self.assertNotIn("export default", self.source)
-        self.assertNotIn("\nexport ", self.source)
-        self.assertNotIn("import ", self.source)
-
-    def test_panel_renders_all_four_acceptance_values(self) -> None:
-        for label in ("'Turns'", "'Tokens'", "'Rate'", "'Projection'"):
-            self.assertIn(label, self.source)
-        for field in ("cumulative_turns", "cumulative_tokens", "tokens_per_min", "turns_per_min", "eta_seconds"):
-            self.assertIn(field, self.source)
-
-    def test_panel_polls_the_snapshot_endpoint(self) -> None:
-        self.assertIn("/api/run-telemetry", self.source)
-        self.assertIn("setInterval(refresh", self.source)
-
-    def test_panel_renders_unknown_instead_of_nan(self) -> None:
-        self.assertIn("var UNKNOWN = 'unknown';", self.source)
-        # Every formatter is finite-guarded and falls back to the unknown token.
-        self.assertIn("return typeof v === 'number' && isFinite(v);", self.source)
-        for formatter in ("function formatCount", "function formatRate", "function formatDuration"):
-            body = self.source.split(formatter, 1)[1].split("\n  }", 1)[0]
-            self.assertIn("return UNKNOWN;", body, f"{formatter} lacks an unknown fallback")
-
-    def test_panel_guards_against_double_mount(self) -> None:
-        self.assertIn("containerEl.__runTelemetryPanel", self.source)
 
 
 if __name__ == "__main__":

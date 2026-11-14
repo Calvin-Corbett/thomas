@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from thomas.server import dial_elevation
 from thomas.server.chat_runtime_policy_model import (
     ChatRuntimePolicyError,
     CostRuntimePolicy,
@@ -109,6 +110,10 @@ def resolve_chat_runtime_policy(
     companion = _companion_request(payload)
     if companion and "autonomy_level" not in payload:
         autonomy = 2
+    # Capped after resolving, not only where a request is read: a request that
+    # omits the level inherits the session's saved one, and a Work job carries
+    # its own. Full autonomy and Autopilot count only with a Hello approval.
+    autonomy = int(dial_elevation.cap("autonomy", autonomy))
     system_prompt = (
         str(payload.get("system_prompt") or "").strip()
         if "system_prompt" in payload

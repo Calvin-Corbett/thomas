@@ -1,4 +1,8 @@
-"""Tests for thomas.server.routes.goals (task kanban CRUD + stats)."""
+"""Tests for thomas.server.routes.goals (task kanban CRUD + stats).
+
+The row thomas.server.rows.goals serves these routes, and nothing here imports it. Its name in this line is how a change
+to the row finds this file: a check follows imports and dotted names, and it does not read the profile.
+"""
 
 import tempfile
 import unittest

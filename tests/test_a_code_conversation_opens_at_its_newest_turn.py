@@ -24,18 +24,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-CODE_JS = (
-    Path(__file__).resolve().parents[1]
-    / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
-)
+CODE_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
+LIVE_VIEW_JS = CODE_JS.with_name("unified_code_live_view.js")
 
 
-def _source() -> str:
-    return CODE_JS.read_text(encoding="utf-8")
+def _source(path: Path = CODE_JS) -> str:
+    return path.read_text(encoding="utf-8")
 
 
 def _function_body(name: str) -> str:
-    src = _source()
+    src = _source(LIVE_VIEW_JS if name == "scrollTranscriptToNewest" else CODE_JS)
     assert f"function {name}(" in src, f"{name} is gone"
     body = src.split(f"function {name}(", 1)[1]
     return body.split("\n  function ", 1)[0]
@@ -74,8 +72,7 @@ def test_loading_a_conversation_scrolls_immediately_and_after_hydration() -> Non
     before, _, after = body.partition("hydrateArtifactThumbnails")
 
     assert "scrollTranscriptToNewest()" in before, (
-        "no immediate scroll after render -- a long transcript paints at the top "
-        "and only jumps once thumbnails hydrate"
+        "no immediate scroll after render -- a long transcript paints at the top and only jumps once thumbnails hydrate"
     )
     assert "scrollTranscriptToNewest()" in after[:400], (
         "no scroll after thumbnails hydrate -- a preview that resolves late grows "
@@ -91,9 +88,7 @@ def test_an_internal_reload_does_not_yank_the_scroller() -> None:
 
     for line in body.splitlines():
         if "scrollTranscriptToNewest()" in line:
-            assert "!internal" in line, (
-                f"unguarded scroll during an internal reload: {line.strip()!r}"
-            )
+            assert "!internal" in line, f"unguarded scroll during an internal reload: {line.strip()!r}"
 
 
 def test_removing_either_call_site_is_caught() -> None:

@@ -1,0 +1,3 @@
+### Fixed
+
+- **A plugin that cannot be swapped while Thomas runs now gets a restart by itself.** Some plugins start work with the server, such as a timer or a sampler, and cannot be replaced live. Thomas noticed that and said so, but treated it like a broken plugin: he did not swap it and did not restart either, and showed a Restart button until someone pressed it. On 2026-11-09 the Agents plugin sat that way for three hours with newer code landed. Now such a landing goes to the ordinary restart, which waits for running work as usual, and the notice says which plugin needs it. A plugin that is really broken still keeps the old one serving and restarts nothing.

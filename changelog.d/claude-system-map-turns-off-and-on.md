@@ -1,0 +1,3 @@
+### Changed
+
+- **The System Map can now be turned off and on while Thomas runs.** The page at `/system-map` and the reading it shows from `GET /api/system-map` moved out of the server's fixed list into a row called System Map page, which ships on, so nothing changes until you turn it off. While it is off, System Map in the sidebar opens a frame that reads 404: Not Found, and the frame asks for nothing more. A System Map you already have open keeps its picture until you press Check again, which then says Thomas could not read what is in your project and that the server answered 404. The Consolidation words now say you can see every version on the System Map while that is on.

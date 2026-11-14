@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.benchmarks.benchmark_lane import get_benchmark_context, resolve_benchmark_root
+from thomas.core.benchmark_lane import get_benchmark_context, resolve_benchmark_root
 
 
 def test_resolve_benchmark_root_requires_output_benchmarks(tmp_path: Path) -> None:

@@ -85,6 +85,11 @@ _ENV_DENY_EXACT = frozenset(
         "THOMAS_RUNTIME_PROTECTION_DISABLED",
         "THOMAS_AGENT_ROLE",  # core_overhead_guard SKIPs on role=orchestrator (unsigned bare env)
         "THOMAS_CORE_OVERHEAD_UNLOCK",  # core_overhead_guard full unlock via bare env
+        "PRE_COMMIT_FROM_REF",  # core_overhead_guard reads a pushed range from these; a commit-time run has none
+        "PRE_COMMIT_TO_REF",
+        "PRE_COMMIT_REMOTE_NAME",  # ...and these say "this is a pre-push run"
+        "PRE_COMMIT_REMOTE_URL",
+        "PRE_COMMIT_HOOK_STAGE",
     }
 )
 # Any env var matching one of these prefixes/suffixes is stripped too — covers
@@ -215,15 +220,17 @@ def _git(
     env: dict[str, str] | None = None,
     input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    # Bytes in, UTF-8 out: text mode on Windows sends stdin as cp1252 with CRLF.
+    proc = subprocess.run(
         ["git", *args],
         cwd=str(repo),
         env=env,
         capture_output=True,
-        text=True,
-        input=input_text,
+        input=None if input_text is None else input_text.encode("utf-8"),
         check=False,
     )
+    out, err = (raw.decode("utf-8", "replace").replace("\r\n", "\n") for raw in (proc.stdout, proc.stderr))
+    return subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
 
 
 # --------------------------------------------------------------------------- #
@@ -435,7 +442,7 @@ class CommitMaster:
         self.repo = repo
         self.layout = layout
         # Trusted root for the integrity manifest. In the cage this points at the
-
+        # Calvin-owned, read-only-to-agent copy. Default to the repo's gate dir.
         self.gates_root = gates_root or (repo / "scripts" / "forge" / "gates")
         # The integrity anchor: a manifest of {repo-relative path -> sha256 of
         # CRLF-normalized content} that the worker cannot write. When present,

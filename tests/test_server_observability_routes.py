@@ -1,17 +1,24 @@
+"""The observability routes, which ``thomas.server.rows.observability`` turns on.
+
+That dotted name is how a check finds this file when the row changes: a check follows imports and dotted names, and it
+does not read the list of rows.
+"""
+
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
+import pytest
 from aiohttp import web
 from aiohttp.client_exceptions import WSServerHandshakeError
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, ModelConfig, ServerConfig
-from thomas.server import app_routes_init
 from thomas.server.app import create_app
 from thomas.server.routes.observability import register_observability_routes
+from thomas.server.rows.observability import plugin
 
 _HTTP_ROUTES = (
     "/api/events",
@@ -37,31 +44,60 @@ def test_registration_rejects_a_missing_access_guard_without_adding_routes() -> 
     assert list(app.router.routes()) == []
 
 
-def test_app_route_initialization_injects_the_runtime_access_guard() -> None:
-    source = Path(app_routes_init.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    wrappers = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_register_observability_routes"
-    ]
-    assert len(wrappers) == 1
+def _a_service(guard: Any) -> tuple[SimpleNamespace, list[str]]:
+    """What a row is handed, and a list of the streams it asks its view to end."""
+    asked_for: list[str] = []
 
-    register_calls = [
-        node
-        for node in ast.walk(wrappers[0])
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "register_observability_routes"
-    ]
-    assert len(register_calls) == 1
-    call = register_calls[0]
-    assert len(call.args) == 1
-    assert isinstance(call.args[0], ast.Name) and call.args[0].id == "app_ref"
-    access_keywords = [keyword for keyword in call.keywords if keyword.arg == "require_api_access"]
-    assert len(access_keywords) == 1
-    assert isinstance(access_keywords[0].value, ast.Name)
-    assert access_keywords[0].value.id == "_require_api_access"
+    def view(ctx: Any, *, streams: Any = ()) -> str:
+        asked_for.extend(streams)
+        return "the view"
+
+    return SimpleNamespace(require_api_access=guard, view=view), asked_for
+
+
+def test_the_row_hands_the_registrar_its_view_and_the_runtime_access_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The registrar moved out of the shell into a row on 2026-11-01. The guard it must pass is unchanged, and the websocket
+    # is named as a stream, or one open connection would hold the off switch.
+    handed: list[Any] = []
+    monkeypatch.setattr(
+        "thomas.server.routes.observability.register_observability_routes",
+        lambda app, *, require_api_access: handed.append((app, require_api_access)),
+    )
+
+    def guard(request: web.Request) -> None:
+        return None
+
+    service, streams = _a_service(guard)
+    plugin.apply({"web": service}, {})
+
+    assert handed == [("the view", guard)]
+    assert streams == [_WEBSOCKET_ROUTE]
+
+
+def test_the_row_fails_with_the_familys_line_when_it_has_no_access_guard(caplog: pytest.LogCaptureFixture) -> None:
+    service, _streams = _a_service(None)
+
+    with caplog.at_level("WARNING"), pytest.raises(RuntimeError, match="no access guard"):
+        plugin.apply({"web": service}, {})
+
+    assert "Observability routes unavailable: missing API access guard" in caplog.text
+
+
+def test_the_row_fails_with_the_familys_line_when_the_registrar_does(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Logging and carrying on would read active with no routes, so it logs and raises, and the row reads failed."""
+
+    def refuses(app: Any, *, require_api_access: Any) -> None:
+        raise KeyError("no such thing")
+
+    monkeypatch.setattr("thomas.server.routes.observability.register_observability_routes", refuses)
+    service, _streams = _a_service(lambda request: None)
+
+    with caplog.at_level("WARNING"), pytest.raises(KeyError):
+        plugin.apply({"web": service}, {})
+
+    assert "Observability routes unavailable:" in caplog.text
 
 
 class TestServerObservabilityRoutes(AioHTTPTestCase):

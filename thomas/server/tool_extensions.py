@@ -9,12 +9,8 @@ import logging
 _log = logging.getLogger(__name__)
 
 
-# 2026-09-01: 112 filler modules were disabled below, shrinking the table from
-# 136 to 28 entries. Measured post-disable load is 26/28 (2 kept-but-broken
-# modules -- thomas.codex.tools, thomas.reference_cli_compat.tools -- were
-# already failing to import before this change). 20 gives slack under that
-# real number while still catching a genuine regression.
-_OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD = 20
+# Warn when fewer than most of the 15 remaining optional modules load.
+_OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD = 12
 
 # --- 2026-09-01: burst-generated filler, disabled pending deletion ---
 # 112 of the entries below were created in the single 2026-03-23 generation
@@ -22,9 +18,14 @@ _OPTIONAL_TOOL_LOW_LOAD_WARNING_THRESHOLD = 20
 # focused commit since -- only bulk sweeps. Sampling found hardcoded-literal
 # tool bodies throughout (e.g. blockchain.get_blocks returns the literal
 # string "Use blockchain instance to access blocks"). The owner directed
-# these registrations out of the product; they are commented out here first
-# so their absence can be proven before the modules themselves are deleted.
-# The modules still exist on disk -- uncomment an entry to restore it.
+# these registrations out of the product; they were commented out here first
+# so their absence could be proven before the modules themselves were deleted.
+#
+# 2026-09-25: most of those modules are now gone from disk, so uncommenting
+# their line restores nothing. Six commented entries do still have code behind
+# them and are disabled on purpose -- companion, db_internals, doc_processing,
+# gateway, investigation, watcher. Those six are the only ones an uncomment
+# can bring back.
 _OPTIONAL_TOOL_MODULES = [
     ("thomas.tools.engineering", "register_engineering_tools"),
     # ("thomas.api_gateway.tools", "register_api_gateway_tools"),
@@ -39,11 +40,9 @@ _OPTIONAL_TOOL_MODULES = [
     # ("thomas.canvas.tools", "register_canvas_tools"),
     # ("thomas.cdn.tools", "register_cdn_tools"),
     # ("thomas.chain.tools", "register_chain_tools"),
-    ("thomas.channels.tools", "register_channels_tools"),
     # ("thomas.chatbot.tools", "register_chatbot_tools"),
     # ("thomas.climate.tools", "register_climate_tools"),
     # ("thomas.codegen.tools", "register_codegen_tools"),
-    ("thomas.codex.tools", "register_codex_tools"),
     # ("thomas.columnar.tools", "register_columnar_tools"),
     # ("thomas.companion.tools", "register_companion_tools"),
     # ("thomas.compiler_infra.tools", "register_compiler_infra_tools"),
@@ -89,7 +88,6 @@ _OPTIONAL_TOOL_MODULES = [
     # ("thomas.http2.tools", "register_http2_tools"),
     # ("thomas.human_loop.tools", "register_human_loop_tools"),
     # ("thomas.image_proc.tools", "register_image_proc_tools"),
-    ("thomas.intake.tools", "register_intake_tools"),
     # ("thomas.investigation.tools", "register_investigation_tools"),
     # ("thomas.iot_platform.tools", "register_iot_platform_tools"),
     # ("thomas.jobs.tools", "register_jobs_tools"),
@@ -101,9 +99,13 @@ _OPTIONAL_TOOL_MODULES = [
     ("thomas.loaders.tools", "register_loaders_tools"),
     # ("thomas.logging_framework.tools", "register_logging_framework_tools"),
     # ("thomas.markdown.tools", "register_markdown_tools"),
-    ("thomas.marketplace.tools", "register_marketplace_tools"),
+    # 2026-09-25: thomas.marketplace.tools removed. It registered nine
+    # marketplace.* e-commerce tools (vendors, listings, orders, reviews) whose
+    # execute() bodies imported VendorManager/ListingManager/OrderManager/
+    # ReviewManager/SearchEngine from sibling modules that define no such
+    # classes, so every call raised ImportError. The module and its nine tools
+    # are deleted, not disabled.
     # ("thomas.message_queue.tools", "register_message_queue_tools"),
-    ("thomas.messages.tools", "register_messages_tools"),
     # ("thomas.model_serving.tools", "register_model_serving_tools"),
     # ("thomas.monitoring.tools", "register_monitoring_tools"),
     # ("thomas.multi_cloud.tools", "register_multi_cloud_tools"),
@@ -111,12 +113,7 @@ _OPTIONAL_TOOL_MODULES = [
     # ("thomas.networking_deep.tools", "register_networking_deep_tools"),  # stub-only placeholder
     # ("thomas.nlg.tools", "register_nlg_tools"),
     # ("thomas.nlu.tools", "register_nlu_tools"),
-    ("thomas.nodes.tools", "register_nodes_tools"),
-    ("thomas.notifications.tools", "register_notifications_tools"),
-    ("thomas.notify.tools", "register_notify_tools"),
     # ("thomas.olap.tools", "register_olap_tools"),
-    ("thomas.reference_cli_compat.tools", "register_reference_cli_compat_tools"),
-    ("thomas.orchestrator.tools", "register_orchestrator_tools"),
     # ("thomas.os_kernel.tools", "register_os_kernel_tools"),
     # ("thomas.parsers.tools", "register_parsers_tools"),
     # ("thomas.pathfinding.tools", "register_pathfinding_tools"),
@@ -130,7 +127,6 @@ _OPTIONAL_TOOL_MODULES = [
     # ("thomas.project_mgmt.tools", "register_project_mgmt_tools"),
     # ("thomas.prompts.tools", "register_prompts_tools"),
     # ("thomas.quic.tools", "register_quic_tools"),
-    ("thomas.realtime.tools", "register_realtime_tools"),
     # ("thomas.recommender.tools", "register_recommender_tools"),
     # ("thomas.regex_engine.tools", "register_regex_engine_tools"),
     # ("thomas.robotics_deep.tools", "register_robotics_deep_tools"),
@@ -152,17 +148,14 @@ _OPTIONAL_TOOL_MODULES = [
     # ("thomas.telecom.tools", "register_telecom_tools"),
     ("thomas.template_engine.tools", "register_template_engine_tools"),
     # ("thomas.tracing.tools", "register_tracing_tools"),
-    ("thomas.tray_agent.tools", "register_tray_agent_tools"),
     # ("thomas.tsdb.tools", "register_tsdb_tools"),
     # ("thomas.units.tools", "register_units_tools"),
     ("thomas.forge.anvil.tools", "register_anvil_tools"),
     # ("thomas.validation.tools", "register_validation_tools"),
-    ("thomas.vision.tools", "register_vision_tools"),
     # ("thomas.visualization.tools", "register_visualization_tools"),
     # ("thomas.voice.tools", "register_voice_tools"),
     # ("thomas.waf.tools", "register_waf_tools"),
     # ("thomas.watcher.tools", "register_watcher_tools"),
-    ("thomas.webhooks.tools", "register_webhooks_tools"),
     # ("thomas.webrtc.tools", "register_webrtc_tools"),
     ("thomas.workflow_v2.tools", "register_workflow_v2_tools"),
     ("thomas.marketplace.paper_trading.tools", "register_paper_trading_tools"),
@@ -291,15 +284,14 @@ def _register_work_google_drive(registry) -> None:
 def _register_recent_work(registry) -> None:
     """The model can answer "what did I ask you to make" from the record, not from memory."""
     try:
-        from thomas.core import task_bot_runtime
+        from thomas.core import project_root, task_bot_runtime
         from thomas.forge.anvil import forge_code_projects, forge_code_store
-        from thomas.server.routes.evolve_agent_runtime import _default_repo_root
         from thomas.tools.recent_work import RecentWorkTool
 
         registry.register(
             RecentWorkTool(
                 # The same catalog the Build sidebar reads, resolved the same way.
-                conversation_roots=lambda: forge_code_projects.conversation_roots(_default_repo_root()),
+                conversation_roots=lambda: forge_code_projects.conversation_roots(project_root.code_checkout()),
                 # refresh=False: the Library's cached summaries, never a rebuild on a chat turn.
                 list_executions=lambda: task_bot_runtime.list_user_executions(refresh=False),
                 get_execution=task_bot_runtime.get_execution,
@@ -329,6 +321,14 @@ def _register_ask_user(registry) -> None:
         register_ask_user_tool(registry)
     except (AttributeError, ImportError, RuntimeError, TypeError, ValueError) as exc:
         _log.debug("Skipping ask_user tool: %s", exc)
+    # The same card, for Thomas asking to change one of his own settings: he
+    # shows you what and why instead of sending you to Settings.
+    try:
+        from thomas.tools.setting_request import register_setting_request_tool
+
+        register_setting_request_tool(registry)
+    except (AttributeError, ImportError, RuntimeError, TypeError, ValueError) as exc:
+        _log.debug("Skipping settings.request_change tool: %s", exc)
 
 
 def register_all_optional_tools(registry) -> int:

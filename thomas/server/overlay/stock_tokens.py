@@ -16,6 +16,7 @@ that keeps an overlay from minting tokens nothing reads.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import re
 from pathlib import Path
@@ -27,8 +28,8 @@ _DECL = re.compile(r"(--[a-z0-9-]+)\s*:\s*([^;]+);")
 _BLOCK = re.compile(r"(?P<selector>[^{}]+)\{(?P<body>[^{}]*)\}", re.DOTALL)
 _NAMED = re.compile(r'data-thomas-theme="([a-z]+)"')
 _COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
-_UI_TAG = re.compile(r'''<[^>]*\bdata-ui-id=["']([a-z0-9_.-]+)["'][^>]*>''', re.IGNORECASE)
-_UI_POLICY = re.compile(r'''\bdata-ui-policy=["']([^"']*)["']''', re.IGNORECASE)
+_UI_TAG = re.compile(r"""<[^>]*\bdata-ui-id=["']([a-z0-9_.-]+)["'][^>]*>""", re.IGNORECASE)
+_UI_POLICY = re.compile(r"""\bdata-ui-policy=["']([^"']*)["']""", re.IGNORECASE)
 
 
 def _load_protected_ui_ids() -> frozenset[str]:
@@ -43,12 +44,21 @@ def _load_protected_ui_ids() -> frozenset[str]:
     return frozenset(protected)
 
 
-PROTECTED_UI_IDS = _load_protected_ui_ids()
+@functools.lru_cache(maxsize=1)
+def protected_ui_ids() -> frozenset[str]:
+    """The scan reads every page and script under web/ (about 0.25 s), so it runs on first use, not at boot."""
+    return _load_protected_ui_ids()
+
+
+def __getattr__(name: str) -> frozenset[str]:  # PROTECTED_UI_IDS stays readable, computed when first read
+    if name == "PROTECTED_UI_IDS":
+        return protected_ui_ids()
+    raise AttributeError(name)
 
 
 def is_protected_ui_id(ui_id: str) -> bool:
     """Server-owned stock policy wins over a caller-supplied anchor policy."""
-    return ui_id.split("~~", 1)[0] in PROTECTED_UI_IDS
+    return ui_id.split("~~", 1)[0] in protected_ui_ids()
 
 
 def parse(css_text: str) -> dict[str, dict[str, str]]:

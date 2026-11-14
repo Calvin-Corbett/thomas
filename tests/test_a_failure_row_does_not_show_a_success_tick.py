@@ -43,8 +43,7 @@ from pathlib import Path
 # for across both halves -- finding it in neither must fail, not pass quietly.
 _WEB_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js"
 SOURCE = chr(10).join(
-    (_WEB_JS / name).read_text(encoding="utf-8")
-    for name in ("unified_code_mode.js", "unified_code_events.js")
+    (_WEB_JS / name).read_text(encoding="utf-8") for name in ("unified_code_mode.js", "unified_code_events.js")
 )
 
 
@@ -66,36 +65,36 @@ def _without_comments() -> str:
 
 
 CODE = _without_comments()
+# Since the 2026-10 Build redesign a technical event is drawn as a work row by
+# unified_code_cards.js: no icon, a tint and a ✓/✕ mark instead. The cards never
+# judge an event themselves -- the event cluster hands them its predicate.
+CARDS = (_WEB_JS / "unified_code_cards.js").read_text(encoding="utf-8")
 
 
 def test_one_failure_predicate_decides_both_the_icon_and_the_words() -> None:
-    """Every icon choice must route through the shared predicate.
+    """Every failure look must route through the shared predicate.
 
     The bug was not a wrong predicate, it was two of them. Pinning the shared
     function is what stops a third renderer from drifting again.
     """
 
     assert "function eventFailed(" in CODE, (
-        "the shared failure predicate `eventFailed` is gone; the icon and the "
-        "heading are free to disagree again"
+        "the shared failure predicate `eventFailed` is gone; the icon and the heading are free to disagree again"
     )
 
-    # Every `ph-check-circle`/`ph-warning` ternary must be driven by a variable
-    # assigned from eventFailed, never from a bare is_error test.
-    icon_lines = [
-        line for line in CODE.splitlines() if "ph-check-circle" in line and "ph-warning" in line
-    ]
-    assert icon_lines, "the technical row no longer renders a check/warning icon at all"
+    # The work row's tint and its mark are driven by ONE resolved flag, and
+    # that flag is the caller's predicate, never a bare is_error test.
+    assert "failed: event => eventFailed(event)" in CODE, (
+        "the event cluster no longer hands its failure predicate to the work rows"
+    )
+    row = CARDS.split("function workRowHtml(", 1)[1].split("\n  function ", 1)[0]
+    assert "options.failed(ev)" in row, "a work row decides failure without the caller's predicate"
+    assert re.search(r"\$\{\s*failed\s*\?\s*' is-error'", row), "a failed row is no longer tinted from the flag"
+    face = CARDS.split("function workRowFace(", 1)[1].split("\n  function ", 1)[0]
+    assert re.search(r"options\.failed\s*\?\s*'✕'\s*:\s*'✓'", face), "the ✓/✕ mark no longer follows the flag"
+    assert "is_error" not in CARDS, "the cards judge an event's failure on their own -- a second predicate"
 
-    for line in icon_lines:
-        # `[\w.]` because the grouped renderer reads `group.failed`, not a bare
-        # local -- a pattern without the dot rejects correct code.
-        assert re.search(r"\$\{\s*[\w.]*[Ff]ailed\s*\?", line), (
-            "a technical row picks its icon from something other than a "
-            f"resolved failure flag: {line.strip()[:120]}"
-        )
-
-    # ...and every one of those flags must come from eventFailed.
+    # ...and every flag in the event cluster must come from eventFailed.
     for match in re.finditer(r"const (\w*[Ff]ailed) = ([^;]+);", CODE):
         name, expression = match.group(1), match.group(2)
         assert "eventFailed(" in expression, (
@@ -122,8 +121,7 @@ def test_an_error_event_counts_as_a_failure() -> None:
         "error row renders under a success tick again"
     )
     assert "is_error" in body, (
-        "eventFailed no longer honours is_error, so a tool result that reports "
-        "its own failure renders as a success"
+        "eventFailed no longer honours is_error, so a tool result that reports its own failure renders as a success"
     )
 
 
@@ -149,14 +147,15 @@ def test_a_failed_tool_call_is_named_rather_than_called_a_check() -> None:
 
 
 def test_a_successful_row_still_gets_the_tick() -> None:
-    """The opposite failure: warning-icons on everything.
+    """The opposite failure: warning-looks on everything.
 
     A normal `tool`/`tool_result`/`meta` row has no `is_error` and a kind other
-    than 'error', so it must still resolve to false and keep `ph-check-circle`.
+    than 'error', so it must still resolve to false and keep its success mark
+    (the work row's ✓, since the 2026-10 redesign replaced the icon).
     """
 
-    assert "ph-check-circle" in CODE, (
-        "the success icon is gone entirely -- every technical row now reads as "
+    assert "'✓'" in CARDS, (
+        "the success mark is gone entirely -- every technical row now reads as "
         "a failure, which is the same lie in the other direction"
     )
     match = re.search(r"function eventFailed\([^)]*\)\s*\{(.*?)\n  \}", CODE, re.S)

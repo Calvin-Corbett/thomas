@@ -37,9 +37,33 @@ async def read_json_object(request: web.Request) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def configured_codex_models(config: AppConfig, profile: str) -> list[dict[str, Any]]:
+def configured_codex_models(
+    config: AppConfig, profile: str, catalog: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     cfg = config.models.get(profile)
     model_id = str(getattr(cfg, "model", "") or "").strip() if cfg is not None else ""
+    live = [
+        r
+        for r in (catalog or {}).get("models") or []
+        if r.get("profile") == profile and r.get("source") == "live" and not r.get("hidden")
+    ]
+    if live:
+        # The sign-in's own list (thomas/models/catalog.py). The hand list below
+        # stands in only until that list has been read once.
+        return [
+            {
+                "id": r["id"],
+                "display_name": r.get("display_name") or r["id"],
+                "description": r.get("description", ""),
+                "is_default": r["id"] == model_id,
+                "available": True,
+                "is_new": bool(r.get("is_new")),
+                "retires_at": r.get("retires_at", ""),
+                "replacement": r.get("replacement", ""),
+                "connection": "chatgpt_oauth",
+            }
+            for r in live
+        ]
     ids = [model_id or "gpt-5.6-sol", *OPENAI_CODEX_GPT56_MODELS, "gpt-5.5"]
     seen: set[str] = set()
     rows: list[dict[str, Any]] = []

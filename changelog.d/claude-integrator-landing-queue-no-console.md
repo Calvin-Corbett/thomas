@@ -1,0 +1,3 @@
+### Fixed
+
+- **The landing tools no longer open a console window for every process they start.** Agents run `land.py` from parents that have no console, and Windows then gives each python, git and taskkill child a visible console of its own. A measurement that spawned dozens of them put dozens of windows on your screen. Every spawn the landing tools make now carries the no-window flag, through one small helper, and a test records the creation flags of every spawn path.

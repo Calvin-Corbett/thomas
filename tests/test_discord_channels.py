@@ -17,6 +17,10 @@ orchestration changes: prose that *looks* like a Discord command produces no
 side effect on its own (with the model stubbed, so the turn is deterministic and
 the assertion cannot pass merely because the model call failed), and the
 structured Discord surface still answers without any model at all.
+
+The routes under test are registered by the row ``thomas.server.rows.discord``, which builds the runtime and stops the
+bridge, so a change to that row selects this file. It does not import the routes' module, ``thomas.server.routes.discord_channels_aiohttp``,
+so that is named here too.
 """
 
 from __future__ import annotations
@@ -29,9 +33,11 @@ from unittest.mock import patch
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from tests.plugin_view_fixture import rows_once_started
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
 from thomas.server.app import create_app
+from thomas.server.runtime_plugins import APP_RUNTIME_PLUGINS
 
 
 def _stub_model_turn(reply: str):
@@ -144,8 +150,10 @@ def _build_bot_root(tmp_path: Path) -> Path:
 
 
 async def _start_client(app) -> TestClient:
+    """A row joins the table when its startup hooks end, and a server's own start does not wait for them."""
     client = TestClient(TestServer(app))
     await client.start_server()
+    await rows_once_started(app[APP_RUNTIME_PLUGINS])
     return client
 
 
@@ -501,7 +509,7 @@ async def test_discord_shaped_prose_in_chat_never_starts_the_bridge(
     client = await _start_client(app)
     try:
         with patch(
-            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            "thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message",
             _stub_model_turn("Sure -- I can talk about the Discord bridge."),
         ):
             resp = await client.post(

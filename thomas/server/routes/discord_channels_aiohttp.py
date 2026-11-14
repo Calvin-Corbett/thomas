@@ -9,8 +9,7 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.core.config import AppConfig
-from thomas.integrations.discord_bridge_runtime import DiscordBridgeRuntime
+from thomas.server.discord_bridge_key import BRIDGE
 
 log = logging.getLogger(__name__)
 
@@ -21,19 +20,30 @@ ReadJsonFn = Callable[[web.Request], Any]
 def register_discord_channels_routes(
     app: web.Application,
     *,
-    config: AppConfig,
     require_api_access: RequireAccessFn,
     read_json: ReadJsonFn,
 ) -> None:
-    runtime = DiscordBridgeRuntime(config)
+    """Register the ten routes. Each reads the bridge's runtime from the app, where the Discord row leaves it.
+
+    The row builds the runtime off the event loop before these routes are live, because its constructor makes folders
+    and moves saved tokens, and takes it away when the row stops. A request that finds it gone answers 503.
+    """
+
+    def runtime_of(request: web.Request) -> Any:
+        runtime = request.app.get(BRIDGE)
+        if runtime is None:
+            raise web.HTTPServiceUnavailable(text="the Discord channel is not running")
+        return runtime
 
     async def api_discord_status(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         payload = await asyncio.to_thread(runtime.status)
         return web.json_response({"ok": True, "discord": payload})
 
     async def api_discord_config(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         payload = await read_json(request)
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
@@ -43,6 +53,7 @@ def register_discord_channels_routes(
 
     async def api_discord_runtime(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         payload = await read_json(request)
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
@@ -61,6 +72,7 @@ def register_discord_channels_routes(
 
     async def api_discord_enabled(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         payload = await read_json(request)
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
@@ -71,6 +83,7 @@ def register_discord_channels_routes(
 
     async def api_discord_start(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         try:
             payload = await asyncio.to_thread(runtime.start)
         except RuntimeError as exc:
@@ -80,6 +93,7 @@ def register_discord_channels_routes(
 
     async def api_discord_stop(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         try:
             payload = await asyncio.to_thread(runtime.stop)
         except RuntimeError as exc:
@@ -89,6 +103,7 @@ def register_discord_channels_routes(
 
     async def api_discord_restart(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         try:
             payload = await asyncio.to_thread(runtime.restart)
         except RuntimeError as exc:
@@ -98,6 +113,7 @@ def register_discord_channels_routes(
 
     async def api_discord_voice_probe(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         payload = await read_json(request)
         if payload is None:
             payload = {}
@@ -122,6 +138,7 @@ def register_discord_channels_routes(
 
     async def api_discord_history(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         query = str(request.query.get("q") or "").strip()
         session_id = str(request.query.get("session_id") or "").strip()
         try:
@@ -142,6 +159,7 @@ def register_discord_channels_routes(
 
     async def api_discord_session_context(request: web.Request) -> web.Response:
         require_api_access(request)
+        runtime = runtime_of(request)
         session_id = str(request.match_info.get("session_id") or "").strip()
         if not session_id:
             raise web.HTTPBadRequest(text="missing session_id")

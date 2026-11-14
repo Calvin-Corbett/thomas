@@ -38,7 +38,11 @@ def test_the_prompt_demands_a_summary_read_from_the_changed_files() -> None:
     assert "only details" in prompt.lower(), (
         "no instruction restricting the summary to details actually present in the files"
     )
-    assert "I re-checked" in prompt, "the preferred 'I re-checked <file>' phrasing is not offered"
+    assert "plain note to the person" in prompt, "the closing message must be a plain human summary"
+    assert "I re-checked" in prompt and "do not say" in prompt, (
+        "the file-report phrasing must be forbidden, not preferred"
+    )
+    assert "EVIDENCE and VERIFY" in prompt, "the engine's finish lines must stay available"
 
 
 def test_the_prompt_sends_scratch_under_thomas_scratch_and_asks_for_cleanup() -> None:
@@ -51,7 +55,7 @@ def test_the_scratch_instruction_only_applies_when_the_user_asked_for_a_build() 
     """The new text lives in the build/verify section, after the chat-vs-edit
     framing -- a greeting turn must not open with scratch-file bookkeeping."""
     prompt = _prompt()
-    assert prompt.index("ONLY when the user actually asks") < prompt.index(".thomas/scratch/")
+    assert prompt.index("Read and edit files only when asked") < prompt.index(".thomas/scratch/")
 
 
 def _new_repo(tmp_path):

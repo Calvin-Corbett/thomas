@@ -26,7 +26,44 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 ROOT = Path(__file__).resolve().parents[3]
-VERIFICATION_RECORD = ROOT / ".git" / "agent_verification.json"
+
+
+def _record_path(root: Path) -> Path:
+    """Where this checkout keeps its record: .git/ normally, its own git dir in a linked worktree (.git is a file there)."""
+    fallback = root / ".git" / "agent_verification.json"
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-path", "agent_verification.json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return fallback
+    found = done.stdout.strip()
+    if done.returncode != 0 or not found:
+        return fallback
+    path = Path(found)
+    return path if path.is_absolute() else root / path
+
+
+VERIFICATION_RECORD = _record_path(ROOT)
+
+
+def _rebind_root(raw: str | None) -> None:
+    """Point the gate at another checkout so it can be run against a fixture.
+
+    Without this the gate always judges the repo it lives in, so it could never have
+    a red-path selftest - and the enforcement ratchet will not let an unprovable gate
+    enforce. Same option, same default, as monolith_guard.py.
+    """
+    global ROOT, VERIFICATION_RECORD
+    if not raw:
+        return
+    ROOT = Path(raw).resolve()
+    VERIFICATION_RECORD = _record_path(ROOT)
+
 
 DEPENDENCY_FILES = [
     "pyproject.toml",
@@ -112,15 +149,22 @@ def _load_verification_record() -> dict | None:
     if not VERIFICATION_RECORD.exists():
         return None
     try:
-        return json.loads(VERIFICATION_RECORD.read_text(encoding="utf-8"))
+        data = json.loads(VERIFICATION_RECORD.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    return data if isinstance(data, dict) else None
 
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root (default: inferred from script location).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
+    _rebind_root(args.repo_root)
 
     staged = _staged_files()
     dep_files_staged = [f for f in staged if f in DEPENDENCY_FILES]

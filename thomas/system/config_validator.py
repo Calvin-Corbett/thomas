@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from thomas.core.claude_plan import claude_plan_ready
 from thomas.core.config import AppConfig, load_config
 
 NO_KEY_PROVIDERS = {"", "local", "ollama", "openai_codex"}
@@ -212,7 +213,12 @@ def evaluate_config(
         base_url = str(model.base_url or "").strip()
         has_key = bool(str(model.api_key or "").strip() or secret_lookup(name))
 
-        if _provider_needs_key(provider, base_url) and not has_key:
+        # The Anthropic profile with no key is served by your Claude plan through the
+        # Claude CLI's own sign-in -- in Chat as well as in Build since 2026-09-25
+        # (thomas/core/claude_plan.py) -- so diagnostics must not call it a missing key
+        # and send you looking for one. Without the CLI installed it cannot answer, and
+        # the finding below is still the truth.
+        if _provider_needs_key(provider, base_url) and not has_key and not claude_plan_ready(provider, ""):
             is_default = name == default_profile
             findings.append(
                 ConfigFinding(

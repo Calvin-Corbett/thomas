@@ -15,6 +15,7 @@ import logging
 import re
 import secrets
 from collections.abc import Awaitable, Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,6 +70,27 @@ def _import_workboard_message():
         return workboard_message
 
 
+@contextmanager
+def _board_locked():
+    """Hold the shared board lock across a read-modify-write of WORKBOARD.md.
+
+    Every other board writer takes it; these two read the whole board, edited it and wrote it back
+    with no lock, so a message, a claim or a board archive that landed in between was silently undone.
+    Falls back to no lock only when the scripts package cannot be imported (a bare install).
+    """
+    import sys
+
+    if str(_ROOT) not in sys.path:
+        sys.path.insert(0, str(_ROOT))
+    try:
+        from scripts.crew.workboard import board_io
+    except ImportError:
+        yield
+        return
+    with board_io.file_lock():
+        yield
+
+
 def _add_task_to_workboard(
     task_id: str,
     summary: str,
@@ -87,41 +109,46 @@ def _add_task_to_workboard(
     else:
         wb = workboard_path
 
-    lines = wb.read_text(encoding="utf-8").splitlines(keepends=True)
-    new_line = (
-        f"- task_id={task_id}; scope={scope or 'chat'}; "
-        f"summary={summary}; status=up_for_grabs; "
-        f"created_at={_now_iso()}; source=chat_dispatch\n"
-    )
+    try:
+        with _board_locked():
+            lines = wb.read_text(encoding="utf-8").splitlines(keepends=True)
+            new_line = (
+                f"- task_id={task_id}; scope={scope or 'chat'}; "
+                f"summary={summary}; status=up_for_grabs; "
+                f"created_at={_now_iso()}; source=chat_dispatch\n"
+            )
 
-    insert_idx = None
-    in_section = False
-    for idx, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("## Up For Grabs"):
-            in_section = True
-            insert_idx = idx + 1
-            continue
-        if not in_section:
-            continue
-        if stripped.startswith("## "):
-            insert_idx = idx
-            break
-        if stripped == "- none":
-            lines[idx] = new_line
+            insert_idx = None
+            in_section = False
+            for idx, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith("## Up For Grabs"):
+                    in_section = True
+                    insert_idx = idx + 1
+                    continue
+                if not in_section:
+                    continue
+                if stripped.startswith("## "):
+                    insert_idx = idx
+                    break
+                if stripped == "- none":
+                    lines[idx] = new_line
+                    wb.write_text("".join(lines), encoding="utf-8")
+                    return True
+                if stripped.startswith("- "):
+                    insert_idx = idx + 1
+                elif not stripped:
+                    insert_idx = idx
+
+            if insert_idx is None:
+                log.error("Could not find ## Up For Grabs section in workboard")
+                return False
+            lines.insert(insert_idx, new_line)
             wb.write_text("".join(lines), encoding="utf-8")
             return True
-        if stripped.startswith("- "):
-            insert_idx = idx + 1
-        elif not stripped:
-            insert_idx = idx
-
-    if insert_idx is None:
-        log.error("Could not find ## Up For Grabs section in workboard")
+    except TimeoutError:
+        log.warning("workboard lock timed out; task %s was not mirrored onto the board", task_id)
         return False
-    lines.insert(insert_idx, new_line)
-    wb.write_text("".join(lines), encoding="utf-8")
-    return True
 
 
 def _send_dispatch_message(
@@ -132,23 +159,24 @@ def _send_dispatch_message(
     try:
         wm = _import_workboard_message()
         wb = workboard_path or _DEFAULT_WORKBOARD
-        lines = wb.read_text(encoding="utf-8").splitlines()
-        msg_id = f"msg-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-chat-dispatch"
-        result = wm._append_message(
-            lines=lines,
-            msg_id=msg_id,
-            from_agent=CHAT_DISPATCHER_AGENT,
-            to_agent=TASK_MANAGER_AGENT,
-            task_id=task_id,
-            kind="coordination",
-            priority="p1",
-            summary=f"New task from chat: {summary}",
-            requested_action="dispatch",
-        )
-        if result is None:
-            return False
-        wb.write_text("\n".join(result) + "\n", encoding="utf-8")
-        return True
+        with _board_locked():
+            lines = wb.read_text(encoding="utf-8").splitlines()
+            msg_id = f"msg-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-chat-dispatch"
+            result = wm._append_message(
+                lines=lines,
+                msg_id=msg_id,
+                from_agent=CHAT_DISPATCHER_AGENT,
+                to_agent=TASK_MANAGER_AGENT,
+                task_id=task_id,
+                kind="coordination",
+                priority="p1",
+                summary=f"New task from chat: {summary}",
+                requested_action="dispatch",
+            )
+            if result is None:
+                return False
+            wb.write_text("\n".join(result) + "\n", encoding="utf-8")
+            return True
     except Exception:
         # Broad catch: dispatch notices are best-effort; workboard mirroring already queued the task.
         log.exception("Failed to send dispatch message for task_id=%s", task_id)

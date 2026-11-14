@@ -10,7 +10,7 @@ Storage
 State directory resolution order
 1) Explicit input ``state_dir`` (CLI: ``--state-dir``)
 2) ``THOMAS_STATE_DIR`` environment variable
-3) Best-effort Thomas config discovery (prefers ``thomas.cli.parity_compat``)
+3) Best-effort Thomas config discovery
 
 The implementation avoids Reference CLI naming reuse.
 """
@@ -151,65 +151,10 @@ def _extract_state_dir_from_config(cfg: Any) -> str | None:
     return None
 
 
-def _try_state_dir_from_parity_compat() -> str | None:
-    """Best-effort state dir discovery via `thomas.cli.parity_compat`."""
-
-    try:
-        pc = importlib.import_module("thomas.cli.parity_compat")
-    except (ImportError, AttributeError, RuntimeError):
-        return None
-
-    # Direct helpers
-    for attr in ("get_state_dir", "state_dir", "resolve_state_dir"):
-        fn = getattr(pc, attr, None)
-        if callable(fn):
-            try:
-                val = _call_if_no_required_args(fn)
-            except (ImportError, AttributeError, RuntimeError):
-                return None
-            if isinstance(val, (str, Path)) and str(val).strip():
-                return str(val).strip()
-
-    # Paths dict/object
-    for attr in ("get_paths", "paths", "PATHS"):
-        obj = getattr(pc, attr, None)
-        if callable(obj):
-            try:
-                obj = _call_if_no_required_args(obj)
-            except (ImportError, AttributeError, RuntimeError):
-                obj = None
-        if isinstance(obj, Mapping):
-            for key in ("state_dir", "data_dir", "runtime_dir"):
-                val = obj.get(key)
-                if isinstance(val, (str, Path)) and str(val).strip():
-                    return str(val).strip()
-
-    # Config object
-    cfg = getattr(pc, "config", None) or getattr(pc, "CONFIG", None)
-    val = _extract_state_dir_from_config(cfg)
-    if val:
-        return val
-
-    # Callable config getter
-    for attr in ("get_config", "load_config", "load"):
-        fn = getattr(pc, attr, None)
-        if callable(fn):
-            try:
-                cfg = _call_if_no_required_args(fn)
-            except (json.JSONDecodeError, ValueError, KeyError):
-                continue
-            val = _extract_state_dir_from_config(cfg)
-            if val:
-                return val
-
-    return None
-
-
 def _try_load_thomas_config() -> Any | None:
     """Fallback config discovery (non-fatal)."""
 
     for mod_name in (
-        "thomas.cli.parity_compat",
         "thomas.config",
         "thomas.core.config",
         "thomas.server.config",
@@ -257,17 +202,6 @@ def _resolve_state_dir(inp: NodesPendingApprovalsInput) -> Path:
             raise NodesPendingApprovalsError(
                 ERROR_EXTERNAL_FAILURE,
                 "Resolved THOMAS_STATE_DIR is not a directory.",
-                details={"state_dir": str(p)},
-            )
-        return p
-
-    pc_state = _try_state_dir_from_parity_compat()
-    if pc_state:
-        p = Path(pc_state).expanduser()
-        if p.exists() and not p.is_dir():
-            raise NodesPendingApprovalsError(
-                ERROR_EXTERNAL_FAILURE,
-                "Resolved state directory from parity_compat is not a directory.",
                 details={"state_dir": str(p)},
             )
         return p

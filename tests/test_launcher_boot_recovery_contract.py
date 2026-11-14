@@ -52,7 +52,7 @@ def test_startup_recovery_watch_runs_bootdoctor_rescue_with_context() -> None:
 def test_bootdoctor_cli_supports_rescue_startup_context_and_relaunch() -> None:
     cli_text = _read("thomas/bootdoctor/__main__.py")
     direct_text = _read("scripts/run_boot_doctor_direct.py")
-    assert 'choices=("chat", "report", "rescue")' in cli_text
+    assert 'choices=("chat", "report", "rescue", "check")' in cli_text
     assert "--startup-context" in cli_text
     assert "--max-attempts" in cli_text
     assert "_run_rescue" in cli_text

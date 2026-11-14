@@ -27,7 +27,6 @@
 | 5 | **Browser Automation** | ✅ DONE | Implemented at `thomas/tools/browser.py` |
 | 6 | **Cron Scheduler** | ✅ DONE | Implemented at `thomas/core/scheduler.py` |
 | 7 | **Webhook Listener** | ✅ DONE | Implemented at `thomas/server/routes/webhooks.py` |
-| 8 | **Clipboard Monitor** | ✅ DONE | Implemented at `thomas/intake/clipboard_watcher.py` |
 | 9 | **Python Sandbox** | ✅ DONE | Implemented at `thomas/tools/sandbox.py` |
 | 10 | **Database Connector** | ✅ DONE | Implemented at `thomas/tools/database.py` |
 | 11 | **OpenAPI Importer** | ✅ DONE | Implemented at `thomas/core/api_importer.py` |

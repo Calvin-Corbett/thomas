@@ -19,6 +19,7 @@ False (i.e. protection is NOT considered disabled, so the gate runs normally).
 
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
 import hmac
 import json
@@ -28,6 +29,46 @@ from pathlib import Path
 _FLAG_REL = "runtime/.runtime_protection_disabled"
 _KEY_REL = "runtime/.runtime_protection_key"
 _FLAG_VERSION = 1
+
+# Break-glass is a window, not a state. A signature proves a human authorised the
+# disable; it does not prove they still mean it days later. Found live 2026-09-08:
+# a flag issued two days earlier was still switching off fourteen gates, each
+# printing "PASS (runtime protection disabled by human)" and exiting 0.
+#
+# `expires_at` is NOT part of the signed payload, so it may only ever SHORTEN the
+# window; the age limit applies regardless. Anything unparseable fails closed,
+# which for this module means protection stays ON.
+_MAX_DISABLE_HOURS = 8.0
+
+
+def _within_disable_window(doc: object) -> bool:
+    """Whether a signed flag is still inside its break-glass window."""
+    if not isinstance(doc, dict):
+        return False
+    raw_issued = str(doc.get("issued_at") or "").strip()
+    if not raw_issued:
+        return False
+    try:
+        issued = _dt.datetime.fromisoformat(raw_issued.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if issued.tzinfo is None:
+        issued = issued.replace(tzinfo=_dt.UTC)
+    now = _dt.datetime.now(_dt.UTC)
+    if (now - issued) > _dt.timedelta(hours=_MAX_DISABLE_HOURS):
+        return False
+    raw_expires = str(doc.get("expires_at") or "").strip()
+    if raw_expires:
+        try:
+            expires = _dt.datetime.fromisoformat(raw_expires.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return False
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=_dt.UTC)
+        if now >= expires:
+            return False
+    return True
+
 
 
 def _signing_payload(version: int, issued_at: str, issued_by: str, repo: str) -> bytes:
@@ -90,4 +131,7 @@ def runtime_protection_disabled(repo_root: str | os.PathLike[str]) -> bool:
     except ValueError:
         return False
     expected = hmac.new(key, _signing_payload(version, issued_at, issued_by, repo), hashlib.sha256).digest()
-    return hmac.compare_digest(expected, signature)
+    if not hmac.compare_digest(expected, signature):
+        return False
+    # A valid signature says a human authorised this. The window says they still mean it.
+    return _within_disable_window(doc)

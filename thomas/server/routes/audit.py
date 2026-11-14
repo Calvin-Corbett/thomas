@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any
+
+from aiohttp import web
 
 from thomas.observability.file_audit import get_run_summary, list_file_changes
 
@@ -77,3 +80,32 @@ async def handle_audit_run_files(request: Any, run_id: str) -> tuple[bytes, int,
     except Exception as e:
         log.exception("audit run files error")
         return _json({"error": str(e)}, 500)
+
+
+def register_audit_routes(app: Any, *, require_api_access: Callable[[Any], Any]) -> None:
+    """Register ``GET /api/audit/files`` and ``GET /api/audit/runs/{run_id}/files`` on ``app``."""
+
+    def _safe_error_body(body: bytes, status: int) -> bytes:
+        # Avoid leaking exception text / stack traces to clients. On server
+        # errors the underlying handler embeds str(exc) in the body; replace
+        # it with a generic message (the real detail is logged server-side by
+        # the handler via log.exception). Keep the original status code.
+        if status >= 500:
+            log.error("audit handler returned server error (status=%s); body suppressed", status)
+            return json.dumps({"error": "internal server error"}).encode()
+        return body
+
+    async def _audit_files_handler(request: web.Request) -> web.Response:
+        require_api_access(request)
+        body, status, headers = await handle_audit_files(request)
+        return web.Response(body=_safe_error_body(body, status), status=status, headers=headers)
+
+    async def _audit_run_files_handler(request: web.Request) -> web.Response:
+        require_api_access(request)
+        run_id = request.match_info.get("run_id", "")
+        body, status, headers = await handle_audit_run_files(request, run_id)
+        return web.Response(body=_safe_error_body(body, status), status=status, headers=headers)
+
+    app.router.add_get("/api/audit/files", _audit_files_handler)
+    app.router.add_get("/api/audit/runs/{run_id}/files", _audit_run_files_handler)
+    log.info("File audit routes registered")

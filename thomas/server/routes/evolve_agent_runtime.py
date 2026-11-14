@@ -11,12 +11,16 @@ import os
 import secrets
 import sqlite3
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
 
+from thomas.core import project_root
+from thomas.core.claude_alias_ids import remember_engine_model
+from thomas.core.event_loop_offload import off_loop
 from thomas.forge.anvil import (
     forge_code_deliverables,
     forge_code_git,
@@ -24,7 +28,11 @@ from thomas.forge.anvil import (
     forge_code_store,
     run_report,
 )
+from thomas.forge.anvil.build_model_receipt import engine_model_from_transcript, started_model_in_transcript
+from thomas.forge.anvil.run_files import agent_dir as _agent_dir
+from thomas.forge.anvil.run_files import transcript_path as _transcript_path
 from thomas.server.app_keys import APP_ENGINE_MANAGER, APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE
+from thomas.server.praxis.launch import recovery_start_allowed
 from thomas.server.routes.evolve_verdict import (
     _terminal_engine_verdict,
     _unstructured_engine_error,
@@ -35,9 +43,7 @@ from . import evolve_agent_run_status as _evolve_agent_run_status
 from .evolve_agent_activity import (
     acquire_code_activity_lease as _acquire_code_activity_lease,
 )
-from .evolve_agent_activity import (
-    acquire_code_activity_lease_async,
-)
+from .evolve_agent_activity import acquire_code_activity_lease_async
 from .evolve_agent_activity import (
     attach_code_activity_release as _attach_code_activity_release,
 )
@@ -54,9 +60,6 @@ from .evolve_agent_receipts import (
 
 log = logging.getLogger(__name__)
 
-# Split out (evolve_agent_revert.py, evolve_agent_run_status.py; landing this
-# session, worker.py precedent) past the monolith guard's 800-line soft limit --
-# see their docstrings. Re-exported under original names so no caller changed.
 _normalize_repo_file = _evolve_agent_revert._normalize_repo_file
 _conversation_changed_files = _evolve_agent_revert._conversation_changed_files
 _conversation_is_read_only = _evolve_agent_revert._conversation_is_read_only
@@ -83,6 +86,8 @@ async def _release_code_start_gate(
     activity_token = ""
     try:
         activity_token = await acquire_code_activity_lease_async(app, run_id)
+        if not recovery_start_allowed(consume=False):
+            raise RuntimeError("Build recovery admission changed before the start gate opened")
         await _release_start_gate(
             proc,
             start_token,
@@ -126,6 +131,7 @@ def _code_action_hash(message: str, payload: dict[str, Any] | None) -> str:
         "engine": str(body.get("engine") or "auto").strip().lower(),
         "model": str(body.get("model") or "auto").strip().lower(),
         "model_id": str(body.get("model_id") or "").strip().lower(),
+        "build_roles": body.get("build_roles"),
         "reasoning_effort": str(body.get("reasoning_effort", body.get("effort")) or "medium").strip().lower(),
         "autonomy_level": str(body.get("autonomy_level") or "3").strip(),
         "file_access": str(body.get("file_access") or "project").strip().lower(),
@@ -150,7 +156,19 @@ def _agent_launch(
     package_root: Path,
 ) -> tuple[list[str], dict[str, str]]:
     env = settings.child_environment(dict(os.environ))
+    env["PATH"] = os.pathsep.join((str(Path(sys.executable).parent), env.get("PATH", "")))
     env["PYTHONPATH"] = os.pathsep.join(part for part in (str(package_root), env.get("PYTHONPATH", "")) if part)
+    # `python -m` puts the working folder (the project) ahead of PYTHONPATH, so in
+    # a project that is a copy of Thomas the copy's `thomas/` package won and the
+    # runner ran the code it was editing. PYTHONSAFEPATH keeps the working folder
+    # off sys.path for the runner only; the runner removes it again at startup so
+    # the checks it launches still import the project's own code.
+    env["PYTHONSAFEPATH"] = "1"
+    # One per server process: a newly booted runner must not inherit a stale
+    # drain marker left by the old server.
+    from thomas.server.landed_code_reload import drain_signal_path
+
+    env["THOMAS_CODE_RELOAD_DRAIN_SIGNAL"] = str(drain_signal_path())
     env.update(
         {
             "THOMAS_CLAUDE_BRIDGE_ENABLED": "1",
@@ -169,6 +187,8 @@ def _agent_launch(
         settings.engine,
         "--family",
         settings.family,
+        "--agent",
+        settings.agent,
         "--model",
         settings.dispatch_model.split(":", 1)[-1],
         "--profile",
@@ -196,15 +216,25 @@ async def _release_start_gate(
     release_state: dict[str, bool] | None = None,
 ) -> None:
     """Release a recorded run and hand its prompt/credential over on the one-use pipe."""
-
     writer = getattr(proc, "stdin", None)
     if writer is None:
         raise RuntimeError("Code runner start gate is unavailable")
     payload = json.dumps(
-        {"gate_token": token, "oauth_access_token": str(oauth_access_token or ""), "goal": str(goal)},
+        {
+            "gate_token": token,
+            "oauth_access_token": str(oauth_access_token or ""),
+            "goal": str(goal),
+            "self_edit": {
+                key: value
+                for key, value in (getattr(proc, "thomas_self_edit", None) or {}).items()
+                if key in {"candidate_root", "source_root"}
+            },
+        },
         ensure_ascii=True,
         separators=(",", ":"),
     )
+    if not recovery_start_allowed():
+        raise RuntimeError("Build recovery admission changed before the start gate opened")
     writer.write(f"{payload}\n".encode())
     if release_state is not None:
         release_state["payload_write_attempted"] = True
@@ -219,33 +249,31 @@ def _sse_frame(payload: dict[str, Any], run_id: str, sequence: int) -> bytes:
 
 
 def _default_repo_root() -> Path:
-    # thomas/server/routes/evolve_agent_routes.py -> repo root is parents[3]
-    return Path(__file__).resolve().parents[3]
+    return project_root.code_checkout()
 
 
-def _agent_dir(root: Path) -> Path:
-    d = root / ".thomas" / "evolve" / "agent"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _transcript_path(root: Path, run_id: str = "") -> Path:
-    suffix = f"-{hashlib.sha256(run_id.encode('utf-8')).hexdigest()[:16]}" if run_id else ""
-    return _agent_dir(root) / f"transcript{suffix}.txt"
+_DRAIN_CHUNK_BYTES = 65536
 
 
 async def _drain(proc: Any, transcript: Path) -> bool:
-    """Stream the agent's combined stdout into the transcript file, line by line,
-    flushing so the SSE tail sees output as it happens."""
+    """Stream the agent's combined stdout into the transcript file, flushing so
+    the SSE tail sees output as it happens.
+
+    Reads chunks, not lines. ``readline()`` raises once a single line passes the
+    stream's 64 KiB limit (a long reasoning summary or tool result), and when
+    that killed this reader nobody drained the pipe any more: the runner blocked
+    on its next write and the Build tab showed "Working" forever. The SSE tail
+    reassembles lines itself (``IncrementalLineDecoder``), so partial chunks are
+    safe here."""
     transcript_confirmed = True
     try:
         with open(transcript, "ab") as fh:
             assert proc.stdout is not None
             while True:
-                line = await proc.stdout.readline()
-                if not line:
+                chunk = await proc.stdout.read(_DRAIN_CHUNK_BYTES)
+                if not chunk:
                     break
-                fh.write(line)
+                fh.write(chunk)
                 fh.flush()
     except (AssertionError, OSError, RuntimeError):
         log.warning("evolve agent: transcript drain failed", exc_info=True)
@@ -330,18 +358,7 @@ async def _drain_and_record(
     request_id: str = "",
     run_id: str = "",
 ) -> dict[str, Any]:
-    """Drain the live transcript, then record the run outcome onto the conversation.
-
-    The outcome is computed from *evidence* at the moment the build finishes.
-    A marked successful engine verdict can outrank the Claude CLI's unreliable
-    exit 1 when files landed or a confirmed final reply arrived. A nonzero exit
-    without that verdict fails closed, even when partial files exist. A clean
-    exit that
-    touched nothing is a no-op; a dirty exit with nothing to show for it is a
-    failure; an interruption the person asked for is ``stopped``, in those
-    words. Recording is wrapped so a bad store/git call can never crash the
-    server or lose the transcript.
-    """
+    """Drain a run, end caged project processes, and record its outcome."""
     activity_task = asyncio.create_task(_keep_code_run_active(app, proc))
     try:
         run_capture_confirmed = await _drain(proc, transcript)
@@ -349,11 +366,37 @@ async def _drain_and_record(
         activity_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await activity_task
+        from thomas.tools.cage_shell import end_project_processes
+
+        try:
+            green = any(
+                p.parent.name.lower() == "work" and p.parent.parent.name.lower() == "green"
+                for p in (root, *root.parents)
+            )
+            process_cleanup = (
+                await asyncio.to_thread(end_project_processes, root) if green else end_project_processes(root)
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            process_cleanup = f"cleanup unavailable: {exc}"
+        log.info("Build project process cleanup: %s", process_cleanup)
     result: dict[str, Any]
     try:
         rc = proc.returncode
-        text = transcript.read_text(encoding="utf-8", errors="replace")
-        changed = forge_code_git.project_delta_since(root, snap)
+        text = await off_loop("code_run.transcript", transcript.read_text, encoding="utf-8", errors="replace")
+        self_edit_record = getattr(proc, "thomas_self_edit", None)
+        if self_edit_record:
+            from thomas.forge.anvil.forge_code_self_edit import candidate_delta_since
+
+            from .evolve_agent_self_edit_runs import candidate_for, finish_run
+
+            candidate = candidate_for(self_edit_record)
+            # Hashing a whole private copy of Thomas: measured 9.5-10.9 s for
+            # 8,456 files and 11+ s for 9,524, once per self-edit run.
+            changed = await off_loop(
+                "self_edit.candidate_delta", candidate_delta_since, candidate.candidate_root, candidate.baseline
+            )
+        else:
+            changed = await off_loop("code_run.project_delta", forge_code_git.project_delta_since, root, snap)
         # "stop" | "steer" | "" -- stamped onto the process by the stop endpoint
         # and the steer handler before they kill it. An interruption someone
         # asked for used to be recorded as `failed / exited 1`, which reads as
@@ -366,10 +409,20 @@ async def _drain_and_record(
             and _confirmed_conversation_reply(text, require_final=rc != 0)
         )
         terminal_ok, terminal_cause = _terminal_engine_verdict(text)
+        yielded_for_reload = False
+        runner_finished = False
+        for line in text.splitlines():
+            if line.lstrip().startswith("{"):
+                with contextlib.suppress(json.JSONDecodeError):
+                    event = json.loads(line)
+                    if (
+                        isinstance(event, dict)
+                        and event.get("terminal") is True
+                        and event.get("fc") in {"meta", "error"}
+                    ):
+                        runner_finished = True
+                        yielded_for_reload = bool(event.get("yielded_for_reload")) and rc == 75
         unstructured_cause = _unstructured_engine_error(text)
-        # A nonzero process exit needs positive terminal success evidence.
-        # Partial files are useful recovery material, not proof that the run
-        # reached a successful verdict.
         missing_terminal_failure = rc not in (None, 0) and terminal_ok is not True
         engine_failed = terminal_ok is False or missing_terminal_failure
         crash_cause = terminal_cause or unstructured_cause
@@ -386,6 +439,11 @@ async def _drain_and_record(
         if not run_capture_confirmed or rc is None:
             reason = "process output or exit could not be confirmed"
             outcome = "failed"
+        elif yielded_for_reload:
+            outcome = "reload_yielded"
+            reason = "Build yielded at a safe boundary for landed-code reload"
+            ok = False
+            noop = False
         elif interrupted:
             outcome = "stopped"
             reason = "stopped for your steering update" if interrupted == "steer" else "stopped by you"
@@ -394,12 +452,12 @@ async def _drain_and_record(
                 # subject rather than a mystery.
                 reason += f" — {len(changed)} file(s) had already changed"
         elif engine_failed:
-            # The engine itself declared the run dead. Files that landed first
-            # are named (they are real work worth keeping), but a crash is
-            # never "completed" — that filing is how a crashed one-pass build
-            # got presented as a finished deliverable.
             outcome = "failed"
-            reason = f"the run crashed before finishing — {crash_cause}"
+            reason = (
+                f"the run completed but its engine reported failure — {crash_cause}"
+                if runner_finished and run_capture_confirmed
+                else f"the run crashed before finishing — {crash_cause}"
+            )
             if changed:
                 reason += f"; {len(changed)} file(s) had changed by then"
         elif conversation_reply:
@@ -420,9 +478,16 @@ async def _drain_and_record(
         else:
             reason = f"exited {rc}"
             outcome = "failed"
-        # CAP-141: structured post-run report, built from the run's REAL recorded
-        # data (forge events + git truth). The goal is the conversation's latest
-        # user message — the completion criteria this run was given.
+        cleanup_failed = process_cleanup.startswith("cleanup unavailable:") or (
+            "processes left: [" in process_cleanup and not process_cleanup.endswith("[]")
+        )
+        if cleanup_failed:
+            reason = f"{reason}; {process_cleanup}" if reason else process_cleanup
+            ok = False
+            noop = False
+            if outcome != "stopped":
+                outcome = "failed"
+        # Build the post-run report from recorded events and the latest user goal.
         prior_turns = (forge_code_store.load_conversation(root, cid) or {}).get("turns") or []
         goal_text = next((str(t.get("text") or "") for t in reversed(prior_turns) if t.get("role") == "user"), "")
         report = run_report.build_run_report(
@@ -433,14 +498,53 @@ async def _drain_and_record(
             ok=ok,
             outcome=outcome,
             reason=reason,
-            # Projects are shared, so a build can silently replace another
-            # task's work. This does not prevent the write; it makes it visible.
             foreign_writes=forge_code_store.files_written_by_another_task(root, cid, changed),
         )
+        from thomas.server.praxis.build_verifier import verify_build_checks
+
+        report["verifier_receipts"] = verify_build_checks(
+            root,
+            acceptance=getattr(proc, "thomas_acceptance", []),
+            changed_files=changed,
+        )
+        report["process_cleanup"] = process_cleanup
+        covered = {
+            name
+            for receipt in report["verifier_receipts"]
+            if receipt["status"] == "pass"
+            for name in receipt["covered_files"]
+        }
+        if changed and set(changed) <= covered:
+            report["open_risks"] = [
+                risk for risk in report["open_risks"] if risk.get("risk") != "changed files were never validated"
+            ]
+        if self_edit_record:
+            report["self_edit"] = await asyncio.to_thread(
+                finish_run, catalog_root or root, self_edit_record, successful=bool(ok)
+            )
+            ok = report["self_edit"]["status"] == "ready"
+            reason = report["self_edit"]["reason"]
+            outcome = "completed" if ok else "failed"
+            if cleanup_failed:
+                reason = f"{reason}; {process_cleanup}"
+                ok = False
+                outcome = "failed"
+            # Candidate edits are reviewed/applied separately, never ordinary Keep/Revert.
+            report["changed_files"] = []
+            changed = []
+        # Read the engine's model from the transcript, not the requested alias.
+        model_used = engine_model_from_transcript(text)
+        # Taught HERE as well as in the runner: the runner is another process
+        # (and a self-edit run has its own data folder), so only this call
+        # updates the menu the running server serves without a restart. Taught
+        # from the model the run STARTED, never a helper modelUsage also names.
+        remember_engine_model(model, started_model_in_transcript(text))
         persisted = forge_code_store.append_agent_turn(
             root,
             cid,
             model=model,
+            agent=str(getattr(proc, "thomas_agent", "") or ""),
+            model_used=model_used,
             transcript=text,
             changed_files=changed,
             returncode=rc,
@@ -475,7 +579,7 @@ async def _drain_and_record(
         # a code-only edit) becomes a durable, openable entry pointing back at this
         # conversation. A code-only or failed run registers nothing. The title is the
         # conversation's own (model-derived) name -- the build's purpose.
-        if ok:
+        if ok and not self_edit_record:
             conv = forge_code_store.load_conversation(root, cid) or {}
             forge_code_deliverables.register_from_run(
                 root,
@@ -485,16 +589,18 @@ async def _drain_and_record(
                 model=model,
             )
             if changed:
-                # A finished run in a TASK-BORN project becomes a real commit.
-                # Before this, such a project's only commit was the empty birth
-                # baseline, so when a later run overwrote a finished deliverable,
-                # Keep/Revert could only offer the empty tree back (P1, measured
-                # twice). The helper refuses user-picked projects (their history
-                # is theirs; the Checkpoint button remains their path) and never
-                # raises -- and the guard stands anyway, because preserving
-                # history must never rewrite a successful outcome as a failure.
+                # Save finished task-born work so Keep/Revert has a real baseline.
+                # The helper refuses to commit user-picked projects.
                 try:
-                    forge_code_git.commit_run_snapshot(root, run_id=run_id, reason=reason)
+                    # git add plus git commit over the run's whole output: the one
+                    # place in run recording that WRITES, and the slowest.
+                    await off_loop(
+                        "code_run.snapshot_commit",
+                        forge_code_git.commit_run_snapshot,
+                        root,
+                        run_id=run_id,
+                        reason=reason,
+                    )
                 except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
                     # Named, not broad: the helper already degrades internally;
                     # this is the last line of defense and it must never
@@ -512,28 +618,7 @@ async def _drain_and_record(
             # files, and an unmarked folder only means the next question mints
             # its own, exactly as before.
             forge_code_projects.mark_workspace_reusable(root)
-        # This flag used to be set True because execution REACHED this line,
-        # while every other branch returned it False with a persistence_state.
-        # That made the confirmation CIRCULAR: `_await_recording` awaits the
-        # recorder and then calls `_recording_status`, which decides by reading
-        # `persistence_confirmed` off this very dict. The status check asked the
-        # result whether it saved, and on this path the result always said yes,
-        # so no amount of tightening `_recording_status` or waiting longer could
-        # ever catch a lost write. The truth now enters above, from a store read.
-        #
-        # A correction to the note that used to stand here, because it named
-        # evidence that does not hold. It cited
-        # tests/test_evolve_agent_persistence.py:277 -- persistence_confirmed
-        # True while list_conversations() returned [] -- as proof the flag can be
-        # true against an empty store. Measured: it is not. That request sends no
-        # project_root, so the run is recorded into the scratch project
-        # (~/.thomas/code_scratch), while the assertion reads the CATALOG root.
-        # The turn was written; the test looked in the wrong place. So no case of
-        # this flag lying has actually been demonstrated -- not under
-        # cancellation, not on an ordinary run. The self-certifying assignment
-        # was still wrong, and is now gone, but it is a closed hole rather than a
-        # reproduced failure, and the next reader should not go hunting for a
-        # data-loss bug that this evidence never showed.
+        # Confirmation comes from the store read above, not from reaching this line.
         result = {
             "persistence_confirmed": persistence_confirmed,
             "returncode": rc,
@@ -571,10 +656,18 @@ async def _drain_and_record(
         }
     if request_id and catalog_root is not None:
         try:
-            receipt = _action_receipt(catalog_root, "run", request_id) or {}
-            receipt.update({"state": "completed" if result["persistence_confirmed"] else "persistence_failed"})
+            receipt = await asyncio.to_thread(_action_receipt, catalog_root, "run", request_id) or {}
+            receipt.update(
+                {
+                    "state": "reload_yielded"
+                    if result["persistence_confirmed"] and result.get("outcome") == "reload_yielded"
+                    else "completed"
+                    if result["persistence_confirmed"]
+                    else "persistence_failed"
+                }
+            )
             receipt["persistence"] = result
-            _save_action_receipt(catalog_root, "run", request_id, receipt)
+            await asyncio.to_thread(_save_action_receipt, catalog_root, "run", request_id, receipt)
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             log.warning("evolve agent: run receipt update failed", exc_info=True)
             error = str(exc) or type(exc).__name__
@@ -588,6 +681,7 @@ async def _drain_and_record(
                     "outcome": "persistence_failed",
                 }
             )
+    result["process_cleanup"] = process_cleanup
     return result
 
 

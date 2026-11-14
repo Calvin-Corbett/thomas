@@ -1,6 +1,6 @@
 # The user overlay
 
-Every User's Thomas, phase 2.
+Every User's Thomas, phase 2 (`docs/superpowers/plans/2026-09-02-fork-by-overlay.md`).
 
 Your overlay is the layer that makes this Thomas yours: themes, restyled
 elements, a renamed agent identity, a default theme. It lives outside the

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,21 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def _rebind_root(raw: str | None) -> None:
+    """Point the gate at another checkout so it can be run against a fixture.
+
+    Without this the gate always judges the repo it lives in, so it could never have
+    a red-path selftest - and the enforcement ratchet will not let an unprovable gate
+    enforce. Same option, same default, as monolith_guard.py.
+    """
+    global ROOT
+    if not raw:
+        return
+    ROOT = Path(raw).resolve()
+
+
 FRONTEND_PREFIXES = ("apps/", "web-ui/")
 FRONTEND_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs"}
 
@@ -46,11 +62,29 @@ def _is_frontend_file(path: str) -> bool:
     return Path(path).suffix.lower() in FRONTEND_EXTENSIONS
 
 
+def _local_bin(apps_dir: str, name: str) -> Path | None:
+    """The RUNNABLE shim for a node binary under apps_dir, or None.
+
+    npm writes two shims side by side: an extensionless shell script and a `.cmd`
+    batch file. Windows CreateProcess can only execute the `.cmd` one; handing it
+    the other raises OSError. This gate used to pick the extensionless name and
+    then swallow that OSError as a pass, so on Windows it reported clean code
+    without ever starting the compiler. Measured 2026-09-19: a staged file with a
+    real TS2322 error produced `"errors": [], "ok": true`.
+    """
+    base = ROOT / apps_dir / "node_modules" / ".bin" / name
+    candidates = (base.with_suffix(".cmd"), base) if os.name == "nt" else (base,)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _find_eslint() -> str | None:
     """Find ESLint binary — check node_modules first, then PATH."""
     for apps_dir in ("apps/site", "apps", "."):
-        local = ROOT / apps_dir / "node_modules" / ".bin" / "eslint"
-        if local.exists():
+        local = _local_bin(apps_dir, "eslint")
+        if local:
             return str(local)
     return shutil.which("eslint")
 
@@ -58,8 +92,8 @@ def _find_eslint() -> str | None:
 def _find_tsc() -> str | None:
     """Find TypeScript compiler."""
     for apps_dir in ("apps/site", "apps", "."):
-        local = ROOT / apps_dir / "node_modules" / ".bin" / "tsc"
-        if local.exists():
+        local = _local_bin(apps_dir, "tsc")
+        if local:
             return str(local)
     return shutil.which("tsc")
 
@@ -77,9 +111,11 @@ def _run_eslint(eslint_path: str, files: list[str]) -> tuple[bool, str]:
         output = (proc.stdout or "") + (proc.stderr or "")
         return proc.returncode == 0, output.strip()
     except subprocess.TimeoutExpired:
-        return True, "ESLint timed out"
+        # Fail closed. A check that did not finish is not a check that passed --
+        # returning True here meant the gate vouched for code it never read.
+        return False, "ESLint timed out after 60s; the gate cannot pass what it did not check."
     except OSError as e:
-        return True, f"ESLint error: {e}"
+        return False, f"ESLint could not be executed ({e}); the gate cannot pass what it did not check."
 
 
 def _run_tsc(tsc_path: str, app_dir: str) -> tuple[bool, str]:
@@ -95,15 +131,22 @@ def _run_tsc(tsc_path: str, app_dir: str) -> tuple[bool, str]:
         output = (proc.stdout or "") + (proc.stderr or "")
         return proc.returncode == 0, output.strip()
     except subprocess.TimeoutExpired:
-        return True, "TypeScript check timed out"
+        # Fail closed, same reason as _run_eslint above.
+        return False, "TypeScript check timed out after 60s; the gate cannot pass what it did not check."
     except OSError as e:
-        return True, f"TypeScript error: {e}"
+        return False, f"TypeScript could not be executed ({e}); the gate cannot pass what it did not check."
 
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root (default: inferred from script location).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
+    _rebind_root(args.repo_root)
 
     staged = _staged_files()
     frontend_files = [f for f in staged if _is_frontend_file(f)]

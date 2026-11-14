@@ -48,6 +48,7 @@ from thomas.server.desktop_plugins_runtime import (
     _write_json_file,
     get_installed_plugin,
 )
+from thomas.server.install_transaction import install_transaction
 from thomas.tools.mcp_registry import (
     _load_rows,
     _save_rows,
@@ -59,9 +60,7 @@ log = logging.getLogger(__name__)
 
 
 def _expand_placeholders(value: str, *, plugin_root: Path, plugin_data: Path) -> str:
-    return value.replace("${PLUGIN_ROOT}", str(plugin_root)).replace(
-        "${PLUGIN_DATA}", str(plugin_data)
-    )
+    return value.replace("${PLUGIN_ROOT}", str(plugin_root)).replace("${PLUGIN_DATA}", str(plugin_data))
 
 
 def _user_skills_root() -> Path:
@@ -112,9 +111,7 @@ def _sidecar_owned_by(skill_dir: Path, plugin_name: str) -> bool:
         return False
 
 
-def _register_mcp_servers(
-    config: AppConfig, plugin_dir: Path, info: AgentPluginInfo
-) -> list[str]:
+def _register_mcp_servers(config: AppConfig, plugin_dir: Path, info: AgentPluginInfo) -> list[str]:
     """Register the plugin's MCP servers DISABLED with provenance. An Agent
     Plugin is unverified by definition, so nothing it ships may launch until
     the owner flips the server on. Rows go through the canonical registry
@@ -139,11 +136,7 @@ def _register_mcp_servers(
             "command": expand(_safe_text(cfg.get("command"))),
             "args": [expand(_safe_text(a)) for a in cfg.get("args", []) if _safe_text(a)],
             "url": _safe_text(cfg.get("url")),
-            "env": {
-                _safe_text(k): expand(_safe_text(v))
-                for k, v in (cfg.get("env") or {}).items()
-                if _safe_text(k)
-            },
+            "env": {_safe_text(k): expand(_safe_text(v)) for k, v in (cfg.get("env") or {}).items() if _safe_text(k)},
             "enabled": False,
             "source": "agent-plugin",
             "source_plugin": info.name,
@@ -189,9 +182,7 @@ def _synthesize_manifest(info: AgentPluginInfo) -> dict[str, Any]:
     }
 
 
-def install_agent_plugin_bytes(
-    config: AppConfig, bundle_bytes: bytes, *, source: dict[str, Any]
-) -> dict[str, Any]:
+def install_agent_plugin_bytes(config: AppConfig, bundle_bytes: bytes, *, source: dict[str, Any]) -> dict[str, Any]:
     """Install an Agent Plugins 1.0.0 bundle and return the normalized
     installed record (the same shape the signed installer returns). Raises
     ValueError when the bundle is not a valid Agent Plugin."""
@@ -226,22 +217,50 @@ def install_agent_plugin_bytes(
         )
 
         destination_dir = _installed_plugin_dir(config, manifest.plugin_id)
-        _copy_plugin_tree(plugin_root, destination_dir)
-        manifest_payload = dict(manifest_data)
-        manifest_payload["sha256"] = actual_sha256
-        _write_json_file(destination_dir / "manifest.json", manifest_payload)
 
-        installed_skills = _install_skills(destination_dir, info)
-        registered_servers = _register_mcp_servers(config, destination_dir, info)
+        # Every effect below lands outside the temp dir, and the installed
+        # record — the only thing uninstall can read — is written last. Without
+        # a transaction, a failure after the skills are copied leaves them on
+        # disk with no record naming them, so nothing can ever remove them
+        # (phase 3.4). Each effect records its reversal the moment it succeeds.
+        with install_transaction(f"agent-plugin:{manifest.plugin_id}") as tx:
+            _copy_plugin_tree(plugin_root, destination_dir)
+            tx.undo(lambda: shutil.rmtree(destination_dir, ignore_errors=True))
 
-        record = _build_installed_record(manifest, actual_sha256=actual_sha256, source=source)
-        record["verified"] = False
-        record["agent_plugin"] = {
-            "standard": "1.0.0",
-            "skills": installed_skills,
-            "mcp_servers": registered_servers,
-        }
-        _replace_installed_record(config, record)
+            manifest_payload = dict(manifest_data)
+            manifest_payload["sha256"] = actual_sha256
+            _write_json_file(destination_dir / "manifest.json", manifest_payload)
+
+            installed_skills = _install_skills(destination_dir, info)
+            tx.undo(
+                lambda: cleanup_agent_plugin_extras(
+                    config,
+                    {
+                        "plugin_id": manifest.plugin_id,
+                        "agent_plugin": {"skills": installed_skills, "mcp_servers": []},
+                    },
+                )
+            )
+
+            registered_servers = _register_mcp_servers(config, destination_dir, info)
+            tx.undo(
+                lambda: cleanup_agent_plugin_extras(
+                    config,
+                    {
+                        "plugin_id": manifest.plugin_id,
+                        "agent_plugin": {"skills": [], "mcp_servers": registered_servers},
+                    },
+                )
+            )
+
+            record = _build_installed_record(manifest, actual_sha256=actual_sha256, source=source)
+            record["verified"] = False
+            record["agent_plugin"] = {
+                "standard": "1.0.0",
+                "skills": installed_skills,
+                "mcp_servers": registered_servers,
+            }
+            _replace_installed_record(config, record)
         log.info(
             "Installed Agent Plugin '%s' (skills=%d, mcp_servers=%d, unverified)",
             info.name,
@@ -272,10 +291,7 @@ def cleanup_agent_plugin_extras(config: AppConfig, record: dict[str, Any]) -> No
         kept = [
             r
             for r in rows
-            if not (
-                _safe_text(r.get("name")) in server_names
-                and _safe_text(r.get("source_plugin")) == plugin_id
-            )
+            if not (_safe_text(r.get("name")) in server_names and _safe_text(r.get("source_plugin")) == plugin_id)
         ]
         if len(kept) != len(rows):
             _save_rows(path, kept)

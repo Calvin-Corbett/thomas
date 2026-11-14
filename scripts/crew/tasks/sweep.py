@@ -14,15 +14,19 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 try:
+    from scripts.crew.tasks import claim_liveness, sweep_release
+    from scripts.crew.workboard import backstop_order
     from scripts.crew.workboard import claim as workboard_claim
     from scripts.crew.workboard import issue as workboard_issue
     from scripts.crew.workboard import message as workboard_message
     from scripts.forge.gates import workboard_claims as claims_gate
 except ImportError:  # pragma: no cover
+    from crew.tasks import claim_liveness, sweep_release  # type: ignore
     from crew.workboard import claim as workboard_claim  # type: ignore
     from crew.workboard import message as workboard_message  # type: ignore
     from forge.gates import workboard_claims as claims_gate  # type: ignore
 
+    from scripts.crew.workboard import backstop_order  # type: ignore
     from scripts.crew.workboard import issue as workboard_issue  # type: ignore
 
 try:
@@ -112,6 +116,8 @@ def _stale_claims(
     now: datetime,
     max_idle_minutes: float,
     require_claims_to_have_active_task: bool,
+    presence_dir: Path | None = None,
+    spared: list[dict[str, object]] | None = None,
 ) -> tuple[list[str], list[dict[str, object]], dict[str, list[claims_gate.ActiveTask]]]:
     violations, claims, active_tasks, _grab, _issues = claims_gate.evaluate_board(
         workboard_path,
@@ -171,8 +177,8 @@ def _stale_claims(
         tasks_by_agent.setdefault(_norm(task.agent), []).append(task)
 
     stale: list[dict[str, object]] = []
+    presence = presence_dir if presence_dir is not None else claim_liveness.default_presence_dir(workboard_path)
     for claim in claims:
-        claim_ts = _line_commit_unix(workboard_path, int(claim.line_no))
         stale_item: dict[str, object] = {
             "agent": claim.agent,
             "line_no": int(claim.line_no),
@@ -201,7 +207,7 @@ def _stale_claims(
                 stale_item["last_update_utc"] = _to_iso_utc(freshest_seen)
                 stale_item["issue"] = "agent_activity_timeout"
                 is_stale = True
-        elif claim_ts is None:
+        elif (claim_ts := _line_commit_unix(workboard_path, int(claim.line_no))) is None:
             stale_item["issue"] = "missing_blame_timestamp_and_activity"
             is_stale = True
         else:
@@ -212,6 +218,18 @@ def _stale_claims(
                 stale_item["issue"] = "claim_line_age_timeout"
                 is_stale = True
         if not is_stale:
+            continue
+        live = claim_liveness.live_reason(
+            workboard_path=workboard_path,
+            line_no=int(claim.line_no),
+            agent=claim.agent,
+            now=now,
+            max_idle_minutes=max_idle_minutes,
+            presence_dir=presence,
+        )
+        if live is not None:
+            if spared is not None:
+                spared.append({**stale_item, "spared_because": live})
             continue
         task_rows = tasks_by_agent.get(agent_key, [])
         stale_item["task_ids"] = [row.task_id for row in task_rows]
@@ -299,6 +317,19 @@ def _update_inactive_agents_section(
     return True, {"inactive_agent_count": len(entries), "updated": bool(apply)}
 
 
+def _inactive_rows(workboard_path: Path) -> dict[str, dict[str, str]]:
+    lines = workboard_path.read_text(encoding="utf-8").splitlines()
+    section = _find_section(lines, heading_prefix=INACTIVE_AGENTS_HEADING)
+    rows: dict[str, dict[str, str]] = {}
+    if section is None:
+        return rows
+    for idx in _bullet_indices(lines, section[0], section[1]):
+        _entry, fields, err = _parse_kv_entry(idx + 1, lines[idx])
+        if not err and fields and str(fields.get("agent", "")).strip():
+            rows[_norm(str(fields["agent"]))] = fields
+    return rows
+
+
 def _sweep_inactive(
     *,
     workboard_path: Path,
@@ -307,12 +338,17 @@ def _sweep_inactive(
     now: datetime,
     require_claims_to_have_active_task: bool,
     apply: bool,
+    presence_dir: Path | None = None,
+    only: frozenset[str] | None = None,
 ) -> tuple[bool, dict[str, object]]:
+    spared: list[dict[str, object]] = []
     violations, stale_claims, tasks_by_agent = _stale_claims(
         workboard_path=workboard_path,
         now=now,
         max_idle_minutes=max_idle_minutes,
         require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+        presence_dir=presence_dir,
+        spared=spared,
     )
     if violations:
         return False, {"error": "workboard invalid", "violations": list(violations)}
@@ -323,46 +359,62 @@ def _sweep_inactive(
     reassigned_issue_ids: list[str] = []
     sent_message_ids: list[str] = []
     errors: list[str] = []
+    overrides: list[dict[str, object]] = []
+    skipped_duplicates: list[str] = []
+    if only is not None:
+        stale_claims = [row for row in stale_claims if _norm(str(row.get("agent", ""))) in only]
 
     if apply:
+        prior_rows = _inactive_rows(workboard_path)
         for stale in stale_claims:
             agent = str(stale.get("agent", "")).strip()
             if not agent:
                 continue
-            ok_message, message_payload = workboard_message.send_message(
-                workboard_path,
-                sender=task_manager_agent,
-                recipient=agent,
-                summary=(f"inactivity detected for `{agent}`, confirm active status or allow task reassignment"),
-                task_id="none",
-                kind="ping",
-                priority="p0",
-                requested_action=("ack message if still active, or let task manager reassign blocked work"),
-                decision="pending",
-                require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
-            )
-            if ok_message:
-                sent_message_ids.append(str(dict(message_payload.get("message") or {}).get("msg_id") or ""))
-            else:
-                errors.append("inactive ping message failed: " + str(message_payload.get("error") or "unknown error"))
+            claimed_at = claim_liveness.declared_claim_time(workboard_path, agent)
+            repeat = sweep_release.already_flagged(prior_rows, _norm(agent), claimed_at, _parse_iso_utc)
+            if repeat:
+                skipped_duplicates.append(agent)
+            if not repeat:
+                ok_message, message_payload = workboard_message.send_message(
+                    workboard_path,
+                    sender=task_manager_agent,
+                    recipient=agent,
+                    summary=(f"inactivity detected for `{agent}`, confirm active status or allow task reassignment"),
+                    task_id="none",
+                    kind="ping",
+                    priority="p0",
+                    requested_action=("ack message if still active, or let task manager reassign blocked work"),
+                    decision="pending",
+                    require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+                )
+                if ok_message:
+                    sent_message_ids.append(str(dict(message_payload.get("message") or {}).get("msg_id") or ""))
+                else:
+                    errors.append(
+                        "inactive ping message failed: " + str(message_payload.get("error") or "unknown error")
+                    )
 
             for task in sorted(tasks_by_agent.get(_norm(agent), []), key=lambda row: str(row.task_id).lower()):
                 summary = (
                     f"agent `{agent}` marked inactive (> {max_idle_minutes:.2f} minutes idle), "
                     "task manager should reactivate or reassign"
                 )
-                ok_block, _msg_block, _issue_id = workboard_issue.block_task(
-                    workboard_path,
-                    task_id=task.task_id,
-                    reporter=task_manager_agent,
-                    owner=task_manager_agent,
-                    summary=summary,
-                    issue_id=f"{task.task_id}-inactive",
+                ok_block, _msg_block, _issue_id = (
+                    (False, "", "")
+                    if repeat
+                    else workboard_issue.block_task(
+                        workboard_path,
+                        task_id=task.task_id,
+                        reporter=task_manager_agent,
+                        owner=task_manager_agent,
+                        summary=summary,
+                        issue_id=f"{task.task_id}-inactive",
+                    )
                 )
                 if ok_block:
                     blocked_task_ids.append(task.task_id)
 
-                ok_move, msg_move = workboard_issue.move_task_to_up_for_grabs(
+                ok_move, msg_move = backstop_order.move_task_to_up_for_grabs(
                     workboard_path,
                     task_id=task.task_id,
                     reported_by=task_manager_agent,
@@ -375,18 +427,17 @@ def _sweep_inactive(
 
             stale_issue = str(stale.get("issue", "")).strip() or "agent_activity_timeout"
             dirty_release_reason = f"inactivity reclaim by {task_manager_agent} for {agent}: {stale_issue}"
-            ok_release, msg_release = workboard_claim.release(
-                workboard_path,
-                agent=agent,
-                allow_dirty=True,
-                dirty_reason=dirty_release_reason,
-                # Inactive-agent reclaim: the task is reassigned to up-for-grabs
-                # precisely because the agent went silent before finishing it.
-                require_done_state=False,
+            # Inactive-agent reclaim: the task is reassigned to up-for-grabs
+            # precisely because the agent went silent before finishing it.
+            outcome = sweep_release.release_dead_claim(
+                workboard_claim, workboard_path, agent=agent, reason=dirty_release_reason
             )
-            if ok_release:
+            msg_release = str(outcome["message"])
+            if outcome["override"]:
+                overrides.append(dict(outcome["override"]))  # type: ignore[arg-type]
+            if outcome["ok"] and "no active claim" not in _norm(msg_release) or outcome["ok"] and outcome["override"]:
                 released_agents.append(agent)
-            elif "no active claim" not in _norm(msg_release):
+            elif not outcome["ok"] and "no active claim" not in _norm(msg_release):
                 errors.append(f"release claim `{agent}` failed: {msg_release}")
 
             ok_reassign, issue_ids, reassign_err = _reassign_owned_open_issues(
@@ -419,6 +470,13 @@ def _sweep_inactive(
             apply=False,
         )
 
+    reaped: list[str] = []
+    if apply and stale_claims:
+        _v, still_claimed, _t, _g, _i = claims_gate.evaluate_board(
+            workboard_path, require_claims_to_have_active_task=bool(require_claims_to_have_active_task)
+        )
+        held = {_norm(claim.agent) for claim in still_claimed}
+        reaped = sorted({str(row["agent"]) for row in stale_claims if _norm(str(row["agent"])) not in held})
     payload = {
         "stale_claim_count": len(stale_claims),
         "stale_claims": stale_claims,
@@ -435,6 +493,10 @@ def _sweep_inactive(
         "task_manager_agent": task_manager_agent,
         "max_idle_minutes": float(max_idle_minutes),
         "applied": bool(apply),
+        "reaped_agents": reaped,
+        "spared_live_claims": spared,
+        "presence_overrides": overrides,
+        "skipped_repeat_notices": sorted(set(skipped_duplicates), key=str.lower),
     }
     if errors:
         payload["errors"] = errors

@@ -4,13 +4,6 @@
   border-bottom: 1px solid var(--c-border);
 }
 
-.tc-code-rail-empty {
-  margin: 8px 0 0;
-  color: var(--c-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .tc-code-next {
   display: flex;
   flex-direction: column;
@@ -55,8 +48,7 @@
    Visible at any width; it just looks like a fourth control that failed to
    draw. Guard: tests/test_the_deliverable_card_has_no_empty_slot.py */
 section.tc-code-artifact,
-.tc-code-file-preview,
-.tc-code-change {
+.tc-code-file-preview {
   margin-top: 9px;
   overflow: hidden;
   border: 1px solid var(--c-border);
@@ -65,8 +57,7 @@ section.tc-code-artifact,
 }
 
 .tc-code-artifact header,
-.tc-code-file-preview header,
-.tc-code-change header {
+.tc-code-file-preview header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -77,8 +68,7 @@ section.tc-code-artifact,
 }
 
 .tc-code-artifact header strong,
-.tc-code-file-preview header strong,
-.tc-code-change header strong {
+.tc-code-file-preview header strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -147,10 +137,8 @@ section.tc-code-artifact,
   transform-origin: top left;
   pointer-events: none;
 }
-.tc-code-file-preview header button,
-.tc-code-change button { width: auto; padding: 3px 6px; font-size: 9.5px; }
-.tc-code-file-preview pre,
-.tc-code-change pre {
+.tc-code-file-preview header button { width: auto; padding: 3px 6px; font-size: 9.5px; }
+.tc-code-file-preview pre {
   max-height: 300px;
   overflow: auto;
   margin: 0;
@@ -162,9 +150,6 @@ section.tc-code-artifact,
   white-space: pre;
 }
 
-.tc-code-change header span { display: flex; gap: 4px; }
-.tc-code-change details > summary { padding: 6px 9px; border-top: 1px solid var(--c-border); color: var(--c-muted); font-size: 10px; cursor: pointer; }
-
 .tc-code-approval {
   padding: 10px;
   border: 1px solid var(--c-warn, #d79a45);
@@ -173,22 +158,6 @@ section.tc-code-artifact,
 }
 .tc-code-approval p { margin: 5px 0 8px; color: var(--c-dim); font-size: 11px; line-height: 1.4; }
 .tc-code-approval div { display: flex; gap: 5px; }
-
-.tc-code-steer {
-  display: grid;
-  gap: 6px;
-  padding-top: 4px;
-}
-.tc-code-steer[hidden] { display: none; }
-.tc-code-steer label { color: var(--c-muted); font-size: 10px; font-weight: 700; }
-.tc-code-steer input {
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  background: var(--c-composer-bg);
-  color: var(--c-text);
-}
 
 .tc-code-empty {
   min-height: 300px;

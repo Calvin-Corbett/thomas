@@ -34,11 +34,22 @@ CODE_SOURCES = (
     WEB / "chat.html",
     WEB / "js" / "unified_code_mode.js",
     WEB / "js" / "unified_code_results.js",
+    WEB / "js" / "unified_code_artifacts.js",
+    WEB / "js" / "unified_code_cards.js",
+    WEB / "js" / "unified_code_events.js",
+    WEB / "js" / "unified_code_live_view.js",
+    WEB / "js" / "unified_code_surface.js",
+    WEB / "js" / "unified_code_run_stream.js",
     WEB / "js" / "unified_code_lifecycle.js",
     WEB / "js" / "unified_code_projects.js",
+    # The 2026-10 Build redesign: the composer's primary button and the run's
+    # controls (drawer, side chat, cards draw their own SVG or text glyphs).
+    WEB / "js" / "unified_code_composer.js",
+    WEB / "js" / "unified_code_controls.js",
     WEB / "css" / "unified_code_activity.css",
     WEB / "css" / "unified_code_mode.css",
     WEB / "css" / "unified_code_results.css",
+    WEB / "css" / "unified_code_cards.css",
 )
 
 _USE_RE = re.compile(r"\bph-[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -93,8 +104,7 @@ def test_every_icon_the_code_surface_uses_has_a_glyph() -> None:
     }
 
     assert not missing, (
-        "these render as a bullet, not an icon — add a glyph in "
-        f"css/chat_shell.css: {sorted(missing.items())}"
+        f"these render as a bullet, not an icon — add a glyph in css/chat_shell.css: {sorted(missing.items())}"
     )
 
 

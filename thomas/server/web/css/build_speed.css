@@ -1,0 +1,9 @@
+.tc-speed-scoreboard{margin:12px 16px;padding:14px 18px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface);color:var(--c-text);font-size:13px}
+.tc-speed-scoreboard h2{margin:0 0 8px;font-size:15px}
+.tc-speed-scoreboard p{margin:5px 0}
+.tc-speed-scoreboard .tc-speed-periods{display:flex;gap:16px;flex-wrap:wrap}
+.tc-speed-scoreboard .tc-speed-periods>div{min-width:150px;flex:1}
+.tc-speed-scoreboard .tc-speed-periods strong{display:block;font-size:18px}
+.tc-speed-scoreboard .tc-speed-steps{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.tc-speed-scoreboard .tc-speed-steps span{padding:4px 8px;border:1px solid var(--c-border);border-radius:7px}
+.tc-speed-scoreboard .tc-speed-note{opacity:.75;font-size:12px}

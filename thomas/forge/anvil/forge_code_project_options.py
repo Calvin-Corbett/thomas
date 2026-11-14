@@ -17,8 +17,9 @@ So this offers the picker a small explicit list:
 
 The rule this module exists to enforce: :func:`resolve_selection` returns
 Thomas's source root **only** when the caller explicitly asked for it by id.
-Every other input -- empty, unknown, malformed, or a path that happens to sit
-inside the Thomas repo -- resolves somewhere safe.
+Empty or unknown selections use scratch. A selected path resolving to the
+Thomas repo uses scratch instead. Inconclusive inspection while resolving a
+path stops selection instead of guessing.
 """
 
 from __future__ import annotations
@@ -67,12 +68,13 @@ class ProjectOption:
 
 
 def thomas_option() -> ProjectOption | None:
-    """The explicit 'work on Thomas himself' choice, or None if unavailable."""
+    """The explicit self-edit choice, absent when installed outside a checkout."""
     try:
         root = forge_code_projects.thomas_source_repo_root()
+    except forge_code_projects.ForgeCodeInspectionUnavailable:
+        raise
     except _RESOLVE_FAULTS as exc:  # pragma: no cover - defensive
-        log.debug("thomas source root unavailable: %s", exc)
-        return None
+        raise forge_code_projects.ForgeCodeInspectionUnavailable("Thomas source root could not be inspected") from exc
     if root is None:
         return None
     return ProjectOption(
@@ -115,19 +117,17 @@ def resolve_selection(
     """Turn a picker selection into a project root.
 
     Thomas's own source is returned **only** for ``selection == "thomas"``.
-    Anything else -- including a ``requested_project`` path that points at or
-    inside the Thomas repo -- resolves to a safe project, because reaching
-    Thomas by accident is the bug this module exists to prevent.
+    A selected path equal to the Thomas repo resolves to scratch; inspection
+    failure while resolving a path stops selection instead of guessing.
     """
     catalog = Path(catalog_root)
     chosen = str(selection or "").strip().lower()
 
     if chosen == THOMAS_ID:
         thomas = thomas_option()
-        if thomas is not None:
-            return Path(thomas.root)
-        log.warning("Thomas source root was requested but is unavailable; using scratch")
-        return forge_code_projects.default_scratch_project(catalog)
+        if thomas is None:
+            raise forge_code_projects.ForgeCodeProjectError("Thomas source is not a git checkout")
+        return Path(thomas.root)
 
     scratch = forge_code_projects.default_scratch_project(catalog)
 

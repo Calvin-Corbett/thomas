@@ -46,7 +46,8 @@ def caller_reserved_lines(message: str) -> list[str]:
 
 
 def validate_caller_message(message: str) -> str:
-    body = str(message or "").strip()
+    # A message file written on Windows arrives with CRLF; git and the read-back speak LF.
+    body = str(message or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not body:
         raise CommitIntegrityError("commit message is required")
     forbidden = caller_reserved_lines(body)

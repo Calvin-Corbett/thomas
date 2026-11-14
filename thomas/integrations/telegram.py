@@ -14,10 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.kernel_wiring import build_agent_loop
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
+from thomas.core.llm_slot import models
 from thomas.core.token_economy import normalize_token_economy_level
 from thomas.tools.registry import ToolRegistry
 
@@ -482,17 +484,15 @@ class TelegramBridge:
             log.warning("Failed to save Telegram session store (%s): %s", self._sessions_path, e)
 
     async def _run_agent(self, *, chat_id: int, session: _TelegramSession, prompt: str) -> str:
-        model_cfg = self._config.get_model(session.model_name)
-        llm = LLMClient(
-            model_cfg,
-            fallback_configs=self._config.failover_chain(session.model_name),
+        llm = models().profile(
+            self._config,
+            session.model_name,
+            default=LLMClient,
             failover_enabled=self._config.failover.enabled,
-            failover_cooldown_s=self._config.failover.cooldown_seconds,
-            failover_on_auth_error=self._config.failover.fallback_on_auth_error,
         )
         thread_id = self._thread_id_for_chat(chat_id)
         self._apply_thread_memory_policy(thread_id)
-        agent = AgentLoop(
+        agent = build_agent_loop(
             self._config,
             llm,
             self._tools,
@@ -500,6 +500,7 @@ class TelegramBridge:
             memory=self._memory,
             thread_id=thread_id,
             memory_retrieval_scope=self._memory_retrieval_scope,
+            default=AgentLoop,
         )
 
         deltas: list[str] = []

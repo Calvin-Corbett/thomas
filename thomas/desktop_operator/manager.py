@@ -207,6 +207,21 @@ def get_global_desktop_operator_manager() -> DesktopOperatorServiceManager:
     return _GLOBAL_MANAGER
 
 
+def stop_global_desktop_operator_manager() -> bool:
+    """Stop the helper this process started, if any, and forget the manager so the next use builds a new one.
+
+    Never builds a manager: with none there is nothing to stop. Returns True when a helper was running. It waits up to
+    three seconds for the helper to end, so call it off the event loop.
+    """
+    global _GLOBAL_MANAGER
+    manager, _GLOBAL_MANAGER = _GLOBAL_MANAGER, None
+    if manager is None:
+        return False
+    running = manager.process is not None and manager.process.poll() is None
+    manager.stop()
+    return running
+
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))

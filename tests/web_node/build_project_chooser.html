@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build project chooser layout probe</title>
+  <!-- Open this file directly in a browser to LOOK at the fix.
+       It loads the shipped stylesheets and the shipped
+       js/chat_composer_panels.js, so the chooser you see here is positioned by
+       the same positionLibraryMenu() the app runs. The "Unfixed anchor" button
+       restores the markup's own `left:0` -- the chooser then starts at the
+       folder button and runs off to the right, which is the reported bug. The
+       readout under the buttons is measured, not written down. -->
+  <link rel="stylesheet" href="../../thomas/server/web/css/tokens.css">
+  <link rel="stylesheet" href="../../thomas/server/web/css/unified_code_mode.css">
+  <link rel="stylesheet" href="../../thomas/server/web/css/chat_shell.css">
+  <style>
+    body { margin: 0; background: #070912; color: #eef0fb; font: 14px system-ui; }
+    #tc-shell { --c-bg:#070912; --c-text:#eef0fb; --c-dim:#abb0c8; --c-border:#454658; --c-border-2:#55576d; --c-menu-bg:#15142b; --c-composer-bg:#15182c; --c-shadow:0 18px 50px #02040c; --c-surface:#22253a; --c-accent:#8b8cff; --sidebar-margin:0px; display:flex; height:100vh; }
+    #sidebar { width:280px; flex:none; border-right:1px solid #454658; padding:22px; box-sizing:border-box; }
+    #main { flex:1; min-width:0; display:flex; flex-direction:column; }
+    #tc-mode-surface { flex:1; display:flex; justify-content:center; align-items:center; }
+    #tc-mode-surface p { color:#abb0c8; }
+    [data-ui-id="chat.composer"] { position:relative; padding:6px 24px 18px; }
+    #tc-composer-rail { max-width:768px; margin:0 auto; }
+    #composer-card { position:relative; padding:12px 14px; background:#15182c; border:1px solid #55576d; border-radius:18px; }
+    #composer-card > .controls { display:flex; align-items:center; gap:8px; }
+    #tc-code-project-btn { height:36px; max-width:200px; background:transparent; color:#eef0fb; border:1px solid #55576d; border-radius:10px; padding:0 10px; cursor:pointer; }
+    #tc-code-library-menu { display:none; position:absolute; bottom:calc(100% + 10px); left:0; z-index:60; width:min(760px, calc(100vw - 48px)); box-sizing:border-box; max-height:min(64vh, 540px); padding:0; border-radius:14px; background:#15142b; border:1px solid #55576d; box-shadow:0 18px 50px #02040c; overflow:hidden; flex-direction:column; }
+    #tc-code-library-menu button { color:#eef0fb; }
+    #tc-code-library-menu input { box-sizing:border-box; }
+    /* The reading column, drawn behind everything, so "centred" is something
+       you can see rather than something you have to take on trust. */
+    /* Fixed, because the numbers it is fed are viewport coordinates -- the same
+       ones positionLibraryMenu() works in. */
+    #column-guide { position:fixed; top:0; bottom:0; border-left:1px dashed #8b8cff88; border-right:1px dashed #8b8cff88; pointer-events:none; z-index:1; }
+    #variants { position:fixed; top:14px; right:14px; z-index:200; display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+    #variants button { padding:8px; }
+    #readout { background:#15142bdd; border:1px solid #55576d; border-radius:8px; padding:8px 10px; font:12px/1.5 ui-monospace, monospace; white-space:pre; text-align:left; }
+    @media (max-width:720px) { #sidebar {display:none;} [data-ui-id="chat.composer"] {padding-left:16px;padding-right:16px;} }
+  </style>
+</head>
+<body>
+  <div id="tc-shell" data-surface-mode="code">
+    <aside id="sidebar">Build<br>Projects</aside>
+    <div id="main">
+      <div id="tc-mode-surface"><p>Build workspace · selected project</p></div>
+      <div data-ui-id="chat.composer"><div id="column-guide"></div><div id="tc-composer-rail" class="tc-rail"><div id="composer-card">
+        <div style="height:28px">Message Thomas…</div>
+        <div class="controls"><button type="button">＋</button><button type="button">Tools</button>
+          <div id="tc-code-project-wrap" style="position:relative;display:block">
+            <button id="tc-code-project-btn" type="button" aria-expanded="false" aria-controls="tc-code-library-menu">▱ My selected project ▴</button>
+            <div id="tc-code-library-menu" role="dialog" aria-label="Choose what Thomas works on"></div>
+          </div>
+          <span style="flex:1"></span><button type="button">↑</button>
+        </div>
+      </div></div></div>
+    </div>
+  </div>
+  <div id="variants">
+    <button id="normal">Normal</button>
+    <button id="activity">Activity drawer</button>
+    <button id="viewer">Viewer</button>
+    <button id="unfixed">Unfixed anchor (left:0)</button>
+    <div id="readout">open the chooser</div>
+  </div>
+  <script src="../../thomas/server/web/js/chat_composer_panels.js"></script>
+  <script>
+    const state = {};
+    const panels = window.ThomasChatComposerPanels.create({state, esc: text => String(text).replace(/[&<>"']/g, '')});
+    state.libraryProjects = [{ root_path:'project', name:'My selected project', request_title:'My selected project', entry_path:'index.html' }];
+    window.ThomasUnifiedModes = { newConversation: (root, label) => {
+      document.getElementById('tc-code-project-btn').textContent = '▱ ' + label + ' ▴';
+      document.getElementById('tc-mode-surface').textContent = 'Build workspace · ' + root;
+      return Promise.resolve(true);
+    }};
+    document.getElementById('tc-code-project-btn').addEventListener('click', panels.toggleLibraryMenu);
+    panels.bindLibraryActions();
+
+    const shell = document.getElementById('tc-shell');
+    const menu = document.getElementById('tc-code-library-menu');
+    const rail = document.getElementById('tc-composer-rail');
+    const guide = document.getElementById('column-guide');
+    const readout = document.getElementById('readout');
+
+    function report() {
+      const r = rail.getBoundingClientRect();
+      guide.style.left = r.left + 'px';
+      guide.style.width = r.width + 'px';
+      if (getComputedStyle(menu).display === 'none') { readout.textContent = 'open the chooser'; return; }
+      const m = menu.getBoundingClientRect();
+      const off = (m.left + m.width / 2) - (r.left + r.width / 2);
+      readout.textContent = [
+        'chooser ' + Math.round(m.left) + '..' + Math.round(m.right) + '  (' + Math.round(m.width) + 'px)',
+        'column  ' + Math.round(r.left) + '..' + Math.round(r.right) + '  (' + Math.round(r.width) + 'px)',
+        'viewport ' + window.innerWidth + 'px',
+        'off centre ' + off.toFixed(1) + 'px',
+      ].join('\n');
+    }
+    setInterval(report, 120);
+
+    function variant(side) {
+      if (side) shell.setAttribute('data-code-side', side); else shell.removeAttribute('data-code-side');
+      if (state.libraryMenuOpen) panels.positionLibraryMenu();
+    }
+    document.getElementById('normal').onclick = () => variant('');
+    document.getElementById('activity').onclick = () => variant('activity');
+    document.getElementById('viewer').onclick = () => variant('viewer');
+    // Put the shipped markup's anchor back, so the reported bug is one click away.
+    document.getElementById('unfixed').onclick = () => { menu.style.left = '0px'; menu.style.width = ''; };
+  </script>
+</body>
+</html>

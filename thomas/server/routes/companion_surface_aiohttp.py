@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import AsyncExitStack
 from typing import Any
 
 from aiohttp import web
@@ -235,9 +236,7 @@ def _module_or_404(kernel: CompanionKernel, module_id: str) -> ModuleState:
 
 def _require_permission(module: ModuleState, permission: str) -> None:
     if permission not in list(module.permissions or []):
-        raise web.HTTPForbidden(
-            text=f"module {module.module_id} does not declare permission {permission}"
-        )
+        raise web.HTTPForbidden(text=f"module {module.module_id} does not declare permission {permission}")
 
 
 def _payload_dict(payload: Any) -> dict[str, Any]:
@@ -269,9 +268,7 @@ def register_companion_surface_routes(
         module = _module_or_404(kernel, module_id)
 
         if module.surface_type != SURFACE_TYPE_SURFACE:
-            raise web.HTTPBadRequest(
-                text=f"module {module_id} is surface_type={module.surface_type}, not surface"
-            )
+            raise web.HTTPBadRequest(text=f"module {module_id} is surface_type={module.surface_type}, not surface")
         try:
             path = entrypoint_fs_path(kernel, module)
         except ValueError as exc:
@@ -308,9 +305,7 @@ def register_companion_surface_routes(
             value = _store(kernel).get(module.module_id, str(payload.get("key") or ""))
         except ModuleStoreError as exc:
             return _store_error_response(exc)
-        return web.json_response(
-            {"ok": True, "module_id": module.module_id, "key": payload.get("key"), "value": value}
-        )
+        return web.json_response({"ok": True, "module_id": module.module_id, "key": payload.get("key"), "value": value})
 
     async def api_surface_storage_set(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -321,9 +316,7 @@ def register_companion_surface_routes(
         if "value" not in payload:
             raise web.HTTPBadRequest(text="missing value")
         try:
-            result = _store(kernel).set(
-                module.module_id, str(payload.get("key") or ""), payload.get("value")
-            )
+            result = _store(kernel).set(module.module_id, str(payload.get("key") or ""), payload.get("value"))
         except ModuleStoreError as exc:
             return _store_error_response(exc)
         return web.json_response({"ok": True, **result})
@@ -351,9 +344,7 @@ def register_companion_surface_routes(
             usage = store.usage(module.module_id)
         except ModuleStoreError as exc:
             return _store_error_response(exc)
-        return web.json_response(
-            {"ok": True, "module_id": module.module_id, "keys": keys, "usage": usage}
-        )
+        return web.json_response({"ok": True, "module_id": module.module_id, "keys": keys, "usage": usage})
 
     async def api_surface_ask(request: web.Request) -> web.Response:
         """One-shot completion for a surface. No tools, no history, no elevation."""
@@ -374,18 +365,11 @@ def register_companion_surface_routes(
             )
 
         try:
-            from thomas.core.llm_client import LLMClient
             from thomas.core.llm_shared import LLMError
+            from thomas.core.llm_slot import models
         except ImportError as exc:
             log.warning("Surface ask unavailable: %s", exc)
             raise web.HTTPServiceUnavailable(text="model client unavailable") from exc
-
-        try:
-            model_cfg = config.get_model(getattr(config, "default_model", "") or None)
-            client = LLMClient(model_cfg)
-        except (AttributeError, KeyError, ValueError) as exc:
-            log.warning("Surface ask could not resolve a model: %s", exc)
-            raise web.HTTPServiceUnavailable(text="no model configured") from exc
 
         system = (
             f"You are answering for the companion app '{module.display_name}' "
@@ -397,15 +381,20 @@ def register_companion_surface_routes(
             {"role": "user", "content": prompt},
         ]
 
-        try:
-            result = await client.chat(messages, tools=None)
-        except (LLMError, OSError, TimeoutError, ValueError, RuntimeError) as exc:
-            log.warning("Surface ask failed for %s: %s", module.module_id, exc)
-            return web.json_response({"ok": False, "error": "model call failed"}, status=502)
+        async with AsyncExitStack() as stack:
+            try:
+                model_cfg = config.get_model(getattr(config, "default_model", "") or None)
+                client = await stack.enter_async_context(models().session(model_cfg))
+            except (AttributeError, KeyError, ValueError) as exc:
+                log.warning("Surface ask could not resolve a model: %s", exc)
+                raise web.HTTPServiceUnavailable(text="no model configured") from exc
+            try:
+                result = await client.chat(messages, tools=None)
+            except (LLMError, OSError, TimeoutError, ValueError, RuntimeError) as exc:
+                log.warning("Surface ask failed for %s: %s", module.module_id, exc)
+                return web.json_response({"ok": False, "error": "model call failed"}, status=502)
 
-        return web.json_response(
-            {"ok": True, "module_id": module.module_id, "text": str(result.get("text") or "")}
-        )
+        return web.json_response({"ok": True, "module_id": module.module_id, "text": str(result.get("text") or "")})
 
     base = "/api/companion/v1/surface/{module_id}"
     app.router.add_get(f"{base}/document", api_surface_document)

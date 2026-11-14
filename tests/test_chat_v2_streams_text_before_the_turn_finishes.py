@@ -108,7 +108,7 @@ class TestChatV2StreamsTextBeforeTheTurnFinishes(AioHTTPTestCase):
     async def test_a_text_chunk_is_readable_while_the_brain_is_still_blocked(self):
         _GatedBrain.release = asyncio.Event()
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _GatedBrain):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _GatedBrain):
             resp = await self.client.post(
                 "/api/v2/chat",
                 json={"session_id": "sess-live-stream", "profile": "local", "message": "talk to me"},
@@ -116,6 +116,7 @@ class TestChatV2StreamsTextBeforeTheTurnFinishes(AioHTTPTestCase):
             self.assertEqual(resp.status, 200)
 
             first_text = None
+
             async def _read_until_text():
                 nonlocal first_text
                 while True:

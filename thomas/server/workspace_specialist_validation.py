@@ -40,7 +40,7 @@ def validate_workspace_action(
         except ValueError as exc:
             return str(exc)
     if action == "canvas.spec.save":
-        from thomas.server.routes.canvas_studio_routes import _ID_RE
+        from thomas.server.canvas_studio_shared import _ID_RE
 
         target_id = str(arguments.get("target_id") or "").strip()
         payload = arguments.get("payload")

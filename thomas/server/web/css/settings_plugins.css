@@ -1,0 +1,367 @@
+/* Settings > Plugins. Tokens only, so every theme works with no line here, and a new file because
+   settings.style01.css is past its size limit. */
+
+#plugins [hidden] {
+  display: none !important;
+}
+
+#plugins button:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 3px;
+}
+
+/* The page's one sentence of its own, so it reads as a sentence rather than a label. */
+.plugins-summary {
+  margin-bottom: 14px;
+  color: var(--c-text);
+  font-family: var(--font-head);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+}
+
+.plugins-notices {
+  display: grid;
+  margin-bottom: 14px;
+  gap: 8px;
+}
+
+.plugins-notice {
+  max-width: 76ch;
+  padding: 10px 14px;
+  border: 1px solid var(--warn-line);
+  border-radius: 10px;
+  background: var(--warn-bg);
+  color: var(--c-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugin-rows {
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-card);
+  background: var(--c-surface);
+  list-style: none;
+  transition: opacity 160ms ease;
+}
+
+/* Thomas is not answering: what is shown may be out of date, so it stops looking current. */
+.plugins-panel.is-stale .plugin-rows {
+  opacity: 0.55;
+}
+
+.plugin-row {
+  display: grid;
+  min-width: 0;
+  padding: 18px 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name control"
+    "about control"
+    "cost control"
+    "story story";
+  column-gap: 24px;
+}
+
+.plugin-row + .plugin-row {
+  border-top: 1px solid var(--c-border);
+}
+
+.plugin-name {
+  grid-area: name;
+  margin-bottom: 4px;
+  color: var(--c-text);
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.plugin-about,
+.plugin-cost {
+  max-width: 68ch;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugin-about {
+  grid-area: about;
+}
+
+.plugin-cost {
+  position: relative;
+  grid-area: cost;
+  margin-top: 6px;
+  padding-left: 25px;
+}
+
+/* A small switch in the off position: this sentence is what that position costs. */
+.plugin-cost::before {
+  position: absolute;
+  top: 0.42em;
+  left: 0;
+  width: 17px;
+  height: 10px;
+  border: 1px solid var(--c-border-2);
+  border-radius: 999px;
+  content: "";
+}
+
+.plugin-cost::after {
+  position: absolute;
+  top: calc(0.42em + 2px);
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-dim);
+  content: "";
+}
+
+/* While a row is off that sentence is no longer a warning. It is what is true right now. */
+.plugin-row.is-off .plugin-cost {
+  color: var(--c-text);
+}
+
+.plugin-row.is-off .plugin-cost::before {
+  border-color: var(--c-dim);
+}
+
+.plugin-row.is-off .plugin-cost::after {
+  background: var(--c-text);
+}
+
+.plugin-control {
+  display: flex;
+  grid-area: control;
+  align-self: start;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.plugin-state.status-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plugin-state.status-pill:not(.is-success):not(.is-warning):not(.is-danger) i {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.plugin-state.is-moving i {
+  animation: plugin-moving 1.3s ease-in-out infinite;
+}
+
+@keyframes plugin-moving {
+  50% { opacity: 0.3; }
+}
+
+.toggle-switch.is-unknown {
+  border-color: var(--c-border);
+  background: transparent;
+}
+
+/* Knob in the middle: neither on nor off, because nothing has confirmed either. */
+.toggle-switch.is-unknown::after {
+  background: var(--c-muted);
+  transform: translateX(10px);
+}
+
+.plugin-story {
+  display: grid;
+  grid-area: story;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-border);
+  gap: 6px;
+}
+
+.plugin-lead {
+  color: var(--c-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.plugin-detail,
+.plugin-reason {
+  max-width: 76ch;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugin-reason {
+  overflow-wrap: anywhere;
+}
+
+.plugin-stop,
+.plugin-actions {
+  display: flex;
+  margin-top: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.plugin-stop .btn,
+.plugin-actions .btn {
+  flex: 0 0 auto;
+}
+
+.plugin-stop-cost {
+  min-width: 0;
+  flex: 1 1 260px;
+  max-width: 62ch;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugins-foot {
+  margin-top: 14px;
+  color: var(--c-dim);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .plugin-row {
+    padding: 16px 15px;
+    grid-template-areas:
+      "name control"
+      "about about"
+      "cost cost"
+      "story story";
+    column-gap: 12px;
+  }
+
+  .plugin-control {
+    gap: 8px;
+  }
+
+  .plugin-stop .btn,
+  .plugin-actions .btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin-state.is-moving i {
+    animation: none;
+  }
+}
+
+/* Ready-made sets and Pause, above the long list. Tokens only. */
+.plugins-top {
+  display: grid;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+
+.plugins-pause {
+  display: flex;
+  padding: 10px 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-card);
+  background: var(--c-surface);
+}
+
+.plugins-pause-text {
+  color: var(--c-text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.plugins-heading {
+  margin-bottom: 10px;
+  color: var(--c-text);
+  font-family: var(--font-head);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.plugin-set-cards {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  list-style: none;
+}
+
+.plugin-set-card {
+  display: flex;
+  min-width: 0;
+  padding: 16px 18px;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-card);
+  background: var(--c-surface);
+}
+
+.plugin-set-title {
+  margin: 0;
+  color: var(--c-text);
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.plugin-set-about,
+.plugin-set-ask,
+.plugin-set-note {
+  margin: 0;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugin-set-ask {
+  color: var(--c-text);
+  font-weight: 650;
+}
+
+.plugin-set-actions {
+  display: flex;
+  margin-top: auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plugins-advanced-toggle {
+  margin: 18px 0 12px;
+}
+
+.plugin-group + .plugin-group {
+  margin-top: 18px;
+}
+
+.plugin-group-title {
+  margin: 0 0 2px;
+  color: var(--c-text);
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.plugin-group-about {
+  margin: 0 0 8px;
+  color: var(--c-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Inside Thomas the window already says where you are, so the page does not say "Thomas / Settings" again above
+   itself (2026-11-10: "it says Thomas again, control your workspace, that's dumb"). Opened on its own it keeps it.
+   Here and not in settings.style01.css because that file is at its size ceiling. */
+html.is-embedded .settings-brand, body.is-embedded .settings-brand { display: none !important; }

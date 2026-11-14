@@ -7,13 +7,16 @@ import binascii
 import logging
 import posixpath
 import re
+import sqlite3
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from aiohttp import web
 
+from thomas.core.coding_agents import DEFAULT_AGENT_ID, anthropic_api_key
 from thomas.forge.anvil import forge_code_git, forge_code_store
-from thomas.server.app_keys import APP_SECRETS
+from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings
+from thomas.server.app_keys import APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE, APP_SECRETS
 from thomas.server.openai_codex_oauth import OpenAICodexOAuthError, ensure_openai_codex_access_token
 
 log = logging.getLogger(__name__)
@@ -41,8 +44,18 @@ def chatgpt_auth_unavailable_response() -> web.Response:
     )
 
 
-async def prepare_code_oauth_credential(app: web.Application, family: str) -> tuple[str, web.Response | None]:
-    """Resolve the one-run OAuth credential without exposing it in argv or env."""
+async def prepare_code_oauth_credential(
+    app: web.Application, family: str, *, agent: str = ""
+) -> tuple[str, web.Response | None]:
+    """Resolve the one-run credential without exposing it in argv or env.
+
+    GPT: your ChatGPT OAuth token. Claude on Thomas's own loop: your Anthropic key,
+    including one saved in the app, which the loop sets on its profile in-process
+    (``dispatch_agent_loop``). With none, the loop refuses with the sentence naming
+    both ways out, so this does not refuse first.
+    """
+    if family == "claude" and agent == DEFAULT_AGENT_ID:
+        return anthropic_api_key(), None
     if family != "gpt":
         return "", None
     try:
@@ -65,6 +78,32 @@ def git_status_unavailable_response(exc: forge_code_git.ForgeCodeGitError) -> we
     return web.json_response(
         {"ok": False, "error": str(exc), "code": "git_status_unavailable", "retryable": True},
         status=503,
+    )
+
+
+def code_execution_settings_response(settings: ForgeCodeSettings) -> web.Response | None:
+    """Explain existing executor restrictions before creating a project or run."""
+    if settings.execution_policy()["live_edit"]:
+        return None
+    controls = []
+    remedies = []
+    if settings.autonomy_level < 3:
+        controls.append("autonomy_level")
+        label = "Chat" if settings.autonomy_level == 1 else "Assist"
+        remedies.append(f"Build requires Autonomy set to Agent or Full to edit files; it is currently {label}.")
+    if settings.file_access == "read_only":
+        controls.append("file_access")
+        remedies.append("File access is Read only; choose Workspace or Project to allow edits.")
+    return web.json_response(
+        {
+            "ok": False,
+            "code": "execution_settings_blocked",
+            "blocked_controls": controls,
+            "error": "Build has not started. "
+            + " ".join(remedies)
+            + " Change these controls in Tools, then send again.",
+        },
+        status=409,
     )
 
 
@@ -214,3 +253,39 @@ def conversation_artifact_allowlist(root: Path, conversation: object) -> set[str
             allowed.add(dependency)
             pending.append(dependency)
     return allowed
+
+
+# The failures a run-store write can realistically produce. Named rather than a bare
+# `except Exception`, so a recorder bug still surfaces while a storage hiccup never
+# breaks a launch. Mirrors chat_v2_run_store's set.
+_RUN_STORE_ERRORS = (AttributeError, OSError, RuntimeError, sqlite3.Error, TypeError, ValueError)
+
+
+def _record_code_run_start(app, run_id: str, cid: str, project_root, settings) -> None:
+    """Write one row so a Code run exists in Thomas's own run store.
+
+    Never raises and never blocks the run. A recorder that can take the product down
+    would be worse than no recorder, and this one is being added precisely because
+    nobody noticed it was missing for months -- so it must not become the thing that
+    makes launches fail.
+    """
+
+    module = app.get(APP_RUN_STORE_MODULE)
+    if not bool(app.get(APP_RUN_STORE_ENABLED, False)) or module is None:
+        return
+    try:
+        module.create_run(
+            {
+                "run_id": run_id,
+                "session_id": str(cid or ""),
+                "surface": "code",
+                "profile": str(getattr(settings, "family", "") or ""),
+                "model_id": str(getattr(settings, "recorded_model", lambda: "")() or ""),
+                "mode": "code",
+                "project_root": str(project_root or ""),
+            }
+        )
+    except _RUN_STORE_ERRORS as exc:
+        # Named rather than bare: a recorder must not break a launch, but it must
+        # also not swallow a bug in itself. Same set Chat's recorder uses.
+        log.warning("Code run not recorded (run store write failed): %s", exc)

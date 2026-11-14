@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-
-import numpy as np
+from typing import TYPE_CHECKING
 
 from thomas.memory.store import EventRow
+
+if TYPE_CHECKING:  # numpy only for the hints: importing it costs every process ~480 MB (see embedder._numpy)
+    import numpy as np
 
 # ---------------------------------------------------------------------------
 # Candidate features
@@ -173,7 +175,7 @@ class Tier2Reranker:
             if c.event_id in dense_vecs:
                 dvec = dense_vecs[c.event_id]
                 # Cosine similarity (both normalized)
-                c.dense_score = float(np.dot(query_vec, dvec))
+                c.dense_score = float(query_vec @ dvec)
                 c.final_score = (1 - weight) * c.final_score + weight * c.dense_score
 
         candidates.sort(key=lambda c: c.final_score, reverse=True)

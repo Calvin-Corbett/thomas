@@ -22,7 +22,8 @@ from typing import Any, Sequence
 
 import httpx
 
-from thomas.core.acceptance_contract import ContractItem, Runner, default_runner
+from thomas.agent.sandboxed_runners import contract_runner
+from thomas.core.acceptance_contract import ContractItem, Runner
 from thomas.core.llm import LLMError
 from thomas.core.structured_output import extract_json
 from thomas.tools.web_playtest import WebPlaytestTool, playtest_available, recent_reports
@@ -211,7 +212,7 @@ async def evaluate_with_model(
     chat = getattr(llm, "chat", None)
     if not callable(chat):
         return EvaluatorResult(available=False, items=list(items), error="llm has no chat()")
-    run = runner or default_runner
+    run = runner or contract_runner
     ws = Path(workspace)
     system = JUDGE_SYSTEM + (JUDGE_ADVERSARIAL if adversarial else "")
     # A shell cannot press START. When the work is a page, the judge may also

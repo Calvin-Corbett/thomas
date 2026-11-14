@@ -1,0 +1,4 @@
+### Fixed
+
+- Thomas now saves each private copy of its code that a self-fix works in before deleting it. The capture is one patch of the change as it would land, with a receipt holding its SHA-256, including what a hand-in leaves out (notes in ignored folders and edits to the board). It goes to the keeper's drop folder once installed, or otherwise to a captures folder beside the green folder. A file that cannot be read, a link, or an ignored folder tools rebuild is named in the receipt instead of stopping the save. If the patch cannot be written and checked, the copy is kept for the next sweep to try again; previously a removed copy was gone with nothing saved.
+- Starting a self-fix from Chat no longer sweeps away a copy a Build run is still working in, or one kept for your verdict. That sweep used to take those copies once they were a day old.

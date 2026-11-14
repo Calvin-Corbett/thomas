@@ -4,7 +4,9 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+from thomas.core import workspace_sync_engine
 from thomas.core.engine_manager import EngineManager
+from thomas.core.git_process import TIMED_OUT_RETURNCODE, GitResult
 from thomas.core.workspace_sync_engine import WorkspaceSyncEngine
 
 
@@ -323,3 +325,158 @@ def test_engine_manager_start_all_includes_workspace_sync_engine(monkeypatch) ->
     results = manager.start_all()
     assert "workspace_sync_engine" in results
     assert results["workspace_sync_engine"] is True
+
+
+# --- The sync engine's blocking work: bounded git, and no interpreter per file ---
+
+
+def _engine_for(repo: Path) -> WorkspaceSyncEngine:
+    return WorkspaceSyncEngine(
+        repo_root=repo,
+        idle_threshold_s=0.0,
+        poll_interval_s=1.0,
+        cycle_interval_s=1.0,
+        stable_age_s=0.0,
+        auto_push=False,
+    )
+
+
+def test_checking_python_syntax_spawns_no_process_at_all(tmp_path: Path, monkeypatch) -> None:
+    """Validation used to run ``python -m py_compile`` once per changed file.
+
+    Fifty changed files meant fifty interpreter starts on the engine's thread,
+    each holding the activity lease that every workspace mutation waits on.
+    Both spawn entry points are booby-trapped here, so a version that shells out
+    fails rather than merely being slower.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "good.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "broken.py").write_text("def f(:\n", encoding="utf-8")
+
+    engine = _engine_for(repo)
+
+    def _no_spawn(*args, **kwargs):
+        raise AssertionError(f"syntax validation spawned a process: {args!r}")
+
+    monkeypatch.setattr(subprocess, "run", _no_spawn)
+    monkeypatch.setattr(subprocess, "Popen", _no_spawn)
+
+    result = engine._validate_python_syntax(["good.py", "broken.py", "notes.md"])
+
+    assert result["ok"] is False
+    assert result["checked"] == 2  # notes.md is not Python and is not opened
+    errors = {str(item["path"]): item for item in result["errors"]}
+    assert set(errors) == {"broken.py"}
+    # The report still names the line, which is what the old subprocess gave.
+    assert "line 1" in str(errors["broken.py"]["stderr"])
+
+
+def test_a_file_that_does_not_parse_stops_the_commit(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    # At the repository root, so `git status --porcelain` names the file itself
+    # rather than collapsing it into an untracked directory.
+    (repo / "sample.py").write_text("def f(:\n", encoding="utf-8")
+
+    report = _engine_for(repo).run_cycle_once(reason="unit-test-syntax", force=True)
+
+    assert report.get("committed") is False
+    assert report.get("skip_reason") == "python_syntax_invalid"
+    syntax = dict(dict(report.get("details") or {}).get("syntax") or {})
+    assert syntax.get("ok") is False
+    assert [str(item["path"]) for item in syntax["errors"]] == ["sample.py"]
+    assert "?? sample.py" in _git(repo, "status", "--porcelain").stdout
+
+
+def test_every_git_call_in_a_cycle_carries_a_real_bound(tmp_path: Path, monkeypatch) -> None:
+    """``subprocess.run(["git", ...], timeout=60.0)`` bounded nothing on Windows.
+
+    Every git call the engine makes now goes through ``run_git``, which bounds
+    the drain as well as the wait -- so what this asserts is that no call slips
+    past it with no timeout, and that the remote-facing push gets the longer of
+    the two bounds.
+    """
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", str(origin))
+    _git(repo, "remote", "add", "origin", str(origin))
+    (repo / "sample.py").write_text("x = 1\n", encoding="utf-8")
+
+    seen: list[tuple[str, float]] = []
+    real_run_git = workspace_sync_engine.run_git
+
+    def _recording_run_git(args, **kwargs):
+        seen.append((str(args[0]), float(kwargs["timeout"])))
+        return real_run_git(args, **kwargs)
+
+    monkeypatch.setattr(workspace_sync_engine, "run_git", _recording_run_git)
+
+    engine = WorkspaceSyncEngine(
+        repo_root=repo,
+        idle_threshold_s=0.0,
+        poll_interval_s=1.0,
+        cycle_interval_s=1.0,
+        stable_age_s=0.0,
+        auto_push=True,
+    )
+    engine.run_cycle_once(reason="unit-test-bounds", force=True)
+
+    assert seen, "the cycle made no git calls at all"
+    assert all(bound > 0 for _name, bound in seen)
+    assert {name for name, _bound in seen} >= {"status", "add", "commit", "push"}
+    local_bounds = {bound for name, bound in seen if name != "push"}
+    push_bounds = {bound for name, bound in seen if name == "push"}
+    assert local_bounds == {workspace_sync_engine._GIT_TIMEOUT_S}
+    # The remote-facing call is the one allowed to wait longer, and only it.
+    assert push_bounds == {workspace_sync_engine._GIT_PUSH_TIMEOUT_S}
+    assert workspace_sync_engine._GIT_PUSH_TIMEOUT_S > workspace_sync_engine._GIT_TIMEOUT_S
+
+
+def test_staged_diff_timeout_cannot_commit_another_agents_staged_file(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "someone_else.txt").write_text("staged by someone else\n", encoding="utf-8")
+    _git(repo, "add", "someone_else.txt")
+    (repo / "my_change.py").write_text("x = 1\n", encoding="utf-8")
+    real_run_git = workspace_sync_engine.run_git
+
+    def _timeout_staged_diff(args, **kwargs):
+        if list(args[:2]) == ["diff", "--cached"]:
+            return GitResult(TIMED_OUT_RETURNCODE, "", "timed out", True, 0.1)
+        return real_run_git(args, **kwargs)
+
+    monkeypatch.setattr(workspace_sync_engine, "run_git", _timeout_staged_diff)
+    report = _engine_for(repo).run_cycle_once(reason="unit-test-staged-timeout", force=True)
+    assert report.get("committed") is False
+    assert report.get("skip_reason") == "engine_exception"
+    assert "someone_else.txt" in _git(repo, "diff", "--cached", "--name-only").stdout
+    assert _git(repo, "log", "-1", "--format=%s").stdout.strip() == "seed"
+
+
+def test_a_git_call_that_times_out_is_reported_not_raised(tmp_path: Path, monkeypatch) -> None:
+    """The control: the old code raised ``TimeoutExpired`` out of the cycle.
+
+    ``run_git`` reports a timeout as :data:`TIMED_OUT_RETURNCODE` instead, and
+    the ``add`` call site already treats a non-zero return as a failed stage --
+    so a slow git ends a cycle with a reason a person can read.
+    """
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "sample.py").write_text("x = 1\n", encoding="utf-8")
+
+    real_run_git = workspace_sync_engine.run_git
+
+    def _time_out_the_add(args, **kwargs):
+        if str(args[0]) == "add":
+            return GitResult(TIMED_OUT_RETURNCODE, "", "git did not finish within 60.0s", True, 60.5)
+        return real_run_git(args, **kwargs)
+
+    monkeypatch.setattr(workspace_sync_engine, "run_git", _time_out_the_add)
+
+    report = _engine_for(repo).run_cycle_once(reason="unit-test-timeout", force=True)
+
+    assert report.get("committed") is False
+    assert report.get("skip_reason") == "git_add_failed"
+    assert "did not finish" in str(dict(report.get("details") or {}).get("stderr") or "")

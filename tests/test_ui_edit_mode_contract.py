@@ -19,14 +19,14 @@ def test_shared_editor_carries_the_owner_hotkeys_and_live_component_contract() -
     assert 'event.key === "Tab" && event.shiftKey' in editor
     assert 'event.key === "Escape"' in editor
     assert '["nw", "n", "ne", "e", "se", "s", "sw", "w"]' in editor
-    assert 'event.altKey && p.resize' in editor
-    assert 'event.preventDefault(); event.stopImmediatePropagation()' in editor
-    assert 'node.style.translate' in layout
+    assert "event.altKey && p.resize" in editor
+    assert "event.preventDefault(); event.stopImmediatePropagation()" in editor
+    assert "node.style.translate" in layout
     assert "clone(editing ? slot.draft : slot.saved)" in layout
     assert 'BREAKPOINTS = ["desktop", "tablet", "mobile"]' in layout
-    assert 'protected: protectedNode' in layout
+    assert "protected: protectedNode" in layout
     assert 'collision: parts.includes("collision=avoid")' in layout
-    assert 'return id && key ? `${id}::${key}` : id;' in layout
+    assert "return id && key ? `${id}::${key}` : id;" in layout
     assert "L.get(selectedId())" in editor
     assert "const map = currentMap();" in layout
     assert "requestAnimationFrame(() => { applyFrame = 0; applyAll(); })" in layout
@@ -45,7 +45,7 @@ def test_shared_editor_has_one_persisted_breakpoint_aware_layout_book() -> None:
     assert "book.workspaces[key][point]" in layout
     assert "localStorage.setItem(KEY" in layout
     for capability in ("undo", "redo", "snap", "lock", "reset-view", "export", "front", "back", "cancel", "done"):
-        assert f'data-action=\"{capability}\"' in editor
+        assert f'data-action="{capability}"' in editor
     for capability in ("beginDraft", "commitDraft", "cancelDraft", "restorePrevious", "isDirty"):
         assert capability in layout
     assert "node.style.zIndex" in layout
@@ -58,6 +58,7 @@ def test_shared_editor_has_one_persisted_breakpoint_aware_layout_book() -> None:
 
 def test_editor_is_hotkey_available_but_chrome_is_absent_from_normal_chat() -> None:
     chat = _read(WEB / "chat.html")
+    navigation = _read(WEB / "js" / "chat_workspace_navigation.js")
     css = _read(WEB / "css" / "ui_edit_mode.css")
 
     assert "/static/js/ui_edit_mode.js" in chat
@@ -65,10 +66,13 @@ def test_editor_is_hotkey_available_but_chrome_is_absent_from_normal_chat() -> N
     assert ">Edit UI<" not in chat
     assert ".thomas-ui-edit-entry {" in css
     assert "display: none" in css
-    assert "label: 'Canvas'" in chat
+    assert "label: 'Canvas'" not in navigation, "the sidebar no longer lists Canvas (2026-11-09)"
     assert "label: 'UI Editor'" not in chat
+    assert "label: 'UI Editor'" not in navigation
     assert 'data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control"' in chat
-    assert 'data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control protected"' not in chat
+    assert (
+        'data-ui-id="chat.action.canvas" data-ui-label="Canvas button" data-ui-policy="control protected"' not in chat
+    )
 
 
 def test_ui_edit_mode_standard_names_every_modernized_workspace_and_gate() -> None:

@@ -105,6 +105,65 @@ def _staged_content_hash(rel_path: str) -> str | None:
     return hashlib.sha256(_normalize(proc.stdout)).hexdigest()
 
 
+def _staged_hashes(paths: list[str]) -> dict[str, str | None]:
+    """`_staged_content_hash` for every path through ONE `git cat-file --batch` (66 `git show` processes cost ~3 s).
+
+    Same bytes, same normalisation, same None for a path the index lacks. Any surprise in the batch stream falls back to
+    the one-process-per-path read, so the answer never depends on the batch parsing being right.
+    """
+    try:
+        if any("\n" in p for p in paths):
+            raise ValueError("a path with a newline cannot go through batch mode")
+        proc = subprocess.run(
+            ["git", "cat-file", "--batch"],
+            cwd=ROOT,
+            input="".join(f":{p}\n" for p in paths).encode("utf-8"),
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            raise ValueError("git cat-file --batch failed")
+        data, pos = proc.stdout, 0
+        hashes: dict[str, str | None] = {}
+        for rel_path in paths:
+            eol = data.index(b"\n", pos)
+            header = data[pos:eol].decode("utf-8", "replace")
+            pos = eol + 1
+            if header.endswith(" missing"):
+                hashes[rel_path] = None
+                continue
+            _sha, kind, size_text = header.split(" ")
+            size = int(size_text)
+            body = data[pos : pos + size]
+            if kind != "blob" or len(body) != size:
+                raise ValueError("unexpected object in the batch stream")
+            pos += size + 1
+            hashes[rel_path] = hashlib.sha256(_normalize(body)).hexdigest()
+        return hashes
+    except (OSError, ValueError):
+        return {p: _staged_content_hash(p) for p in paths}
+
+
+def _staged_manifest_text() -> str | None:
+    """The manifest as it stands in the index, or None if it is not staged there.
+
+    --check-staged hashes each script from the index, so the manifest it compares
+    against must come from the index too. It used to be read from the working tree.
+    During a scoped commit the index is HEAD plus that commit's own files, so any
+    enforcement script another agent had staged -- with its new hash already written
+    to the on-disk manifest -- hashed at HEAD while being compared with its NEW
+    hash. Measured 2026-09-10: three such scripts made the native commit tool refuse
+    every commit in the repository, including a one-file plan update that touched no
+    gate at all. Reading both halves from one tree removes that without loosening
+    anything: a tampered script staged beside a stale manifest entry still fails,
+    and the manifest itself is guarded by the protected-files gate either way.
+    """
+    rel = MANIFEST_PATH.relative_to(ROOT).as_posix()
+    proc = subprocess.run(["git", "show", f":{rel}"], cwd=ROOT, capture_output=True)
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.decode("utf-8", errors="replace")
+
+
 def generate_manifest(argv: list[str] | None = None) -> int:
     """Generate a fresh integrity manifest from current script contents."""
     scripts = _load_protected_scripts()
@@ -162,7 +221,12 @@ def verify(argv: list[str] | None = None) -> int:
             print(msg)
         return 1
 
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    staged_manifest = _staged_manifest_text() if args.check_staged else None
+    if staged_manifest is not None:
+        manifest = json.loads(staged_manifest)
+    else:
+        # Not staged (or not checking staged): the working tree is the only copy.
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     scripts = _load_protected_scripts()
     # Verify the UNION of the live protected list and the manifest keys so that
     # neither side can shrink coverage on its own:
@@ -176,6 +240,7 @@ def verify(argv: list[str] | None = None) -> int:
     checklist = sorted(set(scripts) | set(manifest.keys()))
     tampered: list[dict[str, str]] = []
     missing_from_manifest: list[str] = []
+    staged_hashes = _staged_hashes([p for p in checklist if manifest.get(p) is not None]) if args.check_staged else {}
 
     for rel_path in checklist:
         expected_hash = manifest.get(rel_path)
@@ -187,7 +252,7 @@ def verify(argv: list[str] | None = None) -> int:
             continue
 
         if args.check_staged:
-            actual_hash = _staged_content_hash(rel_path)
+            actual_hash = staged_hashes[rel_path]
         else:
             actual_hash = _hash_file(ROOT / rel_path)
 

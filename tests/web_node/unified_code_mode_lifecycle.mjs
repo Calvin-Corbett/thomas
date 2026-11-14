@@ -1,3 +1,4 @@
+import { createPresentationCases } from './unified_code_presentation_cases.mjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const sourcePath = process.argv[2];
@@ -21,7 +22,7 @@ function control(id = '') {
   });
   return controls.get(id);
 }
-const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500 };
+const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500, insertAdjacentHTML() {} };
 const liveChildren = [];
 const liveList = {
   get children() { return liveChildren; },
@@ -77,6 +78,7 @@ globalThis.document = {
   getElementById(id) { return id === 'tc-mode-surface' ? root : control(id); },
   createElement: () => ({ className: '', innerHTML: '', disabled: false, classList: { add() {} }, addEventListener() {} }),
 };
+root.ownerDocument = globalThis.document;
 globalThis.localStorage = {
   getItem: key => key === 'thomas_code_drawer_width' ? storedDrawerWidth : '',
   setItem(key, value) {
@@ -99,7 +101,7 @@ for (const siblingPath of siblingPaths) {
 const source = fs.readFileSync(sourcePath, 'utf8');
 const instrumented = source.replace(
   /\n\}\)\(\);\s*$/,
-  '\n  window.__ThomasCodeModeTest = { state, errorText, progressEvents, activate: () => { adapterActive = true; }, approvePending, changeAction, elapsedLabel, eventHtml, failureSummary, finishRun, handleStreamError, loadConversation, narrativeActivityHtml, newConversation, pickProject, pushLiveEvent, refresh, render, send, steer, technicalActivityHtml, transcriptEvents, turnHtml };\n})();',
+  '\n  window.__ThomasCodeModeTest = { state, errorText, progressEvents, activate: () => { adapterActive = true; }, approvePending, changeAction, elapsedLabel, eventHtml, failureSummary, finishRun, handleStreamError, interleavedActivityHtml, loadConversation, newConversation, pickProject, pushLiveEvent, refresh, render, send, steer, transcriptEvents, turnHtml };\n})();',
 );
 if (instrumented === source) throw new Error('could not instrument Code lifecycle adapter');
 vm.runInThisContext(instrumented, { filename: sourcePath });
@@ -118,7 +120,7 @@ function resetState() {
     artifacts: [], filePreview: null, pendingApproval: null, pendingRequest: null, lastContext: {}, running: false,
     runStartedAt: 0, runStatus: 'ready', source: null, finishing: null, approvalBusy: false, steeringBusy: false,
     projectRoot: '', terminalTool: '', contextEpoch: state.contextEpoch + 1, runProof: null,
-    runId: '', eventCursor: 0, retryRequest: null, pendingUserText: '',
+    runId: '', eventCursor: 0, retryRequest: null, pendingUserText: '', openingConversationId: '',
   });
   busy = false;
   snapshots.length = 0;
@@ -183,6 +185,19 @@ async function proveApprovalRetry() {
   if (runApproveCalls !== 2 || !busy || !state.running || state.pendingApproval) throw new Error('fresh approval retry lifecycle was not stable');
 }
 
+async function proveOpeningStopsWhenStartingANewBuild() {
+  resetState();
+  let resolveOld; const oldReply = new Promise(resolve => { resolveOld = resolve; });
+  fetchHandler = async url => url.endsWith('/conversations/old') ? oldReply
+    : url.endsWith('/conversations/new') ? response({ ok: true, conversation: { id: 'new', project_root: '/new', turns: [] } })
+      : url.split('?')[0].endsWith('/conversations') ? response({ conversations: [] }) : response({ ok: true, entries: [], path: '' });
+  const opening = api.loadConversation('old');
+  if (await api.newConversation('/new') !== true) throw new Error('new build did not open');
+  if (state.openingConversationId || state.activeId !== 'new') throw new Error('opening message survived the switch to the new build');
+  resolveOld(response({ ok: true, conversation: { id: 'old', project_root: '/old', turns: [] } }));
+  if (await opening !== false || state.activeId !== 'new' || state.openingConversationId) throw new Error('the old build kept its opening message over the new build');
+}
+
 async function proveScopedSwitch() {
   resetState();
   const oldSource = { closed: false, close() { this.closed = true; } };
@@ -218,7 +233,7 @@ async function proveScopedSwitch() {
   Object.assign(state, { pendingApproval: { id: 'stale' }, pendingRequest: { message: 'stale' }, artifacts: [{ file: 'stale.html' }], filePreview: { path: 'stale.js' }, terminalTool: 'shell', changes: [{ file: 'stale.js' }], tree: [{ name: 'stale.js' }] });
   fetchHandler = async (url, options) => {
     if (url.endsWith('/conversations/new') && options && options.method === 'POST') return response({ ok: true, conversation: { id: 'project-two', project_root: '/project-two', turns: [] } });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [{ name: 'package.json', kind: 'file', path: 'package.json' }], path: '' });
     throw new Error(`unexpected project switch fetch ${url}`);
   };
@@ -247,7 +262,7 @@ async function proveSteeringConfirmation() {
     if (url.endsWith('/steer')) return response({ ok: true });
     if (url.includes('/status')) return response({ ok: true, running: false });
     if (url.endsWith('/send')) { sendCalls += 1; return response({ ok: true, conversation_id: 'c1', project_root: '/repo', run_id: 'run-c1', run_state: 'running' }); }
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected steering restart fetch ${url}`);
   };
   if (await api.steer('keep the API') !== true || sendCalls !== 1) throw new Error('confirmed steering did not restart exactly once');
@@ -265,29 +280,36 @@ async function proveEvidenceAndRefresh() {
   if (!rawError.includes('tc-code-technical') || rawError.includes('tc-code-event')) throw new Error('raw error was presented as a conversational blob');
   const conciseError = api.failureSummary({ ok: false }, [{ type: 'error', text: 'HTTP 400: {"secret":"raw detail"}' }]);
   if (conciseError.includes('HTTP 400') || conciseError.includes('secret')) throw new Error('raw failure detail leaked into the concise reply');
-  const protocolSpew = api.narrativeActivityHtml([{ kind: 'say', text: '{"tool_uses":[{"recipient_name":"functions.fs_read_file"}]}' }], true);
-  if (protocolSpew.includes('tc-code-event')) throw new Error('tool protocol spew was presented as a conversational update');
-  const grouped = api.technicalActivityHtml([
+  // Tool protocol that leaked into a `say` is technical, never prose: it is a
+  // work row (2026-10 redesign), not a conversational update.
+  const protocolSpew = api.eventHtml({ kind: 'say', text: '{"tool_uses":[{"recipient_name":"functions.fs_read_file"}]}' }, true);
+  if (protocolSpew.includes('tc-code-event') || protocolSpew.includes('tc-code-say') || !protocolSpew.includes('tc-code-work')) throw new Error('tool protocol spew was presented as a conversational update');
+  // Every step is its own row, repeats included; none is merged into a count.
+  // (The grouped "Worked through …" block these lines once checked is gone: the
+  // work rows ARE the evidence now, one line each with the output behind it.)
+  const grouped = api.interleavedActivityHtml([
     { type: 'output', kind: 'tool_result', text: 'same check' },
     { type: 'output', kind: 'tool_result', text: 'same check' },
     { type: 'output', kind: 'tool', name: 'fs.read_file', text: 'read source' },
   ], false);
-  if (!grouped.includes('Worked through 1 tool run · 2 results') || !grouped.includes('×2')) throw new Error('technical evidence was not summarized and deduplicated');
+  if (grouped.includes('×') || (grouped.match(/<details class="tc-code-work /g) || []).length !== 3) throw new Error('technical evidence was merged or dropped instead of one row per step');
+  if ((grouped.match(/class="tc-code-receipts"/g) || []).length !== 1 || grouped.includes('<details class="tc-code-technical')) throw new Error('technical evidence created nested activity blobs');
   // "check" means an ENGINE check everywhere else in this UI -- the verdict card
-  // counts validations and "1/2 checks passed" means two real ones. This header
-  // used the same word for arbitrary tool output, so the Godot run advertised
-  // "26 checks" while its report recorded ONE validation. It now reads
-  // "25 results" on that run, which also shows only one of the 26 was a `meta`
-  // status note; the misnaming was the bigger half, meta the smaller one.
-  const metaCounted = api.technicalActivityHtml([
-    { type: 'output', kind: 'tool_result', text: 'a real result' },
-    { type: 'output', kind: 'meta', text: 'Kept index.html' },
-    { type: 'output', kind: 'meta', text: 'Reverted styles.css' },
-  ], false);
-  if (/\b\d+ checks?\b/.test(metaCounted)) throw new Error('the technical header still calls things checks');
-  if (!metaCounted.includes('1 result')) throw new Error('the one real tool result was not counted');
-  if (/\b3 results\b/.test(metaCounted)) throw new Error('status notes were counted as tool results');
-  if ((grouped.match(/tc-code-saved-activity/g) || []).length !== 1 || grouped.includes('<details class="tc-code-technical')) throw new Error('technical evidence created nested activity blobs');
+  // counts validations and "1/2 checks passed" means two real ones. The note a
+  // turn carries about its failed steps used the same word for arbitrary tool
+  // output, so the Godot run advertised "26 checks" while its report recorded
+  // ONE validation. It now counts results, and `meta` status notes are not results.
+  const metaCounted = api.turnHtml({ role: 'agent', ok: true, transcript: [
+    '{"fc":"tool_result","text":"a real result"}',
+    '{"fc":"tool_result","text":"a broken result","is_error":true}',
+    '{"fc":"meta","text":"Kept index.html"}',
+    '{"fc":"meta","text":"Reverted styles.css"}',
+    '{"fc":"final","text":"Done."}',
+  ].join('\n') });
+  const metaNote = (metaCounted.match(/<div class="tc-code-attempt-note">([^<]*)<\/div>/) || [])[1] || '';
+  if (/\b\d+ checks?\b/.test(metaNote)) throw new Error('the technical note still calls things checks');
+  if (!metaNote.includes('2 results')) throw new Error('the real tool results were not counted');
+  if (/\b4 results\b/.test(metaNote)) throw new Error('status notes were counted as tool results');
   // A tool result is not a check, and a workspace action is not a verification.
   // Both used to claim otherwise: every tool_result row read "Checked tool
   // result" -- measured, 27 of them on one turn, above a folder listing, three
@@ -295,35 +317,26 @@ async function proveEvidenceAndRefresh() {
   // labelled a check. The tool's own name was on the event the whole time (25 of
   // those 27 carried it). And `meta` read "Verified the result" for events whose
   // text is "Kept index.html."
-  const named = api.technicalActivityHtml([
-    { type: 'output', kind: 'tool_result', name: 'fs.write_file', text: 'Wrote 4871 chars to index.html' },
-  ], false);
-  // OWNER REDLINE 2026-08-10: the ROW must speak human. "Result from
-  // fs.write_file" told a non-technical reader nothing, so the heading is now
-  // a verb ("Wrote a file"). The property this line has always protected --
-  // a tool result must not be anonymous -- is unchanged: the producing tool
-  // still rides the row (data-code-tool + title) and heads the expanded body.
+  const named = api.eventHtml({ type: 'output', kind: 'tool_result', name: 'fs.write_file', text: 'Wrote 4871 chars to index.html' }, false);
+  // OWNER REDLINE 2026-08-10: the ROW must speak human. The work row reads
+  // "Wrote  index.html"; the plain-words heading ("Wrote a file") and the tool
+  // that produced it head the expanded body and ride the row as data + title,
+  // so a tool result is never anonymous.
   if (!named.includes('fs.write_file')) throw new Error('a tool result does not name the tool that produced it');
-  if (!/Wrote a file|Result from/.test(named)) throw new Error('a tool result has no readable heading');
+  if (!/Wrote a file/.test(named) || !/>Wrote</.test(named)) throw new Error('a tool result has no readable heading');
   if (/Checked/.test(named)) throw new Error('a file write is still called a check');
 
-  const unnamed = api.technicalActivityHtml([
-    { type: 'output', kind: 'tool_result', text: 'no name on this one' },
-  ], false);
+  const unnamed = api.eventHtml({ type: 'output', kind: 'tool_result', text: 'no name on this one' }, false);
   if (/Checked/.test(unnamed)) throw new Error('an unnamed tool result is still called a check');
 
-  const metaRow = api.technicalActivityHtml([
-    { type: 'output', kind: 'meta', text: 'Kept index.html.' },
-  ], false);
+  const metaRow = api.eventHtml({ type: 'output', kind: 'meta', text: 'Kept index.html.' }, false);
   if (/Verified/.test(metaRow)) throw new Error('keeping a file still announces itself as verifying it');
 
-  const groupedError = api.technicalActivityHtml([{ type: 'error', text: 'request failed' }], false);
+  const groupedError = api.turnHtml({ role: 'agent', ok: false, transcript: '{"fc":"error","text":"request failed"}' });
   if (!groupedError.includes('Worked through 1 issue') || groupedError.includes('1 detail')) throw new Error('technical error was not summarized as an issue');
-  state.running = true;
-  state.runStartedAt = Date.now() - 65000;
-  const timed = api.technicalActivityHtml([{ type: 'output', kind: 'tool_result', text: 'same check' }], false);
-  if (!timed.includes('data-code-elapsed') || !timed.includes('Working · 1m')) throw new Error('live technical summary did not show elapsed progress');
-  state.running = false;
+  // The run's clock is in the status line above the composer since the 2026-10
+  // redesign (unified_code_live_view.js statusOf); the transcript's own label:
+  if (!api.elapsedLabel(Date.now() - 65000).startsWith('1m')) throw new Error('the elapsed label did not show minutes');
   const persisted = api.transcriptEvents({ transcript: [
     '{"fc":"say","text":"Inspecting.","delta":true}',
     '{"fc":"say","text":" Building.","delta":true}',
@@ -331,17 +344,16 @@ async function proveEvidenceAndRefresh() {
     '{"fc":"tool_result","text":"same check"}',
     '{"fc":"say","text":"Inspecting. Building."}',
   ].join('\n') });
-  const replay = api.technicalActivityHtml(persisted.filter(event => event.kind === 'tool_result'), true);
-  if (!replay.includes('×2') || persisted.filter(event => event.kind === 'say').length !== 1) throw new Error('persisted replay lost counts or duplicated progress');
-
-  // progress note inline, Codex-style. Collapse only engages past the
-  // live-event ring bound (MAX_VISIBLE_PROGRESS_EVENTS = 120).
-  const fullFeed = api.narrativeActivityHtml(Array.from({ length: 7 }, (_value, index) => ({ kind: 'say', text: `progress-${index}` })), true);
-  if (fullFeed.includes('<details class="tc-code-progress-history">')) throw new Error('a short progress feed must not be collapsed');
+  const replay = api.interleavedActivityHtml(persisted.filter(event => event.kind === 'tool_result'), true);
+  if (replay.includes('×') || (replay.match(/<details class="tc-code-work /g) || []).length !== 2 || persisted.filter(event => event.kind === 'say').length !== 1) throw new Error('persisted replay merged rows or duplicated progress');
+  // Owner contract (Calvin, 2026-07-18): the running action feed shows EVERY
+  // progress note inline, Codex-style. (The 120-note collapse these lines also
+  // checked lived in narrativeActivityHtml, which no render path called; it
+  // was removed with it. The live ring stays bounded by MAX_LIVE_EVENTS below.)
+  const fullFeed = api.interleavedActivityHtml(Array.from({ length: 7 }, (_value, index) => ({ kind: 'say', text: `progress-${index}` })), true);
+  if (fullFeed.includes('<details')) throw new Error('a short progress feed must not be collapsed');
   if (!fullFeed.includes('progress-0') || !fullFeed.includes('progress-6')) throw new Error('full progress feed lost notes');
-  const hugeFeed = api.narrativeActivityHtml(Array.from({ length: 130 }, (_value, index) => ({ kind: 'say', text: `progress-${index}` })), true);
-  if (!hugeFeed.includes('<details class="tc-code-progress-history">')) throw new Error('an extreme progress feed past the ring bound was not collapsed');
-  const longProgress = api.narrativeActivityHtml([{ kind: 'say', text: 'x'.repeat(500) }], true);
+  const longProgress = api.eventHtml({ kind: 'say', text: 'x'.repeat(500) }, true);
   if (!longProgress.includes('Show full update') || longProgress.split('x').length < 500) throw new Error('long progress was not compacted with a full disclosure');
   const completedTurn = api.turnHtml({
     role: 'agent', ok: true, reason: '3 file(s) changed', changed_files: ['a.js'],
@@ -352,13 +364,12 @@ async function proveEvidenceAndRefresh() {
     ].join('\n'),
   });
   const progressAt = completedTurn.indexOf('Inspecting the project.');
-  // OWNER REDLINE 2026-08-10: evidence is no longer a separate collapsed
-  // block after the narrative - receipts render INLINE, under the sentence
-  // they back up. The ordering property is unchanged and still checked:
-  // progress, then the evidence for it, then the final reply.
+  // A finished turn reads in the order design 4a draws it: Thomas's progress
+  // and the work rows that back it up, then the reply. A run this short keeps
+  // its rows inline -- nothing folds behind "show work".
   const evidenceAt = completedTurn.indexOf('tc-code-technical');
   const finalAt = completedTurn.indexOf('Built the game and verified Start, Pause, and Resume.');
-  if (!(progressAt >= 0 && evidenceAt > progressAt && finalAt > evidenceAt)) throw new Error('completed turn did not render progress, evidence, then final reply');
+  if (!(progressAt >= 0 && evidenceAt > progressAt && finalAt > evidenceAt && !completedTurn.includes('<details class="tc-code-steps"'))) throw new Error('completed turn did not render progress, then its evidence, then the reply');
   if (completedTurn.indexOf('3 file(s) changed') >= 0 || (completedTurn.match(/Built the game/g) || []).length !== 1) throw new Error('machine receipt replaced or duplicated the final reply');
   const failedTurn = api.turnHtml({
     role: 'agent', ok: false,
@@ -376,7 +387,7 @@ async function proveEvidenceAndRefresh() {
       '{"fc":"meta","text":"engine checks passed","is_error":false}',
     ].join('\n'),
   });
-  if (!verifiedAfterLimitTurn.includes('passed Thomas’s verification') || verifiedAfterLimitTurn.includes('could not apply')) throw new Error('authoritative engine success did not replace the stale review-limit reply');
+  if (!verifiedAfterLimitTurn.includes('Finished the requested changes.') || verifiedAfterLimitTurn.includes('could not apply') || verifiedAfterLimitTurn.includes('passed Thomas’s verification')) throw new Error('authoritative engine success did not replace the stale review-limit reply with a status-neutral fallback');
   const filteredReceipt = api.turnHtml({
     role: 'agent', ok: true, changed_files: ['.thomas/evolve/agent/conversations/run.json', 'game.js'],
     artifacts: [{ file: '.thomas/evolve/agent/conversations/run.json', kind: 'data' }, { file: 'game.html', kind: 'html' }],
@@ -388,12 +399,13 @@ async function proveEvidenceAndRefresh() {
   // wording is gone on purpose -- a count is not a delivery, and results are now
   // named cards you can open. So the same guarantee is asserted against what the
   // receipt actually says now: the real file is named, the internal one is not.
-  // OWNER REDLINE 2026-08-10: the count now heads the "See every change"
-  // disclosure ("See every change - 1 file") instead of a trailing note. Same
-  // guarantee: the real file is named, the internal one is neither named nor
-  // counted.
-  if (!/1 file/.test(filteredReceipt) || /2 files/.test(filteredReceipt)) throw new Error('internal Thomas bookkeeping inflated the changed-file count');
-  if (!filteredReceipt.includes('game.html')) throw new Error('the delivered result was not named in the saved turn receipt');
+  // Since the 2026-10 redesign the count is the deliverable's "Review 1 file"
+  // action (it was the "See every change" disclosure before). Same guarantee:
+  // the real file is named, the internal one is neither named nor counted.
+  // The deliverable is one live preview now, with no file name and no counts:
+  // exactly one figure, and none for the internal file.
+  if ((filteredReceipt.match(/data-code-live=/g) || []).length !== 1) throw new Error('the delivered page was not shown as one live preview');
+  if (/Review \d+ file|Keep all|Open in a tab/.test(filteredReceipt)) throw new Error('the transcript still carries the old artifact action row');
   if (filteredReceipt.includes('run.json') || filteredReceipt.includes('.thomas/evolve')) throw new Error('internal Thomas bookkeeping was offered to the owner as a result');
   for (let index = 0; index < 140; index += 1) api.pushLiveEvent({ type: 'output', text: `raw-${index}` });
   if (state.liveEvents.length !== 120) throw new Error('live evidence was not capped');
@@ -419,7 +431,7 @@ async function proveTransientStreamFailure() {
   Object.assign(state, { activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] }, running: true, runStatus: 'working', source, runId: 'run-c1', runProof: { conversationId: 'c1', runId: 'run-c1' }, liveEvents: [{ type: 'say', kind: 'say', text: 'streamed progress' }] });
   busy = true;
   fetchHandler = async url => {
-    if (url.endsWith('/status')) return response({ ok: true, running: true, recording: false });
+    if (url.endsWith('/status?run_id=run-c1')) return response({ ok: true, run_id: 'run-c1', running: true, recording: false });
     throw new Error(`unexpected stream recovery fetch ${url}`);
   };
   if (await api.handleStreamError(source) !== true) throw new Error('transient stream failure did not recover');
@@ -435,7 +447,7 @@ async function proveTerminalDedup() {
     if (url.endsWith('/conversations/c1')) return response({ ok: true, conversation: { id: 'c1', project_root: '/repo', turns: [{ role: 'agent', run_id: 'run-c1', reason: 'Finished', transcript: '{"fc":"say","text":"unique-progress"}' }] } });
     if (url.includes('/changes?')) return response({ changed: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected terminal refresh fetch ${url}`);
   };
   snapshots.length = 0;
@@ -452,7 +464,7 @@ async function proveMissingPersistedTurn() {
     if (url.endsWith('/conversations/c1')) return response({ ok: true, conversation: { id: 'c1', project_root: '/repo', turns: [{ role: 'user', text: 'build it' }] } });
     if (url.includes('/changes?')) return response({ changed: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected persistence-gap fetch ${url}`);
   };
   await api.finishRun();
@@ -468,7 +480,7 @@ async function proveCompletedReplayDurability() {
     if (url.endsWith('/conversations/c1')) return response({ ok: true, conversation: { id: 'c1', project_root: '/repo', turns: [{ role: 'agent', run_id: 'run-fast', transcript: '{"fc":"final","text":"Durable reply"}' }] } });
     if (url.includes('/changes?')) return response({ changed: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected completed replay fetch ${url}`);
   };
   if (await api.send('finish immediately', {}) !== true) throw new Error('durable completed replay reported failure');
@@ -480,12 +492,12 @@ async function proveCompletedReplayDurability() {
   fetchHandler = async (url, options) => {
     if (url.endsWith('/send') && options?.method === 'POST') return response({ ok: true, conversation_id: 'c2', project_root: '/repo', run_id: 'run-gap', run_state: 'completed', persistence_confirmed: true, outcome: 'completed' });
     if (url.endsWith('/conversations/c2')) return response({ ok: false, error: 'history unavailable' }, 503);
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected persistence failure fetch ${url}`);
   };
   if (await api.send('finish with missing history', {}) !== false) throw new Error('unconfirmed completed replay reported success');
   if (state.running || busy || state.runStatus !== 'failed' || !state.runProof) throw new Error('unconfirmed completed replay did not preserve failure proof');
-  if (!state.liveEvents.some(event => event.type === 'error' && event.text.includes('durable Code reply'))) throw new Error('unconfirmed completed replay hid its persistence failure');
+  if (!state.liveEvents.some(event => event.type === 'error' && event.text.includes('durable Build reply'))) throw new Error('unconfirmed completed replay hid its persistence failure');
 }
 
 async function proveFinishingQueuesRapidResend() {
@@ -500,7 +512,7 @@ async function proveFinishingQueuesRapidResend() {
     if (url.endsWith('/conversations/c1')) { await historyGate; return response({ ok: true, conversation: { id: 'c1', project_root: '/repo', turns: [{ role: 'agent', run_id: 'run-old' }] } }); }
     if (url.includes('/changes?')) return response({ changed: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected finishing fetch ${url}`);
   };
   const finishing = api.finishRun();
@@ -580,7 +592,7 @@ async function proveAccessibleDrawerAndPickerErrors() {
   fetchHandler = async (url, options) => {
     if (url === '/api/local/projects/pick-folder') return response({ ok: true, path: '/picked-project' });
     if (url.endsWith('/conversations/new') && options?.method === 'POST') return response({ ok: true, conversation: { id: 'picked', project_root: '/picked-project', turns: [] } });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
     throw new Error(`unexpected successful picker fetch ${url}`);
   };
@@ -602,274 +614,14 @@ async function proveAccessibleDrawerAndPickerErrors() {
   if (!pickerError.includes('unreadable folder-picker response (200)')) throw new Error('successful non-JSON picker response failed silently');
 }
 
-async function proveARepeatedStepStillLooksRepeated() {
-  // The filter that collapses a duplicated progress note exempts technical rows,
-  // because -- its own words -- "collapsing them would hide real repetition rather
-  // than noise". That argument does not stop being true for the notes the owner
-  // reads. A run that announced "Running the test suite." five times looped five
-  // times, and with the repeats dropped and nothing in their place it read as one
-  // clean step. The clean step is the wrong story.
-  const looped = Array.from({ length: 5 }, () => ({ type: 'say', kind: 'say', text: 'Running the test suite.' }));
-  looped.push({ type: 'say', kind: 'say', text: 'All checks passed.' });
-  const kept = api.progressEvents(looped, null);
-
-  if (kept.length !== 2) throw new Error(`repeat collapse changed shape: ${kept.length} rows, expected 2`);
-  const first = String(kept[0].text || '');
-  if (!/×5/.test(first)) throw new Error(`a five-pass loop left no trace: ${JSON.stringify(first)}`);
-
-  // A distinct note must NOT grow a counter, or the number means nothing.
-  if (/×/.test(String(kept[1].text || ''))) {
-    throw new Error('a note that happened once was labelled as repeated');
-  }
-  // And the stored events must be untouched: this list is re-rendered on every
-  // repaint, so annotating in place would multiply the counter each time.
-  if (looped.some(e => /×/.test(String(e.text || '')))) {
-    throw new Error('the counter was written onto the stored event, so it will compound on repaint');
-  }
-}
-
-async function proveTheActionSurvivesTheReason() {
-  // The mirror of the case above. That one recovered the *reason* when a wrapper
-  // buried it; this one recovers the *action*, which errorText used to throw away
-  // outright: it returned error.message whenever there was one, and a server error
-  // almost always has one. Every "Could not open that Code task." the callers pass
-  // in -- fourteen of them -- was written, handed over, and dropped on the floor.
-  //
-  // Taken from a real click: My Stuff's deep link to a task that no longer exists
-  // rendered "not found", twice, and never once said what had not been found.
-  const both = api.errorText(new Error('not found'), 'Could not open that Code task.');
-  if (!/Could not open that Code task/.test(both)) throw new Error('the action was discarded: ' + both);
-  if (!/not found/.test(both)) throw new Error('the reason was discarded: ' + both);
-
-  // No usable reason -> the caller's sentence stands alone, unchanged.
-  const bare = api.errorText(new Error(''), 'Could not steer the Code task.');
-  if (bare !== 'Could not steer the Code task.') throw new Error('an empty reason mangled the fallback: ' + bare);
-  const notAnError = api.errorText({ message: 'ignored' }, 'Could not stop the Code run.');
-  if (notAnError !== 'Could not stop the Code run.') throw new Error('a non-Error was treated as a reason: ' + notAnError);
-
-  // And it must not say the same thing twice.
-  const same = api.errorText(new Error('Could not keep that change.'), 'Could not keep that change.');
-  if (same !== 'Could not keep that change.') throw new Error('an identical reason was doubled: ' + same);
-  const restated = api.errorText(
-    new Error('Could not open that Code task: it was deleted'), 'Could not open that Code task.');
-  if (restated.indexOf('Could not open that Code task') !== restated.lastIndexOf('Could not open that Code task')) {
-    throw new Error('a reason that already named the action was doubled: ' + restated);
-  }
-}
-
-async function proveTheRealReasonSurvivesTheExitWrapper() {
-  // Errors arrive oldest-first and the last is almost always `agent loop
-  // exited 1`, a wrapper that says nothing. The summary took `.at(-1)` and only
-  // then asked whether it was usable, so it always inspected the wrapper,
-  // rejected it, and fell back to "Thomas hit a technical problem ... open the
-  // technical details for the raw error" -- while the plain-language cause sat
-  // one entry earlier, already in hand.
-  //
-  // Taken from a real failed run: the owner asked for a calculator app, the
-  // provider was overloaded, and Thomas told him to go dig for the reason.
-  resetState();
-  const overloaded = api.failureSummary({ ok: false }, [
-    { type: 'error', text: 'Our servers are currently overloaded. Please try again later.' },
-    { type: 'error', text: 'agent loop exited 1' },
-  ]);
-  if (/technical problem/i.test(overloaded)) throw new Error('the real reason was discarded in favour of the generic message');
-  if (!/busy|again in a moment/i.test(overloaded)) throw new Error('an overloaded provider was not named as such');
-  // "Our servers" reads as THOMAS's servers unless the message says whose.
-  if (!/provider/i.test(overloaded)) throw new Error('the message did not say whose servers were busy');
-
-  // A useful error that is NOT an overload must still be shown verbatim
-  // instead of being swallowed by the trailing wrapper.
-  const readOnly = api.failureSummary({ ok: false }, [
-    { type: 'error', text: 'The project folder is read-only, so no files could be written.' },
-    { type: 'error', text: 'agent loop exited 1' },
-  ]);
-  if (!readOnly.includes('read-only')) throw new Error('a usable earlier error was lost behind the exit wrapper');
-
-  // And when every recorded error IS a wrapper there is genuinely nothing
-  // worth showing, so the generic message is the honest answer.
-  const wrappersOnly = api.failureSummary({ ok: false }, [
-    { type: 'error', text: 'agent loop exited 1' },
-    { type: 'error', text: 'exited 1' },
-  ]);
-  if (!/technical problem/i.test(wrappersOnly)) throw new Error('unusable errors should still fall back to the generic message');
-
-  // A run that dies with NO error event still knows two things: how it ended,
-  // and that nothing explained why. Measured on four consecutive runs of one
-  // goal, each recording three events then exiting 1 with no error: every one
-  // said only "The Code task stopped before it finished."
-  const silentWithReason = api.failureSummary({ ok: false, reason: 'exited 1' }, []);
-  if (!silentWithReason.includes('exited 1')) throw new Error('a silent failure hides how it ended');
-  if (!/no error recorded/i.test(silentWithReason)) {
-    throw new Error('a silent failure does not distinguish itself from a withheld reason');
-  }
-  // And with nothing to say, it must not invent anything.
-  const silentNoReason = api.failureSummary({ ok: false }, []);
-  if (/exited|no error recorded/i.test(silentNoReason)) throw new Error('a reason was invented where none existed');
-
-  // No errors at all is a third, distinct case and must not borrow either.
-  const silent = api.failureSummary({ ok: false }, []);
-  if (/technical problem/i.test(silent)) throw new Error('a silent failure was reported as a surfaced error');
-
-  // A run cut off by its pass budget did not fail its repair attempts -- it
-  // never finished them. Both errors are present on a real truncated run, and
-  // the ORDER of the branches is the whole fix: the verification branch used to
-  // match first and sent the owner to inspect a check, while the sentence that
-  // said what to do sat unread in a collapsed risk row.
-  //
-  // Taken from the study-planner run, whose recorded errors were exactly these
-  // two, in this order.
-  const truncated = api.failureSummary({ ok: false }, [
-    {
-      type: 'error',
-      text: 'Pass budget exhausted after 10 passes while work was still active. The task is incomplete; continue it in the same conversation.',
-    },
-    { type: 'error', text: 'verification failed (exit 1) after fix attempts' },
-  ]);
-  if (/repair attempts|still failed/i.test(truncated)) {
-    throw new Error('a truncated run was reported as one that failed its repair attempts');
-  }
-  if (!/unfinished|ran out of passes/i.test(truncated)) throw new Error('the run was not described as unfinished');
-  if (!/continue/i.test(truncated)) throw new Error('the only useful action was not offered');
-
-  // The verification message must still win when the run really did finish its
-  // attempts, or this trades one wrong summary for another.
-  const genuinelyFailed = api.failureSummary({ ok: false }, [
-    { type: 'error', text: 'verification failed (exit 1) after fix attempts' },
-  ]);
-  if (!/repair attempts/i.test(genuinelyFailed)) {
-    throw new Error('a genuine post-repair verification failure lost its own message');
-  }
-}
-
-// A run can emit more than one `final`. `finalReplyEvent` recognises only the
-// LAST one, so an earlier `final` fell through into the narrative -- where it
-// repeated, word for word, the `say` that had just streamed the same text. On a
-// real failed run the two blocks carried byte-identical 476-character labels and
-// the reader was shown the same paragraph twice, once headed UPDATE and once
-// THOMAS.
-//
-// `ok: false` on purpose: with a passing turn the final event becomes the reply,
-// so the marker would legitimately appear again outside the narrative and this
-// could not tell the bug from correct behaviour.
-async function proveNarrativeNeverRepeatsItself() {
-  resetState();
-  const repeated = 'REPEATED-NARRATIVE-BLOCK';
-  const lastFinal = 'DISTINCT-LAST-FINAL';
-  const html = api.turnHtml({
-    role: 'agent',
-    ok: false,
-    reason: 'verification failed after fix attempts',
-    transcript: [
-      JSON.stringify({ fc: 'say', text: repeated }),
-      JSON.stringify({ fc: 'final', text: repeated }),
-      JSON.stringify({ fc: 'final', text: lastFinal }),
-    ].join('\n'),
-  });
-
-  const repeats = html.split(repeated).length - 1;
-  if (repeats !== 1) throw new Error(`narrative rendered the same text ${repeats} times, expected once`);
-
-  // The distinct text of a different event must not be collapsed away with it --
-  // deduping is meant to drop a verbatim repeat, not unrelated content.
-  const kept = api.turnHtml({
-    role: 'agent',
-    ok: false,
-    reason: 'verification failed after fix attempts',
-    transcript: [
-      JSON.stringify({ fc: 'say', text: 'FIRST-DISTINCT-STEP' }),
-      JSON.stringify({ fc: 'say', text: 'SECOND-DISTINCT-STEP' }),
-      JSON.stringify({ fc: 'final', text: lastFinal }),
-    ].join('\n'),
-  });
-  if (!kept.includes('FIRST-DISTINCT-STEP') || !kept.includes('SECOND-DISTINCT-STEP')) {
-    throw new Error('deduping swallowed distinct narrative steps');
-  }
-}
-
-// "What should we make?" and its four starter cards stayed on screen for the
-// WHOLE of a new conversation's first run -- measured at 76 seconds, every
-// sample -- sitting above the live turn, while the question the user had just
-// asked was nowhere on screen. The empty state was chosen by "are there saved
-// turns", the live turn by "is a run going", and on a brand-new conversation
-// both were true at once.
-//
-// Both are now decided by the same hoisted flag, so they cannot disagree.
-async function proveTheEmptyStateStandsDownForALiveRun() {
-  resetState();
-  Object.assign(state, {
-    activeId: 'c1',
-    projectRoot: '/repo',
-    conversation: { id: 'c1', turns: [] },
-    running: true,
-    runStatus: 'working',
-    liveEvents: [{ type: 'planning', text: 'Thomas is preparing the Code run…' }],
-  });
-  snapshots.length = 0;
-  api.render();
-  const during = snapshots.at(-1) || '';
-  if (during.includes('tc-code-empty')) throw new Error('the empty state renders during a live run');
-  if (!during.includes('data-code-live-turn')) throw new Error('no live turn rendered while running');
-
-  // The control: with nothing running and nothing saved, the empty state is
-  // exactly what should be there. A fix that simply deleted it would pass the
-  // assertion above and break the surface it is meant to introduce.
-  resetState();
-  Object.assign(state, {
-    activeId: 'c1', projectRoot: '/repo', conversation: { id: 'c1', turns: [] },
-    running: false, liveEvents: [],
-  });
-  snapshots.length = 0;
-  api.render();
-  const idle = snapshots.at(-1) || '';
-  if (!idle.includes('tc-code-empty')) throw new Error('the empty state is gone when it should be shown');
-  if (!idle.includes('tc-code-starter')) throw new Error('the starter cards are gone');
-}
-
-// An empty file list has three different causes and used to name only one:
-// whatever the reason, it read "Choose a project beside Tools to browse its
-// files." Measured on a new task: for 45 seconds -- the whole run -- the drawer
-// header said "Code task 2026-07-30 1018" while the list directly beneath it
-// told you to choose a project. The header had always used `state.projectRoot`
-// for exactly this decision; the list simply did not ask.
-async function proveTheFileListNamesTheRealReasonItIsEmpty() {
-  const renderWith = (patch) => {
-    resetState();
-    Object.assign(state, {
-      activeId: 'c1', conversation: { id: 'c1', turns: [] }, drawerOpen: true, ...patch,
-    });
-    snapshots.length = 0;
-    api.render();
-    return snapshots.at(-1) || '';
-  };
-
-  const noProject = renderWith({ projectRoot: '', tree: [], treeLoaded: false });
-  if (!noProject.includes('Choose a project beside Tools')) {
-    throw new Error('with no project chosen the list must still say to choose one');
-  }
-
-  const loading = renderWith({ projectRoot: '/repo', tree: [], treeLoaded: false });
-  if (loading.includes('Choose a project beside Tools')) {
-    throw new Error('told the reader to choose a project that is already chosen');
-  }
-  if (!loading.includes('Loading files')) throw new Error('a pending fetch is not reported as loading');
-
-  const empty = renderWith({ projectRoot: '/repo', tree: [], treeLoaded: true });
-  if (empty.includes('Choose a project beside Tools')) {
-    throw new Error('an empty folder was blamed on not choosing a project');
-  }
-  if (!empty.includes('no files yet')) throw new Error('an empty folder is not reported as empty');
-  if (empty.includes('Loading files')) throw new Error('a finished fetch still claims to be loading');
-
-  // The control: with entries, the list shows them and no message at all.
-  const filled = renderWith({
-    projectRoot: '/repo', treeLoaded: true,
-    tree: [{ kind: 'file', name: 'tally.html', path: 'tally.html' }],
-  });
-  if (!filled.includes('tally.html')) throw new Error('tree entries stopped rendering');
-  if (filled.includes('no files yet') || filled.includes('Choose a project beside Tools')) {
-    throw new Error('an empty-list message rendered beside real entries');
-  }
-}
+const {
+  proveARepeatedStepStillLooksRepeated,
+  proveTheActionSurvivesTheReason,
+  proveTheRealReasonSurvivesTheExitWrapper,
+  proveNarrativeNeverRepeatsItself,
+  proveTheEmptyStateStandsDownForALiveRun,
+  proveTheFileListNamesTheRealReasonItIsEmpty
+} = createPresentationCases({ api, resetState, state, snapshots });
 
 // After Stop the header read "Thomas · Code · working" directly above its own
 // note saying "Stopped -- you interrupted this run." `is-live` drives that
@@ -1027,6 +779,7 @@ await proveTheFileListNamesTheRealReasonItIsEmpty();
 await proveAStoppedRunStopsCallingItselfWorking();
 await proveYourOwnMessageIsOnScreenWhileItRuns();
 await proveScopedSwitch();
+await proveOpeningStopsWhenStartingANewBuild();
 await proveSteeringConfirmation();
 await proveEvidenceAndRefresh();
 await proveTransientStreamFailure();

@@ -1,4 +1,8 @@
-"""Schedules have a page, not only a CLI (frontier parity: Claude Code /schedule, ChatGPT tasks, Chrome scheduled tasks)."""
+"""Schedules have a page, not only a CLI (frontier parity: Claude Code /schedule, ChatGPT tasks, Chrome scheduled tasks).
+
+A server gets these routes from the row in ``thomas.server.rows.schedules``. Nothing imports a row, so that name, here,
+is how a check of the row finds this file.
+"""
 
 from __future__ import annotations
 

@@ -16,7 +16,7 @@ from thomas.notifications.delegation_hooks import (
 )
 from thomas.notifications.dispatcher import NotificationDispatcher
 from thomas.notifications.store import NotificationStore
-from thomas.server.chat_delegation_emitter import _DelegationEmitter
+from thomas.server.chat_delegation_emitter import _DelegationEmitter, lend_notifier
 
 
 class _FakeBot:
@@ -187,29 +187,53 @@ def test_notifier_exception_does_not_break_delegation_events():
     emitter = _DelegationEmitter(emit_event, notifier=notifier)
     # Must not raise.
     asyncio.run(_emit(emitter.completed(_record(), specialist_id="sp", bot=_FakeBot(), text="done")))
-    asyncio.run(_emit(emitter.failed(_record(), specialist_id="sp", bot=_FakeBot(), text="boom")))
+    # One ending per execution reaches the chat, so the failure is another task's.
+    failure = _record(execution_id="exec-124")
+    asyncio.run(_emit(emitter.failed(failure, specialist_id="sp", bot=_FakeBot(), text="boom")))
 
     assert [e["type"] for e in events] == ["delegation_completed", "delegation_failed"]
 
 
-def test_emitter_default_notifier_uses_delegation_hooks(monkeypatch, dispatcher):
+@pytest.fixture()
+def lent():
+    """What the notifications row does while it runs: lend the delegation hook to every emitter built with none."""
+    undo = lend_notifier(delegation_hooks.emit_delegation_notification)
+    yield
+    undo()
+
+
+def test_emitter_lent_notifier_is_what_delegation_hooks_provide(monkeypatch, dispatcher):
     calls: list[str] = []
 
     def fake_hook(event: str, record: dict[str, Any], *, text: str = "", dispatcher: Any = None) -> None:
         calls.append(event)
 
     monkeypatch.setattr(delegation_hooks, "emit_delegation_notification", fake_hook)
+    undo = lend_notifier(delegation_hooks.emit_delegation_notification)
 
+    async def emit_event(evt: dict[str, Any]) -> None:
+        return None
+
+    try:
+        emitter = _DelegationEmitter(emit_event)
+        asyncio.run(_emit(emitter.completed(_record(), specialist_id="sp", bot=_FakeBot(), text="done")))
+    finally:
+        undo()
+
+    assert calls == ["completed"]
+
+
+def test_emitter_with_nothing_lent_notifies_nobody(monkeypatch, dispatcher):
     async def emit_event(evt: dict[str, Any]) -> None:
         return None
 
     emitter = _DelegationEmitter(emit_event)
     asyncio.run(_emit(emitter.completed(_record(), specialist_id="sp", bot=_FakeBot(), text="done")))
 
-    assert calls == ["completed"]
+    assert dispatcher.store.list() == []
 
 
-def test_emitter_end_to_end_persists_notification(dispatcher):
+def test_emitter_end_to_end_persists_notification(dispatcher, lent):
     async def emit_event(evt: dict[str, Any]) -> None:
         return None
 

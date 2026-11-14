@@ -1,0 +1,3 @@
+### Changed
+
+- **Chat now starts as a required plugin, so it shows on the Plugins page as on and locked.** Its 24 routes (your messages, the saved sessions, the plan and slash command lists, the documents and voice you attach, and the pages workers built for you to open) moved out of the server's fixed list into a plugin called Chat and your saved sessions, and they answer exactly as before. It has no off switch: turning it off is refused with a message saying why. If Chat ever fails to start, Thomas keeps running, sending a message is still answered with a 503 that says Chat is unavailable, health lists chat as degraded, and Try again on the Plugins page starts it. The Chat list at `/api/chats`, the questions Thomas asks you and the to-do list stay where they were.

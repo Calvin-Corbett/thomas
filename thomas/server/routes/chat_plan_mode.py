@@ -15,6 +15,7 @@ from thomas.agent.execution_plan import (
     plan_to_markdown,
     plan_to_payload,
 )
+from thomas.agent.kernel_wiring import build_agent_loop
 from thomas.agent.loop import AgentLoop
 from thomas.core.events import EventType
 
@@ -80,7 +81,7 @@ async def _run_agent_capture(
     forward_text: bool,
     forward_tools: bool,
 ) -> str:
-    agent = AgentLoop(
+    agent = build_agent_loop(
         config,
         llm,
         tools,
@@ -91,6 +92,7 @@ async def _run_agent_capture(
         run_id=run_id,
         session_id=session_id,
         autonomy_level=autonomy_level,
+        default=AgentLoop,
     )
     chunks: list[str] = []
     tool_args_by_id: dict[str, str] = {}

@@ -1,0 +1,3 @@
+### Fixed
+
+- **A one-line version bump no longer runs nearly every test.** A change to `thomas/__init__.py` selected 1,992 of 2,085 test files, because a changed package counts as reached through anything that imports from it, and that file holds the version. Checks that hit the 360-file cap used 73% of all check test time, and most of the capped hand-ins carried that one line. The check now proves from the diff when a release file changes by its version line and nothing else, and runs the tests that read the version instead. On the 10 capped hand-ins where it applies, selection falls from 3,600 test files to 943. Any other change to that file still reaches everything.

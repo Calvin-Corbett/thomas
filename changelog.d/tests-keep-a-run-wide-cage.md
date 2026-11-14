@@ -1,0 +1,2 @@
+### Fixed
+- A test can no longer write into the live cage after it has finished. At 19:59 on 2026-10-25 a hand-in started by a test in a Build team's test run finished after its test, once that test's own cage folder had been put back, and wrote a fake submission into `C:\ProgramData\ThomasCage\inbox`. The promoter refused it (its change did not apply to dev), so nothing reached your card. A test run now keeps a cage folder of its own for the whole run, so anything still running between or after tests writes there.

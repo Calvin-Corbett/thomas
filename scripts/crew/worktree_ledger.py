@@ -31,7 +31,7 @@ import json
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +54,13 @@ ROOT = Path(__file__).resolve().parents[2]
 # ── Built-in governance defaults (used when agent_safety.toml omits them) ──────
 DEFAULT_MAX_DIRTY_WORKTREES = 5
 DEFAULT_STALE_DAYS = 7
+# A dirty worktree with a changed file or a commit this recent is somebody's work in
+# progress, not merge debt, and does not count toward the ceiling. Counting live work
+# capped concurrency at the ceiling itself: AGENTS.md forbids starting in a dirty
+# checkout, so each agent needs its own worktree, and five busy agents refused the
+# sixth. Thirty minutes matches the task sweep's abandonment window
+# (scripts/crew/tasks/base.py DEFAULT_MAX_IDLE_MINUTES).
+DEFAULT_ACTIVE_MINUTES = 30
 DEFAULT_LEDGER_DIR = ".thomas"
 _GIT_TIMEOUT_SECONDS = 15
 
@@ -100,6 +107,7 @@ class GovernanceConfig:
 
     max_dirty_worktrees: int = DEFAULT_MAX_DIRTY_WORKTREES
     stale_days: int = DEFAULT_STALE_DAYS
+    active_minutes: int = DEFAULT_ACTIVE_MINUTES
     ledger_dir: str = DEFAULT_LEDGER_DIR
 
 
@@ -128,6 +136,7 @@ def load_governance(root: Path | None = None) -> GovernanceConfig:
     return GovernanceConfig(
         max_dirty_worktrees=_int("max_dirty_worktrees", DEFAULT_MAX_DIRTY_WORKTREES),
         stale_days=_int("stale_days", DEFAULT_STALE_DAYS),
+        active_minutes=_int("active_minutes", DEFAULT_ACTIVE_MINUTES),
         ledger_dir=ledger_dir or DEFAULT_LEDGER_DIR,
     )
 
@@ -224,6 +233,9 @@ class WorktreeRow:
     dirty: bool
     exists: bool
     note: str = ""
+    # Dirty, with a changed file or a commit inside ``active_minutes``: somebody's
+    # work in progress rather than merge debt.
+    active: bool = False
 
 
 @dataclass
@@ -245,8 +257,18 @@ class Ledger:
 
     @property
     def dirty_worktrees(self) -> list[WorktreeRow]:
-        """DIRTY linked worktrees — these drive the merge-debt ceiling."""
+        """DIRTY linked worktrees, whether or not anyone is working in them."""
         return [row for row in self.linked if row.dirty]
+
+    @property
+    def active_worktrees(self) -> list[WorktreeRow]:
+        """DIRTY linked worktrees somebody touched within ``active_minutes``."""
+        return [row for row in self.linked if row.dirty and row.active]
+
+    @property
+    def debt_worktrees(self) -> list[WorktreeRow]:
+        """DIRTY linked worktrees nobody is working in — these drive the merge-debt ceiling."""
+        return [row for row in self.linked if row.dirty and not row.active]
 
     @property
     def stale_worktrees(self) -> list[WorktreeRow]:
@@ -257,12 +279,16 @@ class Ledger:
         return len(self.dirty_worktrees)
 
     @property
+    def debt_count(self) -> int:
+        return len(self.debt_worktrees)
+
+    @property
     def stale_count(self) -> int:
         return len(self.stale_worktrees)
 
     @property
     def over_ceiling(self) -> bool:
-        return self.dirty_count >= self.config.max_dirty_worktrees
+        return self.debt_count >= self.config.max_dirty_worktrees
 
 
 def _now_utc(now: datetime | None) -> datetime:
@@ -286,7 +312,46 @@ def _days_since(iso: str, now: datetime) -> int | None:
     return max(0, delta.days)
 
 
-def _inspect_worktree(record: dict[str, str], *, main_path: Path, stale_days: int, now: datetime) -> WorktreeRow:
+def _touched_within(path: Path, status_lines: list[str], last_commit_iso: str, *, now: datetime, minutes: int) -> bool:
+    """True when the last commit, or any changed path, is newer than ``minutes`` ago.
+
+    An untracked directory is judged by its own modification time, which moves when
+    entries are added or removed. A path that cannot be read (deleted, or quoted in a
+    way this does not unescape) is skipped, so an unreadable worktree errs toward
+    counting as debt -- which is how every dirty worktree was counted before.
+    """
+    threshold = now - timedelta(minutes=max(0, minutes))
+    if last_commit_iso:
+        try:
+            committed = datetime.fromisoformat(last_commit_iso)
+        except ValueError:
+            committed = None
+        if committed is not None:
+            if committed.tzinfo is None:
+                committed = committed.replace(tzinfo=timezone.utc)
+            if committed >= threshold:
+                return True
+    for line in status_lines:
+        entry = line[3:].split(" -> ")[-1].strip().strip('"')
+        if not entry:
+            continue
+        try:
+            modified = datetime.fromtimestamp((path / entry).stat().st_mtime, tz=timezone.utc)
+        except (OSError, ValueError):
+            continue
+        if modified >= threshold:
+            return True
+    return False
+
+
+def _inspect_worktree(
+    record: dict[str, str],
+    *,
+    main_path: Path,
+    stale_days: int,
+    now: datetime,
+    active_minutes: int = DEFAULT_ACTIVE_MINUTES,
+) -> WorktreeRow:
     """Build a single ledger row, degrading a broken path to a noted row."""
     raw_path = record.get("path", "")
     path = Path(raw_path)
@@ -319,10 +384,12 @@ def _inspect_worktree(record: dict[str, str], *, main_path: Path, stale_days: in
         )
 
     note = ""
-    # Uncommitted file count.
+    # Uncommitted file count. The lines are kept: they are also what "is anyone
+    # working in here" is judged from.
     code, out, err = _run_git(["status", "--porcelain"], cwd=path)
+    status_lines = [line for line in out.splitlines() if line.strip()] if code == 0 else []
     if code == 0:
-        uncommitted = sum(1 for line in out.splitlines() if line.strip())
+        uncommitted = len(status_lines)
     else:
         uncommitted = 0
         note = (note + "; " if note else "") + f"status unavailable ({err.strip()[:60]})"
@@ -336,6 +403,7 @@ def _inspect_worktree(record: dict[str, str], *, main_path: Path, stale_days: in
 
     dirty = uncommitted > 0
     stale = days is not None and days > stale_days
+    active = dirty and _touched_within(path, status_lines, last_iso, now=now, minutes=active_minutes)
     return WorktreeRow(
         path=raw_path,
         is_main=is_main,
@@ -349,6 +417,7 @@ def _inspect_worktree(record: dict[str, str], *, main_path: Path, stale_days: in
         dirty=dirty,
         exists=True,
         note=note,
+        active=active,
     )
 
 
@@ -383,7 +452,16 @@ def collect(root: Path | None = None, *, now: datetime | None = None) -> Ledger:
         return Ledger(generated_at=generated_at, root=str(base), config=config, rows=[main_row])
 
     records = parse_worktree_list(out)
-    rows = [_inspect_worktree(record, main_path=base, stale_days=config.stale_days, now=moment) for record in records]
+    rows = [
+        _inspect_worktree(
+            record,
+            main_path=base,
+            stale_days=config.stale_days,
+            now=moment,
+            active_minutes=config.active_minutes,
+        )
+        for record in records
+    ]
     if not rows:
         rows = [
             WorktreeRow(
@@ -413,6 +491,8 @@ def _flags(row: WorktreeRow) -> str:
         marks.append("MISSING")
     if row.dirty:
         marks.append("DIRTY")
+    if row.active:
+        marks.append("ACTIVE")
     if row.stale:
         marks.append("STALE")
     return ",".join(marks) if marks else "ok"
@@ -424,13 +504,15 @@ def header_line(ledger: Ledger) -> str:
     if total <= 1:
         return f"✓ {total} worktree — clean. No merge debt."
     dirty = ledger.dirty_count
+    active = len(ledger.active_worktrees)
     stale = ledger.stale_count
     glyph = "⚠" if (dirty or stale or ledger.over_ceiling) else "✓"
-    msg = f"{glyph} {total} worktrees — {dirty} DIRTY, {stale} STALE."
+    in_use = f" ({active} in active use)" if active else ""
+    msg = f"{glyph} {total} worktrees — {dirty} DIRTY{in_use}, {stale} STALE."
     if dirty or stale:
         msg += " Review before creating a new one."
     if ledger.over_ceiling:
-        msg += f" OVER CEILING ({dirty} ≥ {ledger.config.max_dirty_worktrees}) — consolidate."
+        msg += f" OVER CEILING ({ledger.debt_count} idle ≥ {ledger.config.max_dirty_worktrees}) — consolidate."
     return msg
 
 
@@ -439,8 +521,9 @@ def summary_line(ledger: Ledger) -> str:
     if ledger.total <= 1:
         return f"worktrees: {ledger.total} (clean)"
     return (
-        f"worktrees: {ledger.total} total, {ledger.dirty_count} dirty, "
-        f"{ledger.stale_count} stale (ceiling={ledger.config.max_dirty_worktrees})"
+        f"worktrees: {ledger.total} total, {ledger.dirty_count} dirty "
+        f"({len(ledger.active_worktrees)} active), {ledger.stale_count} stale "
+        f"(ceiling={ledger.config.max_dirty_worktrees} idle)"
     )
 
 
@@ -510,8 +593,9 @@ def render_markdown(ledger: Ledger) -> str:
             "",
             "## How to use",
             "",
-            f"- Merge-debt ceiling: **{ledger.config.max_dirty_worktrees}** dirty worktrees "
-            f"(stale = no commit in > {ledger.config.stale_days} days).",
+            f"- Merge-debt ceiling: **{ledger.config.max_dirty_worktrees}** dirty worktrees nobody has "
+            f"touched in {ledger.config.active_minutes} minutes. ACTIVE ones are work in progress and "
+            f"do not count (stale = no commit in > {ledger.config.stale_days} days).",
             "- Create new worktrees only via `python scripts/forge/gates/worktree_creation_gate.py new <name>`.",
             "- Raw `git worktree add` is discouraged — it bypasses the debt ceiling and the ledger.",
             "- Refresh this file with `python scripts/crew/worktree_ledger.py update`.",
@@ -529,6 +613,8 @@ def _ledger_to_json(ledger: Ledger) -> dict[str, Any]:
         "summary": {
             "total": ledger.total,
             "dirty": ledger.dirty_count,
+            "active_dirty": len(ledger.active_worktrees),
+            "debt": ledger.debt_count,
             "stale": ledger.stale_count,
             "over_ceiling": ledger.over_ceiling,
         },

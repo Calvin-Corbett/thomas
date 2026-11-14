@@ -40,6 +40,9 @@ class _EmptyStdout:
     async def readline(self) -> bytes:
         return b""
 
+    async def read(self, _n: int = -1) -> bytes:
+        return b""
+
 
 class _ExitedProcess:
     stdout = _EmptyStdout()
@@ -82,6 +85,29 @@ def test_files_without_terminal_verdict_do_not_outvote_exit_one(tmp_path: Path, 
     reason = saved["turns"][-1]["reason"]
     assert "without a terminal engine verdict" in reason
     assert "2 file(s) had changed by then" in reason
+
+
+def test_a_completed_disqualified_answer_is_not_called_a_crash(tmp_path: Path) -> None:
+    repo = _new_repo(tmp_path)
+    conversation = forge_code_store.new_conversation(repo)
+    transcript = repo / "transcript.txt"
+    transcript.write_text(
+        '{"fc":"tool","name":"fs.write_file","access":"write"}\n'
+        '{"fc":"tool_result","name":"fs.write_file","is_error":true}\n'
+        '{"fc":"final","text":"I updated the file."}\n'
+        '{"fc":"error","is_error":true,"terminal":true,"text":"GPT gave an answer but a tool call failed and no files changed"}\n',
+        encoding="utf-8",
+    )
+    snap = forge_code_git.snapshot(repo)
+
+    result = _record(repo, conversation["id"], transcript, _ExitedProcess(1), snap)
+
+    assert result["ok"] is False
+    assert result["outcome"] == "failed"
+    saved = forge_code_store.load_conversation(repo, conversation["id"])
+    reason = saved["turns"][-1]["reason"]
+    assert "the run completed but its engine reported failure" in reason
+    assert "crashed before finishing" not in reason
 
 
 def test_a_confirmed_final_answer_outvotes_a_lying_exit_code(tmp_path: Path) -> None:

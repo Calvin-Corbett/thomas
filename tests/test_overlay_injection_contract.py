@@ -6,12 +6,16 @@ overlay's view script and runtime tag before </head>; the stylesheet appears
 only when an overlay exists. Requesting every page with the overlay absent
 must leave it absent: the base never writes it. The index handler keeps
 exactly one web_dir page name so the deep-links test's rule still holds.
+
+The splice is installed by the overlay row (``thomas.server.rows.overlay``) and is not there otherwise, so these tests
+install it the way the row does, and the last two hold what a page is without it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -42,6 +46,13 @@ def web_dir(tmp_path: Path) -> Path:
     return directory
 
 
+@pytest.fixture(autouse=True)
+def _the_row_is_on() -> Iterator[None]:
+    take_back = helpers.use_overlay_injector(render.inject)
+    yield
+    take_back()
+
+
 @pytest.fixture
 def overlay_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     directory = tmp_path / "overlay"
@@ -63,7 +74,9 @@ def _serve_all(web_dir: Path) -> dict[str, str]:
     return asyncio.run(go())
 
 
-def test_every_page_carries_the_view_and_the_runtime_and_the_overlay_stays_absent(web_dir: Path, overlay_dir: Path) -> None:
+def test_every_page_carries_the_view_and_the_runtime_and_the_overlay_stays_absent(
+    web_dir: Path, overlay_dir: Path
+) -> None:
     pages = _serve_all(web_dir)
     assert set(pages) >= {"index", "classic", "settings", "companion"}
     for name, html in pages.items():
@@ -80,9 +93,14 @@ def test_an_existing_overlay_is_a_stylesheet_in_every_page(web_dir: Path, overla
     render.invalidate()
     for name, html in _serve_all(web_dir).items():
         head = html.split("</head>", 1)[0]
-        assert ':root{--c-accent:#2ecc71;}' in head, name
+        assert ":root{--c-accent:#2ecc71;}" in head, name
         assert head.index('id="thomas-overlay-css"') < head.index('id="thomas-overlay-view"'), name
-    assert sorted(p.name for p in overlay_dir.iterdir()) == [".gitattributes", ".gitignore", "README.md", "manifest.json"]
+    assert sorted(p.name for p in overlay_dir.iterdir()) == [
+        ".gitattributes",
+        ".gitignore",
+        "README.md",
+        "manifest.json",
+    ]
 
 
 def test_the_mission_page_is_covered_with_its_own_stamp_token(tmp_path: Path, overlay_dir: Path) -> None:
@@ -118,3 +136,26 @@ def test_the_index_handler_still_names_exactly_one_page_for_the_deep_links_rule(
     body = source.split("async def index(", 1)[1].split("async def ", 1)[0]
     assert set(re.findall(r'web_dir\s*/\s*"([^"]+\.html)"', body)) == {"chat.html"}
     assert body.count("inject_overlay(") == 1
+
+
+def test_with_the_row_off_every_page_is_served_as_it_ships(web_dir: Path, overlay_dir: Path) -> None:
+    """Nothing is installed, so a saved change cannot reach a page, and the saved file is not touched."""
+    m.append([TOKEN], ACTION, BASE, path=overlay_dir / "manifest.json", stock=stock_tokens.load_stock())
+    saved = (overlay_dir / "manifest.json").read_bytes()
+    render.invalidate()
+    on = _serve_all(web_dir)
+    helpers.use_overlay_injector(render.inject)()  # takes it back, as the row does when it stops
+    off = _serve_all(web_dir)
+    assert all('id="thomas-overlay-view"' in html for html in on.values())
+    for name, html in off.items():
+        assert "overlay" not in html and "--c-accent" not in html, name
+        assert "__THOMAS_WEB_BUILD__" not in html and "__THOMAS_VERSION__" not in html, name
+    assert (overlay_dir / "manifest.json").read_bytes() == saved
+
+
+def test_the_row_taking_back_its_splice_does_not_take_back_a_newer_one() -> None:
+    first, second = (lambda html, stamp: "first"), (lambda html, stamp: "second")
+    take_back_first = helpers.use_overlay_injector(first)
+    helpers.use_overlay_injector(second)
+    take_back_first()
+    assert helpers.inject_overlay("<head></head>", "s") == "second"

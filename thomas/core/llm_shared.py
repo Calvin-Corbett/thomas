@@ -5,13 +5,16 @@ from __future__ import annotations
 import inspect
 import json
 import re
+import time
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
+from thomas.core.provider_limits import QUOTA_CODES
+
 # HTTP statuses every provider transport treats as worth another attempt.
 # Shared so a change to the retry policy reaches all providers at once.
-RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+RETRYABLE_STATUS = {429, 500, 502, 503, 504, 529}
 
 
 def callable_accepts_keyword(func: Any, keyword: str) -> bool:
@@ -32,10 +35,57 @@ def callable_accepts_keyword(func: Any, keyword: str) -> bool:
 class LLMError(Exception):
     """LLM request failed after retries."""
 
-    def __init__(self, message: str, status: int = 0, retryable: bool = False):
+    def __init__(
+        self,
+        message: str,
+        status: int = 0,
+        retryable: bool = False,
+        *,
+        error_code: str = "",
+        response_headers: dict[str, str] | None = None,
+    ):
         super().__init__(message)
         self.status = status
         self.retryable = retryable
+        self.error_code = error_code
+        self.response_headers = response_headers or {}
+
+    @property
+    def quota_hint(self) -> bool:
+        # One set of codes for every layer that asks "is this account out?" —
+        # thomas/core/provider_limits.py owns it; praxis.quota reads the same one.
+        if self.error_code.lower().replace("-", "_") in QUOTA_CODES:
+            return True
+        for name in ("retry-after", "x-ratelimit-reset", "x-rate-limit-reset"):
+            try:
+                value = float(self.response_headers.get(name) or 0)
+            except (TypeError, ValueError):
+                continue
+            if name == "retry-after" or value < 1_000_000_000:
+                remaining = value
+            else:
+                remaining = (value / 1000 if value > 10_000_000_000 else value) - time.time()
+            if remaining > 600:
+                return True
+        return False
+
+
+def quota_error_fields(body: bytes, headers: Any) -> tuple[str, dict[str, str]]:
+    """Retain only provider quota metadata; never forward arbitrary response headers."""
+    try:
+        parsed = json.loads(body)
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        parsed = {}
+    error = parsed.get("error", parsed) if isinstance(parsed, dict) else {}
+    code = str(error.get("code") or error.get("type") or "") if isinstance(error, dict) else ""
+    safe_headers = {}
+    if headers is not None:
+        lowered = {str(key).lower(): value for key, value in headers.items()}
+        for name in ("retry-after", "x-ratelimit-reset", "x-rate-limit-reset"):
+            value = lowered.get(name)
+            if value is not None:
+                safe_headers[name] = str(value)[:80]
+    return code[:80], safe_headers
 
 
 @dataclass
@@ -49,12 +99,16 @@ class TokenUsage:
     # prompt_tokens). Every transport reported it; until 2026-09-05 the
     # count dissolved here and the reply receipt could not show it.
     cached_prompt_tokens: int = 0
+    # Prompt tokens written into the provider's cache on this call (also a subset of prompt_tokens). Anthropic
+    # bills them above the plain input price; OpenAI does not report or bill them, so they stay 0 there.
+    cache_write_prompt_tokens: int = 0
 
     def add(self, other: TokenUsage) -> None:
         self.prompt_tokens += other.prompt_tokens
         self.completion_tokens += other.completion_tokens
         self.total_tokens += other.total_tokens
         self.cached_prompt_tokens += getattr(other, "cached_prompt_tokens", 0) or 0
+        self.cache_write_prompt_tokens += getattr(other, "cache_write_prompt_tokens", 0) or 0
 
 
 @dataclass

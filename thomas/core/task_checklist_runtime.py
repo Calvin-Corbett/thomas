@@ -42,14 +42,15 @@ def attach_contract(
 
     if not ac.contract_enabled():
         return ""
-    payload = rt.get_execution(execution_id, repo_root)
-    if payload is None:
-        return ""
-    items = ac.build_contract(prompt_text, workspace)
-    payload["acceptance_contract"] = ac.items_to_dicts(items)
-    payload["workspace"] = str(workspace)
-    payload["contract_started_at"] = ac.now()
-    rt._write_json(rt.execution_path(execution_id, repo_root), payload)
+    with rt._record_lock(execution_id, repo_root):  # rev 3: whole-record write under the shared mutation protocol
+        payload = rt.get_execution(execution_id, repo_root)
+        if payload is None:
+            return ""
+        items = ac.build_contract(prompt_text, workspace)
+        payload["acceptance_contract"] = ac.items_to_dicts(items)
+        payload["workspace"] = str(workspace)
+        payload["contract_started_at"] = ac.now()
+        rt._write_json(rt.execution_path(execution_id, repo_root), payload)
     return ac.contract_prompt_block(items)
 
 
@@ -101,16 +102,17 @@ def set_task_type(
 
     from thomas.core import task_bot_runtime as rt
 
-    payload = rt.get_execution(execution_id, repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"execution `{execution_id}` not found")
-    labelled = str(task_type or "").strip()
-    payload["task_type"] = labelled
-    rows = payload.get("checklist")
-    if labelled and task_checklist.checklists_enabled() and (not isinstance(rows, list) or not rows):
-        payload["checklist"] = task_checklist.checklist_to_dicts(task_checklist.build_checklist(labelled))
-    rt._write_json(rt.execution_path(execution_id, repo_root), payload)
-    rt._write_summary(repo_root)
+    with rt._record_lock(execution_id, repo_root):  # rev 3
+        payload = rt.get_execution(execution_id, repo_root)
+        if payload is None:
+            raise FileNotFoundError(f"execution `{execution_id}` not found")
+        labelled = str(task_type or "").strip()
+        payload["task_type"] = labelled
+        rows = payload.get("checklist")
+        if labelled and task_checklist.checklists_enabled() and (not isinstance(rows, list) or not rows):
+            payload["checklist"] = task_checklist.checklist_to_dicts(task_checklist.build_checklist(labelled))
+        rt._write_json(rt.execution_path(execution_id, repo_root), payload)
+        rt._write_summary(repo_root, changed=payload)
     return payload
 
 
@@ -143,18 +145,26 @@ def record_checklist_evidence(
 
     from thomas.core import task_bot_runtime as rt
 
-    payload = rt.get_execution(execution_id, repo_root)
-    if payload is None:
+    evaluated = rt.get_execution(execution_id, repo_root)
+    if evaluated is None:
         raise FileNotFoundError(f"execution `{execution_id}` not found")
-    changed = bool(
+    checklist_changed = bool(
         task_checklist.checklists_enabled()
-        and _evaluate_stored_checklist(payload, read_paths=read_paths, output_text=output_text)
+        and _evaluate_stored_checklist(evaluated, read_paths=read_paths, output_text=output_text)
     )
-    changed = bool(_evaluate_stored_contract(payload, output_text=output_text)) or changed
-    if not changed:
-        return payload
-    rt._write_json(rt.execution_path(execution_id, repo_root), payload)
-    rt._write_summary(repo_root)
+    contract_changed = bool(_evaluate_stored_contract(evaluated, output_text=output_text))
+    with rt._record_lock(execution_id, repo_root):
+        payload = rt.get_execution(execution_id, repo_root)
+        if payload is None:
+            raise FileNotFoundError(f"execution `{execution_id}` not found")
+        if not (checklist_changed or contract_changed):
+            return payload
+        if checklist_changed:
+            payload["checklist"] = evaluated["checklist"]
+        if contract_changed:
+            payload["acceptance_contract"] = evaluated["acceptance_contract"]
+        rt._write_json(rt.execution_path(execution_id, repo_root), payload)
+        rt._write_summary(repo_root, changed=payload)
     return payload
 
 
@@ -179,7 +189,8 @@ def hold_if_unmet(
     if task_checklist.checklists_enabled() and isinstance(rows, list) and rows:
         if read_paths is not None or output_text:
             evaluated = _evaluate_stored_checklist(payload, read_paths=read_paths, output_text=output_text)
-            rt._write_json(rt.execution_path(execution_id, repo_root), payload)
+            with rt._record_lock(execution_id, repo_root):  # rev 3: re-enters the lock complete_execution already holds
+                rt._write_json(rt.execution_path(execution_id, repo_root), payload)
         else:
             evaluated = task_checklist.checklist_from_dicts(rows)
         unmet_lines += [f"{it.item_id}: {it.detail or it.description}" for it in task_checklist.unmet_items(evaluated)]

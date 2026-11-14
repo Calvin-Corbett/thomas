@@ -100,6 +100,55 @@ class ThomasFixture:
     log_export: str = "missing"
 
 
+class QuietHTTPServer(ThreadingHTTPServer):
+    """A loopback server whose handler threads never outlive the test.
+
+    Every browser test ends by closing Chromium while a response is still being
+    written, which raises in the handler thread. socketserver answers that by
+    printing the traceback to stderr, and a daemon thread printing to stderr
+    while the interpreter is finalizing aborts the whole process -- pytest
+    reports every test passed and then exits 0xC0000409 (measured 2026-09-24 on
+    the Search tests, whose last act is closing the browser mid-stream). So:
+    nothing is printed from a handler, and the exit waits for the handlers.
+    """
+
+    daemon_threads = True
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.closing = False
+        self._handler_threads: list[threading.Thread] = []
+        self._handler_lock = threading.Lock()
+
+    def process_request_thread(self, request, client_address) -> None:
+        current = threading.current_thread()
+        with self._handler_lock:
+            self._handler_threads.append(current)
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with self._handler_lock:
+                self._handler_threads.remove(current)
+
+    def handle_error(self, request, client_address) -> None:
+        # A client that went away mid-response is the normal end of a test, not
+        # a fault to report -- and reporting it is what kills the process.
+        return
+
+    def close_quietly(self, serve_thread: threading.Thread | None = None, timeout: float = 5.0) -> None:
+        """Stop serving, then wait for the threads rather than abandoning them."""
+        self.closing = True
+        self.shutdown()
+        self.server_close()
+        deadline = time.monotonic() + timeout
+        for thread in ([serve_thread] if serve_thread else []) + self._snapshot_handlers():
+            thread.join(max(0.0, deadline - time.monotonic()))
+
+    def _snapshot_handlers(self) -> list[threading.Thread]:
+        with self._handler_lock:
+            return list(self._handler_threads)
+
+
 def _handler(fixture: ThomasFixture):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -177,6 +226,10 @@ def _handler(fixture: ThomasFixture):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             for i in range(20):
+                # A drip in flight when the test ends must stop at the next
+                # piece instead of holding a thread open for three more seconds.
+                if getattr(self.server, "closing", False):
+                    return
                 line = json.dumps({"type": "text", "text": f"piece {i} of the reply to {asked[:12]}. "}) + "\n"
                 chunk = line.encode("utf-8")
                 self.wfile.write(f"{len(chunk):x}\r\n".encode("ascii") + chunk + b"\r\n")
@@ -214,16 +267,14 @@ class serve:
 
     def __enter__(self) -> ThomasFixture:
         self.fixture = ThomasFixture(url="")
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _handler(self.fixture))
-        self.server.daemon_threads = True
+        self.server = QuietHTTPServer(("127.0.0.1", 0), _handler(self.fixture))
         self.fixture.url = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         return self.fixture
 
     def __exit__(self, *_exc) -> None:
-        self.server.shutdown()
-        self.server.server_close()
+        self.server.close_quietly(self.thread)
 
 
 # ── Driving the shell in a real browser ─────────────────────────────────

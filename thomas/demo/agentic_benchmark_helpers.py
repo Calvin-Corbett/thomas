@@ -10,6 +10,7 @@ from typing import Any
 
 from thomas.core.config import AppConfig
 from thomas.core.llm import LLMClient
+from thomas.core.llm_slot import models
 from thomas.demo.agentic_benchmark_core import _ensure_usage_telemetry
 
 _CODING_HINT_RE = re.compile(
@@ -57,7 +58,7 @@ async def _chat_json_lane(
     watch_prefix: str = "",
 ) -> dict[str, Any]:
     model_cfg = config.get_model(profile)
-    llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
+    llm = models().open(model_cfg, default=LLMClient, fallback_configs=[], failover_enabled=False)
     started = time.monotonic()
     text = ""
     error = ""

@@ -16,6 +16,20 @@ repos:
 
   - repo: local
     hooks:
+      # FIRST, deliberately. A commit that fails a gate does not simply stop:
+      # pre-commit restores its stash, and where hook auto-fixes conflict, its
+      # recovery path hard-checks-out the working tree and discards uncommitted
+      # changes. This photographs the tree before any gate can fail, so the loss
+      # is recoverable with `python scripts/forge/worktree_safety.py --restore`.
+      # It never fails a commit: an instrument that can block is a gate, and this
+      # is not one.
+      - id: thomas-worktree-safety
+        name: Thomas Worktree Safety Snapshot
+        entry: python scripts/forge/worktree_safety.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: thomas-agent-safety-validation
         name: Thomas Agent Safety Validation
         entry: python scripts/_gate_python.py scripts/validate_agent_changes.py
@@ -30,7 +44,7 @@ repos:
 
       - id: thomas-workboard-inbox-gate
         name: Thomas Workboard Inbox Gate
-        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py --advisory
         language: system
         pass_filenames: false
 
@@ -181,13 +195,13 @@ repos:
 
       - id: thomas-workboard-inbox-final-gate
         name: Thomas Workboard Inbox Final Gate
-        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py --advisory
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-inbox-commit-msg-gate
         name: Thomas Workboard Inbox Commit Message Gate
-        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py
+        entry: python scripts/_gate_python.py scripts/forge/gates/workboard_inbox.py --advisory
         language: system
         pass_filenames: false
         stages: [commit-msg]

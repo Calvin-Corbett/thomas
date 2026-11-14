@@ -13,10 +13,12 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from thomas.agent import acceptance_runtime
 from thomas.core import acceptance_contract as ac
 from thomas.core import goal_book
-from thomas.core.acceptance_learning import load_learned
+from thomas.core.acceptance_learning import load_learned, record_misses
 from thomas.tools.goals import GoalAddTool, GoalDoneTool, GoalListTool
 
 
@@ -50,6 +52,41 @@ def test_open_goals_are_judged_requirements_on_every_turn(tmp_path: Path) -> Non
     assert goals[0].item_id.startswith("goal:")
     assert "Every race must end on a results screen" in goals[0].description
     assert "Standing goal" in goals[0].description
+
+
+def test_a_goals_file_of_the_wrong_shape_holds_no_goals_and_costs_no_learned_check(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()  # the project keeps its learned checks under its own root
+    miss = ac.ContractItem("req:1", ac.KIND_REQUIREMENT, "The app opens without an error.", "prompt", "", True)
+    record_misses(tmp_path, [miss], caught=True)
+    goal_book.goals_path(tmp_path).parent.mkdir(parents=True)
+    goal_book.goals_path(tmp_path).write_text('{"version": 1, "goals": 5}', encoding="utf-8")
+
+    assert goal_book.open_goals(tmp_path) == []
+    assert _run(GoalListTool(tmp_path), {}).ok
+    assert [row["item_id"] for row in load_learned(tmp_path)] == ["learned:req:1"]
+
+
+def _contract_at(level: str, prompt: str) -> list[ac.ContractItem] | None:
+    loop = SimpleNamespace(llm=SimpleNamespace(config=SimpleNamespace(reasoning_effort=level)))
+    acceptance_runtime.begin_contract(loop, prompt_text=prompt, route_path="coding")
+    state = getattr(loop, "_acceptance_state", None)
+    return None if state is None else state["items"]
+
+
+def test_a_goal_is_held_only_where_a_separate_judge_rules(tmp_path: Path, monkeypatch) -> None:
+    """Below xhigh no judge checks a judged requirement, so a goal could only be listed as unchecked under every
+    reply, and a goal alone made a contract of a turn with nothing to check. Goals ride where a separate judge
+    rules: xhigh and max, the level the Build profile runs at by default (2026-10-14)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("THOMAS_VERIFICATION_CONTRACT", "1")
+    (tmp_path / ".git").mkdir()
+    goal_book.add_goal(tmp_path, "Every race must end on a results screen with six finishers.")
+
+    medium = _contract_at("medium", "Add a pause menu.")
+    assert medium is not None and [it.source for it in medium if it.source == "goal"] == []
+    assert _contract_at("medium", "Thanks, that looks right.") is None
+    judged = _contract_at("xhigh", "Thanks, that looks right.")
+    assert judged is not None and [it.source for it in judged if it.source == "goal"] == ["goal"]
 
 
 def test_the_tools_add_list_and_close(tmp_path: Path) -> None:

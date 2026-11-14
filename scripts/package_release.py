@@ -79,6 +79,9 @@ INCLUDE_EXACT_PATHS = frozenset(
         # referenced from inside those launchers
         "scripts/run_boot_doctor_direct.py",
         "scripts/oauth_signin.py",
+        # started by run-ui.ps1 (tray mode) to watch boot health and hand a stalled
+        # start to Boot Doctor; run-ui.ps1 only warns when it is missing
+        "scripts/startup_recovery_watch.ps1",
         # referenced by thomas/cli/commands/setup_wizard.py for the desktop shortcut
         "scripts/create_shortcut.py",
     }
@@ -437,7 +440,7 @@ def _generate_third_party_notices(bundle_root: Path) -> Path:
         lines.extend(f"- {name}" for name in sorted(missing))
 
     path = bundle_root / DEFAULT_NOTICE_FILENAME
-    path.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
@@ -503,7 +506,13 @@ def _copy_to_stage(paths: list[str], stage_dir: Path) -> tuple[int, list[str]]:
             skipped.append(rel)
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+        if source.suffix.lower() == ".sh":
+            # A Windows checkout holds shell scripts with CRLF line endings, and bash stops
+            # at the carriage return in "set -euo pipefail\r". The bundle is for any OS.
+            target.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
+            shutil.copystat(source, target)
+        else:
+            shutil.copy2(source, target)
         copied += 1
     return copied, skipped
 
@@ -514,6 +523,19 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _exclusion_counts(excluded: list[tuple[str, str]]) -> dict[str, int]:
+    """How many items each kind of exclusion dropped (prefix, glob, exact, ...).
+
+    Counts only. The manifest and summary are shipped inside the bundle, so they must
+    not name the private files left out of it or the folder it was built in.
+    """
+    counts: dict[str, int] = {}
+    for _, reason in excluded:
+        kind = reason.split(":", 1)[0]
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
 
 
 def _build_manifest(
@@ -534,11 +556,10 @@ def _build_manifest(
     payload = {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "release_version": generated_version,
-        "root": str(ROOT),
         "included_count": len(included),
         "excluded_count": len(excluded),
         "files": files,
-        "excluded": [{"path": path, "reason": reason} for path, reason in excluded],
+        "excluded_by_reason": _exclusion_counts(excluded),
     }
     manifest_path = stage_dir / DEFAULT_MANIFEST_FILENAME
     manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -546,9 +567,7 @@ def _build_manifest(
 
 
 def _write_summary(stage_dir: Path, version: str, included: list[str], excluded: list[tuple[str, str]]) -> Path:
-    excluded_by_reason: dict[str, int] = {}
-    for _, reason in excluded:
-        excluded_by_reason[reason] = excluded_by_reason.get(reason, 0) + 1
+    excluded_by_reason = _exclusion_counts(excluded)
     lines = [
         "# Thomas User Release Bundle",
         "",
@@ -575,7 +594,7 @@ def _write_summary(stage_dir: Path, version: str, included: list[str], excluded:
         ]
     )
     summary_path = stage_dir / DEFAULT_SUMMARY_FILENAME
-    summary_path.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return summary_path
 
 

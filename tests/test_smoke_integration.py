@@ -239,7 +239,8 @@ class TestAutonomy:
         from thomas.core.autonomy import parse_autonomy_level
 
         assert parse_autonomy_level(0) == 1
-        assert parse_autonomy_level(99) == 4
+        # The ceiling is 5 (Autopilot) since a3ea4b2c; it used to be 4.
+        assert parse_autonomy_level(99) == 5
 
     def test_roundtrip(self):
         from thomas.core.autonomy import autonomy_level_to_pref, parse_autonomy_level

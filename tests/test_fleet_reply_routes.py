@@ -16,6 +16,9 @@ Proves the acceptance line end-to-end over HTTP:
     rather than an error page;
   * an un-acked reply past the ack deadline shows up reconciled as failed;
   * receipts are listable per session in dispatch order.
+
+These routes reach a real server through the row ``thomas.server.rows.agent_panels``, and nothing imports a row, so
+that name is written here for a change to the row to find this file.
 """
 
 from __future__ import annotations

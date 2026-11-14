@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
 
+from thomas.agent.kernel_wiring import build_agent_loop
 from thomas.agent.loop import AgentLoop
 from thomas.cli.repl_approval import _FILE_WRITE_TOOLS, render_post_edit_summary
 from thomas.cli.repl_hooks import (
@@ -55,7 +56,7 @@ class ThomasREPLAgentMixin:
         else:
             run_id = str(session_id or "repl")
 
-        agent = AgentLoop(
+        agent = build_agent_loop(
             config=self.config,
             llm=llm,
             tools=self.tools,
@@ -66,6 +67,7 @@ class ThomasREPLAgentMixin:
             guarded_tool_runner=guarded_runner,
             session_id=session_id,
             run_id=run_id,
+            default=AgentLoop,
         )
 
         # Streaming state

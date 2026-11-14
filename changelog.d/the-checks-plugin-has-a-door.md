@@ -1,0 +1,3 @@
+### Added
+
+- **The checks code now has a door: outside code may touch only six of its modules.** A check that runs only one plugin's tests cannot see a break in the code that depends on it, and 38 imports in 16 outside files reached into the checks code. Those now go through the packages' own names, `door` in `plugins/checks.toml` lists what outside code may touch, and a new test that runs in every full check fails on anything that reaches past it, including a module reached through a package by attribute. A change to a door module always takes the full check. This changes nothing about how a change is checked today.

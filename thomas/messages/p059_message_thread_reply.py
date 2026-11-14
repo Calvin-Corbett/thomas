@@ -231,7 +231,6 @@ def _resolve_thomas_config() -> dict[str, Any]:
 
     # Context files hint these modules exist in-repo.
     for mod_name in (
-        "thomas.cli.parity_compat",
         "thomas.config",
         "thomas.settings",
         "thomas.server.config",

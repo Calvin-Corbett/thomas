@@ -1,0 +1,3 @@
+### Changed
+
+- **Thomas no longer re-runs tests that can only say what he already knows.** When a Build agent runs the same tests again and nothing in the project has changed since (the same commit, and the same content in every changed or new file), it now gets the earlier result at once, marked as a repeat, and no tests start. Measured on your PC over four hours on 2026-11-09: 27 of about 210 test runs were such repeats, about 2.6 hours of the 13 hours agents spent checking, and tests are what fill the processor. Any change to a file, a different selection of tests, or asking for a fresh run starts the tests as before. Only test runs are answered this way; ruff and the git reads always run.

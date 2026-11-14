@@ -1,0 +1,3 @@
+### Fixed
+
+- **After a restart, one team works in a Thomas project's copy, not two.** A Build runner reports to the server that started it and outlives that server. When the caged server restarted at 07:50, the ratchet project's runner was deep in a fix pass that had written nothing for a while, so the restart took its run for stopped and started a second runner in the same copy; two teams edited it for four hours, and the first one's result had nowhere to go. The restart now looks for the conversation's runners first: one whose server is gone is ended before the run carries on, and one whose server is still running is left to that server.

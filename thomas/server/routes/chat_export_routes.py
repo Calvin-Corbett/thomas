@@ -2,7 +2,7 @@
 
 GET /api/chats/{chat_id}/export?format=md|json|html[&title=...]
 
-Reads the live v2 session store (``.thomas/sessions_v2/chat_<hex>.json``) and
+Reads the live v2 session store (the sessions store's ``chat_<hex>.json`` files) and
 returns Markdown by default, JSON or a self-contained read-only HTML page on
 request, as an attachment. The chat id is the sidebar's session id or the
 store's ``chat_<hex>`` file stem; anything else is refused before a path is built.
@@ -19,6 +19,8 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.core.event_loop_offload import off_loop
+
 # The sidebar carries the raw v2 session id (24 url-safe chars); the store
 # names the file chat_<sha256(session_id)[:16]>.json (thomas/chat/session_store.py).
 # Either form is accepted; the first version accepted only the file stem and
@@ -27,17 +29,19 @@ _CHAT_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _FILE_STEM = re.compile(r"^chat_[0-9a-f]{16}$")
 
 
-def session_file_for(sessions_dir: Path, chat_id: str) -> Path | None:
-    """The session file behind a sidebar id or a file stem; None when the id is malformed."""
-    import hashlib
+def session_file_for(store: Any, chat_id: str) -> Path | None:
+    """The session file behind a sidebar id or a file stem; None when the id is malformed.
 
+    *store* is the sessions store: ``files()`` names the saved chats and ``path_of`` the file for a session id.
+    """
     chat_id = str(chat_id or "").strip()
     if not _CHAT_ID.fullmatch(chat_id):
         return None
-    root = Path(sessions_dir)
-    if _FILE_STEM.fullmatch(chat_id) and (root / f"{chat_id}.json").exists():
-        return root / f"{chat_id}.json"
-    return root / f"chat_{hashlib.sha256(chat_id.encode()).hexdigest()[:16]}.json"
+    if _FILE_STEM.fullmatch(chat_id):
+        for saved in store.files():
+            if saved.stem == chat_id:
+                return Path(saved)
+    return Path(store.path_of(chat_id))
 
 
 def _when(session: dict[str, Any]) -> str:
@@ -180,49 +184,49 @@ def render_html(session: dict[str, Any], *, title: str = "") -> str:
     )
 
 
+def _prepare_export(store: Any, chat_id: str, fmt: str, title: str) -> tuple[str, str, str] | None:
+    """Read and render an export in a worker, including the file-stem existence check."""
+    path = session_file_for(store, chat_id)
+    if path is None:
+        return None
+    try:
+        session = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(session, dict):
+        return None
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", _title(session, title)).strip("-")[:60] or chat_id
+    if fmt == "json":
+        return json.dumps(session, ensure_ascii=False, indent=2, default=str), "application/json", f"{stem}.json"
+    if fmt == "html":
+        return render_html(session, title=title), "text/html", f"{stem}.html"
+    return render_markdown(session, title=title), "text/markdown", f"{stem}.md"
+
+
 def setup_chat_export_routes(
     app: web.Application,
     *,
-    sessions_dir: Path,
+    store: Any,
     require_api_access: Callable[[web.Request], Any] | None = None,
 ) -> None:
     guard = require_api_access or (lambda _request: None)
-    root = Path(sessions_dir)
 
     async def export_chat(request: web.Request) -> web.Response:
         guard(request)
         chat_id = str(request.match_info.get("chat_id") or "").strip()
-        path = session_file_for(root, chat_id)
-        if path is None:
+        if not _CHAT_ID.fullmatch(chat_id):
             return web.json_response({"ok": False, "error": "chat id must be a session id or chat_<hex>"}, status=400)
-        try:
-            session = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return web.json_response({"ok": False, "error": "no such chat"}, status=404)
-        if not isinstance(session, dict):
-            return web.json_response({"ok": False, "error": "no such chat"}, status=404)
         fmt = str(request.query.get("format") or "md").strip().lower()
         title = str(request.query.get("title") or "")
-        stem = re.sub(r"[^A-Za-z0-9._-]+", "-", _title(session, title)).strip("-")[:60] or chat_id
-        if fmt == "json":
-            body = json.dumps(session, ensure_ascii=False, indent=2, default=str)
-            return web.Response(
-                text=body,
-                content_type="application/json",
-                headers={"Content-Disposition": f'attachment; filename="{stem}.json"'},
-            )
-        if fmt == "html":
-            return web.Response(
-                text=render_html(session, title=title),
-                content_type="text/html",
-                charset="utf-8",
-                headers={"Content-Disposition": f'attachment; filename="{stem}.html"'},
-            )
+        prepared = await off_loop("chat_export.build", _prepare_export, store, chat_id, fmt, title)
+        if prepared is None:
+            return web.json_response({"ok": False, "error": "no such chat"}, status=404)
+        body, content_type, filename = prepared
         return web.Response(
-            text=render_markdown(session, title=title),
-            content_type="text/markdown",
-            charset="utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{stem}.md"'},
+            text=body,
+            content_type=content_type,
+            charset="utf-8" if content_type != "application/json" else None,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     app.router.add_get("/api/chats/{chat_id}/export", export_chat)

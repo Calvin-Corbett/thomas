@@ -172,12 +172,25 @@ def test_track_download_stabilize_timeout(tmp_path: Path) -> None:
     assert excinfo.value.code in {"BROWSER.DOWNLOAD_STABILIZE_TIMEOUT", "BROWSER.DOWNLOAD_TIMEOUT"}
 
 
-def test_cli_download_tracking_json_success(tmp_path: Path) -> None:
+def test_cli_download_tracking_json_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     app = _get_cli_app()
 
     payload = b"cli download payload\n"
-    created_path = _write_file_later(tmp_path, "cli.txt", payload, delay_s=0.15)
+    created_path = tmp_path / "cli.txt"
+    tracking = importlib.import_module("thomas.browser.p021_browser_download_tracking")
+    snapshot = tracking._snapshot_files
+    first = True
+
+    def snapshot_then_download(*args: Any, **kwargs: Any) -> Any:
+        nonlocal first
+        files = snapshot(*args, **kwargs)
+        if first:
+            first = False
+            created_path.write_bytes(payload)
+        return files
+
+    monkeypatch.setattr(tracking, "_snapshot_files", snapshot_then_download)
 
     res = runner.invoke(
         app,

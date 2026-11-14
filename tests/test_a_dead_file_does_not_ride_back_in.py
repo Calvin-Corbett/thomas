@@ -17,10 +17,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from scripts.forge import graveyard
+from scripts.forge.gates import merge_resurrection_gate as gate
 from scripts.forge.gates.merge_resurrection_gate import run_check
 
-GATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "forge" / "gates" / "merge_resurrection_gate.py"
+
+@pytest.fixture
+def cli_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    repo = tmp_path / "repo"
+    _init_git_repo(repo)
+    monkeypatch.setattr(gate, "ROOT", repo)
+    monkeypatch.setattr(sys, "argv", ["merge_resurrection_gate.py", "--repo-root", str(repo)])
+    return repo
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -171,15 +180,16 @@ def test_a_rename_shaped_reintroduction_of_a_dead_path_still_fails(tmp_path: Pat
     assert result["violations"][0]["name"] == "old/retired_module.py"
 
 
-def test_a_case_scrambled_reintroduction_of_a_dead_path_still_fails(tmp_path: Path) -> None:
+def test_a_case_scrambled_reintroduction_of_a_dead_path_still_fails(
+    cli_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Regression: core.ignorecase=true on this repo (the Windows/NTFS
     default). A dead path re-added under a different letter-case is a
     genuine, distinct-string git ADD -- an exact dict lookup misses it, even
     though on a case-insensitive filesystem it lands on the exact same file
     as the one that died. The FAIL output must name BOTH spellings so the
     case trick is explicit, not just the record's original name."""
-    repo = tmp_path / "repo"
-    _init_git_repo(repo)
+    repo = cli_repo
     death_id = graveyard.record_death(
         repo, "file", "old/retired_module.py", "deadbeef", reason="replaced by new/module.py", by="test-suite"
     )
@@ -195,38 +205,34 @@ def test_a_case_scrambled_reintroduction_of_a_dead_path_still_fails(tmp_path: Pa
     assert violation["name"] == "old/retired_module.py"
     assert violation["matched_path"] == "Old/Retired_Module.py"
 
-    proc = subprocess.run(
-        [sys.executable, str(GATE_SCRIPT), "--repo-root", str(repo)],
-        capture_output=True,
-        text=True,
-    )
-    combined = proc.stdout + proc.stderr
-    assert proc.returncode != 0
+    assert gate.main() == 1
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
     assert "old/retired_module.py" in combined
     assert "Old/Retired_Module.py" in combined
 
 
-def test_cli_names_the_death_record_and_approval_command_on_failure(tmp_path: Path) -> None:
+def test_cli_fixture_checks_runtime_protection_in_the_temporary_repo(cli_repo: Path) -> None:
+    assert cli_repo == gate.ROOT
+
+
+def test_cli_names_the_death_record_and_approval_command_on_failure(
+    cli_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Pins the human-readable message a person actually reads: the dead
     path, the death id, deleted_on, reason, and the exact approval command
     naming that id -- run through main()/argparse, not run_check() directly,
     so a regression in the CLI's rendering (not just its return value) is
     caught here."""
-    repo = tmp_path / "repo"
-    _init_git_repo(repo)
+    repo = cli_repo
     death_id = graveyard.record_death(
         repo, "file", "old/retired_module.py", "deadbeef", reason="replaced by new/module.py", by="test-suite"
     )
     _write_and_stage(repo, "old/retired_module.py")
 
-    proc = subprocess.run(
-        [sys.executable, str(GATE_SCRIPT), "--repo-root", str(repo)],
-        capture_output=True,
-        text=True,
-    )
-
-    combined = proc.stdout + proc.stderr
-    assert proc.returncode != 0
+    assert gate.main() == 1
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
     assert "old/retired_module.py" in combined
     assert death_id in combined
     assert "replaced by new/module.py" in combined

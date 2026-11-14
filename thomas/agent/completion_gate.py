@@ -11,6 +11,9 @@ from typing import Any
 
 GATE_ALLOW = "allow"
 GATE_BLOCK = "block"
+# Opens the error a refused finish ends with; the delegation layer reads it to tell
+# you Thomas's checks refused the work rather than that a provider failed.
+GATE_BLOCKED_ERROR = "Completion gate blocked AGENT_DONE"
 
 
 @dataclass(frozen=True)

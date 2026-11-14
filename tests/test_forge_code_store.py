@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 
 from thomas.forge.anvil.forge_code_store import (
@@ -236,6 +237,17 @@ def test_delete_conversation_removes_file_and_is_idempotent(tmp_path):
     # Deleting an already-gone conversation is a safe False, never a raise.
     assert delete_conversation(tmp_path, cid) is False
     assert delete_conversation(tmp_path, "fc_never_existed") is False
+
+
+def test_a_reader_holding_the_file_for_a_moment_does_not_stop_the_delete(tmp_path):
+    """Refused here, a settled copy stayed, and Build turned down the repair round it was removed for, every retry."""
+    conv = new_conversation(tmp_path, title="Read at the wrong moment")
+    path = conversations_dir(tmp_path) / f"{conv['id']}.json"
+    reader = path.open(encoding="utf-8")
+    threading.Timer(0.1, reader.close).start()
+
+    assert delete_conversation(tmp_path, conv["id"]) is True
+    assert not path.exists()
 
 
 def test_load_missing_returns_none(tmp_path):

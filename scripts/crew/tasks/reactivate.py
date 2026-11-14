@@ -73,6 +73,38 @@ _remove_up_for_grabs_task = workboard_task_manager_sweep._remove_up_for_grabs_ta
 _remove_inactive_agent = workboard_task_manager_sweep._remove_inactive_agent
 
 
+def _claim_line(agent: str, scope: str, summary: str, existing: str | None = None) -> str:
+    """One claim row, carrying the identity fields the claims gate requires.
+
+    This used to emit `agent`, `scope` and `task` only -- the three names in
+    `REQUIRED_CLAIM_FIELDS`, which was the whole contract when it was written.
+    `name`, `role` and `parent` became required later in
+    `REQUIRED_CLAIM_FIELDS_WITH_IDENTITY`, and this caller was never brought
+    along. So every reactivation wrote a row the gate rejects, and because a
+    malformed row fails `could not resolve active claim` for the WHOLE board,
+    one reactivation stopped every agent in the repo from committing at all --
+    not just the agent being reactivated. Measured 2026-09-10 the moment a
+    long-blocked P0 finally reactivated.
+
+    Defaults match what claim.py mints for a solo agent. An existing row's
+    identity is preserved, because reactivation changes what an agent works on,
+    never who it is.
+    """
+    name, role, parent = str(agent), "solo", "none"
+    # Parsed with the GATE reader, not workboard_issue's. That one returns only
+    # {agent, scope, task} -- the pre-identity field set -- so reading an existing
+    # row through it reports every identity field as absent, and would quietly
+    # demote a worker to `role=solo; parent=none` on every reactivation. The
+    # preservation would have looked like it worked and never have.
+    if existing:
+        claim, err = claims_gate._parse_claim_entry(0, str(existing))  # type: ignore[attr-defined]
+        if claim is not None and not err:
+            name = claim.name or name
+            role = claim.role or role
+            parent = claim.parent or "none"
+    return f"- agent={agent}; name={name}; role={role}; parent={parent}; scope={scope}; task={summary}"
+
+
 def set_task_status(
     workboard_path: Path,
     *,
@@ -305,7 +337,6 @@ def _reactivate_task(
     lines = text.splitlines()
 
     claim_section = workboard_issue._find_claim_section(lines)  # type: ignore[attr-defined]
-    claim_line = f"- agent={agent}; scope={scope}; task={summary}"
     claim_found = False
     for idx in sorted(workboard_issue._bullet_indices(lines, claim_section[0], claim_section[1]), reverse=True):  # type: ignore[attr-defined]
         entry, fields, err = workboard_issue._parse_claim_line(idx + 1, lines[idx])  # type: ignore[attr-defined]
@@ -317,13 +348,15 @@ def _reactivate_task(
         if not fields:
             continue
         if _norm(fields.get("agent", "")) == _norm(agent):
-            lines[idx] = claim_line
+            # Carry the existing identity forward: a reactivation changes what an
+            # agent is working on, never who it is.
+            lines[idx] = _claim_line(agent, scope, summary, entry)
             claim_found = True
         elif _norm(fields.get("task", "")) == _norm(summary):
             del lines[idx]
     if not claim_found:
         claim_section = workboard_issue._find_claim_section(lines)  # type: ignore[attr-defined]
-        lines.insert(claim_section[1], claim_line)
+        lines.insert(claim_section[1], _claim_line(agent, scope, summary))
 
     active_section = workboard_issue._find_active_tasks_section(lines)  # type: ignore[attr-defined]
     replacement = workboard_issue._format_active_task(  # type: ignore[attr-defined]

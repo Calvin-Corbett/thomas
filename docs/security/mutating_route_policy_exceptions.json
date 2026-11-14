@@ -11,9 +11,9 @@
       "authz": "webhook_provider_signature_or_secret",
       "csrf": "not_applicable_webhook_receiver",
       "owner": "platform-security",
-      "reason": "Public webhook ingress is authenticated by provider-specific signature verification.",
-      "reviewed_on": "2026-07-18",
-      "expires_on": "2026-10-18"
+      "reason": "Public GitHub ingress bypasses API-access and CSRF middleware. Remote-mode enforcement rejects missing secrets; configured secrets require X-Hub-Signature-256 verification before queuing. Without enforcement and secrets, this receiver accepts unsigned requests: do not expose that configuration publicly.",
+      "reviewed_on": "2026-10-22",
+      "expires_on": "2027-01-22"
     },
     {
       "method": "POST",
@@ -21,9 +21,9 @@
       "authz": "webhook_provider_signature_or_secret",
       "csrf": "not_applicable_webhook_receiver",
       "owner": "platform-security",
-      "reason": "Stripe webhook receiver relies on Stripe signature validation when configured and is intentionally public.",
-      "reviewed_on": "2026-07-18",
-      "expires_on": "2026-10-18"
+      "reason": "Public Stripe ingress bypasses API-access and CSRF middleware. Stripe-Signature is verified when provider secrets exist; remote-mode signature enforcement rejects missing secrets. Without enforcement and secrets, this receiver accepts unsigned requests: do not expose that configuration publicly.",
+      "reviewed_on": "2026-10-22",
+      "expires_on": "2027-01-22"
     },
     {
       "method": "POST",
@@ -31,9 +31,9 @@
       "authz": "webhook_provider_signature_or_secret",
       "csrf": "not_applicable_webhook_receiver",
       "owner": "platform-security",
-      "reason": "Generic webhook ingress uses tenant-specific shared secret validation when secreted webhooks are configured.",
-      "reviewed_on": "2026-07-18",
-      "expires_on": "2026-10-18"
+      "reason": "Public generic ingress bypasses API-access and CSRF middleware. A configured per-webhook secret is verified against X-Webhook-Signature; remote-mode signature enforcement rejects records without a secret. Without enforcement and a secret, this receiver accepts unsigned requests: do not expose that configuration publicly.",
+      "reviewed_on": "2026-10-22",
+      "expires_on": "2027-01-22"
     }
   ]
 }

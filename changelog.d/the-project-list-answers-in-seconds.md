@@ -1,0 +1,3 @@
+### Fixed
+- Your project list and successive project starts reuse each eligible copy's changed-file list while its commit, index, base metadata, worktree file stamps, and freshness window agree. A failed worktree stamp check falls back to Git instead of omitting an eligible copy. Sibling Git reads run in a pool of at most eight; settled, declined, scratch, and asking copies are excluded on every call.
+- A 20-copy stand-in test checks 40 Git calls on the first read, none on the immediate repeat or 20 subsequent starts, two after a single HEAD or index change, and concurrent reads bounded by eight.

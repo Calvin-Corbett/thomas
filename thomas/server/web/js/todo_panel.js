@@ -32,6 +32,7 @@
 
   var POLL_MS = 1500;
   var MAX_POLL_MS = 30000;
+  var IDLE_MS = 15000;  // how rarely a hidden tab re-checks whether it is back
 
   // Next wait after a poll: the base on success, doubled to thirty seconds on failure.
   function nextDelay(current, ok) {
@@ -56,7 +57,7 @@
   }
 
   function anchor() {
-    var box = document.querySelector('textarea[placeholder^="Message Thomas"], textarea[aria-label^="Message Thomas"]');
+    var box = document.getElementById('tc-input') || document.querySelector('textarea[placeholder^="Message Thomas"], textarea[aria-label^="Message Thomas"]');
     if (!box) return null;
     return box.closest('form') || box.parentElement;
   }
@@ -108,8 +109,14 @@
     el.hidden = false;
   }
 
+  function paused() {
+    return !!(window.ThomasDocActivity && window.ThomasDocActivity.isPaused());
+  }
+
   function poll() {
-    if (document.hidden) return Promise.resolve();
+    // A hidden tab is still a live document; asking on its behalf is work
+    // nobody can see. It refreshes the moment the tab is shown again.
+    if (paused()) return Promise.resolve();
     // Only this chat's checklist; with no chat open there is nothing to show.
     var sid = window.ThomasChatSession ? window.ThomasChatSession.current() : '';
     if (!sid) { paint(null); return Promise.resolve(); }
@@ -122,8 +129,16 @@
       .catch(function () { delay = nextDelay(delay, false); /* server away; wait longer */ });
   }
 
-  function tick() { poll().finally(function () { setTimeout(tick, delay); }); }
-  function start() { tick(); }
+  var timer = null;
+  function schedule(ms) { clearTimeout(timer); timer = setTimeout(tick, ms); }
+  function tick() { poll().finally(function () { schedule(paused() ? IDLE_MS : delay); }); }
+  function start() {
+    tick();
+    if (window.ThomasDocActivity) {
+      // Shown again: refresh at once rather than waiting out the idle gap.
+      window.ThomasDocActivity.onChange(function (isPaused) { if (!isPaused) schedule(0); });
+    }
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();

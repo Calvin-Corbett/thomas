@@ -12,6 +12,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 try:
     from scripts.crew.brief.coordination_barrier import CoordinationBlocked, require_clear_p0
+    from scripts.crew.workboard.claim_release import _release_all_active_tasks as release_all_active_tasks
     from scripts.crew.workboard.claim_utils import (
         LOCK_FILE,
         NONE_ENTRY,
@@ -45,6 +46,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     from crew.brief.coordination_barrier import CoordinationBlocked, require_clear_p0  # type: ignore
+    from crew.workboard.claim_release import _release_all_active_tasks as release_all_active_tasks  # type: ignore
     from crew.workboard.claim_utils import (  # type: ignore
         LOCK_FILE,
         NONE_ENTRY,
@@ -83,6 +85,7 @@ try:
         evaluate_takeover_eligibility,
         foreign_scope_conflicts,
         refusal_message,
+        require_takeover_actor,
         validate_takeover_reason,
     )
 except ImportError:  # pragma: no cover
@@ -91,6 +94,7 @@ except ImportError:  # pragma: no cover
         evaluate_takeover_eligibility,
         foreign_scope_conflicts,
         refusal_message,
+        require_takeover_actor,
         validate_takeover_reason,
     )
 
@@ -99,6 +103,24 @@ except ImportError:  # pragma: no cover
 # `scripts.crew.workboard.claim`; this helper makes those patches reach the
 # internals here. If `claim` doesn't override a name (production), fall through
 # to the module-local symbol.
+def _seat_manager_if_open(workboard_path, agent: str, claim_role: str) -> None:
+    """Take the task-manager seat, but only after a claim has actually landed.
+
+    Appointing during role resolution meant a REFUSED claim still mutated the
+    board, and a refusal must change nothing.
+    """
+
+    if claim_role != "parent":
+        return
+    try:
+        from thomas.core.praxis_scaffold import appoint_manager
+
+        appoint_manager(workboard_path, agent)
+    except (ImportError, OSError):
+        # Coordination must not become unusable because appointment failed.
+        return
+
+
 def _via_claim(name: str, default):
     claim_mod = sys.modules.get("scripts.crew.workboard.claim")
     if claim_mod is not None:
@@ -210,7 +232,34 @@ def claim(
                     return False, str(exc)
         claim_name = _resolve_display_name(name, agent)
         claim_parent = _normalize_parent_token(parent)
-        claim_role = _resolve_claim_role(role, claim_parent)
+        # An agent that names no role used to become `solo`, and a solo agent is
+        # never dispatched to (bootstrap_claim requires role == parent), so every
+        # agent raced for claims instead of being assigned work. Derive it from
+        # the board instead: an open task-manager seat is an offer to take it, a
+        # filled one makes you a worker under the holder. Never a refusal -- the
+        # first agent in a fresh project must always be able to proceed.
+        if not str(role or "").strip() and not claim_parent:
+            try:
+                from scripts.crew.workboard.claim_parent import parent_holds_a_claim
+                from thomas.core.praxis_scaffold import manager_of, role_for
+
+                claim_role = role_for(workboard_path, agent)
+                if claim_role == "worker":
+                    # A worker is a worker UNDER someone. Deriving the role without the
+                    # parent built `role=worker; parent=none`, which the claim validator
+                    # rejects, so a new agent arriving at a seated board could not claim
+                    # at all. Found by claude-perf from autoclaim's own refusal.
+                    claim_parent = _normalize_parent_token(manager_of(workboard_path))
+                    if claim_parent and not parent_holds_a_claim(workboard_path, claim_parent):
+                        claim_parent = ""  # the seat row names no live claim: go solo
+                    if not claim_parent:
+                        claim_role = _resolve_claim_role(role, claim_parent)
+            except (ImportError, OSError):
+                # Coordination must not become unusable because appointment
+                # failed; fall back to the previous behaviour.
+                claim_role = _resolve_claim_role(role, claim_parent)
+        else:
+            claim_role = _resolve_claim_role(role, claim_parent)
         formatted = _format_claim(
             agent,
             scope,
@@ -230,6 +279,7 @@ def claim(
         takeover = ""
         takeover_evidence: dict[str, object] = {}
         takeover_intermediate_text = ""
+        takeover_actor = None
         strict_takeover = False
         if conflicts:
             if not allow_scope_takeover:
@@ -238,6 +288,15 @@ def claim(
                 takeover = validate_takeover_reason(takeover_reason)
             except ValueError as exc:
                 return False, str(exc)
+            # The audit line names the taker's bound session, and it is written after the board. Asked only there,
+            # an unbound taker moved the claim and was then refused, leaving no line saying who took the scope.
+            try:
+                takeover_actor = require_takeover_actor(agent, workboard_path=workboard_path)
+            except (ValueError, RuntimeError) as exc:
+                return False, (
+                    f"cannot take over scope `{scope_norm}` without a bound session ({exc}); the board is unchanged. "
+                    "Bind one with scripts/crew/brief/bootstrap_claim.py, apply the exports it prints, and retry."
+                )
             strict_takeover = bool(scope_guard(workboard_path))
             if strict_takeover:
                 eligible, eligibility_message, takeover_evidence = evaluate_takeover_eligibility(
@@ -315,6 +374,13 @@ def claim(
         )
         if not active_ok:
             return False, active_message
+        # Taking a queued task has to take it OUT of the queue. The claim wrote the
+        # Active Tasks row and left the Up For Grabs row in place, so the validator
+        # refused the whole write with "task_id appears in both active tasks and
+        # up-for-grabs". _remove_up_for_grabs_entry existed for exactly this and had
+        # no caller anywhere. A task that was never queued is the common case, so
+        # "not found" is not a failure.
+        _remove_up_for_grabs_entry(lines, task)
 
         new_text = "".join(lines)
         if strict_takeover and takeover_agents:
@@ -375,10 +441,13 @@ def claim(
                 scope=scope,
                 takeover_from=takeover_agents,
                 workboard_path=workboard_path,
+                actor_binding=takeover_actor,
             )
 
         if existing_idx is not None:
+            _seat_manager_if_open(workboard_path, agent, claim_role)
             return True, f"updated claim for `{agent}` to scope `{scope_norm}` with task `{task}`"
+        _seat_manager_if_open(workboard_path, agent, claim_role)
         return True, f"claimed scope `{scope_norm}` for agent `{agent}` with task `{task}`"
 
 
@@ -508,7 +577,10 @@ def release(
                 if task_id:
                     released_task_ids.append(task_id)
 
-        ok, release_msg = _release_active_task(lines, agent=agent)
+        ok, release_msg = release_all_active_tasks(lines, agent=agent)
+        # A claim with no task row is fine; a task row that stays behind is not.
+        if not ok and release_msg != "no active tasks found":
+            return False, f"cannot release claim for `{agent}`: {release_msg}"
         cleaned_count = 0
         if released_task_ids:
             from scripts.crew.workboard.claim_utils import _cleanup_auto_inactive_issues_for_tasks

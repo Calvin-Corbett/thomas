@@ -1,3 +1,9 @@
+"""The task-ledger routes through a real app, and the row that now registers them.
+
+``thomas.server.rows.task_ledger`` registers the current and history views through ``thomas.server.task_ledger_routes``,
+so a change to either runs this file. ``thomas.server.app_routes_task_ledger`` still builds their handlers.
+"""
+
 import json
 import tempfile
 import unittest
@@ -93,7 +99,7 @@ class TestServerTaskLedger(AioHTTPTestCase):
         _FakeModelTurn.reply = "Done. Implemented and verified."
         _FakeModelTurn.calls = []
         with patch(
-            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            "thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message",
             _fake_process_message,
         ):
             chat_resp = await self.client.post(
@@ -104,8 +110,11 @@ class TestServerTaskLedger(AioHTTPTestCase):
                     "text": "Implement task ledger API",
                 },
             )
+            # The reply streams, and the brain runs while the body is read, so the
+            # stand-in has to stay patched until the whole turn has been read.
+            body = await chat_resp.text()
         self.assertEqual(chat_resp.status, 200)
-        events = _parse_ndjson(await chat_resp.text())
+        events = _parse_ndjson(body)
         self.assertTrue(any(e.get("type") == "done" for e in events))
 
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
@@ -139,7 +148,7 @@ class TestServerTaskLedger(AioHTTPTestCase):
             "Completed and verified. I opened the page, clicked Start, and confirmed the snake visibly moves."
         )
         with patch(
-            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            "thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message",
             _fake_process_message,
         ):
             chat_resp = await self.client.post(
@@ -151,8 +160,11 @@ class TestServerTaskLedger(AioHTTPTestCase):
                     "text": "Build a snake game with a visible start flow and restart button.",
                 },
             )
+            # The reply streams, and the brain runs while the body is read, so the
+            # stand-in has to stay patched until the whole turn has been read.
+            body = await chat_resp.text()
         self.assertEqual(chat_resp.status, 200)
-        events = _parse_ndjson(await chat_resp.text())
+        events = _parse_ndjson(body)
         self.assertFalse(any(e.get("type") == "task_definition" for e in events))
         self.assertFalse(any(e.get("type") == "task_evaluation" for e in events))
 
@@ -168,7 +180,7 @@ class TestServerTaskLedger(AioHTTPTestCase):
 
         _FakeModelTurn.reply = "I need your API key and repository URL to continue."
         with patch(
-            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            "thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message",
             _fake_process_message,
         ):
             chat_resp = await self.client.post(
@@ -179,6 +191,9 @@ class TestServerTaskLedger(AioHTTPTestCase):
                     "text": "Ship this feature",
                 },
             )
+            # The reply streams, and the brain runs while the body is read, so the
+            # stand-in has to stay patched until the whole turn has been read.
+            body = await chat_resp.text()
         self.assertEqual(chat_resp.status, 200)
 
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
@@ -193,7 +208,7 @@ class TestServerTaskLedger(AioHTTPTestCase):
 
         _FakeModelTurn.reply = "BATCH_LEDGER_DONE"
         with patch(
-            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            "thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message",
             _fake_process_message,
         ):
             chat_resp = await self.client.post(
@@ -205,8 +220,11 @@ class TestServerTaskLedger(AioHTTPTestCase):
                     "text": "Run a batch operation",
                 },
             )
+            # The reply streams, and the brain runs while the body is read, so the
+            # stand-in has to stay patched until the whole turn has been read.
+            body = await chat_resp.text()
         self.assertEqual(chat_resp.status, 200)
-        events = _parse_ndjson(await chat_resp.text())
+        events = _parse_ndjson(body)
         self.assertTrue(any(e.get("type") == "done" for e in events))
         migration = [event for event in events if event.get("type") == "mode_migrated"]
         self.assertEqual(len(migration), 1)
@@ -232,7 +250,7 @@ class TestServerTaskLedger(AioHTTPTestCase):
 
         _FakeModelTurn.reply = "SWARM_LEDGER_DONE"
         with patch(
-            "thomas.server.routes.chat_v2.OrchestratorBrain.process_message",
+            "thomas.server.routes.chat_v2_support.OrchestratorBrain.process_message",
             _fake_process_message,
         ):
             chat_resp = await self.client.post(
@@ -244,8 +262,11 @@ class TestServerTaskLedger(AioHTTPTestCase):
                     "text": "Run swarm operation",
                 },
             )
+            # The reply streams, and the brain runs while the body is read, so the
+            # stand-in has to stay patched until the whole turn has been read.
+            body = await chat_resp.text()
         self.assertEqual(chat_resp.status, 200)
-        events = _parse_ndjson(await chat_resp.text())
+        events = _parse_ndjson(body)
         self.assertTrue(any(e.get("type") == "done" for e in events))
         migration = [event for event in events if event.get("type") == "mode_migrated"]
         self.assertEqual(len(migration), 1)

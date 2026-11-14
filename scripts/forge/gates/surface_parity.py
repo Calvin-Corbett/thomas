@@ -18,10 +18,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 ROOT = Path(__file__).resolve().parents[3]
-SERVER_EVENT_SOURCES: Sequence[Path] = (
-    ROOT / "thomas" / "server" / "routes" / "chat_stream_events.py",
-    ROOT / "thomas" / "server" / "routes" / "chat_request_execution.py",
-)
+SERVER_EVENT_SOURCES: Sequence[Path] = (ROOT / "thomas" / "server" / "routes" / "chat_stream_events.py",)
 WEB_RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 WEB_CHAT = ROOT / "thomas" / "server" / "web" / "js" / "chat.js"
 WEB_APP = ROOT / "thomas" / "server" / "web" / "js" / "app.js"
@@ -38,7 +35,6 @@ REQUIRED_WIRE_EVENTS: set[str] = {
     "tool_start",
     "tool_args",
     "tool_result",
-    "guardrails",
     "error",
     "done",
 }

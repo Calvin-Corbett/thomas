@@ -78,7 +78,7 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
     async def _post(self, payload: dict[str, Any]):
         _FakeBrain.calls = []
         with (
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeBrain),
             patch("thomas.server.routes.chat_v2.start_background_delegation", _no_background_delegation),
         ):
             return await self.client.post("/api/chat", json=payload)

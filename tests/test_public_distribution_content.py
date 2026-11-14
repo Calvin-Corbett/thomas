@@ -120,9 +120,8 @@ def test_the_publisher_strips_everything_the_gate_blocks():
 
     from scripts.forge.publish.content_check import BLOCKED_PREFIXES
 
-    baseline = json.loads(
-        Path("docs/repo_hygiene_baseline.json").read_text(encoding="utf-8")
-    )
+    repo_root = Path(__file__).resolve().parents[1]
+    baseline = json.loads((repo_root / "docs" / "repo_hygiene_baseline.json").read_text(encoding="utf-8"))
     stripped = set(baseline.get("publish_strip_prefixes", []))
     stripped |= set(baseline.get("forbidden_tracked_prefixes", []))
 

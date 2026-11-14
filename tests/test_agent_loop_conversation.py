@@ -4,6 +4,8 @@ import asyncio
 import unittest
 from typing import Any
 
+import pytest
+
 from thomas.agent.loop import AgentLoop
 from thomas.agent.prompt_templates import build_route_system_prompt
 from thomas.agent.response_tone import strip_sandbox_links
@@ -13,6 +15,12 @@ from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.registry import ToolRegistry
+
+
+@pytest.fixture(autouse=True)
+def _run_from_an_empty_folder(tmp_path, monkeypatch):
+    """A run's finish check walks the working directory; run from a copy of the repo, that is the whole repo."""
+    monkeypatch.chdir(tmp_path)
 
 
 class DummyLLM:
@@ -116,10 +124,7 @@ class TestAgentLoopConversation(unittest.TestCase):
                     pass
 
             asyncio.run(run_once())
-            names = {
-                str(spec.get("name") or (spec.get("function") or {}).get("name") or "")
-                for spec in llm.last_tools
-            }
+            names = {str(spec.get("name") or (spec.get("function") or {}).get("name") or "") for spec in llm.last_tools}
             self.assertEqual(names, {"dummy.echo"})
 
     def test_model_prose_is_preserved_verbatim(self) -> None:

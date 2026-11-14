@@ -16,6 +16,22 @@ class AutonomyLevelSpec:
     prefers_extended_iterations: bool = False
 
 
+# How an Autopilot team says something it cannot do stops it from finishing. You said: "autopilot ... is meant to
+# actually fix issues with Thomas that prevent him from finish not the actually work continuous forever".
+# ``thomas/server/autopilot_blockers.py`` reads the line; the level-5 directive, the Build prompt and every message
+# Autopilot sends its team carry this text.
+AUTOPILOT_BLOCKED_RULE = (
+    "When you finish, say so and stop. When something you cannot do stops you from finishing, end your final "
+    "answer with this one line: `BLOCKED: <what is missing> | NEEDS: <what would unblock it>`, and add "
+    "` | OWNER` at its end when only the owner can give it: a password, a payment or money, a permission not yet "
+    "granted, an account the owner must create, or a choice only the owner can make. Anything that would spend "
+    "money, accept terms, need you to enter passwords or payment details, send something on the owner's behalf, "
+    "or post anything publicly is always OWNER: never do it yourself. Anything else is yours to get within the "
+    "permissions already given -- install the tool or package, download what is needed, sign in where a sign-in "
+    "is already saved, write the missing piece of Thomas itself -- so get it and finish instead of writing the line."
+)
+
+
 _SPECS: dict[int, AutonomyLevelSpec] = {
     1: AutonomyLevelSpec(
         level=1,
@@ -74,13 +90,42 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
         force_tools_policy="always",
         prefers_extended_iterations=True,
     ),
+    5: AutonomyLevelSpec(
+        level=5,
+        name="Autopilot",
+        ui_label="autopilot",
+        summary="Fixes its own blockers and keeps going — nothing stops the work but you",
+        # Owner direction: "if there is a blocker, fix the blocker... there
+        # should be never anything that stops you." The one clause that makes
+        # this different from L4 is the absence of L4's "Only stop if" escape:
+        # at L5 a blocker is the next task, not a place to stop and report.
+        system_directive=(
+            "Autonomy Level 5 (Autopilot): finish the work, and treat every blocker as "
+            "part of the work. When something stands in the way — a missing dependency, a "
+            "failing check, a broken script, a tool that refuses, your own earlier mistake — "
+            "fix that thing first, say you are doing it, then carry on with the original "
+            "task. Do not hand a blocker back as a reason the job is not done. "
+            "When the blocker is in your own code, fix it there: read the file, change it "
+            "with fs.write_protected_file, and say what you changed and why. Do not ask "
+            "first and do not describe the fix instead of making it. Every change you make "
+            "to yourself is recorded with the text that was there before, and the owner "
+            "gets a card at the end with Undo and Accept, so a wrong fix costs them one "
+            "click. Fixing and being corrected is better than stopping. "
+            "Two things are still not yours to decide: anything the user has switched off "
+            "is their setting, and anything that spends money, sends something on their "
+            "behalf, or weakens a safety protection waits for them. Say plainly which one "
+            "you hit and what you did about the rest. " + AUTOPILOT_BLOCKED_RULE
+        ),
+        force_tools_policy="always",
+        prefers_extended_iterations=True,
+    ),
 }
 
-
+# Default = L2 Assist (asks for approval before acting), NOT L3 Agent. Calvin
 # design law (2026-06-14): the system must not act autonomously "by default" — the
 # user opts UP into hands-off autonomy; it is never on out of the box. The autonomy
 # levels themselves are unchanged; only the default is. Do not raise this back
-
+# to 3 without Calvin.
 DEFAULT_AUTONOMY_LEVEL = 2
 
 
@@ -91,8 +136,11 @@ def clamp_autonomy_level(value: object, *, default: int = DEFAULT_AUTONOMY_LEVEL
         iv = int(default)
     if iv < 1:
         return 1
-    if iv > 4:
-        return 4
+    # 5 (Autopilot) is the top. The ceiling used to be 4, which meant a request
+    # for the level that fixes its own blockers was silently answered with the
+    # level that stops at them.
+    if iv > 5:
+        return 5
     return iv
 
 

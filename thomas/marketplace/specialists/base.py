@@ -24,6 +24,10 @@ from thomas.marketplace.orchestrator.protocol import (
     HealthReport,
 )
 
+# Chat's turn-deadline/final-pass logic (the model's last, tool-restricted
+# try before a turn would otherwise end in a timeout) lives in
+# thomas/marketplace/specialists/final_pass.py, not here -- this class stays
+# the plain per-specialist execution wrapper it always was.
 log = logging.getLogger(__name__)
 
 

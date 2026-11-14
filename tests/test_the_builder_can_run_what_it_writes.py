@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from thomas.forge.anvil import forge_code_git, forge_code_runner
+from thomas.forge.anvil import agent_passes, forge_code_git, forge_code_runner
 from thomas.forge.anvil.bridge_prompts import compose_headless_prompt
 from thomas.forge.anvil.dispatch_claude_cli import SAFE_CLI_TOOLS, dispatch_via_claude_cli
 from thomas.forge.anvil.forge_code_settings import ForgeCodeSettings, direct_shell_allowed
@@ -131,8 +131,8 @@ def test_all_policy_rows_match_both_engine_dispatches(
         captured["claude"] = kwargs
         return result
 
-    monkeypatch.setattr(forge_code_runner, "dispatch_via_agent_loop", _gpt)
-    monkeypatch.setattr(forge_code_runner, "dispatch_via_claude_cli", _claude)
+    monkeypatch.setattr(agent_passes, "dispatch_via_agent_loop", _gpt)
+    monkeypatch.setattr(agent_passes, "dispatch_via_claude_cli", _claude)
     monkeypatch.setattr(forge_code_runner, "_default_emit", lambda _event: None)
 
     for family, model in (("gpt", "gpt-5.6"), ("claude", "sonnet")):
@@ -186,7 +186,7 @@ def test_claude_argv_has_an_exact_guardrail_tool_surface(
         captured["cmd"] = cmd
         return 0, raw_result
 
-    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root: {})
+    monkeypatch.setattr(forge_code_git, "snapshot", lambda _root, **_kwargs: {})
     monkeypatch.setattr(forge_code_git, "project_delta_since", lambda _root, _snap: ["index.html"])
 
     result = dispatch_via_claude_cli(

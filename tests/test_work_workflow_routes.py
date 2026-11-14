@@ -10,7 +10,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from thomas.server.routes.work import register_work_routes
-from thomas.work import WorkConflictError, WorkCorruptStateError, WorkStore, WorkValidationError
+from thomas.work import WorkConflictError, WorkStore, WorkValidationError
 
 
 def _job(store: WorkStore) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -43,8 +43,11 @@ def test_automation_trigger_semantics_validate_on_write_and_reload(tmp_path: Pat
     state["apps"][app["id"]]["jobs"][job["id"]]["automations"][0]["trigger"] = {"type": "garbage"}
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    with pytest.raises(WorkCorruptStateError, match="automation definitions"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work automation definitions are invalid"
+    assert store.state_path.read_bytes() == original
 
 
 async def _client(

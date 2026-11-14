@@ -126,11 +126,19 @@
   if (typeof document === 'undefined') return;
 
   // ---- page wiring -------------------------------------------------------
-  var state = null;
+  var receipts = Object.create(null);
+  var context = { sessionId: '', mode: 'chat' };
   var table = null;
 
+  core.setContext = function (next) {
+    context = { sessionId: String(next.sessionId || ''), mode: next.surfaceMode || 'chat' };
+    paint();
+  };
+
   function anchor() {
-    var box = document.querySelector('textarea[placeholder^="Message Thomas"], textarea[aria-label^="Message Thomas"]');
+    // Mode switches change the prompt before all view callbacks have settled.
+    // Anchor to the shared composer itself, not its temporary placeholder.
+    var box = document.getElementById('tc-input') || document.querySelector('textarea[placeholder^="Message Thomas"], textarea[aria-label^="Message Thomas"]');
     if (!box) return null;
     return box.closest('form') || box.parentElement;
   }
@@ -145,7 +153,9 @@
     el.setAttribute('role', 'status');
     el.setAttribute('aria-live', 'polite');
     el.setAttribute('aria-label', 'Cost of this reply and this chat');
-    el.title = 'Tokens from the model\'s own receipt; dollars estimated from Settings > Token Economy pricing. Click to open Token Economy.';
+    // Why a one-word message reads "6.1k in": the count is everything the model was sent, not only what you typed.
+    el.title = '"in" is everything the model read for this reply: Thomas\'s standing instructions and the list of tools he can use (about 5 to 6 thousand tokens on every message), plus this chat so far and your message. '
+      + '"cached" is the part the provider had already seen and bills at a lower rate. Tokens come from the model\'s own receipt; dollars are estimated from Settings > Token Economy pricing. Click to open Token Economy.';
     el.style.cssText = 'font:11px/1.4 var(--font-mono, ui-monospace, monospace);color:var(--text-muted, #8a8f98);padding:2px 12px 0;cursor:pointer;user-select:none;';
     // The fast toggle (fast_mode.js) keeps a shared row under the composer;
     // join it when it exists so the two sit on one line, whichever loaded first.
@@ -162,7 +172,7 @@
   function paint() {
     var el = host();
     if (!el) return;
-    var line = format(state, table);
+    var line = context.mode === 'chat' && context.sessionId ? format(receipts[context.sessionId], table) : '';
     el.textContent = line;
     el.hidden = !line;
   }
@@ -182,8 +192,13 @@
     if (!consumer || typeof consumer.consume !== 'function' || consumer.__costReadout) return;
     var inner = consumer.consume;
     consumer.consume = function (res, onEvent) {
+      var owner = context.sessionId;
       return inner.call(consumer, res, function (evt) {
-        try { state = fold(state, evt); if (evt && evt.type === 'done') paint(); } catch (e) { /* the reply matters more than the readout */ }
+        try {
+          var sid = String((evt && evt.session_id) || owner || '');
+          if (sid) receipts[sid] = fold(receipts[sid], evt);
+          if (evt && (evt.type === 'done' || evt.type === 'model_runtime')) paint();
+        } catch (e) { /* the reply matters more than the readout */ }
         return onEvent(evt);
       });
     };

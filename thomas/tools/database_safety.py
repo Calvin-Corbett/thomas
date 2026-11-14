@@ -6,6 +6,7 @@ Handles:
   - Dangerous operation detection
   - Statement type detection (SELECT, INSERT, etc.)
   - CTE (WITH clause) handling
+  - Credentials removed from error messages
 """
 
 from __future__ import annotations
@@ -339,3 +340,12 @@ def _rows_json_safe(rows: list[tuple[Any, ...]]) -> tuple[list[list[Any]], int]:
         safe_rows.append(safe_row)
 
     return safe_rows, est_bytes
+
+
+def _sanitize_error_message(msg: str) -> str:
+    """Remove credentials from error messages."""
+    if not msg:
+        return msg
+    msg = re.sub(r"://([^:/@\s]+):([^@/\s]+)@", r"://\1:***@", msg)
+    msg = re.sub(r":([^:@/\s]+)@", r":***@", msg)
+    return msg

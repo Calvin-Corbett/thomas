@@ -1,0 +1,3 @@
+### Changed
+
+- **Five modules stopped loading the whole command line to look for settings that were never there.** The nodes, messages and browser modules each tried `thomas.cli.parity_compat` or `thomas.cli.main` for a state folder, an artifacts folder or a route, and none of the names they tried has ever existed. Chat also imported the whole server only so a test could swap one class. Those lookups are gone, and every plugin except the command line and the server, which load everything by design, can now be proven from 866 files or fewer. The two that remain are the shells that start Thomas, and the audit that builds the whole server now belongs to the server plugin.

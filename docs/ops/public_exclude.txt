@@ -1,0 +1,15 @@
+# Files a public release leaves out of the tree it publishes.
+#
+# One rule per line:  <path or pattern> | <why it stays private, in one line>
+#   a path ending in "/"  leaves out everything under that folder
+#   a pattern with * ? [  is matched against the whole path ("*" also crosses folders)
+#   any other line        is one exact path
+# Blank lines and lines starting with "#" are ignored. A rule with no reason is refused.
+#
+# The folders listed under publish_strip_prefixes in docs/repo_hygiene_baseline.json are left out as well. This list
+# adds to them; it never lowers them. scripts/forge/publish/public_tree.py reads both, and the release tool
+# (scripts/forge/publish/public_release.py) refuses a tree that still holds a listed path, or a file that imports a
+# listed Python module.
+thomas/security/secret_canaries.py | private security tooling that stays out of the public repository
+tests/test_secret_canaries.py | the tests for that private tooling
+OWNER_STEPS.md | the steps for setting up your own windows and helper accounts, not for people who install Thomas

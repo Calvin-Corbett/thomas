@@ -346,6 +346,8 @@ def test_gate_parent_throughput_fails_when_ready_tasks_exist_without_workers(
         up_for_grabs_block="- task_id=server-lane; scope=thomas/server/routes; summary=server lane; reported_by=bot",
     )
     monkeypatch.setenv("AGENT_ID", "Codex 3")
+    # Throughput is capped by the peers that exist; pin them so the test does not depend on who is running here.
+    monkeypatch.setattr(mod, "_available_peer_count", lambda actor: 5)
 
     rc = mod.run(
         [
@@ -381,6 +383,8 @@ def test_gate_parent_throughput_passes_with_active_worker(tmp_path: Path, monkey
         up_for_grabs_block="- task_id=core-lane; scope=thomas/core; summary=core lane; reported_by=bot",
     )
     monkeypatch.setenv("AGENT_ID", "Codex 3")
+    # Throughput is capped by the peers that exist; pin them so the test does not depend on who is running here.
+    monkeypatch.setattr(mod, "_available_peer_count", lambda actor: 5)
 
     rc = mod.run(
         [
@@ -407,6 +411,8 @@ def test_gate_parent_throughput_json_fail_payload(tmp_path: Path, monkeypatch, c
         up_for_grabs_block="- task_id=server-lane; scope=thomas/server/routes; summary=server lane; reported_by=bot",
     )
     monkeypatch.setenv("AGENT_ID", "Codex 3")
+    # Throughput is capped by the peers that exist; pin them so the test does not depend on who is running here.
+    monkeypatch.setattr(mod, "_available_peer_count", lambda actor: 5)
 
     rc = mod.run(
         [
@@ -486,3 +492,56 @@ def test_gate_rejects_explicit_fallback_without_reason(tmp_path: Path, monkeypat
     assert payload["scope_source"] == "explicit_fallback"
     assert payload["fallback_reason"] == ""
     assert "requires THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON" in payload["error"]
+
+
+def test_gate_parent_throughput_still_fails_when_presence_cannot_be_read(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Unreadable presence is unknown, not zero: the requirement stays what it was before peers were counted."""
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
+        active_tasks_block="- task_id=coord-lane; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active",
+        up_for_grabs_block="- task_id=server-lane; scope=thomas/server/routes; summary=server lane; reported_by=bot",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 3")
+    monkeypatch.setattr(mod, "_available_peer_count", lambda actor: None)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--enforce-parent-throughput",
+            "--parent-target-workers",
+            "1",
+            "--parent-min-ready-suggestions",
+            "1",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "parent agent 'Codex 3' has 0 active worker claim(s)" in out
+
+
+def test_gate_parent_throughput_asks_for_nobody_when_no_peer_exists(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
+        active_tasks_block="- task_id=coord-lane; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active",
+        up_for_grabs_block="- task_id=server-lane; scope=thomas/server/routes; summary=server lane; reported_by=bot",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 3")
+    monkeypatch.setattr(mod, "_available_peer_count", lambda actor: 0)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--enforce-parent-throughput",
+            "--parent-target-workers",
+            "1",
+            "--parent-min-ready-suggestions",
+            "1",
+        ]
+    )
+
+    assert rc == 0, capsys.readouterr().out

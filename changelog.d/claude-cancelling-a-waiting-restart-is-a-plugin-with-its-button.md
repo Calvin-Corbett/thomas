@@ -1,0 +1,3 @@
+### Fixed
+
+- **The restart notice has its Cancel restart button, and cancelling is a plugin.** The notice at the top of the window is now one short line with the detail in its tooltip. While a restart waits it shows **Cancel restart**, which lets new tasks start again and carries on held work without stopping anything that was running. It no longer stays on screen empty with a live button, it is left out of a task shown inside another window, and the corner badge says newer code is available only when no Chat, Build or Work run is busy. The route behind the button was first added to the server itself, one more than the server may hold; it is now the plugin "Cancel a waiting restart", which like Pause has no off switch.

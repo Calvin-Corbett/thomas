@@ -24,6 +24,7 @@ MARKETPLACE_RENDERER = WEB / "js" / "runtime" / "036_workbench_editors_08.js"
 COMPOSER_CSS = WEB / "css" / "composer.css"
 EVOLUTION_CSS = WEB / "css" / "evolution.css"
 
+
 def _evolution_css() -> str:
     """evolution.css is an @import hub (split by responsibility to satisfy the
     CSS size cap). The contract spans the hub plus every file it imports."""
@@ -33,13 +34,8 @@ def _evolution_css() -> str:
         parts.append((EVOLUTION_CSS.parent / name).read_text(encoding="utf-8"))
     return "\n".join(parts)
 
-TOKEN_WIDGET_CSS = WEB / "css" / "token_economy_widget.css"
-PANELS = (
-    WEB / "js" / "mention_context_panel.js",
-    WEB / "js" / "pr_review_panel.js",
-    WEB / "js" / "source_annotation_panel.js",
-)
 
+TOKEN_WIDGET_CSS = WEB / "css" / "token_economy_widget.css"
 HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 
@@ -83,9 +79,7 @@ def test_composer_css_is_token_driven_not_a_hex_ramp() -> None:
     css = _read(COMPOSER_CSS)
     hex_count = len(HEX_RE.findall(css))
     var_count = css.count("var(--")
-    assert var_count > hex_count, (
-        f"composer.css should lean on tokens: var()={var_count} hex={hex_count}"
-    )
+    assert var_count > hex_count, f"composer.css should lean on tokens: var()={var_count} hex={hex_count}"
     for token in ("--c-composer-bg", "--c-text", "--c-dim", "--c-accent"):
         assert f"var({token}" in css
 
@@ -95,7 +89,7 @@ def test_evolution_forge_tokens_point_at_canonical_semantics() -> None:
     assert "--fc-accent: var(--c-accent)" in css
     assert "--fc-warn: var(--c-warn)" in css
     assert "--fc-danger: var(--c-danger)" in css
-    assert "ui-monospace, \"SFMono-Regular\", Menlo, Consolas, monospace" not in css
+    assert 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace' not in css
 
 
 def test_token_economy_widget_reserves_mono_for_numeric_cells() -> None:
@@ -116,11 +110,3 @@ def _rule_map(css: str) -> dict[str, str]:
     for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
         out[match.group(1).strip()] = match.group(2)
     return out
-
-
-def test_injected_panel_palettes_are_token_based() -> None:
-    for path in PANELS:
-        body = _read(path)
-        hexes = HEX_RE.findall(body)
-        assert not hexes, f"{path.name} still injects hex colors: {sorted(set(hexes))}"
-        assert "var(--c-" in body, f"{path.name} should consume --c-* tokens"

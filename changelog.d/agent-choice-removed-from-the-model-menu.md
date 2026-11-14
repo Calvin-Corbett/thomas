@@ -1,0 +1,3 @@
+### Removed
+
+- **You can no longer pick which agent runs Build.** You said "remove the agent agnostic thing, remove it from the model selector thing too" because you were not sure what it would do. The Models | Agents switch in the model menu is gone, and so is the Agent column in Advanced model settings. The model menu now lists models only, and Advanced model settings has one choice per job: the model. Build still decides for itself which runner to use (Thomas's own loop, or Claude Code for Claude models), as it did when you picked nothing. Chat's Build hand-off and Build requests no longer send a chosen agent, and the list of agents the picker read (`/api/evolve/agent/agents`) is removed.

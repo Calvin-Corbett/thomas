@@ -1,0 +1,3 @@
+### Fixed
+
+- **Signing out or switching ChatGPT accounts works again after a sign-in recovery.** The revoked-token recovery that landed today kept the recovered token for the rest of a run by writing it into the model settings the call used. Chat announcements, self-review and the companion screens share one set of settings with no token in it; one recovery there fixed that token in place until the server restarted, so switching accounts or signing out no longer reached them, and an expired token was sent instead of refreshed. A recovered token is now kept only by a run that was handed its own token; everything else reads the sign-in store as before.

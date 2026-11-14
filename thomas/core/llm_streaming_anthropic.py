@@ -20,9 +20,42 @@ from typing import Any
 
 import httpx
 
-from thomas.core.llm_shared import RETRYABLE_STATUS, LLMError, StreamEvent, TokenUsage
+from thomas.core.llm_request_admission import admitted_stream, finish_admitted_attempt
+from thomas.core.llm_shared import RETRYABLE_STATUS, LLMError, StreamEvent, TokenUsage, quota_error_fields
 
 log = logging.getLogger(__name__)
+
+
+def extract_anthropic_usage(event_data: dict[str, Any]) -> dict[str, int]:
+    """Extract Anthropic usage fields from top-level and nested message objects."""
+    raw_usage: dict[str, Any] = {}
+
+    top_usage = event_data.get("usage")
+    if isinstance(top_usage, dict):
+        raw_usage.update(top_usage)
+
+    message_obj = event_data.get("message")
+    if isinstance(message_obj, dict):
+        msg_usage = message_obj.get("usage")
+        if isinstance(msg_usage, dict):
+            for k, v in msg_usage.items():
+                raw_usage.setdefault(k, v)
+
+    out: dict[str, int] = {}
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    ):
+        if key not in raw_usage:
+            continue
+        try:
+            out[key] = max(0, int(raw_usage.get(key) or 0))
+        except (TypeError, ValueError, OverflowError):
+            log.debug("Ignoring invalid Anthropic usage field %s=%r", key, raw_usage.get(key))
+            continue
+    return out
 
 
 async def stream_anthropic(
@@ -38,6 +71,7 @@ async def stream_anthropic(
 
     for attempt in range(max_retries):
         lease = await owner.begin_budget_attempt(messages, tools)
+        attempt_state = {"started": False}
         try:
             body = owner._build_anthropic_request(
                 messages,
@@ -55,21 +89,28 @@ async def stream_anthropic(
                 )
             else:
                 log.debug("Anthropic request: NO tools sent")
-            async with client.stream("POST", url, json=body) as resp:
+            async with admitted_stream(owner, client, "POST", url, attempt_state=attempt_state, json=body) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
                     if resp.status_code == 429:
+                        error_code, safe_headers = quota_error_fields(error_body, resp.headers)
                         retry_after_s = owner._retry_after_seconds(getattr(resp, "headers", None))
-                        owner._mark_rate_limited(owner.config, retry_after_s)
                         wait_note = (
                             f" Retry after about {int(retry_after_s)}s."
                             if retry_after_s is not None and retry_after_s > 0
                             else ""
                         )
+                        # Handed to the park as well as raised: see _parked_text.
+                        detail = (
+                            f"Anthropic HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}"
+                        )
+                        owner._mark_rate_limited(owner.config, retry_after_s, detail)
                         raise LLMError(
-                            f"Anthropic HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}",
+                            detail,
                             status=429,
                             retryable=True,
+                            error_code=error_code,
+                            response_headers=safe_headers,
                         )
                     if resp.status_code in RETRYABLE_STATUS:
                         last_error = LLMError(
@@ -88,9 +129,12 @@ async def stream_anthropic(
                         if delay > 0:
                             await asyncio.sleep(delay)
                         continue
+                    error_code, safe_headers = quota_error_fields(error_body, resp.headers)
                     raise LLMError(
                         f"Anthropic HTTP {resp.status_code}: {error_body.decode(errors='replace')[:500]}",
                         status=resp.status_code,
+                        error_code=error_code,
+                        response_headers=safe_headers,
                     )
 
                 current_tool_id = ""
@@ -99,7 +143,11 @@ async def stream_anthropic(
                 prompt_tokens = 0
                 completion_tokens = 0
                 cached_tokens = 0
+                written_tokens = 0
                 usage_emitted = False
+                # `message.model` from message_start: the exact model Anthropic says
+                # answered, carried on `done` so a Build turn can record it.
+                reported_model = ""
 
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
@@ -111,6 +159,9 @@ async def stream_anthropic(
 
                     event_type = event_data.get("type", "")
                     log.debug("Anthropic SSE event: %s", event_type)
+                    message = event_data.get("message")
+                    if event_type == "message_start" and isinstance(message, dict) and message.get("model"):
+                        reported_model = str(message["model"])
                     usage_fields = owner._extract_anthropic_usage(event_data)
                     if usage_fields:
                         prompt_candidate = (
@@ -122,6 +173,7 @@ async def stream_anthropic(
                         prompt_tokens = max(prompt_tokens, prompt_candidate)
                         completion_tokens = max(completion_tokens, completion_candidate)
                         cached_tokens = max(cached_tokens, usage_fields.get("cache_read_input_tokens", 0))
+                        written_tokens = max(written_tokens, usage_fields.get("cache_creation_input_tokens", 0))
 
                     if event_type == "content_block_start":
                         block = event_data.get("content_block", {})
@@ -179,11 +231,12 @@ async def stream_anthropic(
                                 completion_tokens=completion_tokens,
                                 total_tokens=prompt_tokens + completion_tokens,
                                 cached_prompt_tokens=cached_tokens,
+                                cache_write_prompt_tokens=written_tokens,
                             )
                             owner.session_usage.add(tu)
                             yield StreamEvent(type="usage", data={"usage": tu})
                             usage_emitted = True
-                        yield StreamEvent(type="done")
+                        yield StreamEvent(type="done", data={"model": reported_model} if reported_model else {})
                         return
 
                 if not usage_emitted and (prompt_tokens or completion_tokens):
@@ -192,10 +245,11 @@ async def stream_anthropic(
                         completion_tokens=completion_tokens,
                         total_tokens=prompt_tokens + completion_tokens,
                         cached_prompt_tokens=cached_tokens,
+                        cache_write_prompt_tokens=written_tokens,
                     )
                     owner.session_usage.add(tu)
                     yield StreamEvent(type="usage", data={"usage": tu})
-                yield StreamEvent(type="done")
+                yield StreamEvent(type="done", data={"model": reported_model} if reported_model else {})
                 return
 
         except httpx.ConnectError as e:
@@ -210,7 +264,7 @@ async def stream_anthropic(
             if delay > 0:
                 await asyncio.sleep(delay)
         finally:
-            await owner.finish_budget_attempt(lease)
+            await finish_admitted_attempt(owner, lease, attempt_state)
 
     raise LLMError(
         f"Anthropic request failed after {max_retries} attempts: {last_error}",

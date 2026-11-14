@@ -1,0 +1,3 @@
+### Changed
+
+- **Exporting a chat and branching a chat can now be turned off and on while Thomas runs.** The two chat routes moved out of the server's fixed list into one row called Chat export and branching, which ships on, so nothing changes until you turn it off. While it is off, Export as Markdown, Save as web page to share and the export command open a tab that reads 404: Not Found, and Branch this chat and the branch button under a reply show an error message and make no copy. Your saved chats and any copies already made stay. They read the saved chats through the sessions store the server hands them, and a server started with the row off never loads their code.

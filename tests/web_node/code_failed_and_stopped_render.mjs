@@ -16,11 +16,15 @@
 //      recovered" rather than "issues", and the very first read probe of a
 //      brand-new empty project is a neutral existence note, not a red row.
 import fs from 'node:fs';
+import path from 'node:path';
 import vm from 'node:vm';
 
 const eventsPath = process.argv[2];
+// The rows, cards and head a turn is drawn from live beside it and load first.
+const cardsPath = path.join(path.dirname(eventsPath), 'unified_code_cards.js');
 
 globalThis.window = {};
+vm.runInThisContext(fs.readFileSync(cardsPath, 'utf8'), { filename: cardsPath });
 vm.runInThisContext(fs.readFileSync(eventsPath, 'utf8'), { filename: eventsPath });
 
 const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));

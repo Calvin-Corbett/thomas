@@ -1,0 +1,2 @@
+### Fixed
+- Starting a Build run no longer freezes the server. Every run start read the whole run-receipts file (22.5 MB, 2,071 runs) and wrote it back indented, on the event loop, twice; with a busy fleet each start held the loop for 30 s or more, project launches waited 15 minutes, and the server stopped answering. Receipts are now kept in memory between saves, written compact, and run starts save them off the loop.

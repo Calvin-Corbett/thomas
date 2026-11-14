@@ -1,0 +1,2 @@
+### Changed
+- Thomas's CPU cap now leaves room for everything else on this PC, so the whole PC stays under 90%, not just Thomas. With a fixed 90% cap the PC still sat at 98%: Windows Defender, Windows Search and your own apps came on top of Thomas's share. Every 10 seconds the caged server now measures what the other programs use and sets Thomas's share to what is left under 90%, never under 30% so his work keeps moving. Thomas already runs below normal priority, so your apps win whenever they compete for the processor.

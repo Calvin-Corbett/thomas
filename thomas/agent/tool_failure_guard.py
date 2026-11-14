@@ -35,6 +35,13 @@ class ToolFailureGuard:
     _disabled: dict[str, int] = field(default_factory=dict)
     _abort_reason: str = ""
 
+    def reset_after_mutation(self, loop_counts: dict[str, int]) -> None:
+        """A successful code mutation gives every failed call a fresh attempt."""
+        loop_counts.clear()
+        self._counts.clear()
+        self._disabled.clear()
+        self._abort_reason = ""
+
     def record_failure(self, tool_name: str, args: dict[str, Any], result_text: str) -> str | None:
         """Record one failed call. Returns the note to show the model when the call gets disabled."""
         count = _record_failed_tool(self._counts, tool_name, args, result_text)

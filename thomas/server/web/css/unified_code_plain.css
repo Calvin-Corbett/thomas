@@ -1,0 +1,232 @@
+/* Build reads as plain text: one sans stack (tokens.css pins it for Build), no
+   boxes around meta, no icons in the transcript. Real code keeps --font-code.
+   Loaded after every other Build sheet so it wins ties. Scoped to Build. */
+#tc-shell[data-surface-mode="code"] { --plain-dim: color-mix(in srgb, var(--c-text) 56%, transparent); }
+
+/* Real code stays monospace: inline code, code blocks, diff lines, and what a
+   work row shows when you open it. */
+#tc-shell[data-surface-mode="code"] code,
+#tc-shell[data-surface-mode="code"] pre,
+#tc-shell[data-surface-mode="code"] kbd,
+#tc-shell[data-surface-mode="code"] .tc-code-livediff-body,
+#tc-shell[data-surface-mode="code"] .tc-code-livediff-body *,
+#tc-shell[data-surface-mode="code"] .tc-code-work-body,
+#tc-shell[data-surface-mode="code"] .tc-code-work-body * { font-family: var(--font-code) !important; }
+
+/* No icons and no tile in the transcript. */
+#tc-code-turns i.ph, #tc-code-turns .tc-code-avatar,
+#tc-code-turns .tc-code-technical:not(.tc-code-receipt) > i { display: none; }
+#tc-code-turns .tc-code-technical:not(.tc-code-receipt) { grid-template-columns: minmax(0, 1fr); }
+
+/* Messages. */
+.tc-code-turn { font-size: 15px; line-height: 1.65; letter-spacing: 0; }
+.tc-code-turn.is-user {
+  max-width: min(78%, 560px);
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--c-user-bg);
+  font-weight: 400;
+}
+.tc-code-turn.is-user .tc-code-message-head { display: none; }
+.tc-code-message-head { gap: 8px; margin-bottom: 4px; }
+.tc-code-message-head strong { color: var(--c-strong); font-size: 14px; font-weight: 700; }
+.tc-code-message-head small { color: var(--plain-dim); font: 400 13px/1.2 var(--font-sans); }
+.tc-code-reply, .tc-code-turn-body {
+  border: 0; border-radius: 0; background: none; box-shadow: none; padding-left: 0; padding-right: 0;
+  color: var(--c-text); font-weight: 400;
+}
+.tc-code-reply strong, .tc-code-reply b { color: var(--c-strong); font-weight: 650; }
+.tc-code-copy {
+  width: auto; height: auto; padding: 2px 8px; border-radius: 6px;
+  font: 400 12.5px/1.3 var(--font-sans); color: var(--c-muted); opacity: 0;
+}
+.tc-code-turn:hover .tc-code-copy, .tc-code-copy:focus-visible { opacity: 1; }
+.tc-code-say code, .tc-code-reply code { border: 0; padding: 1px 5px; background: var(--c-surface-2); }
+
+/* Work rows: one quiet sentence, "Edited index.html (+11 -2)". */
+.tc-code-receipts { gap: 2px; }
+.tc-code-work > summary {
+  display: block; min-height: 0; padding: 2px 0;
+  color: var(--plain-dim); font: 400 13.5px/1.5 var(--font-sans);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tc-code-work-verb, .tc-code-work-detail, .tc-code-work-meta {
+  display: inline; font: inherit; color: inherit; white-space: inherit;
+}
+.tc-code-work-verb { font-weight: 400; }
+.tc-code-work-detail { margin-left: .3em; }
+.tc-code-work-meta { margin-left: .3em; font-variant-numeric: tabular-nums; }
+.tc-code-work-meta:not(:empty)::before { content: "("; }
+.tc-code-work-meta:not(:empty)::after { content: ")"; }
+.tc-code-work > summary:hover, .tc-code-work[open] > summary { color: var(--c-text); }
+.tc-code-work > summary:hover .tc-code-work-verb, .tc-code-work[open] > summary .tc-code-work-verb,
+.tc-code-work > summary:hover .tc-code-work-detail, .tc-code-work[open] > summary .tc-code-work-detail { color: inherit; }
+.tc-code-work.is-error > summary { color: var(--c-warn); }
+.tc-code-work-body { margin: 4px 0 8px 0; }
+.tc-code-add { color: var(--fc-add-ink); }
+.tc-code-del { color: var(--fc-del-ink); }
+
+/* Labels become sentence case sans, dim, untracked. */
+.tc-code-plan-label, .tc-code-queue-label, .tc-code-steerchip-label, .tc-code-ask-label,
+.tc-agents-label, .tc-code-section-title, .tc-agent-chat-label, .tc-tools-heading, .tc-code-event strong {
+  font: 600 13px/1.3 var(--font-sans); letter-spacing: 0; text-transform: none; color: var(--plain-dim);
+}
+.tc-code-queue-label, .tc-code-steerchip-label { color: var(--c-accent); }
+.tc-code-ask-label { color: var(--c-warn); }
+.tc-agent-chat-label.is-accent { color: var(--c-accent); }
+
+/* Meta that wore a pill or a box is now plain dim text. */
+.tc-code-step-pill, .tc-code-context .tc-code-activity-count, .tc-code-ask-tag,
+.tc-agent-chip, .tc-code-result-note span, .tc-code-proof-fact, .tc-code-proof-chip {
+  border: 0; border-radius: 0; background: none; padding: 0; box-shadow: none;
+  color: var(--plain-dim); font: 400 12.5px/1.4 var(--font-sans);
+}
+.tc-code-ask-tag { color: var(--c-accent); margin-left: 8px; }
+.tc-code-context > button { border-color: var(--c-border); box-shadow: none; font-weight: 500; }
+.tc-code-plan-time, .tc-code-plan-count, .tc-code-plan-owner, .tc-code-status-meta, .tc-agent-time, .tc-agent-role,
+.tc-agent-chat-badge, .tc-agent-chat-title small, .tc-agents-head-text small, .tc-code-steerchip-state {
+  font: 400 12.5px/1.4 var(--font-sans); color: var(--plain-dim);
+}
+.tc-code-status-words { font-weight: 400; }
+.tc-code-plan-text, .tc-code-proof-ask { font-weight: 400; }
+.tc-code-proof, .tc-code-plan, .tc-code-ask { border-radius: 10px; }
+
+/* Buttons are text; only the primary action is filled. */
+.tc-code-proof-act, .tc-code-queue-remove, .tc-agents-drawer button.tc-agents-keep, .tc-agents-drawer button.tc-agents-revert,
+.tc-agents-drawer button.tc-agent-open { font-weight: 500; }
+.tc-code-proof-act:not(.is-primary), .tc-agents-drawer button.tc-agent-open { background: none; border-color: transparent; color: var(--c-dim); }
+.tc-code-proof-act:not(.is-primary):hover, .tc-agents-drawer button.tc-agent-open:hover:not(:disabled) { color: var(--c-text); background: var(--c-hover); }
+
+/* The verifier's summary: a sentence and plain facts, not a box of tiles. */
+.tc-code-run-report > summary { border: 0; border-left: 0; border-radius: 0; background: none; padding: 4px 0; box-shadow: none; }
+.tc-code-run-report > summary:hover { background: none; }
+.tc-code-verdict-text strong { color: var(--c-strong); font-size: 14px; font-weight: 650; }
+.tc-code-stats { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 2px; }
+.tc-code-stat, .tc-code-stat.is-prose {
+  display: inline-flex; align-items: baseline; gap: .3em; border: 0; border-radius: 0; background: none; padding: 0; box-shadow: none;
+  color: var(--plain-dim); font: 400 13px/1.5 var(--font-sans);
+}
+/* A flex gap, not a margin: the count and its words stay two items with a space between them in the page's text. */
+.tc-code-stat b, .tc-code-stat i { font: inherit; font-style: normal; color: inherit; }
+.tc-code-verdict-more { color: var(--plain-dim); font: 400 12.5px/1.3 var(--font-sans); }
+.tc-code-plan, .tc-code-proof { border: 0; background: none; padding-left: 0; padding-right: 0; }
+.tc-code-plan-head { padding-left: 0; }
+.tc-code-verdict-unchecked { display: block; margin-top: 2px; color: var(--plain-dim); font: 400 12.5px/1.4 var(--font-sans); }
+#tc-shell[data-surface-mode="code"] .tc-history-day,
+#tc-shell[data-surface-mode="code"] #tc-history-filter { font-family: var(--font-sans) !important; letter-spacing: 0; text-transform: none; font-size: 12px; }
+
+/* ---- Two voices ------------------------------------------------------------
+   An UPDATE is quiet: what is being done, a result, a note while the work runs.
+   No name, no tile. Thomas's name, in the theme accent, appears only when he is
+   actually speaking -- the closing reply, a problem, a question, or the answer
+   to something you said -- so the name means "read this". */
+.tc-code-say.is-update { color: var(--c-text); font-size: 15px; font-weight: 400; line-height: 1.65; }
+.tc-code-say.is-update strong { color: var(--c-text); font-weight: 600; }
+.tc-code-say.is-update code { font-size: 12.5px; }
+.tc-code-turn .tc-code-message-head strong,
+.tc-code-ask-label { color: var(--c-accent); font-weight: 700; }
+.tc-code-ask-sub { color: var(--c-dim); font: 400 12.5px/1 var(--font-sans); }
+
+/* ---- The deliverable, live in the thread ----------------------------------- */
+.tc-code-artifacts > .tc-live {
+  position: relative; margin: 4px 0 0; width: 100%; aspect-ratio: 16 / 10; --live-scale: 0.6;
+  border: 1px solid var(--c-border); border-radius: 12px; overflow: hidden; background: var(--c-surface);
+}
+.tc-live:not(.is-playing):not(:fullscreen) .tc-live-frame { pointer-events: none; }  /* the wheel belongs to the transcript until you click in */
+.tc-live-wait { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+/* Inline the page is laid out at a desktop viewport and shrunk to the card, so
+   the whole page shows, nothing scrolls, and the wheel moves the transcript. */
+.tc-live-frame { display: block; width: 1280px; height: 800px; border: 0; background: #fff; transform-origin: 0 0; transform: scale(var(--live-scale)); }
+.tc-live-wait { background: var(--c-surface); }
+.tc-live-label {
+  position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); padding: 4px 9px; border-radius: 7px;
+  background: color-mix(in srgb, var(--c-bg, #000) 78%, transparent); color: var(--c-strong);
+  font: 600 12.5px/1.2 var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.tc-live:hover .tc-live-label { opacity: 1; }
+.tc-live-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
+.tc-live:hover .tc-live-tools, .tc-live:focus-within .tc-live-tools { opacity: 1; }
+.tc-live-btn {
+  position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; cursor: pointer; text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, .16); border-radius: 8px; color: #fff; line-height: 1;
+  background: rgba(17, 19, 24, .86); backdrop-filter: blur(6px);
+}
+.tc-live-btn svg { width: 18px; height: 18px; }
+.tc-live-btn[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+  background: rgba(17, 19, 24, .95); color: #fff; font: 600 12px/1.2 var(--font-sans); opacity: 0; pointer-events: none; transition: opacity .12s;
+}
+.tc-live-btn[data-tip]:hover::after, .tc-live-btn[data-tip]:focus-visible::after { opacity: 1; }
+.tc-live-btn:hover { border-color: var(--c-accent); color: var(--c-accent); }
+.tc-live-btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.tc-live:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; border: 0; border-radius: 0; background: #000; }
+.tc-live:fullscreen .tc-live-frame { width: 100%; height: 100%; transform: none; }
+@media (hover: none) { .tc-live-tools { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tc-live-label, .tc-live-tools { transition: none; } }
+/* An image result shows large; any other file is an icon and its name. */
+.tc-code-artifact.is-image .tc-code-artifact-open { max-width: 100%; }
+.tc-code-artifact-thumb.is-image { width: auto; height: auto; max-height: 60vh; border-right: 0; background: var(--c-surface); }
+.tc-code-artifact-thumb.is-image img { display: block; max-width: 100%; max-height: 60vh; }
+
+/* A reply is paragraphs and tables, not one pre-wrapped block. Every line of the reply is its own <p>; the first one
+   is the headline of what follows, so it gets a bigger gap. A table reads as rows: a line under each, a stripe on
+   every other row, a heavier line under the header, and long names wrap inside their cell instead of the page. */
+.tc-code-reply-text { white-space: normal; }
+.tc-code-reply-text > p { margin: 0 0 10px; }
+.tc-code-reply-text > p:first-child { margin-bottom: 18px; }
+.tc-code-reply-text .tc-md-table { margin: 14px 0 18px; max-width: 100%; overflow-x: auto; }
+.tc-code-reply-text table {
+  border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.5;
+  --row-line: color-mix(in srgb, var(--c-text) 16%, transparent);
+}
+.tc-code-reply-text th, .tc-code-reply-text td {
+  border: 0; border-bottom: 1px solid var(--row-line); padding: 9px 14px 9px 0; text-align: left; vertical-align: top;
+  background: none; overflow-wrap: anywhere;
+}
+.tc-code-reply-text th {
+  border-bottom: 2px solid color-mix(in srgb, var(--c-text) 30%, transparent);
+  color: var(--c-strong); font-weight: 650; white-space: nowrap;
+}
+.tc-code-reply-text tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--c-text) 4%, transparent); }
+.tc-code-reply-text td code { font-size: .86em; }
+
+/* What Thomas is doing is ONE line, not a growing stack: only the newest receipt shows, and while the run is live its
+   words shimmer as each new step replaces the last. Click it to open everything it did; click the empty space on the
+   open list to fold it back. The status line above the composer keeps only the clock. */
+html:not(.tc-show-steps) #tc-code-live-events .tc-code-receipts,
+html:not(.tc-show-steps) #tc-code-live-events [data-code-heartbeat] { display: none; }
+/* The words and the clock sit together at the composer's left edge, not the clock at the far end of a wider row. */
+.tc-code-status { padding-left: 18px; }
+.tc-code-status-words, .tc-code-status-dot { display: none; }
+.tc-code-status-meta { margin-left: 0; }
+/* The line at the very bottom of the feed: the action Thomas is on right now ("Read package.json", "Ran diff…"),
+   replaced by the next one as it happens, shimmering in place. Click it to show every step. */
+.tc-code-doing {
+  --shim-base: color-mix(in srgb, var(--c-text) 55%, transparent);
+  display: block; width: fit-content; max-width: 100%; margin: 4px 0 0; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 14px/1.5 var(--font-sans);
+  background: linear-gradient(90deg, var(--shim-base) 0%, var(--shim-base) 40%, var(--c-strong) 50%, var(--shim-base) 60%, var(--shim-base) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: tc-text-shimmer 2.2s linear infinite;
+}
+@keyframes tc-text-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .tc-code-doing { animation: none; -webkit-text-fill-color: var(--c-muted); }
+}
+
+/* The Activity button lives in the top bar, on the right, level with the project chip and the chat's name. The bar
+   is the first 46px of the page, so a fixed box 7px down sits in it; the Steps card stays under the button. The
+   button itself opens and closes the drawer, so the drawer has no X. */
+#tc-shell[data-surface-mode="code"] .tc-code-context { position: fixed; top: 7px; right: 18px; }
+.tc-agents-drawer .tc-agents-close { display: none; }
+
+/* Icons answer a hover: the Activity pulse draws itself again. */
+@keyframes tc-act-draw { from { stroke-dasharray: 60; stroke-dashoffset: 60; } to { stroke-dasharray: 60; stroke-dashoffset: 0; } }
+.tc-code-context > button:hover .tc-act-icon path { animation: tc-act-draw .7s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .tc-code-context > button:hover .tc-act-icon path { animation: none; }
+}

@@ -1,0 +1,3 @@
+### Added
+
+- **Each agent writes its own changelog fragment; the release folds them in.** Two agents writing one `CHANGELOG.md` took turns parking each other's words and once swept the other's entries into a commit by accident. A fragment under `changelog.d/<agent>-<slug>.md` belongs to one agent: nobody edits anybody else's, and `python scripts/forge/changelog_fragments.py compile --version X.Y.Z` folds every fragment into the version section, grouped Added, Changed, Fixed, Removed, Security, refusing to touch the changelog if any fragment is malformed. The two gates that demand `CHANGELOG.md` in a commit learn to accept a staged fragment instead; that patch waits on an owner tap because both gate files are protected. This entry is the first fragment.

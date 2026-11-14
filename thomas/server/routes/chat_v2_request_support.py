@@ -15,7 +15,6 @@ from thomas.server.routes.chat_v2_session_routes import (
 from thomas.server.routes.chat_v2_session_routes import (
     handle_session_delegations as _handle_session_delegations,
 )
-from thomas.server.work_connector_runtime import request_work_tools
 
 
 async def handle_session_delegations(request: web.Request) -> web.Response:
@@ -62,6 +61,8 @@ def _request_tools_for_chat_surface(
     """Bind connector tools only after Thomas resolved an exact Work job."""
     if request_tools is None or surface_mode != "work" or not context_id or not private_context:
         return request_tools
+    from thomas.server.work_connector_runtime import request_work_tools
+
     return request_work_tools(app, request_tools, context_id=context_id)
 
 

@@ -18,105 +18,28 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from aiohttp import CookieJar, web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp import web
+from aiohttp.test_utils import TestClient
 
+from tests.evolve_agent_route_support import (  # noqa: F401 - re-exported for other test files
+    _commit_all,
+    _drive,
+    _GateInput,
+    _init_repo,
+    _new_repo,
+    _owner_raised,
+)
 from thomas.forge.anvil import forge_code_git, forge_code_projects, forge_code_store
-from thomas.forge.anvil.forge_code_git import _run_git
 from thomas.server.app_keys import APP_SECRETS
-from thomas.server.routes import evolve_agent_http_support, evolve_agent_routes, evolve_agent_runtime
-from thomas.server.routes.deliverable_aiohttp import register_deliverable_routes
+from thomas.server.routes import evolve_agent_http_support
 from thomas.server.routes.evolve_agent_routes import (
-    APP_EVOLVE_AGENT_APPROVALS,
     APP_EVOLVE_AGENT_DRAIN,
     APP_EVOLVE_AGENT_SESSION,
     APP_EVOLVE_AGENT_TASK,
-    register_evolve_agent_routes,
 )
-
-
-class _GateInput:
-    def __init__(self) -> None:
-        self.data = b""
-        self.closed = False
-
-    def write(self, data: bytes) -> None:
-        self.data += data
-
-    async def drain(self) -> None:
-        return None
-
-    def close(self) -> None:
-        self.closed = True
-
-
-def _init_repo(root: Path) -> None:
-    """Create a throwaway git repo with deterministic identity/signing."""
-    _run_git(root, ["init"])
-    _run_git(root, ["config", "user.email", "test@example.com"])
-    _run_git(root, ["config", "user.name", "Forge Test"])
-    # A developer's global config may force GPG signing; disable it so a commit
-    # in a bare tmp repo cannot hang or fail for unrelated reasons.
-    _run_git(root, ["config", "commit.gpgsign", "false"])
-
-
-def _commit_all(root: Path, message: str = "commit") -> None:
-    _run_git(root, ["add", "-A"])
-    _run_git(root, ["commit", "-m", message])
-
-
-def _new_repo(tmp_path: Path) -> Path:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _init_repo(repo)
-    return repo
-
-
-def _drive(
-    repo: Path,
-    body: Callable[[TestClient], Awaitable[Any]],
-    *,
-    configure: Callable[[web.Application], None] | None = None,
-) -> Any:
-    """Build an app with only the evolve-agent routes and run ``body`` against it.
-
-    Wrapped in :func:`asyncio.run` so each test is an ordinary sync function --
-    no pytest-asyncio dependency, and ``tmp_path`` composes cleanly.
-    """
-
-    async def _runner() -> Any:
-        app = web.Application()
-        preview_service = register_deliverable_routes(app, require_api_access=lambda _request: None)
-        register_evolve_agent_routes(
-            app,
-            require_api_access=lambda _request: None,  # auth stubbed out
-            root_resolver=lambda: repo,
-        )
-        if configure is not None:
-            configure(app)
-        client = TestClient(TestServer(app), cookie_jar=CookieJar(unsafe=True))
-        await client.start_server()
-        preview_service.configure(main_origin=str(client.make_url("/")).rstrip("/"))
-        try:
-            return await body(client)
-        finally:
-            await client.close()
-            await preview_service.stop()
-
-    prior_data_dir = os.environ.get("THOMAS_DATA_DIR")
-    os.environ["THOMAS_DATA_DIR"] = str(repo.parent / "thomas-test-data")
-    try:
-        return asyncio.run(_runner())
-    finally:
-        if prior_data_dir is None:
-            os.environ.pop("THOMAS_DATA_DIR", None)
-        else:
-            os.environ["THOMAS_DATA_DIR"] = prior_data_dir
 
 
 def test_conversation_new_list_get_and_missing_404(tmp_path: Path) -> None:
@@ -244,6 +167,32 @@ def test_conversation_rename_and_delete(tmp_path: Path) -> None:
             json={"title": "nope"},
         )
         assert resp.status == 404
+
+        # Only executed continuations appear in the read-only history after reload.
+        from thomas.server.routes.evolve_agent_autopilot import CONTINUATION_PREFIX
+
+        forge_code_store.append_user_turn(repo, cid, CONTINUATION_PREFIX + " queued")
+        forge_code_store.append_user_turn(repo, cid, CONTINUATION_PREFIX + " retry")
+        forge_code_store.append_agent_turn(
+            repo,
+            cid,
+            model="test",
+            transcript='{"fc":"tool_result","name":"pytest"}',
+            changed_files=[],
+            returncode=1,
+            ok=False,
+            noop=False,
+            reason="assertion failed <not markup>",
+            outcome="failed",
+            run_id="ran-1",
+        )
+        forge_code_store.append_user_turn(repo, cid, CONTINUATION_PREFIX + " did not start")
+        history = (await (await client.get(f"/api/evolve/agent/conversations/{cid}")).json())["conversation"][
+            "continuation_history"
+        ]
+        assert history["count"] == 1
+        assert history["runs"][0]["reason"] == "assertion failed <not markup>"
+        assert history["runs"][0]["run_id"] == "ran-1"
 
         # Delete removes it; a second delete 404s (idempotent at the store layer).
         resp = await client.delete(f"/api/evolve/agent/conversations/{cid}")
@@ -826,453 +775,3 @@ def test_incremental_line_decoder_holds_partial_line_until_newline() -> None:
     assert dec.feed(b"half\n") == ["second half"]  # newline completes it
     assert dec.feed(b"no newline yet") == []  # still buffered
     assert dec.flush() == ["no newline yet"]  # final remainder surfaced once
-
-
-def test_stop_when_nothing_running_is_a_safe_noop(tmp_path: Path) -> None:
-    repo = _new_repo(tmp_path)
-
-    async def _body(client: TestClient) -> None:
-        resp = await client.post("/api/evolve/agent/stop", json={"run_id": "run-stop"})
-        assert resp.status == 409
-        body = await resp.json()
-        assert body["ok"] is False
-        assert body["stopped"] is False
-        assert body["termination_confirmed"] is False
-        assert body["code"] == "no_active_run"
-
-    _drive(repo, _body)
-
-
-def test_stop_claims_stopped_only_after_process_wait_confirms_exit(
-    tmp_path: Path,
-    monkeypatch: Any,
-) -> None:
-    repo = _new_repo(tmp_path)
-
-    class _RunningProcess:
-        pid = 417
-        returncode: int | None = None
-
-        async def wait(self) -> int:
-            self.returncode = -15
-            return self.returncode
-
-    proc = _RunningProcess()
-    monkeypatch.setattr(evolve_agent_runtime, "_kill_tree", lambda target: setattr(target, "kill_requested", True))
-
-    async def _body(client: TestClient) -> None:
-        resp = await client.post("/api/evolve/agent/stop", json={"run_id": "run-stop"})
-        payload = await resp.json()
-        assert resp.status == 200
-        assert payload["ok"] is True
-        assert payload["stopped"] is True
-        assert payload["termination_confirmed"] is True
-        assert payload["state"] == "terminated"
-        assert payload["returncode"] == -15
-        assert proc.kill_requested is True
-
-    def _configure(app: web.Application) -> None:
-        app[APP_EVOLVE_AGENT_TASK] = proc
-        app[APP_EVOLVE_AGENT_SESSION] = {"run_id": "run-stop"}
-
-    _drive(repo, _body, configure=_configure)
-
-
-def test_status_reports_recording_and_stop_waits_for_persistence(
-    tmp_path: Path,
-    monkeypatch: Any,
-) -> None:
-    repo = _new_repo(tmp_path)
-    captured: dict[str, Any] = {}
-
-    class _RunningProcess:
-        pid = 419
-        returncode: int | None = None
-
-        async def wait(self) -> int:
-            self.returncode = -15
-            return self.returncode
-
-    proc = _RunningProcess()
-    monkeypatch.setattr(evolve_agent_runtime, "_kill_tree", lambda _target: None)
-
-    def _configure(app: web.Application) -> None:
-        app[APP_EVOLVE_AGENT_TASK] = proc
-        app[APP_EVOLVE_AGENT_SESSION] = {"run_id": "run-recording"}
-        app[APP_EVOLVE_AGENT_DRAIN] = asyncio.get_running_loop().create_future()
-        captured["app"] = app
-
-    async def _body(client: TestClient) -> None:
-        status = await (await client.get("/api/evolve/agent/status")).json()
-        assert status["running"] is True
-        assert status["recording"] is True
-
-        stop_request = asyncio.create_task(client.post("/api/evolve/agent/stop", json={"run_id": "run-recording"}))
-        await asyncio.sleep(0.02)
-        assert stop_request.done() is False
-        captured["app"][APP_EVOLVE_AGENT_DRAIN].set_result(
-            {
-                "persistence_confirmed": True,
-                "returncode": -15,
-                "ok": False,
-                "noop": False,
-                "outcome": "failed",
-                "changed_files": [],
-                "artifacts": [],
-            }
-        )
-        response = await stop_request
-        receipt = await response.json()
-        assert response.status == 200
-        assert receipt["termination_confirmed"] is True
-        assert receipt["persistence_confirmed"] is True
-
-        finished = await (await client.get("/api/evolve/agent/status")).json()
-        assert finished["running"] is False
-        assert finished["recording"] is False
-
-    _drive(repo, _body, configure=_configure)
-
-
-def test_send_rejects_a_new_run_while_the_prior_result_is_recording(tmp_path: Path) -> None:
-    repo = _new_repo(tmp_path)
-    captured: dict[str, Any] = {}
-
-    class _FinishedProcess:
-        returncode = 0
-
-    def _configure(app: web.Application) -> None:
-        recording = asyncio.get_running_loop().create_future()
-        app[APP_EVOLVE_AGENT_TASK] = _FinishedProcess()
-        app[APP_EVOLVE_AGENT_DRAIN] = {"generation": 4, "run_id": "run-prior", "task": recording}
-        captured["recording"] = recording
-
-    async def _body(client: TestClient) -> None:
-        response = await client.post(
-            "/api/evolve/agent/send",
-            json={"message": "Start the next build", "request_id": "request-next"},
-        )
-        payload = await response.json()
-        assert response.status == 409
-        assert payload["code"] == "agent_result_recording"
-        assert captured["recording"].done() is False
-        captured["recording"].cancel()
-
-    _drive(repo, _body, configure=_configure)
-
-
-def test_unconfirmed_process_stop_returns_pending_receipt(monkeypatch: Any) -> None:
-    class _StuckProcess:
-        pid = 418
-        returncode = None
-
-        async def wait(self) -> int:
-            await asyncio.sleep(1)
-            return 0
-
-    monkeypatch.setattr(evolve_agent_runtime, "_kill_tree", lambda _target: None)
-    receipt = asyncio.run(evolve_agent_runtime._terminate_process(_StuckProcess(), timeout_s=0.01))
-
-    assert receipt == {
-        "ok": False,
-        "stopped": False,
-        "termination_confirmed": False,
-        "state": "termination_pending",
-        "code": "termination_pending",
-        "returncode": None,
-    }
-
-
-def test_steering_requires_a_live_run_and_returns_restart_receipt(
-    tmp_path: Path,
-    monkeypatch: Any,
-) -> None:
-    repo = _new_repo(tmp_path)
-
-    class _RunningProcess:
-        returncode = None
-
-    process = _RunningProcess()
-    killed: list[Any] = []
-    monkeypatch.setattr(evolve_agent_routes, "_kill_tree", killed.append)
-
-    async def _body(client: TestClient) -> None:
-        empty = await client.post("/api/evolve/agent/steer", json={"message": "  "})
-        assert empty.status == 400
-
-        response = await client.post(
-            "/api/evolve/agent/steer",
-            json={"message": "Keep the API, simplify the interface", "run_id": "run-steer"},
-        )
-        payload = await response.json()
-        assert response.status == 202
-        assert payload == {
-            "ok": True,
-            "stop_requested": True,
-            "restart_required": True,
-            "message": "Keep the API, simplify the interface",
-        }
-        for _attempt in range(20):
-            if killed:
-                break
-            await asyncio.sleep(0.01)
-        assert killed == [process]
-
-        stale = await client.post(
-            "/api/evolve/agent/steer",
-            json={"message": "stale request", "run_id": "run-old"},
-        )
-        assert stale.status == 409
-        assert (await stale.json())["code"] == "run_not_active"
-        assert killed == [process]
-
-    def _configure(app: web.Application) -> None:
-        app[APP_EVOLVE_AGENT_TASK] = process
-        app[APP_EVOLVE_AGENT_SESSION] = {"run_id": "run-steer"}
-
-    _drive(repo, _body, configure=_configure)
-
-
-def test_external_project_conversation_persists_settings_and_scopes_tree(tmp_path: Path) -> None:
-    catalog = _new_repo(tmp_path)
-    project = tmp_path / "selected-project"
-    project.mkdir()
-    _init_repo(project)
-    (project / "src").mkdir()
-    (project / "src" / "main.py").write_text("print('selected')\n", encoding="utf-8")
-    (project / ".thomas").mkdir()
-
-    async def _body(client: TestClient) -> None:
-        response = await client.post(
-            "/api/evolve/agent/conversations/new",
-            json={
-                "title": "Selected project",
-                "project_root": str(project),
-                "model": "codex:gpt",
-                "model_id": "gpt-5.6-codex",
-                "reasoning_effort": "high",
-                "autonomy_level": 4,
-                "file_access": "pc",
-                "memory": False,
-                "guardrails": "open",
-                "token_economy": "cheap",
-            },
-        )
-        assert response.status == 200
-        created = (await response.json())["conversation"]
-        cid = created["id"]
-        assert created["project_root"] == str(project.resolve())
-        assert created["settings"]["effective"]["model"] == "gpt-5.6-codex"
-        assert created["settings"]["support"]["file_access"]["effective"] == "pc"
-
-        fetched = (await (await client.get(f"/api/evolve/agent/conversations/{cid}")).json())["conversation"]
-        assert fetched["project_root"] == str(project.resolve())
-        assert fetched["settings"] == created["settings"]
-        listing = (await (await client.get("/api/evolve/agent/conversations")).json())["conversations"]
-        assert next(item for item in listing if item["id"] == cid)["project_root"] == str(project.resolve())
-
-        tree_response = await client.get(f"/api/evolve/agent/conversations/{cid}/tree")
-        assert tree_response.status == 200
-        tree = await tree_response.json()
-        assert tree["project_root"] == str(project.resolve())
-        assert {entry["name"] for entry in tree["entries"]} == {"src"}
-        nested = await (await client.get(f"/api/evolve/agent/conversations/{cid}/tree?path=src")).json()
-        assert [entry["path"] for entry in nested["entries"]] == ["src/main.py"]
-        assert (await client.get(f"/api/evolve/agent/conversations/{cid}/tree?path=..")).status == 400
-
-    _drive(catalog, _body)
-
-
-def test_send_passes_raw_prompt_to_gpt_without_local_semantic_approval(
-    tmp_path: Path,
-    monkeypatch: Any,
-) -> None:
-    catalog = _new_repo(tmp_path)
-    project = tmp_path / "selected-project"
-    project.mkdir()
-    _init_repo(project)
-    spawned: dict[str, Any] = {}
-
-    class _EmptyStdout:
-        async def readline(self) -> bytes:
-            return b""
-
-    class _FinishedProcess:
-        pid = 1234
-        returncode = 0
-        stdout = _EmptyStdout()
-
-        def __init__(self) -> None:
-            self.stdin = _GateInput()
-
-        async def wait(self) -> int:
-            return 0
-
-    async def _spawn(executable: str, *args: str, **kwargs: Any) -> _FinishedProcess:
-        spawned.update({"executable": executable, "args": args, **kwargs})
-        proc = _FinishedProcess()
-        proc.start_token = kwargs["env"]["THOMAS_CODE_START_TOKEN"]
-        spawned["proc"] = proc
-        return proc
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
-
-    async def _access_token(_profile: str, *, secret_store: object) -> str:
-        assert secret_store is not None
-        return "live-oauth-token"
-
-    monkeypatch.setattr(evolve_agent_http_support, "ensure_openai_codex_access_token", _access_token)
-
-    async def _body(client: TestClient) -> None:
-        raw_prompt = "Review this build, then deploy it to production"
-        created = await (
-            await client.post(
-                "/api/evolve/agent/conversations/new",
-                json={"title": "GPT build", "project_root": str(project)},
-            )
-        ).json()
-        cid = created["conversation"]["id"]
-        response = await client.post(
-            "/api/evolve/agent/send",
-            json={
-                "conversation_id": cid,
-                "project_root": str(project),
-                "message": raw_prompt,
-                "model": "codex:gpt",
-                "model_id": "gpt-5.6-codex",
-                "reasoning_effort": "xhigh",
-                "autonomy_level": 4,
-                "file_access": "full",
-                "memory": True,
-                "guardrails": "fortress",
-                "token_economy": "max",
-            },
-        )
-        assert response.status == 200
-        payload = await response.json()
-        assert payload["conversation_id"] == cid
-        assert payload["project_root"] == str(project.resolve())
-        assert payload["settings"]["support"]["reasoning_effort"]["status"] == "applied"
-        assert payload["settings"]["support"]["autonomy_level"]["status"] == "applied"
-        assert payload["settings"]["support"]["file_access"]["status"] == "applied"
-        assert payload["settings"]["support"]["file_access"]["effective"] == "full"
-        assert payload["settings"]["support"]["guardrails"]["effective"] == "fortress"
-        assert payload["settings"]["support"]["memory"]["effective"] == "conversation_history"
-        assert spawned["stdin"] is asyncio.subprocess.PIPE
-        assert spawned["env"]["THOMAS_CODE_START_GATE"] == "pipe"
-        assert spawned["env"]["THOMAS_CODE_RUN_ID"] == payload["run_id"]
-        assert spawned["env"]["THOMAS_CODE_REQUEST_ID"] == payload["request_id"]
-        # The runaway ceiling, not a per-tier budget: cd0203a7 removed pass
-        # limits (abandoning nearly-working code saves nothing), so every
-        # economy reports the same generous cap.
-        assert payload["settings"]["support"]["token_economy"]["max_fix_iters"] == 20
-
-        assert spawned["cwd"] == str(project.resolve())
-        args = list(spawned["args"])
-        assert args[:3] == ["-m", "thomas.forge.anvil.forge_code_runner", "--project-root"]
-        assert raw_prompt not in args
-        assert args[args.index("--profile") + 1] == "forgecode"
-        assert "--chatgpt-connected" not in args
-        assert args[args.index("--autonomy") + 1] == "4"
-        assert args[args.index("--file-access") + 1] == "full"
-        assert args[args.index("--memory") + 1] == "on"
-        assert args[args.index("--guardrails") + 1] == "fortress"
-        assert args[args.index("--token-economy") + 1] == "max"
-        env = spawned["env"]
-        assert env["THOMAS_MODELS_FORGECODE_MODEL"] == "gpt-5.6-codex"
-        assert env["THOMAS_MODELS_FORGECODE_REASONING_EFFORT"] == "xhigh"
-        assert str(Path(evolve_agent_routes.__file__).resolve().parents[3]) in env["PYTHONPATH"].split(os.pathsep)
-        gate_payload = json.loads(spawned["proc"].stdin.data.decode())
-        assert gate_payload["gate_token"] == spawned["proc"].start_token
-        assert gate_payload["oauth_access_token"] == "live-oauth-token"
-        assert gate_payload["goal"] == raw_prompt
-        assert "live-oauth-token" not in " ".join(args)
-        assert "live-oauth-token" not in json.dumps(env)
-        assert spawned["proc"].stdin.closed is True
-
-        # A completed turn can be followed by another turn in the same Code
-        # conversation, preserving its project and durable history identity.
-        for _ in range(100):
-            status = await (await client.get("/api/evolve/agent/status")).json()
-            if status.get("running") is False:
-                break
-            await asyncio.sleep(0.01)
-        assert status["running"] is False
-        follow_up = await client.post(
-            "/api/evolve/agent/send",
-            json={"conversation_id": cid, "project_root": str(project), "message": "improve it"},
-        )
-        assert follow_up.status == 200
-        follow_up_payload = await follow_up.json()
-        assert follow_up_payload["conversation_id"] == cid
-        assert follow_up_payload["run_id"] != payload["run_id"]
-        assert json.loads(spawned["proc"].stdin.data.decode())["goal"] == "improve it"
-        for _ in range(100):
-            status = await (await client.get("/api/evolve/agent/status")).json()
-            if status.get("running") is False:
-                break
-            await asyncio.sleep(0.01)
-        assert status["running"] is False
-
-        other = tmp_path / "other-project"
-        other.mkdir()
-        _init_repo(other)
-        changed = await client.post(
-            "/api/evolve/agent/send",
-            json={"conversation_id": cid, "project_root": str(other), "message": "move it"},
-        )
-        assert changed.status == 409
-        assert (await changed.json())["code"] == "project_change_requires_new_conversation"
-
-    def _configure(app: web.Application) -> None:
-        app[APP_SECRETS] = object()  # type: ignore[assignment]
-
-    _drive(catalog, _body, configure=_configure)
-
-
-def test_chatgpt_transport_failure_is_structured_and_never_launches(
-    tmp_path: Path,
-    monkeypatch: Any,
-    caplog: Any,
-) -> None:
-    catalog = _new_repo(tmp_path)
-    project = tmp_path / "selected-project"
-    project.mkdir()
-    _init_repo(project)
-
-    async def _access_token(_profile: str, *, secret_store: object) -> str:
-        assert secret_store is not None
-        raise evolve_agent_http_support.OpenAICodexOAuthError("refresh_token=TOP_SECRET_REFRESH")
-
-    async def _must_not_spawn(*_args: Any, **_kwargs: Any) -> Any:
-        raise AssertionError("Code must not spawn after OAuth preparation fails")
-
-    monkeypatch.setattr(evolve_agent_http_support, "ensure_openai_codex_access_token", _access_token)
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", _must_not_spawn)
-
-    async def _body(client: TestClient) -> None:
-        response = await client.post(
-            "/api/evolve/agent/send",
-            json={
-                "message": "build it",
-                "project_root": str(project),
-                "model": "codex:gpt",
-                "request_id": "oauth-transport-failure",
-            },
-        )
-        assert response.status == 503
-        payload = await response.json()
-        assert payload == {
-            "ok": False,
-            "error": "ChatGPT authentication is temporarily unavailable. Retry or reconnect in Easy Setup.",
-            "code": "chatgpt_auth_unavailable",
-            "retryable": True,
-        }
-        assert evolve_agent_runtime._action_receipt(catalog, "run", "oauth-transport-failure") is None
-        assert forge_code_store.list_conversations(project) == []
-        assert "TOP_SECRET_REFRESH" not in caplog.text
-
-    def _configure(app: web.Application) -> None:
-        app[APP_SECRETS] = object()  # type: ignore[assignment]
-
-    _drive(catalog, _body, configure=_configure)

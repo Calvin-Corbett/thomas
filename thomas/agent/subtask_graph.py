@@ -54,6 +54,8 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from thomas.agent.sandboxed_runners import COMMAND_NOT_RUN, COMMAND_TIMED_OUT
+
 __all__ = [
     "CommandRerunVerifier",
     "GraphCycleError",
@@ -281,6 +283,13 @@ def _pin_python(argv: list[str]) -> list[str]:
 
 
 def _default_command_runner(argv: list[str], cwd: str | None, timeout_seconds: int) -> tuple[int, str, str]:
+    """Run through the sandbox slot: the cage when it is wanted, the local runner below when it is not."""
+    from thomas.agent.sandboxed_runners import argv_runner
+
+    return argv_runner(argv, cwd, timeout_seconds, local=_local_command_runner, pin=_pin_python, snippet=_snippet)
+
+
+def _local_command_runner(argv: list[str], cwd: str | None, timeout_seconds: int) -> tuple[int, str, str]:
     env = dict(os.environ)
     if cwd:
         env["PYTHONPATH"] = str(cwd)
@@ -341,6 +350,12 @@ class CommandRerunVerifier:
                 )
                 continue
             rc, out, err = runner(argv, cwd or None, self.timeout_seconds)
+            if int(rc) in (COMMAND_NOT_RUN, COMMAND_TIMED_OUT):
+                # The sandbox did not run it (or it ran out of time). That is a failure whatever exit code is expected.
+                checks.append(
+                    RubricCheck(crit.key, crit.description, False, f"did not run: {_snippet(err or out, limit=200)}")
+                )
+                continue
             passed = int(rc) == int(self.expected_returncode)
             if passed:
                 detail = f"exit {rc}"

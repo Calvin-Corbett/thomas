@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -29,9 +30,14 @@ def default_library_root(config: AppConfig) -> Path:
     """Compute the default library folder path.
 
     If memory root is `<project>/runtime`, keep library at `<project>/library`.
-    Otherwise colocate at `<memory_root>/library`.
+    Otherwise colocate at `<memory_root>/library`. When config leaves the memory
+    root unset, THOMAS_MEMORY_ROOT can supply it (including for isolated tests).
     """
-    root = config.memory.root_path
+    env_root = os.environ.get("THOMAS_MEMORY_ROOT", "").strip()
+    if not str(config.memory.root or "").strip() and env_root:
+        root = Path(env_root).expanduser().resolve()
+    else:
+        root = config.memory.root_path
     if root.name.lower() == "runtime":
         return root.parent / "library"
     return root / "library"

@@ -1,0 +1,2 @@
+### Changed
+- The code-search tool group (`code.search`, `code.find_definition`, `code.find_references`, `code.project_structure`, `code.semantic_search`) is now described by `thomas/server/tool_manifests/code-search.toml` and registered from it by `_build_tools`. The tool set, order and model-facing schemas are byte-identical to before; if the manifest is missing or disagrees with what the group registers, the original direct registration runs instead and a warning is logged.

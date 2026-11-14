@@ -1,4 +1,4 @@
-""""needs key" is a remedy now, not just a verdict.
+""" "needs key" is a remedy now, not just a verdict.
 
 The model menu listed Anthropic, Google, xAI, Meta Llama and Mistral, marked
 every one "needs key", and the unified shell had NO way to supply one. The only
@@ -30,6 +30,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 CHAT_HTML = ROOT / "thomas" / "server" / "web" / "chat.html"
 
@@ -37,19 +39,17 @@ CHAT_HTML = ROOT / "thomas" / "server" / "web" / "chat.html"
 def _shell() -> str:
     """chat.html with comments stripped before anything is searched."""
 
-    text = CHAT_HTML.read_text(encoding="utf-8", errors="replace")
+    text = read_chat_sources(CHAT_HTML)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
-    return "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("//")
-    )
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//"))
 
 
 def _key_row_body() -> str:
     shell = _shell()
     start = shell.find("function buildKeyRow")
     assert start != -1, "buildKeyRow is gone; a keyless provider has no way to be given a key"
-    return shell[start:start + 2400]
+    return shell[start : start + 2400]
 
 
 def test_the_key_row_is_rendered_for_keyless_providers() -> None:
@@ -58,8 +58,7 @@ def test_the_key_row_is_rendered_for_keyless_providers() -> None:
     # without it this passes with the call removed, which is the exact
     # built-but-never-called state that buried the old settings UI.
     assert re.search(r"(?<!function )buildKeyRow\(p\)", shell), (
-        "buildKeyRow is defined but never called, so a provider marked "
-        "'needs key' still offers no way to supply one"
+        "buildKeyRow is defined but never called, so a provider marked 'needs key' still offers no way to supply one"
     )
     assert "profileIsUsable(p)" in shell, (
         "the keyless list no longer filters on profileIsUsable, so the key row "
@@ -74,20 +73,17 @@ def test_the_key_is_typed_into_a_password_field_and_not_left_behind() -> None:
         "shoulder-readable and lands in every screenshot of this menu"
     )
     assert re.search(r"input\.value\s*=\s*''", body), (
-        "the key is no longer cleared from the field on submit, so it sits in "
-        "the DOM after being sent"
+        "the key is no longer cleared from the field on submit, so it sits in the DOM after being sent"
     )
 
 
 def test_it_posts_the_key_to_the_secrets_endpoint() -> None:
     body = _key_row_body()
     assert "/api/secrets/" in body and "encodeURIComponent(profile.name)" in body, (
-        "the key row no longer POSTs to /api/secrets/{profile}, or no longer "
-        "escapes the profile name"
+        "the key row no longer POSTs to /api/secrets/{profile}, or no longer escapes the profile name"
     )
     assert re.search(r"api_key:\s*key", body), (
-        "the request body no longer carries api_key, which is the only field "
-        "the endpoint accepts"
+        "the request body no longer carries api_key, which is the only field the endpoint accepts"
     )
 
 
@@ -102,7 +98,7 @@ def test_saving_a_key_does_not_switch_the_active_model() -> None:
     shell = _shell()
     start = shell.find("async function reloadModelProfiles")
     assert start != -1, "reloadModelProfiles is gone"
-    body = shell[start:start + 900]
+    body = shell[start : start + 900]
     assert "setProfile(" not in body, (
         "reloadModelProfiles now changes the active profile, so saving a key "
         "for one provider can silently switch the conversation to it"

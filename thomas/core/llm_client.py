@@ -7,14 +7,11 @@ retries, error classification, token tracking, and tool call parsing.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import logging
 import re
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from email.utils import parsedate_to_datetime
 from typing import Any
 
 try:
@@ -25,8 +22,25 @@ except ImportError:
 from thomas.core import capture_context
 from thomas.core.config import ModelConfig
 from thomas.core.llm_budget import LLMBudgetMixin
+from thomas.core.llm_park import parked_error, parked_text
+from thomas.core.llm_provider_state import (
+    _PROVIDER_COOLDOWNS,
+    _ProviderCooldown,
+    get_cooldown,
+)
 from thomas.core.llm_shared import LLMError, StreamEvent, TokenUsage, callable_accepts_keyword
 from thomas.core.llm_streaming import stream_anthropic, stream_openai, stream_openai_codex
+from thomas.core.llm_streaming_anthropic import extract_anthropic_usage
+from thomas.core.llm_transport_pool import (
+    _coerce_async_iterator,
+    close_http_client,
+    get_http_client,
+    retry_after_seconds,
+    stream_anthropic_events,
+    stream_current_provider,
+    stream_openai_codex_events,
+    stream_openai_events,
+)
 from thomas.core.structured_output import StructuredResult, request_structured
 
 log = logging.getLogger(__name__)
@@ -36,59 +50,11 @@ _BASE_DELAY = 1.0
 _DEFAULT_RATE_LIMIT_COOLDOWN_S = 20.0
 _MAX_RETRY_AFTER_S = 300.0
 _AUTH_FAILURE_BASE_S = 18_000.0  # 5 hours (billing/auth failures)
-_SERVER_FAILURE_BASE_S = 300.0  # 5 minutes (general server errors)
-_MAX_BACKOFF_S = 86_400.0  # 24 hours cap
-_RATE_LIMIT_BACKOFF_CAP_S = 600.0  # 10 minutes cap for rate limits
-
-
-@dataclass
-class _ProviderCooldown:
-    """Tracks per-provider cooldown with exponential backoff."""
-
-    until: float = 0.0
-    failure_count: int = 0
-    failure_type: str = ""  # "rate_limit" | "auth" | "server" | "connect"
-
-    def mark(self, failure_type: str, base_s: float = _SERVER_FAILURE_BASE_S) -> None:
-        self.failure_type = failure_type
-        self.failure_count += 1
-        wait = base_s * (2 ** min(self.failure_count - 1, 7))
-        wait = min(wait, _MAX_BACKOFF_S)
-        if failure_type == "rate_limit":
-            wait = min(wait, _RATE_LIMIT_BACKOFF_CAP_S)
-        self.until = time.monotonic() + wait
-
-    def remaining(self) -> float:
-        rem = self.until - time.monotonic()
-        return rem if rem > 0 else 0.0
-
-    def is_active(self) -> bool:
-        return self.remaining() > 0
-
-    def clear(self) -> None:
-        self.until = 0.0
-        self.failure_count = 0
-        self.failure_type = ""
-
-
-_PROVIDER_COOLDOWNS: dict[str, _ProviderCooldown] = {}
-
-
-async def _coerce_async_iterator(value: Any, *, source: str) -> AsyncIterator[Any]:
-    if hasattr(value, "__aiter__"):
-        return value
-    if inspect.isawaitable(value):
-        resolved = await value
-        if hasattr(resolved, "__aiter__"):
-            return resolved
-        raise TypeError(f"{source} returned {type(resolved)!r} after await, not an async iterator.")
-    raise TypeError(f"{source} returned unsupported type {type(value)!r}; expected async iterator.")
 
 
 def _get_cooldown(key: str) -> _ProviderCooldown:
-    if key not in _PROVIDER_COOLDOWNS:
-        _PROVIDER_COOLDOWNS[key] = _ProviderCooldown()
-    return _PROVIDER_COOLDOWNS[key]
+    """Compatibility wrapper over the extracted process-wide registry."""
+    return get_cooldown(key, cooldowns=_PROVIDER_COOLDOWNS, cooldown_factory=_ProviderCooldown)
 
 
 class LLMClient(LLMBudgetMixin):
@@ -105,7 +71,9 @@ class LLMClient(LLMBudgetMixin):
         max_retries: int = _MAX_RETRIES,
         base_retry_delay_s: float = _BASE_DELAY,
         request_overrides: dict[str, Any] | None = None,
+        request_admission: Any = None,
     ):
+        self._request_admission = request_admission
         self.config = config
         self._primary_config = config
         self.session_usage = TokenUsage()
@@ -126,35 +94,10 @@ class LLMClient(LLMBudgetMixin):
         self.capture_failures: int = 0
 
     async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            headers: dict[str, str] = {"Content-Type": "application/json"}
-            if self.config.extra_headers:
-                headers.update(self.config.extra_headers)
-
-            if self.config.api_key:
-                if self.config.provider == "anthropic":
-                    headers["x-api-key"] = self.config.api_key
-                    headers.setdefault("anthropic-version", "2023-06-01")
-                else:
-                    header_name = self.config.api_key_header or "Authorization"
-                    prefix = self.config.api_key_prefix or ""
-                    headers[header_name] = f"{prefix}{self.config.api_key}"
-
-            self._client = httpx.AsyncClient(
-                headers=headers,
-                timeout=httpx.Timeout(
-                    connect=10.0,
-                    read=self.config.timeout_s,
-                    write=10.0,
-                    pool=10.0,
-                ),
-            )
-        return self._client
+        return await get_http_client(self, httpx_module=httpx)
 
     async def close(self) -> None:
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None
+        await close_http_client(self)
 
     async def _switch_config(self, cfg: ModelConfig) -> None:
         """Switch active model config and reset provider clients if needed."""
@@ -196,32 +139,9 @@ class LLMClient(LLMBudgetMixin):
 
     @staticmethod
     def _retry_after_seconds(headers: Any) -> float | None:
-        if headers is None:
-            return None
-        raw = ""
-        try:
-            raw = str(headers.get("retry-after") or headers.get("Retry-After") or "").strip()
-        except (AttributeError, TypeError):
-            raw = ""
-        if not raw:
-            return None
+        return retry_after_seconds(headers, max_retry_after_s=_MAX_RETRY_AFTER_S)
 
-        try:
-            seconds = float(raw)
-            if seconds >= 0:
-                return min(seconds, _MAX_RETRY_AFTER_S)
-        except ValueError:
-            pass
-
-        try:
-            dt = parsedate_to_datetime(raw)
-            now = time.time()
-            delta = max(0.0, float(dt.timestamp() - now))
-            return min(delta, _MAX_RETRY_AFTER_S)
-        except (ValueError, TypeError):
-            return None
-
-    def _mark_rate_limited(self, cfg: ModelConfig, retry_after_s: float | None) -> None:
+    def _mark_rate_limited(self, cfg: ModelConfig, retry_after_s: float | None, refusal: str = "") -> None:
         key = self._cooldown_key(cfg)
         cd = _get_cooldown(key)
         if retry_after_s is not None and retry_after_s > 0:
@@ -229,8 +149,9 @@ class LLMClient(LLMBudgetMixin):
             cd.until = time.monotonic() + min(float(retry_after_s), _MAX_RETRY_AFTER_S)
             cd.failure_type = "rate_limit"
             cd.failure_count = max(cd.failure_count, 1)
+            cd.refusal = refusal
         else:
-            cd.mark("rate_limit", base_s=float(_DEFAULT_RATE_LIMIT_COOLDOWN_S))
+            cd.mark("rate_limit", base_s=float(_DEFAULT_RATE_LIMIT_COOLDOWN_S), refusal=refusal)
 
     def _rate_limit_remaining(self, cfg: ModelConfig) -> float:
         key = self._cooldown_key(cfg)
@@ -238,6 +159,14 @@ class LLMClient(LLMBudgetMixin):
         if cd.failure_type == "rate_limit":
             return cd.remaining()
         return 0.0
+
+    def _parked_text(self, cfg: ModelConfig, remaining: float) -> str:
+        """What a turn refused by the park, rather than by the provider, reports (thomas/core/llm_park.py)."""
+        return parked_text(cfg.name, remaining, str(_get_cooldown(self._cooldown_key(cfg)).refusal or ""))
+
+    def _parked_error(self, cfg: ModelConfig, remaining: float) -> LLMError:
+        """The park's refusal, carrying the quota facts the provider's refusal carried (thomas/core/llm_park.py)."""
+        return parked_error(cfg.name, remaining, str(_get_cooldown(self._cooldown_key(cfg)).refusal or ""))
 
     @staticmethod
     def _cfg_snapshot(cfg: ModelConfig) -> dict[str, Any]:
@@ -310,10 +239,7 @@ class LLMClient(LLMBudgetMixin):
             "stream": stream,
         }
         if stream and str(getattr(self.config, "provider", "") or "").lower() != "azure":
-            # OpenAI-compatible streams carry usage only when asked. Without
-            # this, a local model server (Ollama, vLLM, LM Studio) never sends
-            # a count and every receipt read "0 in · 0 out". Azure's older API
-            # versions reject the field, so Azure is left as it was.
+            # OpenAI-compatible streams report usage only when asked; older Azure APIs reject this.
             body["stream_options"] = {"include_usage": True}
         if self.config.top_p < 1.0:
             body["top_p"] = self.config.top_p
@@ -512,35 +438,7 @@ class LLMClient(LLMBudgetMixin):
 
     @staticmethod
     def _extract_anthropic_usage(event_data: dict[str, Any]) -> dict[str, int]:
-        """Extract Anthropic usage fields from top-level and nested message objects."""
-        raw_usage: dict[str, Any] = {}
-
-        top_usage = event_data.get("usage")
-        if isinstance(top_usage, dict):
-            raw_usage.update(top_usage)
-
-        message_obj = event_data.get("message")
-        if isinstance(message_obj, dict):
-            msg_usage = message_obj.get("usage")
-            if isinstance(msg_usage, dict):
-                for k, v in msg_usage.items():
-                    raw_usage.setdefault(k, v)
-
-        out: dict[str, int] = {}
-        for key in (
-            "input_tokens",
-            "output_tokens",
-            "cache_creation_input_tokens",
-            "cache_read_input_tokens",
-        ):
-            if key not in raw_usage:
-                continue
-            try:
-                out[key] = max(0, int(raw_usage.get(key) or 0))
-            except (TypeError, ValueError, OverflowError):
-                log.debug("Ignoring invalid Anthropic usage field %s=%r", key, raw_usage.get(key))
-                continue
-        return out
+        return extract_anthropic_usage(event_data)
 
     async def stream_chat(
         self,
@@ -628,11 +526,7 @@ class LLMClient(LLMBudgetMixin):
                 }
                 self._attempt_trace.append(attempt)
                 self._runtime_attempt_trace.append(attempt)
-                raise LLMError(
-                    f"Rate-limit cooldown active for profile '{self.config.name}' ({int(rem)}s remaining).",
-                    status=429,
-                    retryable=True,
-                )
+                raise self._parked_error(self.config, rem)
             attempt = {
                 **self._cfg_snapshot(self.config),
                 "status": "running",
@@ -647,6 +541,16 @@ class LLMClient(LLMBudgetMixin):
                 ):
                     yield event
                 attempt["status"] = "success"
+                # It answered, so nothing the park remembers about it holds. Only
+                # the failover loop below cleared the park, and a profile with no
+                # fallbacks never enters it -- the ordinary case for one plan picked
+                # in the model menu. Harmless while the park was just a timer; not
+                # now that a spent allowance is reported until the reset its refusal
+                # named (provider_cooldowns.spent_allowances), which for a reset read
+                # from words is deliberately an hour late when the zone is unreadable
+                # (claude_plan._ZONE_MARGIN_S). Without this the composer's line kept
+                # calling your plan out of allowance while it was answering.
+                self._clear_cooldown(self.config)
                 return
             except asyncio.CancelledError:
                 raise
@@ -689,11 +593,7 @@ class LLMClient(LLMBudgetMixin):
                 attempt["cooldown_remaining_s"] = int(rate_limited_for)
                 if idx < len(candidates) - 1:
                     continue
-                last_error = LLMError(
-                    f"Rate-limit cooldown active for profile '{cfg.name}' ({int(rate_limited_for)}s remaining).",
-                    status=429,
-                    retryable=True,
-                )
+                last_error = self._parked_error(cfg, rate_limited_for)
                 continue
             if idx > 0:
                 rem = self._cooldown_remaining(cfg)
@@ -769,43 +669,27 @@ class LLMClient(LLMBudgetMixin):
         *,
         turn_user_content: Any = None,
     ) -> AsyncIterator[StreamEvent]:
-        provider_name = str(self.config.provider or "").strip().lower().replace("-", "_")
-        if provider_name == "openai_codex":
-            stream_obj = await _coerce_async_iterator(
-                self._stream_openai_codex(
-                    messages,
-                    tools,
-                    turn_user_content=turn_user_content,
-                ),
-                source="stream_openai_codex",
-            )
-            async for event in stream_obj:
-                yield event
-        elif provider_name == "anthropic":
-            stream_obj = await _coerce_async_iterator(
-                self._stream_anthropic(messages, tools),
-                source="stream_anthropic",
-            )
-            async for event in stream_obj:
-                yield event
-        else:
-            stream_obj = await _coerce_async_iterator(
-                self._stream_openai(messages, tools),
-                source="stream_openai",
-            )
-            async for event in stream_obj:
-                yield event
+        async for event in stream_current_provider(
+            self,
+            messages,
+            tools,
+            turn_user_content=turn_user_content,
+            coerce_async_iterator=_coerce_async_iterator,
+        ):
+            yield event
 
     async def _stream_openai(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
-        stream_obj = await _coerce_async_iterator(
-            stream_openai(self, messages, tools),
-            source="stream_openai",
-        )
-        async for event in stream_obj:
+        async for event in stream_openai_events(
+            self,
+            messages,
+            tools,
+            stream_openai_func=stream_openai,
+            coerce_async_iterator=_coerce_async_iterator,
+        ):
             yield event
 
     async def _stream_openai_codex(
@@ -815,16 +699,14 @@ class LLMClient(LLMBudgetMixin):
         *,
         turn_user_content: Any = None,
     ) -> AsyncIterator[StreamEvent]:
-        stream_obj = await _coerce_async_iterator(
-            stream_openai_codex(
-                self,
-                messages,
-                tools,
-                turn_user_content=turn_user_content,
-            ),
-            source="stream_openai_codex",
-        )
-        async for event in stream_obj:
+        async for event in stream_openai_codex_events(
+            self,
+            messages,
+            tools,
+            turn_user_content=turn_user_content,
+            stream_openai_codex_func=stream_openai_codex,
+            coerce_async_iterator=_coerce_async_iterator,
+        ):
             yield event
 
     async def _stream_anthropic(
@@ -832,11 +714,13 @@ class LLMClient(LLMBudgetMixin):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
-        stream_obj = await _coerce_async_iterator(
-            stream_anthropic(self, messages, tools),
-            source="stream_anthropic",
-        )
-        async for event in stream_obj:
+        async for event in stream_anthropic_events(
+            self,
+            messages,
+            tools,
+            stream_anthropic_func=stream_anthropic,
+            coerce_async_iterator=_coerce_async_iterator,
+        ):
             yield event
 
     async def chat(
@@ -888,8 +772,7 @@ class LLMClient(LLMBudgetMixin):
         back to the model and retried up to ``max_repair_attempts`` times.
 
         Raises SchemaValidationError for a malformed caller schema and
-        StructuredOutputError (with a per-attempt trace) when the model cannot
-        produce conforming output within the bounded repair loop.
+        StructuredOutputError when the repair loop cannot produce valid output.
         """
 
         async def _adapter(msgs: list[dict[str, Any]]) -> str:

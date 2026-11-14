@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 WEB = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web"
 CODE_JS = WEB / "js" / "unified_code_mode.js"
 # The artifact cards, their preview documents and the run report live in the
@@ -17,7 +19,7 @@ CODE_RESULTS_CSS = WEB / "css" / "unified_code_results.css"
 
 
 def _js() -> str:
-    return CODE_JS.read_text(encoding="utf-8") + "\n" + CODE_RESULTS_JS.read_text(encoding="utf-8")
+    return read_code_sources(WEB / "js")
 
 
 def test_a_finished_build_names_what_it_produced() -> None:
@@ -71,11 +73,12 @@ def test_a_result_shows_a_live_thumbnail() -> None:
     the parts missing, which looks exactly like the parts being broken.
     """
     text = _js()
-    body = text.split("function artifactCardsHtml", 1)[1].split("\n  }\n", 1)[0]
+    body = code_function_body(WEB / "js", "livePreviewHtml")
 
-    assert "tc-code-artifact-thumb" in body
+    assert "tc-live-frame" in body, "a page is one large live frame, not a thumbnail row"
     assert "srcdoc=" not in body, "srcdoc cannot load what the page references"
-    assert "src=" in body
+    assert "data-live-src" in body and "sandbox=" in body
+    assert "Click to open" not in body, "the card says nothing about files or clicking"
 
 
 def test_thumbnails_are_loaded_without_being_asked_and_are_capped() -> None:
@@ -89,7 +92,7 @@ def test_a_finished_run_presents_its_result_without_being_asked() -> None:
     text = _js()
 
     assert "presentNewestResult" in text
-    body = text.split("async function presentNewestResult", 1)[1].split("\n  }", 1)[0]
+    body = code_function_body(WEB / "js", "presentNewestResult")
     assert "role !== 'agent'" in body, "only a Thomas turn produces a result"
     assert "turn.ok" in body, "a failed run has nothing to present"
     assert re.search(r"\.x\?html\?\$", body) or ".x?html?$" in body, "prefer a page"
@@ -106,7 +109,7 @@ def test_the_card_is_a_real_control() -> None:
 
 def test_internal_paths_are_not_offered_as_results() -> None:
     text = _js()
-    body = text.split("function artifactCardsHtml", 1)[1].split("\n  }", 1)[0]
+    body = code_function_body(WEB / "js", "artifactCardsHtml")
 
     assert "isInternalResultPath" in body
 

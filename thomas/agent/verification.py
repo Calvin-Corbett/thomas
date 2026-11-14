@@ -677,18 +677,42 @@ async def verify_after_tool(
         # into the source, but the regex is a defense-in-depth second layer.
         if module_parts and _MODULE_NAME_RE.fullmatch(module_name):
             try:
-                proc = await asyncio.create_subprocess_exec(
+                import_argv = [
                     "python",
                     "-c",
                     "import importlib, sys; importlib.import_module(sys.argv[1])",
                     module_name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=sandbox_root or ".",
-                )
-                _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
-                if proc.returncode != 0:
+                ]
+                status, code, err_text = "local", None, ""
+                if sandbox_root:  # in a project folder the sandbox decides where this agent-written code is imported
+                    from thomas.agent.sandboxed_runners import argv_ladder
+
+                    # allowed=True: this probe has no shell switch of its own; it runs after every good write
+                    status, code, err_text = await asyncio.to_thread(
+                        argv_ladder, import_argv, sandbox_root, 10, allowed=True
+                    )
+                if status == "local":
+                    proc = await asyncio.create_subprocess_exec(
+                        *import_argv,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=sandbox_root or ".",
+                    )
+                    _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+                    status, code = "ran", proc.returncode
                     err_text = stderr.decode("utf-8", errors="replace").strip()
+                if status == "not_run":
+                    issues.append(
+                        {
+                            "level": "warning",
+                            "check": "import",
+                            "message": f"{path.name}: Import check did not run — {err_text[:200]}",
+                        }
+                    )
+                elif status == "timeout":
+                    log.debug("Import check timed out for %s", path)
+                elif code != 0:
+                    err_text = err_text.strip()
                     if "ModuleNotFoundError" not in err_text:
                         issues.append(
                             {

@@ -1,0 +1,3 @@
+### Fixed
+
+- **The line of test runs gives each free place to the run that came first, and sees the cage's CPU cap.** A review of the line that landed this morning found three things. A free place went to whichever waiting run asked first, so a run could be passed again and again; now a run starts only when every run ahead of it fits too. Under the caged server's CPU cap the whole PC reads under 90% even while Thomas's own share is used up, so the line let up to 14 runs start into a throttled cage; now a Build reads the cap and what the cage used from its own Windows job, and counts the room inside it. And setting the PC's clock forward gave up every running place; the line now reads ages from a clock that never moves back or jumps.

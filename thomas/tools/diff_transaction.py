@@ -22,7 +22,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from thomas.tools.filesystem import _is_protected_runtime_path, _safe_path
+from thomas.tools.filesystem import (
+    _is_protected_runtime_path,
+    _runtime_protection_roots,
+)
+from thomas.tools.fs_scope import scopes
 
 _HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
@@ -301,15 +305,24 @@ def _plan(
     file_patches: list[FilePatch],
     root: Path,
     accepted: set[str],
+    project_root: Path | None = None,
 ) -> tuple[list[tuple[Path, str, str]], list[HunkConflict], list[str], list[str]]:
     """Preflight all files; return (planned_writes, conflicts, applied, skipped).
 
     ``planned_writes`` entries are (resolved_path, relative_name, new_content).
+    ``project_root`` is checked the way fs.write_file checks it: against the
+    real project (and *root* only when it sits INSIDE that tree), never
+    against *root* alone -- checking *root* alone refused every
+    thomas/server|tools|agent|core and scripts/ path inside a self-fix green,
+    a private copy outside the project tree (fix round 1, C2). Defaults to
+    *root* itself, which reproduces the old (pre-C2) behaviour for a caller
+    that does not pass one.
     """
     planned: list[tuple[Path, str, str]] = []
     conflicts: list[HunkConflict] = []
     applied: list[str] = []
     skipped: list[str] = []
+    protection_roots = _runtime_protection_roots(root, project_root or root)
 
     for fp in file_patches:
         file_accepted = [h for h in fp.hunks if h.hunk_id in accepted]
@@ -321,12 +334,16 @@ def _plan(
             conflicts.extend(HunkConflict(h.hunk_id, file, reason) for h in hunks)
 
         try:
-            path = _safe_path(root, fp.file)
+            path = scopes().scope(root).resolve(fp.file)
         except ValueError as e:
             _reject(str(e))
             continue
 
-        blocked = _is_protected_runtime_path(root, path)
+        blocked = None
+        for protection_root in protection_roots:
+            blocked = _is_protected_runtime_path(protection_root, path)
+            if blocked:
+                break
         if blocked:
             _reject(blocked)
             continue
@@ -361,6 +378,8 @@ def preflight_patch(
     patch_text: str,
     root: Path,
     selection: Sequence[str | int] | None = None,
+    *,
+    project_root: Path | None = None,
 ) -> PreflightReport:
     """Parse + verify a patch against current file content. Never writes."""
     file_patches = parse_patch(patch_text)
@@ -372,7 +391,7 @@ def preflight_patch(
     if unknown:
         report.conflicts.extend(HunkConflict(token, "", "unknown hunk id or index") for token in unknown)
         return report
-    _, conflicts, _, _ = _plan(file_patches, root, accepted)
+    _, conflicts, _, _ = _plan(file_patches, root, accepted, project_root)
     report.conflicts.extend(conflicts)
     return report
 
@@ -401,6 +420,8 @@ def apply_patch_transactional(
     patch_text: str,
     root: Path,
     selection: Sequence[str | int] | None = None,
+    *,
+    project_root: Path | None = None,
 ) -> ApplyReport:
     """Apply a unified diff atomically: preflight everything, write, or roll back.
 
@@ -422,7 +443,7 @@ def apply_patch_transactional(
     if selection is not None and not accepted:
         return ApplyReport(ok=False, skipped_hunks=all_ids, error="empty hunk selection; nothing applied")
 
-    planned, conflicts, applied, skipped = _plan(file_patches, root, accepted)
+    planned, conflicts, applied, skipped = _plan(file_patches, root, accepted, project_root)
 
     if conflicts:
         return ApplyReport(

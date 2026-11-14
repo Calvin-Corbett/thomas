@@ -38,6 +38,20 @@ except ImportError:
     TEST_PREFIXES = ("tests/",)
     THRESHOLD = 3
 
+
+def _rebind_root(raw: str | None) -> None:
+    """Point the gate at another checkout so it can be run against a fixture.
+
+    Without this the gate always judges the repo it lives in, so it could never have
+    a red-path selftest - and the enforcement ratchet will not let an unprovable gate
+    enforce. Same option, same default, as monolith_guard.py.
+    """
+    global ROOT
+    if not raw:
+        return
+    ROOT = Path(raw).resolve()
+
+
 CODE_EXTENSIONS = {".py", ".js", ".mjs", ".ts", ".tsx", ".jsx"}
 DOC_EXTENSIONS = {".md", ".txt", ".rst"}
 CONFIG_EXTENSIONS = {".toml", ".yaml", ".yml", ".json", ".cfg", ".ini"}
@@ -74,11 +88,17 @@ def _is_doc_or_config(path: str) -> bool:
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root (default: inferred from script location).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     parser.add_argument(
         "--threshold", type=int, default=THRESHOLD, help=f"Min source files to require test (default: {THRESHOLD})"
     )
     args = parser.parse_args(argv)
+    _rebind_root(args.repo_root)
 
     staged = _staged_files()
     source_files = [f for f in staged if _is_source_code(f)]

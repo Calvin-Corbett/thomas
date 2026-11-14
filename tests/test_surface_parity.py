@@ -242,7 +242,7 @@ def test_run_fails_when_web_missing_required_event(monkeypatch: pytest.MonkeyPat
         "\n".join(f'await send({{"type": "{evt}"}})' for evt in sorted(mod.REQUIRED_WIRE_EVENTS)),
         encoding="utf-8",
     )
-    web_events = sorted(mod.REQUIRED_WIRE_EVENTS - {"guardrails"})
+    web_events = sorted(mod.REQUIRED_WIRE_EVENTS - {"iteration"})
     web.write_text(
         "\n".join(f"if (event.type === '{evt}') {{}}" for evt in web_events),
         encoding="utf-8",
@@ -322,7 +322,7 @@ def test_run_json_fail_payload(
         encoding="utf-8",
     )
     web.write_text(
-        "\n".join(f"if (evt.type === '{evt}') {{}}" for evt in sorted(mod.REQUIRED_WIRE_EVENTS - {"guardrails"})),
+        "\n".join(f"if (evt.type === '{evt}') {{}}" for evt in sorted(mod.REQUIRED_WIRE_EVENTS - {"iteration"})),
         encoding="utf-8",
     )
     cli.write_text(
@@ -345,7 +345,7 @@ def test_run_json_fail_payload(
     assert rc == 1
     assert payload["ok"] is False
     assert payload["gate"] == "surface_parity"
-    assert "guardrails" in payload["missing_web_required"]
+    assert "iteration" in payload["missing_web_required"]
 
 
 def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:

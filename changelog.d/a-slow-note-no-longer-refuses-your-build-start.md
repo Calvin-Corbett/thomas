@@ -1,0 +1,2 @@
+### Fixed
+- Sending a message to Build on "Improve Thomas" no longer gets refused with "preparation stalled ... while registering the project" because one of the notes your team is given was slow to read. The two notes (what other projects are changing, and what earlier teams were sent back for) each get eight seconds, then the project starts without the one that is slow. If a start still stands still, the refusal now names the step that stood still instead of the one before it.

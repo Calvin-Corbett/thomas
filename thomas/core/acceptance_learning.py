@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from thomas.core.acceptance_contract import KIND_DATA_FIELD, KIND_LEARNED, KIND_OUTPUT_PATH, ContractItem
+from thomas.core.goal_book import contract_rows
 from thomas.core.project_root import resolve_project_root, user_praxis_root
 
 _FILE = "learned_checks.json"
@@ -78,6 +79,9 @@ def load_learned(workspace: str | Path, *, env: dict[str, str] | None = None) ->
                 "target": str(row.get("target") or ""),
             }
         )
+    # Every standing goal joins as a judged requirement until someone retires it; begin_contract keeps goals only where
+    # a separate judge rules. goal_book reads a goals file it cannot read or parse, or of the wrong shape, as no goals.
+    out.extend(contract_rows(workspace))
     return out
 
 

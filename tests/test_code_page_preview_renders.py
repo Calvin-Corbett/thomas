@@ -5,11 +5,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-CODE_MODE_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
+CODE_JS = Path(__file__).resolve().parent.parent / "thomas" / "server" / "web" / "js"
 
 
-def _source() -> str:
-    return CODE_MODE_JS.read_text(encoding="utf-8")
+def _source(name: str = "unified_code_surface.js") -> str:
+    return (CODE_JS / name).read_text(encoding="utf-8")
 
 
 def test_an_html_file_is_previewed_as_a_rendered_page() -> None:
@@ -42,7 +42,7 @@ def test_the_preview_iframe_never_gets_same_origin() -> None:
 def test_the_live_refresh_never_opens_a_preview_by_itself() -> None:
     """It refreshes what is already open. Popping a preview open mid-run would
     steal the panel while someone is reading something else."""
-    text = _source()
+    text = _source("unified_code_live_view.js")
     body = text.split("function refreshOpenPagePreview", 1)[1].split("function pushLiveEvent", 1)[0]
 
     assert "if (!open" in body, "must bail when nothing is open"
@@ -52,7 +52,11 @@ def test_the_live_refresh_never_opens_a_preview_by_itself() -> None:
 def test_the_live_refresh_is_throttled() -> None:
     """Run events arrive in bursts; re-reading the file on every one would hammer
     the endpoint."""
-    body = _source().split("function refreshOpenPagePreview", 1)[1].split("function pushLiveEvent", 1)[0]
+    body = (
+        _source("unified_code_live_view.js")
+        .split("function refreshOpenPagePreview", 1)[1]
+        .split("function pushLiveEvent", 1)[0]
+    )
 
     assert "_previewRefreshAt" in body
     assert re.search(r"<\s*1500", body), "no throttle interval"

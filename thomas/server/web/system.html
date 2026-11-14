@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System — Thomas</title>
+<link rel="stylesheet" href="/static/css/tokens.css">
+<style>
+  /* Embedded as a workspace (?embed=1): the shell already shows the product name and the workspace title. */
+  html.tcw-embed, html.tcw-embed body { background: transparent !important; }
+</style>
+<script>
+  (function () {
+    try {
+      if (new URLSearchParams(window.location.search).get('embed') === '1') {
+        document.documentElement.classList.add('tcw-embed');
+      }
+    } catch (e) {}
+  })();
+</script>
+<script>
+  /* Apply the unified theme before first paint. */
+  (function () {
+    var theme = 'nebula';
+    try { theme = String(localStorage.getItem('thomas_chat_theme') || 'nebula').toLowerCase(); } catch (e) {}
+    var de = document.documentElement;
+    de.dataset.thomasTheme = theme;
+    de.dataset.theme = theme;
+  })();
+</script>
+<link rel="stylesheet" href="/static/css/system_page.css">
+</head>
+<body>
+<div class="sy-shell">
+  <nav class="sy-nav" aria-label="System pages">
+    <h1>System</h1>
+    <div id="sy-pages" role="tablist" aria-orientation="vertical"></div>
+    <p id="sy-updated" class="sy-quiet" role="status"></p>
+  </nav>
+  <main id="sy-page" class="sy-page" tabindex="-1" aria-live="polite"></main>
+</div>
+<script src="/static/js/system_page.js"></script>
+</body>
+</html>

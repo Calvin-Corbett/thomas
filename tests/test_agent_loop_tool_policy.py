@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from thomas.agent.loop import AgentLoop
 from thomas.agent.routing import IntentRouter
 from thomas.core.config import AppConfig, ModelConfig, QualityConfig
@@ -7,6 +9,12 @@ from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.registry import ToolRegistry
+
+
+@pytest.fixture(autouse=True)
+def _run_from_an_empty_folder(tmp_path, monkeypatch):
+    """A run's finish check walks the working directory; run from a copy of the repo, that is the whole repo."""
+    monkeypatch.chdir(tmp_path)
 
 
 class _DummyTool(Tool):
@@ -249,6 +257,7 @@ def test_select_tools_does_not_call_semantic_search() -> None:
     tools = ToolRegistry()
     tools.register(_BrowserOpenTool())
     tools.register(_BrowserExtractTool())
+
     def fail_search(*_args, **_kwargs):  # noqa: ANN002, ANN003
         raise AssertionError("semantic tool search must not run")
 
@@ -319,9 +328,6 @@ def test_provider_structured_tool_call_still_executes() -> None:
     assert llm.calls == 2
 
 
-
-
-
 def test_coding_loop_counts_provider_safe_tool_aliases_for_pre_edit_guard() -> None:
     from thomas.agent.loop_execution import _canonical_code_tool_name, _code_tool_action
 
@@ -389,8 +395,7 @@ def test_tool_usage_questions_are_answered_by_the_model() -> None:
         async def stream_chat(self, messages, tools):  # noqa: ANN001
             self.calls += 1
             self.tool_names = {
-                str(spec.get("name") or (spec.get("function") or {}).get("name") or "")
-                for spec in (tools or [])
+                str(spec.get("name") or (spec.get("function") or {}).get("name") or "") for spec in (tools or [])
             }
             yield StreamEvent(type="token", data={"text": "No tools were called in this conversation."})
             yield StreamEvent(type="done", data={})
@@ -532,6 +537,7 @@ def test_tool_usage_detector_does_not_disable_tools_for_long_coding_prompt() -> 
     assert start is not None
     assert start.data.get("tools_policy") == "always"
 
+
 # The three tests that used to live here pinned inspection caps that have been
 # removed. They asserted that after 6 read-only calls Thomas ordered the model to
 # stop inspecting and stripped its read tools; that after 6 post-edit reads it
@@ -555,9 +561,7 @@ def test_the_model_keeps_its_tools_for_the_whole_run() -> None:
     source = Path(loop_execution.__file__).read_text(encoding="utf-8")
     assert "force_mutation" not in source, "the pre-edit tool strip is back"
     assert "force_final_response" not in source, "the post-edit tool strip is back"
-    assert "iteration_tool_specs = tool_specs" in source, (
-        "the tool list is being derived rather than passed through"
-    )
+    assert "iteration_tool_specs = tool_specs" in source, "the tool list is being derived rather than passed through"
 
 
 def test_a_call_that_was_never_attempted_is_not_reported_as_failed() -> None:

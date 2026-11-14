@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import thomas.core.boot_doctor as boot_doctor
+from tests._bootdoctor_fakes import isolate_offline_checks
 from thomas.bootdoctor.__main__ import (
     BootDoctorPathPolicy,
     RestrictedTool,
@@ -129,94 +131,92 @@ def test_boot_recovery_notice_roundtrip_and_consume(tmp_path: Path) -> None:
     assert read_boot_recovery_notice(tmp_path, consume=False) is None
 
 
-def test_run_boot_doctor_leaves_repaired_retry_running(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _seed_boot_layout(tmp_path)
-    (tmp_path / "thomas" / "groupchat").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "thomas" / "server" / "__main__.py").write_text(
-        "def main():\n"
-        "    try:\n"
-        "        from thomas.server.app import serve\n\n"
-        "        serve(config, host=str(args.host), port=int(args.port))\n"
-        "    except Exception:\n"
-        "        raise\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "thomas" / "server" / "tool_extensions.py").write_text(
-        "def _try_import(module_path: str, func_name: str):\n"
-        "    try:\n"
-        "        mod = __import__(module_path, fromlist=[func_name])\n"
-        "        return getattr(mod, func_name)\n"
-        "    except (ImportError, ModuleNotFoundError, AttributeError):\n"
-        "        return None\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "thomas" / "groupchat" / "__init__.py").write_text(
-        '"""Backward-compatible re-export for groupchat helpers."""\n\nfrom thomas.marketplace.groupchat import *\n',
-        encoding="utf-8",
-    )
+class _Launch:
+    """A fake server launch: what BootDoctor spawned, what it killed, and how healthy the port looks."""
 
-    state = {"t": 0.0}
-    kill_calls: list[int] = []
-    spawned: list[object] = []
-    spawn_modes: list[bool] = []
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, *, healthy_once_spawned: bool) -> None:
+        self.spawned: list[object] = []
+        self.killed: list[int] = []
+        self.clock = 0.0
+        launch = self
 
-    class _DummyProc:
-        def __init__(self, log_handle, exit_code: int | None, log_text: str = "") -> None:
-            self.pid = 4100 + len(spawned)
-            self._exit_code = exit_code
-            if log_text:
-                log_handle.write(log_text)
-                log_handle.flush()
-            spawned.append(self)
+        class _Proc:
+            pid = 4101
 
-        def poll(self):
-            return self._exit_code
+            def poll(self):
+                return None  # still running
 
-    def _fake_spawn(*, py_exe, root, host, port, stdout, detached=False):
-        spawn_modes.append(bool(detached))
-        if len(spawned) == 0:
-            return _DummyProc(
-                stdout, 1, "RuntimeError: Unable to locate monolith_source_loader.py in repository root\n"
-            )
-        return _DummyProc(stdout, None, "14:08:17 [thomas.server] INFO: Thomas starting\n")
+        def _spawn(*, py_exe, root, host, port, stdout):
+            stdout.write("14:08:17 [thomas.server] INFO: Thomas starting\n")
+            stdout.flush()
+            proc = _Proc()
+            launch.spawned.append(proc)
+            return proc
 
-    monkeypatch.setattr(boot_doctor, "_resolve_python", lambda root: Path(sys.executable).resolve())
-    monkeypatch.setattr(boot_doctor, "_run_cmd", lambda *args, **kwargs: (True, "exit=0"))
-    monkeypatch.setattr(boot_doctor, "_thomas_http_healthy", lambda port: False)
-    monkeypatch.setattr(boot_doctor, "_is_port_listening", lambda host, port, timeout=0.4: False)
-    monkeypatch.setattr(boot_doctor, "_kill_pid", lambda pid: kill_calls.append(pid) or True)
-    monkeypatch.setattr(
-        boot_doctor, "_bootdoctor_sleep", lambda seconds: state.__setitem__("t", state["t"] + float(seconds) + 100.0)
-    )
-    monkeypatch.setattr(boot_doctor.time, "monotonic", lambda: state["t"])
-    monkeypatch.setattr(boot_doctor, "_spawn_thomas_server", _fake_spawn)
+        def _jump_the_clock(seconds: float) -> None:
+            # A real sleep would run the launch deadline out for real; move the clock instead.
+            launch.clock += 100.0
 
-    config = AppConfig(memory=MemoryConfig(root=str(tmp_path)))
-    report_path = run_boot_doctor(
-        config=config,
-        root=tmp_path,
-        port=9011,
-        reason="simulated startup crash",
-        auto_repair=True,
-        allow_ai=False,
-        relaunch=True,
-    )
+        monkeypatch.setattr(boot_doctor, "_resolve_python", lambda root: Path(sys.executable).resolve())
+        monkeypatch.setattr(boot_doctor, "_run_cmd", lambda *args, **kwargs: (True, "exit=0"))
+        monkeypatch.setattr(boot_doctor, "_is_port_listening", lambda host, port, timeout=0.4: False)
+        monkeypatch.setattr(
+            boot_doctor, "_thomas_http_healthy", lambda port: healthy_once_spawned and bool(launch.spawned)
+        )
+        monkeypatch.setattr(boot_doctor, "_kill_pid", lambda pid: launch.killed.append(pid) or True)
+        monkeypatch.setattr(boot_doctor, "_spawn_thomas_server", _spawn)
+        monkeypatch.setattr(boot_doctor, "_bootdoctor_sleep", _jump_the_clock)
+        monkeypatch.setattr(boot_doctor, "time", SimpleNamespace(monotonic=lambda: launch.clock))
 
-    report_text = Path(report_path).read_text(encoding="utf-8")
-    assert len(spawned) == 2
-    assert spawn_modes == [False, True]
-    assert kill_calls == []
-    assert "Known startup repair: patched thomas.server.__main__ to use app_lifecycle.serve." in report_text
-    assert "Known startup repair: widened optional tool import fallback to skip broken modules." in report_text
-    assert "Known startup repair: replaced crashing thomas.groupchat re-export with a safe shim." in report_text
-    assert (
-        "Startup recovery launch after known repair is still initializing on 127.0.0.1:9011; leaving the repaired server running for continued startup."
-        in report_text
-    )
-    assert "app_lifecycle import serve" in (tmp_path / "thomas" / "server" / "__main__.py").read_text(encoding="utf-8")
-    assert "except Exception as exc:" in (tmp_path / "thomas" / "server" / "tool_extensions.py").read_text(
-        encoding="utf-8"
-    )
-    assert "Compatibility shim for optional groupchat surface" in (
-        tmp_path / "thomas" / "groupchat" / "__init__.py"
-    ).read_text(encoding="utf-8")
+    def run(self, tmp_path: Path, *, relaunch: bool) -> str:
+        report = run_boot_doctor(
+            config=AppConfig(memory=MemoryConfig(root=str(tmp_path / "mem"))),
+            root=tmp_path,
+            port=9011,
+            reason="simulated startup crash",
+            auto_repair=True,
+            allow_ai=False,
+            relaunch=relaunch,
+        )
+        return Path(report).read_text(encoding="utf-8")
+
+
+def test_a_relaunch_leaves_the_healthy_server_it_started_running(tmp_path: Path, monkeypatch) -> None:
+    isolate_offline_checks(tmp_path, monkeypatch)
+    launch = _Launch(monkeypatch, healthy_once_spawned=True)
+
+    text = launch.run(tmp_path, relaunch=True)
+
+    assert len(launch.spawned) == 1
+    assert launch.killed == []
+    assert "Startup recovery launch: server left running on 127.0.0.1:9011." in text
+
+
+def test_a_diagnostic_launch_stops_the_healthy_server_it_started(tmp_path: Path, monkeypatch) -> None:
+    isolate_offline_checks(tmp_path, monkeypatch)
+    launch = _Launch(monkeypatch, healthy_once_spawned=True)
+
+    text = launch.run(tmp_path, relaunch=False)
+
+    assert launch.killed == [4101]
+    assert "Startup probe: server became healthy in diagnostic launch." in text
+
+
+def test_a_relaunch_leaves_a_server_that_is_still_initializing_alone(tmp_path: Path, monkeypatch) -> None:
+    isolate_offline_checks(tmp_path, monkeypatch)
+    launch = _Launch(monkeypatch, healthy_once_spawned=False)
+
+    text = launch.run(tmp_path, relaunch=True)
+
+    assert launch.killed == []
+    assert "Startup recovery launch is still initializing on 127.0.0.1:9011" in text
+
+
+def test_a_diagnostic_launch_that_never_gets_healthy_is_stopped_and_reported(tmp_path: Path, monkeypatch) -> None:
+    isolate_offline_checks(tmp_path, monkeypatch)
+    launch = _Launch(monkeypatch, healthy_once_spawned=False)
+
+    text = launch.run(tmp_path, relaunch=False)
+
+    assert launch.killed == [4101]
+    assert "Startup probe failed (exit=running)" in text

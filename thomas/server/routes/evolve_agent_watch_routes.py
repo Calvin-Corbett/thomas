@@ -27,8 +27,11 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.forge.anvil import run_control
 from thomas.forge.anvil.forge_code_http_stream import IncrementalLineDecoder, line_to_sse_payload
+from thomas.server.app_keys import APP_PRAXIS_RECOVERY_REPORT, APP_PRAXIS_RUN_CHANNELS
 
+from .evolve_agent_run_control_routes import session_agent
 from .evolve_agent_run_state import (
     APP_EVOLVE_AGENT_CONVO,
     APP_EVOLVE_AGENT_DRAIN,
@@ -154,11 +157,22 @@ def build_evolve_agent_watch_handlers(
             pass
         return resp
 
+    def _run_controls(sess: dict[str, Any], *, is_running: bool) -> dict[str, Any]:
+        """Whether you have this run paused, and what its lead can take (``run_control``): nothing once it ended."""
+        run_id = str(sess.get("run_id") or "")
+        if not is_running or not run_control.valid_id(run_id):
+            return {"paused": False, "controls": dict(run_control.NO_CONTROLS)}
+        return {
+            "paused": run_control.is_paused(run_control.control_dir(catalog_root(), run_id)),
+            "controls": run_control.controls_for_agent(session_agent(sess)),
+        }
+
     def _status_payload(sess: dict[str, Any], drain: Any, *, is_running: bool) -> dict[str, Any]:
         return {
             "ok": True,
             "running": is_running,
             **_recording_status(drain),
+            **_run_controls(sess, is_running=is_running),
             "run_id": sess.get("run_id") or "",
             "generation": sess.get("generation") or 0,
             "session": {
@@ -171,6 +185,41 @@ def build_evolve_agent_watch_handlers(
             "settings": sess.get("settings") or app.get(APP_EVOLVE_AGENT_SETTINGS) or {},
         }
 
+    def _recovered_children(run_id: str) -> dict[str, Any] | None:
+        report = app.get(APP_PRAXIS_RECOVERY_REPORT) or {}
+        recovered_run = next((row for row in report.get("resumed", []) if row.get("run_id") == run_id), None)
+        if recovered_run is None:
+            return None
+        registry = app.get(APP_PRAXIS_RUN_CHANNELS)
+        channel = (registry._runs or {}).get(run_id) if registry is not None else None
+        if channel is None:
+            return None
+        status = channel.status()
+        return {
+            "run_id": run_id,
+            "conversation_id": str(recovered_run.get("conversation_id") or ""),
+            "lead_attached": False,
+            "agents": [
+                {
+                    key: row[key]
+                    for key in (
+                        "agent_id",
+                        "plan_id",
+                        "title",
+                        "kind",
+                        "execution_origin",
+                        "state",
+                        "model_used",
+                        "model_source",
+                        "attempts",
+                        "cursor",
+                    )
+                }
+                for row in status["agents"]
+            ],
+            "metrics": status["metrics"],
+        }
+
     async def status(request: web.Request) -> web.Response:
         require_api_access(request)
         # Per-slot resolution: ?conversation_id= or ?run_id= answers for THAT
@@ -180,9 +229,30 @@ def build_evolve_agent_watch_handlers(
         if wanted_cid or wanted_run:
             slot = runs(app).get(wanted_cid) if wanted_cid else slot_for_run_id(app, wanted_run)
             sess = (slot or {}).get("session") or {}
-            return web.json_response(_status_payload(sess, (slot or {}).get("drain"), is_running=slot_running(slot)))
+            payload = _status_payload(sess, (slot or {}).get("drain"), is_running=slot_running(slot))
+            recovered_run_id = wanted_run or next(
+                (
+                    str(row.get("run_id") or "")
+                    for row in (app.get(APP_PRAXIS_RECOVERY_REPORT) or {}).get("resumed", [])
+                    if str(row.get("conversation_id") or "") == wanted_cid
+                ),
+                "",
+            )
+            recovered = _recovered_children(recovered_run_id) if recovered_run_id else None
+            if wanted_run and slot is None and recovered is None:
+                return web.json_response({"ok": False, "code": "run_not_found", "run_id": wanted_run}, status=404)
+            if recovered is not None:
+                payload["run_id"] = recovered_run_id
+                payload["session"]["conversation_id"] = recovered["conversation_id"]
+                payload["praxis_recovered"] = recovered
+            return web.json_response(payload)
         sess = app.get(APP_EVOLVE_AGENT_SESSION) or {}
         payload = _status_payload(sess, app.get(APP_EVOLVE_AGENT_DRAIN), is_running=running())
+        payload["praxis_recovered_runs"] = [
+            recovered
+            for row in (app.get(APP_PRAXIS_RECOVERY_REPORT) or {}).get("resumed", [])
+            if (recovered := _recovered_children(str(row.get("run_id") or ""))) is not None
+        ]
         payload["runs"] = [
             {
                 "run_id": str((slot.get("session") or {}).get("run_id") or ""),

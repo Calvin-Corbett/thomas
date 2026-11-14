@@ -17,7 +17,13 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.server.app_keys import APP_CONFIG
+from thomas.server.app_keys import (
+    APP_CONFIG,
+    APP_WORK_MISSION_CANCELLER,
+    APP_WORK_MISSION_STATUS_PROVIDER,
+    APP_WORK_MISSION_SUBMITTER,
+    APP_WORK_STORE,
+)
 from thomas.work import (
     WorkConflictError,
     WorkCorruptStateError,
@@ -30,6 +36,7 @@ from thomas.work.connectors import list_work_connectors
 from thomas.work.mission import build_mission_job_payload
 
 from .work_connector_runtime import connect_account_secret, public_account
+from .work_lane_proposals import lane_stores, register_lane_proposal_routes
 from .work_mission_runtime import (
     active_mission_ids,
     cancel_automation_missions,
@@ -45,11 +52,6 @@ RequireAccessFn = Callable[[web.Request], None]
 MissionSubmitter = Callable[[dict[str, Any]], dict[str, Any] | Awaitable[dict[str, Any]]]
 MissionStatusProvider = Callable[[str], dict[str, Any] | None | Awaitable[dict[str, Any] | None]]
 MissionCanceller = Callable[[str], dict[str, Any] | Awaitable[dict[str, Any]]]
-
-APP_WORK_STORE = web.AppKey("work_store", WorkStore)
-APP_WORK_MISSION_SUBMITTER = web.AppKey("work_mission_submitter", object)
-APP_WORK_MISSION_STATUS_PROVIDER = web.AppKey("work_mission_status_provider", object)
-APP_WORK_MISSION_CANCELLER = web.AppKey("work_mission_canceller", object)
 
 
 def _include_archived(request: web.Request) -> bool:
@@ -121,7 +123,8 @@ def register_work_routes(
     """Register Work routes and return the initialized durable store."""
 
     work_store = store or WorkStore.from_config(app[APP_CONFIG])
-    onboarding_runtime = WorkOnboardingRuntime(work_store)
+    lane_proposals, _lane_stats = lane_stores(work_store.root_path)
+    onboarding_runtime = WorkOnboardingRuntime(work_store, proposal_store=lane_proposals)
     event_delivery_locks = tuple(asyncio.Lock() for _ in range(64))
     app[APP_WORK_STORE] = work_store
     if mission_submitter is not None:
@@ -139,7 +142,8 @@ def register_work_routes(
 
     async def apps_list(request: web.Request) -> web.Response:
         guard(request)
-        return _ok(apps=work_store.list_apps(include_archived=_include_archived(request)))
+        apps = work_store.list_apps(include_archived=_include_archived(request))
+        return _ok(apps=apps, warnings=work_store.work_warnings)
 
     async def apps_create(request: web.Request) -> web.Response:
         guard(request)
@@ -779,6 +783,9 @@ def register_work_routes(
     ]
     for method, path, handler in routes:
         app.router.add_route(method, path, _expected_errors(handler))
+    register_lane_proposal_routes(
+        app, guard=guard, expected_errors=_expected_errors, ok=_ok, proposal_store=lane_proposals
+    )
     from thomas.server.routes.work_dashboard_runtime import register_work_dashboard_routes
 
     register_work_dashboard_routes(
@@ -793,8 +800,6 @@ def register_work_routes(
 
 
 __all__ = [
-    "APP_WORK_MISSION_STATUS_PROVIDER",
-    "APP_WORK_MISSION_SUBMITTER",
     "APP_WORK_STORE",
     "register_work_routes",
 ]

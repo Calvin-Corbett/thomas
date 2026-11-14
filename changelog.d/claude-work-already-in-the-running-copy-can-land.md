@@ -1,0 +1,3 @@
+### Fixed
+
+- **Uncommitted work that already sits in the running copy can land.** The promoter refused any change touching a file the running copy had changed, to protect work in progress. So the 75 changes left uncommitted by stopped agent sessions could never land, even after they were saved as candidates for the ratchet: the work was in the very files it would land. A file whose content on disk is already exactly what a checkout would write, and whose index holds nothing else, now passes; any other uncommitted work is still refused and kept. If a landing fails and dev is put back, those files are left as they were rather than returned to the old version.

@@ -1,0 +1,3 @@
+### Fixed
+
+- **Shutting the app down no longer spends four seconds probing a ComfyUI service that was never started.** `ComfyStudioService.close()` ran `shutdown()`, which probed `127.0.0.1:8188` twice in a row, two seconds each, and nobody reads the result. It now returns at once when no process was booted, and the status check skips its second probe when the first one was a refused connection or a timeout (an HTTP error still probes twice). Every test that built and cleaned up an app paid those four seconds: the 37 asset studio route tests went from 188 s to 43 s on the same machine and path.

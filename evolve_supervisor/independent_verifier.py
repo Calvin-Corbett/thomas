@@ -226,8 +226,9 @@ def _rerun_check(
     argv: list[str],
     cwd: Path,
     timeout_seconds: int,
+    environment: Mapping[str, str] | None = None,
 ) -> CheckEvidence:
-    env = dict(os.environ)
+    env = dict(os.environ if environment is None else environment)
     env["PYTHONPATH"] = str(cwd)
     try:
         completed = subprocess.run(
@@ -294,6 +295,7 @@ def verify_claim(
     *,
     timeout_seconds: int = DEFAULT_CHECK_TIMEOUT_SECONDS,
     model_review: ModelReviewFn | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> IndependentVerdict:
     """Independently verify a completion claim by rerunning its evidence.
 
@@ -333,7 +335,7 @@ def verify_claim(
                 )
             )
             continue
-        evidence.append(_rerun_check(check, argv, cwd, timeout_seconds))
+        evidence.append(_rerun_check(check, argv, cwd, timeout_seconds, environment=environment))
     rows = tuple(evidence)
     diverged = [item for item in rows if item.diverged]
     matched = [item for item in rows if item.status == EVIDENCE_MATCHED]

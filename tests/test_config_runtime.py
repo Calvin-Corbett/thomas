@@ -302,6 +302,8 @@ def test_load_config_defaults_profile_runtime_env_and_production_overrides(
     # value (e.g. ``/home/runner/.../share/thomas`` on CI runners).
     monkeypatch.delenv("THOMAS_HOME", raising=False)
     monkeypatch.delenv("THOMAS_RUNTIME_DIR", raising=False)
+    # THOMAS_MEMORY_ROOT overrides the file's [memory] root, and tests/conftest.py sets it for every test.
+    monkeypatch.delenv("THOMAS_MEMORY_ROOT", raising=False)
 
     cfg = load_config(cfg_path, data_dir=tmp_path / "data-root", profile="demo")
 

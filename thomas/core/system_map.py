@@ -48,12 +48,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from thomas.core.git_process import run_git
 from thomas.core.landing_health import collect_landing_health
 
 # ---------------------------------------------------------------------------
@@ -110,14 +110,6 @@ _PLACE_LABELS = {
     PLACE_TEMP: "a temporary folder Windows can delete without warning",
     PLACE_ELSEWHERE: "somewhere else on this machine",
 }
-
-# Every failure a git probe here is allowed to meet, named explicitly. A broad
-# ``except Exception`` would turn a real bug in this file into a calm "could not
-# read", which is the exact class of quiet lie this module exists to expose.
-#   OSError                    -- git not on PATH, working dir gone, dead pipe
-#   subprocess.SubprocessError -- TimeoutExpired and its siblings
-#   ValueError                 -- bad argument shape, undecodable output
-_GIT_ERRORS = (OSError, subprocess.SubprocessError, ValueError)
 
 _SECONDS_PER_DAY = 86400.0
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -220,21 +212,20 @@ class _GitReader:
     """Runs read-only git commands under a hard total time budget.
 
     Deliberately parallel to ``landing_health._GitProbe`` rather than importing
-    it: this reader needs a larger budget and tab-delimited multi-line parsing,
-    and reaching into a sibling module's private class to get it would couple
-    two files that should be free to tune their own timeouts. The hardening it
-    repeats is the part that must never be dropped -- git must never stop to ask
-    a human anything, and must never take the index lock just to answer a
-    question.
+    it: this reader needs a larger budget, tab-delimited multi-line parsing and
+    a list of what it could not read, and reaching into a sibling module's
+    private class to get that would couple two files that should be free to tune
+    their own timeouts. What it does NOT repeat is how git is run: both go
+    through :func:`thomas.core.git_process.run_git`, which is where the bound is
+    made real (``subprocess.run``'s ``timeout`` is not one when git is reached
+    through its Windows launcher) and where git is told never to prompt a human
+    and never to take the index lock to answer a question.
     """
 
     def __init__(self, root: Path, budget_seconds: float = GIT_TOTAL_BUDGET_SECONDS) -> None:
         self.root = root
         self.deadline = time.monotonic() + budget_seconds
         self.failures: list[str] = []
-        self.env = dict(os.environ)
-        self.env["GIT_TERMINAL_PROMPT"] = "0"
-        self.env["GIT_OPTIONAL_LOCKS"] = "0"
 
     def run(self, *args: str) -> str | None:
         """Return stripped stdout, or None if the command failed or timed out."""
@@ -242,26 +233,16 @@ class _GitReader:
         if remaining <= 0:
             self.failures.append(f"git {args[0] if args else '?'} (ran out of time)")
             return None
-        try:
-            proc = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
-                ["git", *args],
-                cwd=str(self.root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=min(GIT_COMMAND_TIMEOUT_SECONDS, remaining),
-                stdin=subprocess.DEVNULL,
-                env=self.env,
-                check=False,
-            )
-        except _GIT_ERRORS:
+        result = run_git(
+            args,
+            cwd=self.root,
+            timeout=min(GIT_COMMAND_TIMEOUT_SECONDS, remaining),
+            slot_wait=remaining,
+        )
+        if not result.ok:
             self.failures.append(f"git {args[0] if args else '?'}")
             return None
-        if proc.returncode != 0:
-            self.failures.append(f"git {args[0] if args else '?'}")
-            return None
-        return (proc.stdout or "").strip()
+        return result.output()
 
     def lines(self, *args: str) -> list[str] | None:
         """Non-empty output lines, or None if the command failed."""

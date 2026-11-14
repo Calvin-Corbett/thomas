@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Trunk health: session start says whether the trunk can still sync.
 
-WHY THIS EXISTS: a pre-push gate battery can fail quietly, leaving the trunk
-unable to sync while nothing at session start says so. This reports "the trunk
-cannot sync" and "the last push attempt was blocked" up front. Worktree sprawl
-and branch
+WHY THIS EXISTS (branch-equilibrium plan, phase 2 Task 1, docs/superpowers/
+plans/2026-08-27-branch-equilibrium.md): the 2026-08-27 cleanup found ``dev``
+746 commits unpushed because the pre-push gate battery had been failing
+silently for weeks -- nothing at session start ever said "the trunk cannot
+sync" or "the last push attempt was blocked". Worktree sprawl and branch
 sprawl already have a voice at session start (``_startup_worktree_inventory``,
 ``_startup_branch_inventory`` in ``startup_signals.py``); the trunk's own
 syncability did not. This module is that voice: one ``TRUNK:`` line, printed

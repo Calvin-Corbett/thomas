@@ -38,6 +38,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 DELIVERABLE = ROOT / "thomas" / "server" / "routes" / "deliverable_aiohttp.py"
 RESULTS_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
@@ -51,9 +53,7 @@ def _sandbox_directives(text: str) -> list[str]:
     is how an earlier CSS guard in this suite passed with the fix deleted.
     """
 
-    without_comments = "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    )
+    without_comments = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     # Join adjacent string literals first: the directive outgrew one line and
     # Python implicitly concatenates them, so a scan anchored on the opening
     # quote stops at the first closing quote and reports tokens missing that are
@@ -80,7 +80,7 @@ def test_the_artifact_csp_permits_modals() -> None:
 def test_the_viewer_stage_opts_in() -> None:
     """The CSP is only a ceiling; the surface has to opt in as well."""
 
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
     stage = re.search(r"tc-code-viewer-stage.{0,200}?sandbox=\"([^\"]*)\"", js, re.S)
     assert stage, "the viewer stage iframe is gone or no longer carries a sandbox attribute"
     assert "allow-modals" in stage.group(1), (
@@ -98,7 +98,7 @@ def test_the_decorative_previews_still_refuse_modals() -> None:
     clicked.
     """
 
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
     offenders = []
     for cls in ("tc-code-artifact-thumb", "tc-code-artifact-shot"):
         for m in re.finditer(re.escape(cls) + r".{0,240}?sandbox=\"([^\"]*)\"", js, re.S):

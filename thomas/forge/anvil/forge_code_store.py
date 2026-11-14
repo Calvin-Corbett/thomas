@@ -14,11 +14,19 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from thomas.core import atomic_json
+from thomas.forge.anvil import forge_code_summary_cache
+
 logger = logging.getLogger(__name__)
+_REPLACE_ATTEMPTS = 20
+_REPLACE_WAIT_S = 0.05
 
 
 def transcript_text(value: object) -> str:
@@ -199,12 +207,37 @@ def _new_id() -> str:
 
 
 def _write_conversation(root: str | Path, conversation: dict) -> dict:
+    """Write the whole conversation or none of it: a temporary file, then ``os.replace``.
+
+    Written in place, a reader that landed mid-write saw half a file; Chat's task card for a Thomas project
+    checks every few seconds and read that as the project's end (Task 4 fix round 1, M6). On Windows a
+    reader holding the file open makes the replace fail for a moment, so it is retried; if it still
+    cannot land, the write goes in place as before rather than being lost.
+    """
     path = _conversation_path(root, conversation["id"])
-    path.write_text(
-        json.dumps(conversation, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    text = json.dumps(conversation, ensure_ascii=False, indent=2)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    temporary.write_text(text, encoding="utf-8")
+    for _attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(temporary, path)
+            return conversation
+        except PermissionError:
+            time.sleep(_REPLACE_WAIT_S)
+    temporary.unlink(missing_ok=True)
+    path.write_text(text, encoding="utf-8")
     return conversation
+
+
+def write_conversation(root: str | Path, conversation: dict) -> dict:
+    """Persist an already-built conversation dict verbatim under ``root``.
+
+    For copying a conversation into a root that will outlive its original one
+    -- a Thomas project's green, once ``thomas_project.settle_if_finished``
+    hands its patch to the promoter and the green is removed along with
+    everything inside it, including the conversation file itself.
+    """
+    return _write_conversation(root, conversation)
 
 
 def draft_conversation(
@@ -213,12 +246,16 @@ def draft_conversation(
     source_evolve_item: dict | None = None,
     self_edit: bool = False,
     protected_paths: list[str] | None = None,
+    thomas_project: dict | None = None,
 ) -> dict:
     """Allocate a fresh in-memory conversation without making it durable.
 
     ``self_edit`` marks a thread the person opened on purpose through Redesign
     to change Thomas's own UI: the one kind of conversation the source-repo
-    guard lets run inside the checkout.
+    guard lets run inside the checkout. ``thomas_project`` marks the other
+    kind: a Build run given the full team in a green copy
+    (``thomas.server.thomas_project``), carrying at least an
+    ``execution_id`` so ``settle_if_finished`` can find the green again.
     """
     now = _now_iso()
     conversation = {
@@ -231,6 +268,8 @@ def draft_conversation(
     }
     if self_edit:
         conversation["self_edit"] = True
+    if thomas_project:
+        conversation["thomas_project"] = dict(thomas_project)
     fenced = [str(p).strip() for p in (protected_paths or []) if str(p).strip()]
     if fenced:
         # Paths other agents hold; the run's write tools refuse them (loop protected_paths).
@@ -245,12 +284,17 @@ def new_conversation(
     source_evolve_item: dict | None = None,
     self_edit: bool = False,
     protected_paths: list[str] | None = None,
+    thomas_project: dict | None = None,
 ) -> dict:
     """Allocate a fresh conversation, persist it, and return the full dict."""
     return _write_conversation(
         root,
         draft_conversation(
-            title=title, source_evolve_item=source_evolve_item, self_edit=self_edit, protected_paths=protected_paths
+            title=title,
+            source_evolve_item=source_evolve_item,
+            self_edit=self_edit,
+            protected_paths=protected_paths,
+            thomas_project=thomas_project,
         ),
     )
 
@@ -285,7 +329,7 @@ def load_conversation(root: str | Path, cid: str) -> dict | None:
     if not path.exists():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(atomic_json.read_text_with_retry(path))
     except (json.JSONDecodeError, OSError, ValueError):
         logger.debug("forge code conversation read failed (non-fatal): %s", path, exc_info=True)
         return None
@@ -297,15 +341,16 @@ def load_conversation(root: str | Path, cid: str) -> dict | None:
 def list_conversations(root: str | Path) -> list[dict]:
     """Return per-conversation summaries, newest-updated first.
 
-    Each summary: ``{"id", "title", "created_at", "updated_at",
-    "turn_count", "last_model"}``. Unreadable files are skipped defensively.
+    Each summary: ``{"id", "title", "created_at", "updated_at", "turn_count",
+    "last_model", "last_model_used", "last_outcome"}``. Unreadable files are skipped.
     """
     summaries: list[dict] = []
-    for path in conversations_dir(root).glob("*.json"):
-        conversation = load_conversation(root, path.stem)
-        if conversation is None:
-            continue
-        summaries.append(_summarize(conversation))
+    for path in conversations_dir(root).glob("*.json"):  # each file parsed again only once it changes
+        summary = forge_code_summary_cache.summary(
+            path, lambda path=path: load_conversation(root, path.stem), _summarize
+        )
+        if summary is not None:
+            summaries.append(summary)
     summaries.sort(key=lambda s: s.get("updated_at") or "", reverse=True)
     return summaries
 
@@ -313,9 +358,18 @@ def list_conversations(root: str | Path) -> list[dict]:
 def _summarize(conversation: dict) -> dict:
     turns = conversation.get("turns") or []
     last_model = ""
+    # The exact model the engine reported on the SAME turn as `last_model`, or ""
+    # when that turn has no report. Borrowing an older turn's report would put
+    # one run's model next to another run's request; an empty value is what lets
+    # the rail say the newest turn's model was not reported.
+    last_model_used = ""
+    last_outcome = None  # the newest run's sidebar mark; see upsert_run_transcript for a turn with no mark
     for turn in reversed(turns):
         if turn.get("role") == "agent":
             last_model = str(turn.get("model") or "")
+            last_model_used = str(turn.get("model_used") or "")
+            live = "returncode" in turn and turn["returncode"] is None and not turn.get("outcome") and turn.get("ok")
+            last_outcome = None if live else str(turn.get("outcome") or ("completed" if turn.get("ok") else "failed"))
             break
     return {
         "id": conversation.get("id", ""),
@@ -324,6 +378,8 @@ def _summarize(conversation: dict) -> dict:
         "updated_at": conversation.get("updated_at", ""),
         "turn_count": len(turns),
         "last_model": last_model,
+        "last_model_used": last_model_used,
+        "last_outcome": last_outcome,
     }
 
 
@@ -358,19 +414,21 @@ def rename_conversation(root: str | Path, cid: str, title: str) -> dict | None:
 def delete_conversation(root: str | Path, cid: str) -> bool:
     """Delete a conversation file; return True iff a file was actually removed.
 
-    Idempotent and defensive: deleting an unknown/already-gone conversation
-    returns False rather than raising, and an OS error while unlinking is logged
-    and swallowed so a locked file can never crash the server.
+    Idempotent and defensive: deleting an unknown/already-gone conversation returns False rather than raising. On
+    Windows a reader holding the file open refuses the delete for a moment, as it does ``_write_conversation``'s
+    replace, so it is retried; an OS error that stays is logged and swallowed, so a locked file never crashes the server.
     """
     path = _conversation_path(root, cid)
-    try:
-        if not path.exists():
-            return False
-        path.unlink()
-        return True
-    except OSError:
-        logger.debug("forge code conversation delete failed (non-fatal): %s", path, exc_info=True)
-        return False
+    for _attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            path.unlink()
+            return True
+        except PermissionError:
+            time.sleep(_REPLACE_WAIT_S)
+        except OSError:  # gone already, or nothing a wait would mend
+            break
+    logger.debug("forge code conversation delete failed (non-fatal): %s", path)
+    return False
 
 
 def append_user_turn(
@@ -436,8 +494,16 @@ def append_agent_turn(
     outcome: str = "",
     redesign_undo: dict | None = None,
     run_source: str = "",
+    agent: str = "",
+    model_used: str = "",
 ) -> dict | None:
-    """Append an agent turn carrying the model used and the run outcome."""
+    """Append an agent turn carrying the agent, the model asked for, the one that ran, and the outcome.
+
+    ``model`` is the REQUEST (``claude:opus``) and ``model_used`` is the exact
+    model the engine reported it started (``claude-opus-5-5``). They were one
+    field, holding only the first, which is how a fleet of runs could be
+    labelled Opus with nothing anywhere saying WHICH Opus answered.
+    """
     conversation = load_conversation(root, cid)
     if conversation is None:
         return None
@@ -460,8 +526,17 @@ def append_agent_turn(
         "reason": reason,
         "run_id": str(run_id or ""),
     }
+    if model_used:
+        # Written only when the engine actually said so. An absent key means the
+        # run never reported one, which is a different fact from "it ran the
+        # alias" and must stay distinguishable from it.
+        turn["model_used"] = str(model_used)
     if run_source:
         turn["run_source"] = str(run_source)
+    if agent:
+        # Which coding agent ran this turn (thomas/core/coding_agents), beside
+        # `model`: the two are separate choices now, so one cannot imply the other.
+        turn["agent"] = str(agent)
     if outcome:
         # The recorder's outcome word ("completed" / "conversation" / "noop" /
         # "stopped" / "failed"), persisted so a reloaded transcript can render
@@ -477,9 +552,30 @@ def append_agent_turn(
         # Redesign source undo metadata points to pre-images held under Thomas's
         # catalog record, never inside the selected project.
         turn["redesign_undo"] = dict(redesign_undo)
+    _record_run(conversation, turn)
     conversation.setdefault("turns", []).append(turn)
     conversation["updated_at"] = _now_iso()
     return _write_conversation(root, conversation)
+
+
+def _record_run(conversation: dict, turn: dict) -> None:
+    """Each finished run goes in the step log: seconds since the request that started it, and how it ended."""
+    from thomas.core import step_log
+
+    asked = next((row.get("ts") for row in reversed(conversation.get("turns") or []) if row.get("role") == "user"), "")
+    try:
+        seconds = (datetime.fromisoformat(turn["ts"]) - datetime.fromisoformat(str(asked))).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        seconds = None
+    step_log.record(
+        "run",
+        seconds=seconds,
+        cid=conversation.get("id"),
+        run=turn.get("run_id"),
+        outcome=turn.get("outcome") or ("ok" if turn.get("ok") else "failed"),
+        model=turn.get("model_used") or turn.get("model"),
+        changed_files=len(turn.get("changed_files") or []),
+    )
 
 
 def mark_redesign_undone(root: str | Path, cid: str, run_id: str, restored: list[str]) -> dict | None:
@@ -499,6 +595,68 @@ def mark_redesign_undone(root: str | Path, cid: str, run_id: str, restored: list
         return None
     undo = turn.get("redesign_undo") if isinstance(turn.get("redesign_undo"), dict) else {}
     turn["redesign_undo"] = {**undo, "available": False, "undone": True, "restored": list(restored)}
+    conversation["updated_at"] = _now_iso()
+    return _write_conversation(root, conversation)
+
+
+def mark_thomas_project_settled(root: str | Path, cid: str) -> dict | None:
+    """Stamp a Thomas-project conversation's ``thomas_project.settled_at``.
+
+    Idempotent: a conversation with no ``thomas_project`` record, or one
+    already stamped, is returned unchanged -- so a caller that (mistakenly)
+    settles the same conversation twice cannot overwrite the first
+    ``settled_at`` with a second one.
+    """
+    conversation = load_conversation(root, cid)
+    if conversation is None:
+        return None
+    project = conversation.get("thomas_project")
+    if not isinstance(project, dict) or project.get("settled_at"):
+        return conversation
+    project["settled_at"] = _now_iso()
+    conversation["thomas_project"] = project
+    conversation["updated_at"] = _now_iso()
+    return _write_conversation(root, conversation)
+
+
+def upsert_run_transcript(
+    root: str | Path,
+    cid: str,
+    *,
+    run_id: str,
+    transcript: str,
+    ok: bool,
+    model: str = "",
+) -> dict | None:
+    """Create or rewrite the agent turn for ``run_id`` as the run produces it.
+
+    ``append_agent_turn`` records a run that has FINISHED. A run you are meant to
+    watch has to appear while it is still going, and it has to stay one turn --
+    appending per update would stack a turn per event and the panel would render
+    the same run dozens of times. Keyed on ``run_id`` so repeated calls land on
+    the same row. The turn has no ``outcome`` and ``returncode`` None, and reads
+    ok until a failure ends it, so ``_summarize`` gives an ok one no mark: it
+    could still be working, and "Verified" would be a claim nothing checked.
+    """
+    conversation = load_conversation(root, cid)
+    if conversation is None:
+        return None
+    turns = conversation.setdefault("turns", [])
+    turn = next(
+        (
+            row
+            for row in reversed(turns)
+            if row.get("role") == "agent" and str(row.get("run_id") or "") == str(run_id or "")
+        ),
+        None,
+    )
+    if turn is None:
+        turn = {"role": "agent", "ts": _now_iso(), "changed_files": [], "artifacts": [], "returncode": None}
+        turn.update(noop=False, reason="", run_id=str(run_id or ""))
+        turns.append(turn)
+    turn["model"] = str(model or turn.get("model") or "")
+    turn["transcript"] = transcript_text(transcript)
+    turn["ok"] = bool(ok)
     conversation["updated_at"] = _now_iso()
     return _write_conversation(root, conversation)
 
@@ -557,6 +715,10 @@ def _agent_reply_text(turn: dict) -> str:
                 says.append(text)
     joined = "\n\n".join(says).strip()
     return (finals[-1] if finals else joined) or str(turn.get("reason") or "").strip()
+
+
+# Public name for readers outside the store (thomas_project builds a landed commit's subject from it).
+agent_reply_text = _agent_reply_text
 
 
 def history_turns(root: str | Path, cid: str, *, drop_last_user: bool = True) -> list[dict]:

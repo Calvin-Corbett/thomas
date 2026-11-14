@@ -45,11 +45,39 @@ from thomas.server.app_middleware_security import (
 )
 
 from .app_helpers import _resolve_runtime_config
+from .model_credentials import embed_credentials
 
 if TYPE_CHECKING:
     from aiohttp import web
 
 log = logging.getLogger(__name__)
+
+
+_UI_DOCUMENT_PATHS = frozenset({"/", "/mission", "/settings", "/companion"})
+_IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+
+
+def resolve_ui_cache_control(path: str, *, is_production: bool, fingerprinted: bool) -> str | None:
+    """Cache policy for UI documents and static assets, or None to leave a response alone.
+
+    Static asset URLs carry a ?v= build fingerprint, and _web_build_fingerprint
+    below hashes EVERY js/**.js and css/**.css by mtime+size -- so any front-end
+    edit moves every asset URL and a cached copy can never go stale. Development
+    used to answer every asset with no-store anyway, which made each tab (and the
+    tab shell gives every tab its own document) re-download and re-parse the whole
+    script bundle to protect a freshness guarantee the fingerprint had made.
+
+    An asset requested without a fingerprint revalidates instead: no-cache still
+    stores the bytes but checks every time, so an unchanged file costs an empty
+    304 and an edited one is picked up immediately. Neither branch serves stale.
+    """
+    if path in _UI_DOCUMENT_PATHS:
+        return "no-store"
+    if not path.startswith("/static/"):
+        return None
+    if is_production or fingerprinted:
+        return _IMMUTABLE_CACHE
+    return "no-cache"
 
 
 def setup_middleware_and_handlers(
@@ -141,18 +169,21 @@ def setup_middleware_and_handlers(
         is_prod = bool(getattr(cfg, "is_production", False))
 
         if request.method == "GET":
-            if request.path in {"/", "/mission", "/settings", "/companion"}:
-                resp.headers.setdefault("Cache-Control", "no-store")
-                resp.headers.setdefault("Pragma", "no-cache")
-                resp.headers.setdefault("Expires", "0")
-            elif request.path.startswith("/static/"):
-                if is_prod:
-                    resp.headers.setdefault(
-                        "Cache-Control",
-                        "public, max-age=31536000, immutable",
-                    )
-                else:
-                    resp.headers.setdefault("Cache-Control", "no-store")
+            cache_control = resolve_ui_cache_control(
+                request.path,
+                is_production=is_prod,
+                # Any ?v= here is the page build fingerprint, which hashes EVERY
+                # js/**.js and css/**.css by mtime+size, so an edit to any
+                # front-end file moves every asset URL. That invariant is what
+                # makes immutable safe; it is pinned by
+                # test_asset_urls_change_when_any_frontend_file_changes.
+                fingerprinted=bool(request.query.get("v")),
+            )
+            if cache_control is not None:
+                resp.headers.setdefault("Cache-Control", cache_control)
+                # Pragma/Expires are the HTTP/1.0 spelling of no-store; sending
+                # them beside a cacheable Cache-Control says the opposite.
+                if cache_control == "no-store":
                     resp.headers.setdefault("Pragma", "no-cache")
                     resp.headers.setdefault("Expires", "0")
         return resp
@@ -614,73 +645,19 @@ def setup_middleware_and_handlers(
 
     def _model_cfg_with_secrets(config: AppConfig, profile: str, model_cfg: Any) -> Any:
         """Resolve model config with embedded secrets."""
-        from dataclasses import replace
-
-        if not model_cfg:
-            return None
-        cfg_copy = replace(model_cfg)
-        secret_store = app.get(APP_SECRETS)
-        if secret_store and hasattr(cfg_copy, "api_key_secret_name"):
-            secret_name = str(cfg_copy.api_key_secret_name or "").strip()
-            if secret_name:
-                api_key = secret_store.get(secret_name)
-                if api_key:
-                    cfg_copy.api_key = api_key
-        if (
-            secret_store
-            and str(getattr(cfg_copy, "provider", "") or "").strip().lower().replace("-", "_") == "openai_codex"
-        ):
-            try:
-                from thomas.server.openai_codex_oauth import access_token_from_store, has_openai_codex_token
-
-                access_token = access_token_from_store(secret_store, str(profile or cfg_copy.name or "chatgpt"))
-                if access_token:
-                    cfg_copy.api_key = access_token
-                cfg_copy._openai_codex_token_ready = bool(
-                    access_token or has_openai_codex_token(secret_store, str(profile or cfg_copy.name or "chatgpt"))
-                )
-            except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as e:
-                log.debug("Failed to resolve ChatGPT OAuth token for %s: %s", profile, e)
-        return cfg_copy
+        return embed_credentials(model_cfg, profile, app.get(APP_SECRETS))
 
     def _failover_cfgs_with_secrets(config: AppConfig, profile: str) -> list[Any]:
         """Resolve failover configs with embedded secrets."""
-        from dataclasses import replace
-
         prof_cfg = config.models.get(profile)
         if not prof_cfg:
             return []
-        failover_list = getattr(prof_cfg, "failover_models", []) or []
-        result = []
         secret_store = app.get(APP_SECRETS)
-        for fcfg in failover_list:
-            if not fcfg:
-                continue
-            fcfg_copy = replace(fcfg)
-            if secret_store and hasattr(fcfg_copy, "api_key_secret_name"):
-                secret_name = str(fcfg_copy.api_key_secret_name or "").strip()
-                if secret_name:
-                    api_key = secret_store.get(secret_name)
-                    if api_key:
-                        fcfg_copy.api_key = api_key
-            if (
-                secret_store
-                and str(getattr(fcfg_copy, "provider", "") or "").strip().lower().replace("-", "_") == "openai_codex"
-            ):
-                try:
-                    from thomas.server.openai_codex_oauth import access_token_from_store, has_openai_codex_token
-
-                    profile_name = str(getattr(fcfg_copy, "name", "") or "chatgpt")
-                    access_token = access_token_from_store(secret_store, profile_name)
-                    if access_token:
-                        fcfg_copy.api_key = access_token
-                    fcfg_copy._openai_codex_token_ready = bool(
-                        access_token or has_openai_codex_token(secret_store, profile_name)
-                    )
-                except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as e:
-                    log.debug("Failed to resolve ChatGPT OAuth failover token for %s: %s", fcfg_copy.name, e)
-            result.append(fcfg_copy)
-        return result
+        return [
+            embed_credentials(fcfg, str(getattr(fcfg, "name", "") or ""), secret_store)
+            for fcfg in (getattr(prof_cfg, "failover_models", []) or [])
+            if fcfg
+        ]
 
     from .app_chat_store import build_chat_store
 

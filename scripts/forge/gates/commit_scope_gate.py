@@ -5,9 +5,10 @@ Rules:
 - >20 code files: requires scope_justification in verification record
 - >50 code files: hard block (split the commit)
 
-Exceptions for bulk operations detected via git diff:
-- Bulk renames (R status)
-- Version bumps (only pyproject.toml, __init__.py, CHANGELOG.md changed)
+Every changed code file counts, whether it is added, modified, removed or renamed. A cleanup of more than 50 files is split
+into commits of at most 50.
+
+Exception: version bumps (only pyproject.toml, __init__.py, CHANGELOG.md changed) do not count.
 
 Gap closed: 7 (enormous commits hide bad changes in volume)
 """
@@ -25,7 +26,44 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 ROOT = Path(__file__).resolve().parents[3]
-VERIFICATION_RECORD = ROOT / ".git" / "agent_verification.json"
+
+
+def _record_path(root: Path) -> Path:
+    """Where this checkout keeps its record: .git/ normally, its own git dir in a linked worktree (.git is a file there)."""
+    fallback = root / ".git" / "agent_verification.json"
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-path", "agent_verification.json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return fallback
+    found = done.stdout.strip()
+    if done.returncode != 0 or not found:
+        return fallback
+    path = Path(found)
+    return path if path.is_absolute() else root / path
+
+
+VERIFICATION_RECORD = _record_path(ROOT)
+
+
+def _rebind_root(raw: str | None) -> None:
+    """Point the gate at another checkout so it can be run against a fixture.
+
+    Without this the gate always judges the repo it lives in, so it could never have
+    a red-path selftest - and the enforcement ratchet will not let an unprovable gate
+    enforce. Same option, same default, as monolith_guard.py.
+    """
+    global ROOT, VERIFICATION_RECORD
+    if not raw:
+        return
+    ROOT = Path(raw).resolve()
+    VERIFICATION_RECORD = _record_path(ROOT)
+
 
 WARN_THRESHOLD = 20
 HARD_LIMIT = 50
@@ -50,34 +88,28 @@ def _staged_files() -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
-def _staged_renames() -> int:
-    """Count files that are renames (not new code)."""
-    proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-status"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        return 0
-    return sum(1 for line in proc.stdout.splitlines() if line.strip() and line.strip()[0] == "R")
-
-
 def _load_verification_record() -> dict | None:
     if not VERIFICATION_RECORD.exists():
         return None
     try:
-        return json.loads(VERIFICATION_RECORD.read_text(encoding="utf-8"))
+        data = json.loads(VERIFICATION_RECORD.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    return data if isinstance(data, dict) else None
 
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root (default: inferred from script location).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     parser.add_argument("--warn", type=int, default=WARN_THRESHOLD)
     parser.add_argument("--hard-limit", type=int, default=HARD_LIMIT)
     args = parser.parse_args(argv)
+    _rebind_root(args.repo_root)
 
     try:
         staged = _staged_files()
@@ -89,8 +121,7 @@ def run(argv: list[str] | None = None) -> int:
         return 1
     code_files = [f for f in staged if Path(f).suffix.lower() in CODE_EXTENSIONS and f not in VERSION_BUMP_FILES]
 
-    rename_count = _staged_renames()
-    effective_count = max(0, len(code_files) - rename_count)
+    effective_count = len(code_files)
 
     ok = True
     reason = ""
@@ -121,7 +152,6 @@ def run(argv: list[str] | None = None) -> int:
                     "ok": ok,
                     "code_files": len(code_files),
                     "effective_count": effective_count,
-                    "renames_excluded": rename_count,
                     "warn_threshold": args.warn,
                     "hard_limit": args.hard_limit,
                     "reason": reason,

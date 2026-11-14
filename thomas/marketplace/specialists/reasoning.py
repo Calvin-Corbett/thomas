@@ -78,6 +78,11 @@ async def _invoke_send_task(
     surface: str,
     specialist: str,
     workspace: str,
+    kind: str = "other",
+    deliverable_format: str = "",
+    needs_build: bool = False,
+    project: dict[str, Any] | None = None,
+    acceptance: list[dict[str, Any]] | None = None,
 ) -> Any:
     """Call the structured dispatcher while supporting older callback shapes."""
     kwargs = {
@@ -86,6 +91,11 @@ async def _invoke_send_task(
         "surface": surface,
         "specialist": specialist,
         "workspace": workspace,
+        "kind": kind,
+        "deliverable_format": deliverable_format,
+        "needs_build": needs_build,
+        "project": project or {"mode": "new"},
+        "acceptance": acceptance or [],
     }
     try:
         parameters = inspect.signature(callback).parameters.values()
@@ -143,8 +153,11 @@ _REPEAT_CALL_LIMIT = 3
 
 def _model_name_of(llm: Any) -> str:
     """Best-effort model id for the client, for the frontier check only."""
-    for holder, attr in ((llm, "model"), (getattr(llm, "config", None), "model"),
-                         (getattr(llm, "config", None), "name")):
+    for holder, attr in (
+        (llm, "model"),
+        (getattr(llm, "config", None), "model"),
+        (getattr(llm, "config", None), "name"),
+    ):
         value = getattr(holder, attr, None) if holder is not None else None
         if isinstance(value, str) and value.strip():
             return value.strip().lower()
@@ -232,7 +245,7 @@ class ReasoningSpecialist(BaseSpecialist):
     ) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "thinking", "text": "Reasoning through the request...", "phase": "reasoning"}
 
-
+        # Thomas's identity is the single canonical constant (Calvin law).
         system = THOMAS_OPERATOR_SYSTEM_PROMPT
         # Autonomy-aware delegation posture. The identity above never changes (he
         # still never does the work himself); this only sets whether he ASKS before
@@ -249,13 +262,17 @@ class ReasoningSpecialist(BaseSpecialist):
         # autonomy just means the default posture, so it is not worth a raise.
         except (AttributeError, LookupError, TypeError, ValueError):
             pass
-
+        # Repo & self awareness + read-only capability (Calvin: "he has no idea who he
         # is" / "should be able to read the repo, not write"). Injected every turn.
         system += "\n" + _repo_self_context()
         if memory_context:
             system += f"Context from memory:\n{memory_context}\n\n"
 
         input_context = getattr(contract, "input_context", None) or {}
+        final_pass = bool(input_context.get("final_pass"))  # final_pass.py: no read tools
+        turn_autonomy_level = int((input_context.get("autonomy") or {}).get("level") or 0)
+        if final_pass:
+            system += "\n\n" + str(input_context.get("final_pass_context") or "")
         system_instructions = str(input_context.get("system_instructions") or "").strip()
         if system_instructions:
             system += f"\nUser-approved persistent instructions for this Thomas session:\n{system_instructions}\n\n"
@@ -334,7 +351,9 @@ class ReasoningSpecialist(BaseSpecialist):
         # read-only (brain._dispatch_single) and write/shell tools are never offered.
         tools: list[dict] | None = None
         if hasattr(self.llm, "stream_chat"):
-            built = _read_tool_specs(self.tools)
+            # final_pass: no read tools (C1); everything but send_task is already
+            # None below too (final_pass_contract strips those callbacks).
+            built = [] if final_pass else _read_tool_specs(self.tools)
             if send_task:
                 built.append(SEND_TASK_TOOL)
             if update_task:
@@ -354,6 +373,15 @@ class ReasoningSpecialist(BaseSpecialist):
         # Appended last so it wins on recency over the identity prompt above.
         if not send_task:
             messages[0]["content"] += "\n\n" + _NO_DISPATCH_HONESTY
+
+        if not remember and not recall:
+            messages[0]["content"] += (
+                "\n\nLong-term memory is not available for this turn. "
+                "Use the conversation messages already provided to retain and update details within this chat. "
+                "Do not call remember or recall, delegate memory storage, or promise retention in future chats. "
+                "If asked to save something across chats, explain that long-term memory is unavailable. "
+                "Keeping track of details in this conversation does not require a memory tool."
+            )
 
         response = ""
         dispatched_titles: list[str] = []
@@ -438,9 +466,7 @@ class ReasoningSpecialist(BaseSpecialist):
                         # already been made twice with identical arguments is stopped
                         # rather than issued a third time and then complained about.
                         for tc in tool_ends:
-                            key = _tool_call_fingerprint(
-                                _structured_tool_name(tc["name"]), tc["arguments"]
-                            )
+                            key = _tool_call_fingerprint(_structured_tool_name(tc["name"]), tc["arguments"])
                             call_counts[key] = call_counts.get(key, 0) + 1
                             if call_counts[key] >= _REPEAT_CALL_LIMIT:
                                 repeated_call = _structured_tool_name(tc["name"])
@@ -485,6 +511,13 @@ class ReasoningSpecialist(BaseSpecialist):
                                         surface=surface,
                                         specialist=specialist,
                                         workspace=workspace,
+                                        kind=str(args.get("kind") or "other"),
+                                        deliverable_format=str(args.get("deliverable_format") or ""),
+                                        needs_build=args.get("needs_build") is True,
+                                        project=args.get("project") if isinstance(args.get("project"), dict) else None,
+                                        acceptance=args.get("acceptance")
+                                        if isinstance(args.get("acceptance"), list)
+                                        else None,
                                     )
                                     dispatched_titles.append(title)
                                     handed_off = True
@@ -605,6 +638,7 @@ class ReasoningSpecialist(BaseSpecialist):
                                         action=str(args.get("action") or ""),
                                         key=str(args.get("key") or ""),
                                         value=args.get("value"),
+                                        reason=str(args.get("reason") or ""),
                                     )
                                 except (LookupError, OSError, RuntimeError, TypeError, ValueError) as exc:
                                     receipt = {"ok": False, "error": f"Inline action failed: {exc}"}
@@ -653,7 +687,9 @@ class ReasoningSpecialist(BaseSpecialist):
                                         ok = bool(getattr(res, "ok", True))
                                         payload = getattr(res, "data", None) if ok else getattr(res, "error", None)
                                         result_text = str(payload if payload is not None else "")[:6000]
-                                        yield {"type": "tool_result", "name": name, "ok": ok}
+                                        # "result" is what final_pass.compact_findings reads to
+                                        # give the final pass what this pass actually found (C1).
+                                        yield {"type": "tool_result", "name": name, "ok": ok, "result": result_text}
                                     # The registry already funnels tool faults into
                                     # ToolResult(ok=False); what can still escape is
                                     # the read itself (OSError), an undecodable file
@@ -704,9 +740,7 @@ class ReasoningSpecialist(BaseSpecialist):
                                 for receipt in action_receipts
                                 if not receipt.get("ok")
                             ]
-                            response = " ".join(
-                                [*handoff_confirmations, *handoff_failures, *refused_actions]
-                            ).strip()
+                            response = " ".join([*handoff_confirmations, *handoff_failures, *refused_actions]).strip()
                             yield {"type": "text", "text": response}
                             break
                         continue
@@ -727,11 +761,15 @@ class ReasoningSpecialist(BaseSpecialist):
                             "expected that call to return and I can try a different way."
                         )
                     else:
-                        response = (
-                            f"I hit the {pass_limit}-pass runaway guard before finishing. That guard "
-                            "exists for smaller models that wander; if this was ordinary work it "
-                            "stopped too early. Ask me to continue and I will pick it back up."
+                        base = (
+                            f"I hit the {pass_limit}-pass runaway guard before finishing. That guard exists "
+                            "for smaller models that wander; if this was ordinary work it stopped too early."
                         )
+                        # Autopilot: state the fact, never ask. Below it: a fact, not
+                        # an instruction. Neither promises a follow-up nothing performs.
+                        done_now = " This turn is done; nothing continues on its own until the next message."
+                        picks_up = " A new message in this thread will pick it back up."
+                        response = base + (done_now if turn_autonomy_level >= 5 else picks_up)
                     yield {"type": "text", "text": response}
             else:
                 passes_used = 1

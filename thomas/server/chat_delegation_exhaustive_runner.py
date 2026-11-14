@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.core import task_bot_runtime
+from thomas.core.event_loop_offload import off_loop
 from thomas.server.chat_delegation_deliverable import (
     _artifacts_from_created,
     _build_result_summary,
@@ -15,6 +16,7 @@ from thomas.server.chat_delegation_deliverable import (
     executability_warning,
 )
 from thomas.server.chat_delegation_emitter import _DelegationEmitter
+from thomas.server.chat_delegation_endings import Endings, attach_proof_unless_ended
 from thomas.server.chat_delegation_exhaustive_observer import _ExhaustiveRunObserver
 from thomas.server.chat_delegation_live_repo import (
     _live_repo_files_changed_since,
@@ -22,9 +24,9 @@ from thomas.server.chat_delegation_live_repo import (
     _live_repo_workspace_mtimes,
 )
 from thomas.server.chat_delegation_result_policy import worker_text_is_confirmed_answer
+from thomas.server.chat_delegation_runner_events import _worker_stopped
 from thomas.server.chat_delegation_session import _execution_is_terminal, _normalize_record
 from thomas.server.issue_ledger import record_issue
-from thomas.server.work_connector_runtime import execution_work_context_id
 
 log = logging.getLogger(__name__)
 
@@ -51,8 +53,13 @@ async def _run_exhaustive_worker(
     guardrails: str = "",
     guardrail_modes: dict[str, str] | None = None,
     runtime_policy: dict[str, Any] | None = None,
+    policy_refusal_sink: list[str] | None = None,
 ) -> None:
-    """Run Max quality gates and fall back only with an explicit downgrade receipt."""
+    """Run Max quality gates and fall back only with an explicit downgrade receipt.
+
+    *policy_refusal_sink* is what the supervisor's worker thread hands every worker (``_start_worker_thread``);
+    before, this runner did not take it, so every Max-effort delegation failed with a TypeError as it started.
+    It goes on to the fallback run."""
 
     from thomas.server.exhaustive_runtime import (
         ExhaustivePassFailure,
@@ -60,8 +67,14 @@ async def _run_exhaustive_worker(
         run_exhaustive_pipeline,
     )
 
+    ends = Endings(emitter, execution_id, repo_root, specialist_id=specialist_id, bot=bot)  # the first ending stays
     work = work_dir or repo_root
-    live_repo_baseline = _live_repo_workspace_mtimes(repo_root) if requires_live_repo_change else {}
+    # Off the loop: this walks the work copy and hashes every byte of it (8,446
+    # files, 98.2 MB on this checkout). On the loop it was silence before the
+    # run had even started.
+    live_repo_baseline: dict[str, Any] = {}  # green, not blue
+    if requires_live_repo_change:
+        live_repo_baseline = await off_loop("exhaustive.baseline", _live_repo_workspace_mtimes, work)
     observer = _ExhaustiveRunObserver(
         execution_id=execution_id,
         repo_root=repo_root,
@@ -71,6 +84,8 @@ async def _run_exhaustive_worker(
         bot=bot,
         emitter=emitter,
     )
+
+    from thomas.server.work_connector_runtime import execution_work_context_id
 
     try:
         ctx = await run_exhaustive_pipeline(
@@ -109,9 +124,9 @@ async def _run_exhaustive_worker(
             raise RuntimeError("exhaustive pipeline quality gates did not pass")
 
         created = (
-            _live_repo_files_changed_since(repo_root, live_repo_baseline)
+            await off_loop("exhaustive.changed", _live_repo_files_changed_since, work, live_repo_baseline)
             if requires_live_repo_change
-            else _snapshot_workspace_files(work)
+            else await off_loop("exhaustive.snapshot", _snapshot_workspace_files, work)
         )
         if requires_live_repo_change and not created:
             raise RuntimeError("exhaustive self-development changed no live repo files")
@@ -148,7 +163,7 @@ async def _run_exhaustive_worker(
             )
         artifacts = _artifacts_from_created(created)
         if artifacts:
-            task_bot_runtime.attach_proof(
+            attach_proof_unless_ended(
                 execution_id,
                 artifacts=artifacts,
                 summary=result_summary,
@@ -157,12 +172,13 @@ async def _run_exhaustive_worker(
                 repo_root=repo_root,
             )
         verified_success = bool(created) or confirmed_answer
-        task_bot_runtime.complete_execution(
+        ending = task_bot_runtime.complete_execution(
             execution_id,
             actor=bot.name,
             summary=result_summary,
             repo_root=repo_root,
             verified_success=verified_success,
+            keep_first_terminal=True,
         )
         record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
         # Record an evidence-free "done" (demoted to failed/no_evidence) so the
@@ -175,36 +191,26 @@ async def _run_exhaustive_worker(
                 context={"execution_id": execution_id, "task": str(record.get("summary") or "")[:160]},
                 repo_root=repo_root,
             )
-        if str((record or {}).get("state") or "") == "completed":
-            await emitter.completed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
-        else:
-            await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=result_summary)
+        await ends.announce(ending, result_summary, completed=str((record or {}).get("state") or "") == "completed")
     except asyncio.CancelledError:
         # The supervisor may have already committed an external terminal state
         # (for example a watchdog failure). The worker thread can outlive its
         # cancelled to_thread future on Windows, so never let that late thread
         # overwrite the durable terminal record.
-        if _execution_is_terminal(execution_id, repo_root):
-            raise
+        if _execution_is_terminal(execution_id, repo_root) or _worker_stopped(execution_id):
+            raise  # the watchdog stopped it and records why itself (a timeout, or your Stop)
         task_bot_runtime.fail_execution(
             execution_id,
             actor=bot.name,
             summary="Background execution cancelled.",
             blocker="cancelled",
             repo_root=repo_root,
+            keep_first_terminal=True,
         )
         raise
     except ExhaustiveQualityGateFailure:
         summary = "Max quality review did not pass after two remediation cycles. No result was presented as verified."
-        task_bot_runtime.fail_execution(
-            execution_id,
-            actor=bot.name,
-            summary=summary,
-            blocker="max_quality_gates_failed",
-            repo_root=repo_root,
-        )
-        record = _normalize_record(task_bot_runtime.get_execution(execution_id, repo_root))
-        await emitter.failed(record, specialist_id=specialist_id, bot=bot, text=summary)
+        await ends.fail(summary, blocker="max_quality_gates_failed")
     except (RuntimeError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         failure_code = str(getattr(exc, "code", "quality_pipeline_failed"))
         failed_pass = {
@@ -273,4 +279,5 @@ async def _run_exhaustive_worker(
             guardrails=guardrails,
             guardrail_modes=guardrail_modes,
             runtime_policy=runtime_policy,
+            policy_refusal_sink=policy_refusal_sink,
         )

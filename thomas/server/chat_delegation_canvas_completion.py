@@ -11,6 +11,7 @@ from thomas.core.file_access import WORKSPACE, authorize_write
 from thomas.server.chat_delegation_deliverable import _artifacts_from_created
 from thomas.server.chat_delegation_session import _normalize_record
 from thomas.server.chat_tool_policy import ToolRuntimePolicy, policy_allows_path
+from thomas.tools.fs_scope import scopes
 
 
 def complete_canvas_delivery(
@@ -27,6 +28,12 @@ def complete_canvas_delivery(
     """Persist, read back, prove, and terminalize one reviewed Canvas result."""
     work_dir = workspace_for(execution_id)
     target = work_dir / "index.html"
+    try:
+        # The files slot is looked up here, at call time, so a patched provider is honoured. A link or junction
+        # named index.html that leads out of the workspace is refused before anything is written.
+        scopes().scope(work_dir).resolve("index.html")
+    except (ValueError, OSError) as exc:
+        raise PermissionError(f"BLOCKED: Canvas artifact leaves its workspace: {exc}") from exc
     write_allowed, reason = authorize_write(
         file_access,
         target,

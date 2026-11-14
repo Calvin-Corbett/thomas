@@ -55,7 +55,7 @@ def _drive() -> dict[str, str]:
 
 def _reply_area(html: str) -> str:
     """Everything from the first reply div onward -- the part the owner reads."""
-    at = html.find('tc-code-reply')
+    at = html.find("tc-code-reply")
     assert at >= 0, f"no reply rendered at all: {html[:400]}"
     return html[at:]
 
@@ -69,7 +69,9 @@ def test_a_failed_run_renders_the_answer_it_produced() -> None:
     # The failure is still told, alongside -- never instead.
     assert "repair attempts" in html, "the failure note vanished with the fix"
     # The answer itself must not wear the error styling; the note does.
-    answer_div = re.search(r'<div class="tc-code-reply">[^<]*THE-PRODUCED-ANSWER', html)
+    answer_div = re.search(
+        r'<div class="tc-code-reply">.*?<div class="tc-code-reply-text">[^<]*THE-PRODUCED-ANSWER', html, re.S
+    )
     assert answer_div, "the produced answer is rendered inside the error styling"
 
 
@@ -87,12 +89,11 @@ def test_a_stopped_run_is_not_dressed_as_a_failure() -> None:
     for key in ("stoppedByReason", "stoppedByOutcome"):
         area = _reply_area(report[key])
         assert "is-error" not in area, (
-            f"{key}: a run the user deliberately stopped renders through the "
-            "red failure pipeline"
+            f"{key}: a run the user deliberately stopped renders through the red failure pipeline"
         )
         assert "Stopped" in area, f"{key}: the stop is not named"
         # Honest wording: the run did not fail, and must not claim it did.
-        assert "The Code task stopped before it finished" not in area, (
+        assert "The Build task stopped before it finished" not in area, (
             f"{key}: the stopped run still reads the failure-pipeline sentence"
         )
     # Detail the recorder attached (how much work was already done) survives.
@@ -104,12 +105,8 @@ def test_a_stopped_run_is_not_dressed_as_a_failure() -> None:
 def test_recovered_attempts_on_an_ok_run_are_not_called_issues() -> None:
     report = _drive()
     ok_html = report["okWithRecoveredAttempts"]
-    assert "7 failed attempts, recovered" in ok_html, (
-        "an OK run's recovered tool errors are not labelled as recovered"
-    )
-    assert not re.search(r"\b7 issues\b", ok_html), (
-        "a flawless run still advertises its recovered retries as issues"
-    )
+    assert "7 failed attempts, recovered" in ok_html, "an OK run's recovered tool errors are not labelled as recovered"
+    assert not re.search(r"\b7 issues\b", ok_html), "a flawless run still advertises its recovered retries as issues"
     # The alarm styling belongs to runs that actually failed.
     assert "has-issues" not in ok_html
     # Control: a failed run's tool errors stay issues (the failing tool_result
@@ -122,16 +119,14 @@ def test_the_first_read_probe_of_an_empty_project_is_a_neutral_note() -> None:
     report = _drive()
     probe_html = report["okWithFirstProbe"]
     assert "tc-code-technical is-error" not in probe_html, (
-        "the expected first read probe of a brand-new project renders as an "
-        "alarming red row"
+        "the expected first read probe of a brand-new project renders as an alarming red row"
     )
     # It is not counted as anything alarming either: no issues, no failed
     # attempts -- the run was flawless.
     assert "issue" not in probe_html and "failed attempt" not in probe_html
-    # Full detail stays available: the raw probe text is still in the log.
-    assert "index.html not found" in probe_html
+    # Since the 2026-10 redesign a look-up like this is a quiet row: the transcript leaves it out
+    # (unified_code_cards.js QUIET_VERBS) and the raw probe text stays in the Activity drawer and the agent feed.
+    assert "index.html not found" not in probe_html
     # Control: a LATER failing read is a real recovered attempt.
     later = report["okWithLaterFailure"]
-    assert "1 failed attempt, recovered" in later, (
-        "the probe exemption swallowed a real mid-run failure"
-    )
+    assert "1 failed attempt, recovered" in later, "the probe exemption swallowed a real mid-run failure"

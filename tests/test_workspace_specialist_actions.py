@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,9 +16,9 @@ async def test_guarded_preference_mutation_uses_live_structured_store(tmp_path: 
     dispatcher = Dispatcher()
     store = PreferencesStore(db_path=str(tmp_path / "prefs.db"))
     guard = GuardedRunner()
-    receipt = await operator(
-        "settings", dispatcher, preferences_store=store, guarded_runner=guard
-    ).execute({"action": "preferences.set", "key": "ui_density", "value": "dense"})
+    receipt = await operator("settings", dispatcher, preferences_store=store, guarded_runner=guard).execute(
+        {"action": "preferences.set", "key": "ui_density", "value": "dense"}
+    )
     assert receipt["ok"] is True
     assert receipt["approval"] == "policy_checked"
     assert receipt["evidence"]["before"]["value"] == "comfortable"
@@ -30,15 +31,11 @@ async def test_guarded_preference_mutation_uses_live_structured_store(tmp_path: 
 
 
 @pytest.mark.asyncio
-async def test_canvas_spec_save_is_atomic_and_read_back(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from thomas.server.routes import canvas_studio_routes
+async def test_canvas_spec_save_is_atomic_and_read_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from thomas.server import canvas_studio_shared
 
-    monkeypatch.setattr(canvas_studio_routes, "_default_repo_root", lambda: tmp_path)
-    receipt = await operator(
-        "app_builder", Dispatcher(), guarded_runner=GuardedRunner()
-    ).execute(
+    monkeypatch.setattr(canvas_studio_shared, "_default_repo_root", lambda: tmp_path)
+    receipt = await operator("app_builder", Dispatcher(), guarded_runner=GuardedRunner()).execute(
         {
             "action": "canvas.spec.save",
             "target_id": "owner-dashboard",
@@ -56,12 +53,10 @@ async def test_canvas_spec_save_is_atomic_and_read_back(
 async def test_canvas_rejects_invalid_spec_id_before_any_file_is_written(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from thomas.server.routes import canvas_studio_routes
+    from thomas.server import canvas_studio_shared
 
-    monkeypatch.setattr(canvas_studio_routes, "_default_repo_root", lambda: tmp_path)
-    receipt = await operator(
-        "app_builder", Dispatcher(), guarded_runner=GuardedRunner()
-    ).execute(
+    monkeypatch.setattr(canvas_studio_shared, "_default_repo_root", lambda: tmp_path)
+    receipt = await operator("app_builder", Dispatcher(), guarded_runner=GuardedRunner()).execute(
         {
             "action": "canvas.spec.save",
             "target_id": "../../orphan",
@@ -85,19 +80,13 @@ async def test_library_project_move_persists_and_reads_position(
     monkeypatch.setattr(
         helpers,
         "_find_project",
-        lambda rows, project_id: (0, rows[0])
-        if project_id == "project-1"
-        else (_ for _ in ()).throw(KeyError()),
+        lambda rows, project_id: (0, rows[0]) if project_id == "project-1" else (_ for _ in ()).throw(KeyError()),
     )
     monkeypatch.setattr(helpers, "_utc_now_iso", lambda: "2026-07-21T00:00:00Z")
-    monkeypatch.setattr(
-        helpers, "_write_registry", lambda _app, rows: writes.append([dict(row) for row in rows])
-    )
+    monkeypatch.setattr(helpers, "_write_registry", lambda _app, rows: writes.append([dict(row) for row in rows]))
     receipt = await operator(
-        "my_stuff", Dispatcher(), guarded_runner=GuardedRunner()
-    ).execute(
-        {"action": "library.project.move", "target_id": "project-1", "payload": {"x": 900, "y": 240}}
-    )
+        "my_stuff", Dispatcher(), guarded_runner=GuardedRunner(), app={"_thomas_projects_registry_lock": asyncio.Lock()}
+    ).execute({"action": "library.project.move", "target_id": "project-1", "payload": {"x": 900, "y": 240}})
     assert receipt["ok"] is True
     assert writes[-1][0]["board_position"] == {"x": 900, "y": 240}
     assert receipt["evidence"]["after"] == {"x": 900, "y": 240}
@@ -112,20 +101,18 @@ async def test_library_missing_project_returns_failed_receipt(monkeypatch: pytes
     monkeypatch.setattr(helpers, "_refresh_projects", lambda _app: [])
     monkeypatch.setattr(helpers, "_find_project", lambda _rows, _id: (_ for _ in ()).throw(web.HTTPNotFound()))
     receipt = await operator(
-        "my_stuff", Dispatcher(), guarded_runner=GuardedRunner()
-    ).execute(
-        {"action": "library.project.move", "target_id": "missing", "payload": {"x": 1, "y": 2}}
-    )
+        "my_stuff", Dispatcher(), guarded_runner=GuardedRunner(), app={"_thomas_projects_registry_lock": asyncio.Lock()}
+    ).execute({"action": "library.project.move", "target_id": "missing", "payload": {"x": 1, "y": 2}})
     assert receipt["ok"] is False
     assert "not found" in receipt["error"].lower()
 
 
 @pytest.mark.asyncio
 async def test_active_tool_policy_denies_file_and_channel_mutations(tmp_path: Path) -> None:
-    from thomas.server.routes import canvas_studio_routes
+    from thomas.server import canvas_studio_shared
 
-    original_root = canvas_studio_routes._default_repo_root
-    canvas_studio_routes._default_repo_root = lambda: tmp_path
+    original_root = canvas_studio_shared._default_repo_root
+    canvas_studio_shared._default_repo_root = lambda: tmp_path
     denied_files = SimpleNamespace(allow_file_write=False, allow_channels=True)
     try:
         canvas = await operator(
@@ -141,7 +128,7 @@ async def test_active_tool_policy_denies_file_and_channel_mutations(tmp_path: Pa
             }
         )
     finally:
-        canvas_studio_routes._default_repo_root = original_root
+        canvas_studio_shared._default_repo_root = original_root
     denied_channels = SimpleNamespace(allow_file_write=True, allow_channels=False)
     channels = await operator(
         "channels", Dispatcher(), guarded_runner=GuardedRunner(), tool_policy=denied_channels
@@ -151,32 +138,59 @@ async def test_active_tool_policy_denies_file_and_channel_mutations(tmp_path: Pa
     assert not (tmp_path / ".thomas" / "canvas").exists()
 
 
+class _Discord:
+    """The runtime the Discord row leaves on the app. Building one is a failure here: the resident must never do it."""
+
+    enabled = False
+    built = 0
+
+    def __init__(self, *_args):
+        type(self).built += 1
+
+    def status(self):
+        return {"bridge": {"enabled": type(self).enabled}}
+
+    def set_enabled(self, enabled: bool):
+        type(self).enabled = bool(enabled)
+        return {"enabled": type(self).enabled}
+
+
 @pytest.mark.asyncio
-async def test_channels_enabled_state_is_persisted_and_read_back(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_channels_enabled_state_is_persisted_and_read_back(monkeypatch: pytest.MonkeyPatch) -> None:
     from thomas.integrations import discord_bridge_runtime
-
-    class _Discord:
-        enabled = False
-
-        def __init__(self, _config):
-            pass
-
-        def status(self):
-            return {"bridge": {"enabled": type(self).enabled}}
-
-        def set_enabled(self, enabled: bool):
-            type(self).enabled = bool(enabled)
-            return {"enabled": type(self).enabled}
+    from thomas.server.discord_bridge_key import BRIDGE
 
     monkeypatch.setattr(discord_bridge_runtime, "DiscordBridgeRuntime", _Discord)
+    _Discord.enabled, _Discord.built = False, 0
+    on_the_app = _Discord()
     receipt = await operator(
-        "channels", Dispatcher(), guarded_runner=GuardedRunner()
+        "channels", Dispatcher(), guarded_runner=GuardedRunner(), app={BRIDGE: on_the_app}
     ).execute({"action": "channels.discord.set_enabled", "value": True})
     assert receipt["ok"] is True
     assert receipt["evidence"]["before"]["bridge"]["enabled"] is False
     assert receipt["evidence"]["after"]["bridge"]["enabled"] is True
+    assert _Discord.built == 1  # the one this test put on the app
+
+
+@pytest.mark.asyncio
+async def test_with_the_discord_row_off_the_channels_resident_reads_nothing_and_changes_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row's runtime is not on the app, so the resident builds none of its own: that would start the bridge's disk work."""
+    from thomas.integrations import discord_bridge_runtime
+    from thomas.server.discord_bridge_key import TURNED_OFF
+
+    monkeypatch.setattr(discord_bridge_runtime, "DiscordBridgeRuntime", _Discord)
+    _Discord.enabled, _Discord.built = False, 0
+    resident = operator("channels", Dispatcher(), guarded_runner=GuardedRunner(), app={})
+
+    changed = await resident.execute({"action": "channels.discord.set_enabled", "value": True})
+    looked = await resident.initial_context()
+
+    assert changed["ok"] is False
+    assert changed["error"] == TURNED_OFF
+    assert looked["discord"] == {"ok": False, "error": TURNED_OFF}
+    assert (_Discord.built, _Discord.enabled) == (0, False)
 
 
 @pytest.mark.asyncio
@@ -198,9 +212,7 @@ async def test_marketplace_enablement_uses_installed_registry_and_readback(
         "list_installed_plugins",
         lambda _config, include_disabled=True: [dict(installed)],
     )
-    receipt = await operator(
-        "marketplace", Dispatcher(), guarded_runner=GuardedRunner()
-    ).execute(
+    receipt = await operator("marketplace", Dispatcher(), guarded_runner=GuardedRunner()).execute(
         {"action": "marketplace.plugin.set_enabled", "target_id": "verified-app", "value": True}
     )
     assert receipt["ok"] is True
@@ -268,12 +280,8 @@ async def test_virtual_office_persists_live_follow_state_without_mission_dispatc
         app={"autonomy_store": _MissionStore()},
         office_store=store,
     )
-    receipt = await resident.execute(
-        {"action": "office.view.set_follow_agent", "target_id": "agent-4"}
-    )
-    rejected_dispatch = await resident.execute(
-        {"action": "mission.job.run_now", "target_id": "job-1"}
-    )
+    receipt = await resident.execute({"action": "office.view.set_follow_agent", "target_id": "agent-4"})
+    rejected_dispatch = await resident.execute({"action": "mission.job.run_now", "target_id": "job-1"})
     assert receipt["ok"] is True
     assert receipt["evidence"]["before"]["follow_agent_id"] == ""
     assert receipt["evidence"]["after"]["follow_agent_id"] == "agent-4"

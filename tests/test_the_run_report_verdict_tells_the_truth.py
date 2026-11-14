@@ -31,14 +31,7 @@ from pathlib import Path
 
 import pytest
 
-RESULTS_JS = (
-    Path(__file__).resolve().parents[1]
-    / "thomas"
-    / "server"
-    / "web"
-    / "js"
-    / "unified_code_results.js"
-)
+RESULTS_JS = Path(__file__).resolve().parents[1] / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
 
 # Verbatim shape of the report that shipped a false green on 2026-07-29, from
 # GET /api/evolve/agent/conversations/fc_20260729T162230_805ebf. Kept whole,
@@ -117,9 +110,7 @@ def _browser_ok() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
-    not _browser_ok(), reason="playwright chromium unavailable"
-)
+pytestmark = pytest.mark.skipif(not _browser_ok(), reason="playwright chromium unavailable")
 
 
 @pytest.fixture(scope="module")
@@ -131,6 +122,7 @@ def render():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.set_content("<!doctype html><html><body></body></html>")
+        page.add_script_tag(content=RESULTS_JS.with_name("unified_code_artifacts.js").read_text(encoding="utf-8"))
         page.add_script_tag(content=RESULTS_JS.read_text(encoding="utf-8"))
         page.evaluate(
             """() => window.ThomasCodeResults.configure({
@@ -146,9 +138,7 @@ def render():
         )
 
         def _render(report: dict) -> str:
-            return page.evaluate(
-                "r => window.ThomasCodeResults.runReportHtml(r)", json.loads(json.dumps(report))
-            )
+            return page.evaluate("r => window.ThomasCodeResults.runReportHtml(r)", json.loads(json.dumps(report)))
 
         yield _render
         browser.close()
@@ -204,9 +194,7 @@ def test_a_run_that_verified_its_requirements_still_reads_as_passing(render) -> 
             "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
             "validations": [_PASSING_CHECK],
             "open_risks": [],
-            "rubric_mapping": [
-                {"criterion": "counts down from 10", "status": "met", "evidence": "asserted"}
-            ],
+            "rubric_mapping": [{"criterion": "counts down from 10", "status": "met", "evidence": "asserted"}],
         }
     )
 
@@ -258,9 +246,7 @@ def test_only_two_requirements_are_named_and_each_stays_readable(render) -> None
             "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
             "validations": [_PASSING_CHECK],
             "open_risks": [],
-            "rubric_mapping": [
-                {"criterion": name, "status": "unverified", "evidence": "e"} for name in long_names
-            ],
+            "rubric_mapping": [{"criterion": name, "status": "unverified", "evidence": "e"} for name in long_names],
         }
     )
 
@@ -343,9 +329,7 @@ def test_a_skipped_check_is_not_counted_as_a_passing_one(render) -> None:
         {
             "attempts": [{"pass": 1, "goal": "g", "outcome": "completed", "exit_state": "exit 0"}],
             "validations": [_PASSING_CHECK, _SKIPPED_SMOKE],
-            "open_risks": [
-                {"risk": "a changed page was never opened in a browser", "detail": "index.html"}
-            ],
+            "open_risks": [{"risk": "a changed page was never opened in a browser", "detail": "index.html"}],
             "rubric_mapping": [{"criterion": "c", "status": "met", "evidence": "e"}],
         }
     )

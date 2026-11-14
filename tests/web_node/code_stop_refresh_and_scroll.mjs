@@ -2,7 +2,7 @@
 // sibling modules in chat.html order, instruments the Code adapter, and drives
 // three lifecycle claims:
 //
-//   1. stopRun -- the drawer Stop button path -- reloads changes + tree after a
+//   1. stopRun -- the primary button's Stop path -- reloads changes + tree after a
 //      confirmed stop, exactly as the post-Keep/Revert path does. Before the
 //      fix the FILES panel stayed on "Loading files…" and CHANGED FILES was
 //      absent until the user switched away and back.
@@ -32,7 +32,8 @@ function control(id = '') {
   });
   return controls.get(id);
 }
-const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500 };
+const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500,
+  cardHtml: '', insertAdjacentHTML(_where, html) { this.cardHtml = html; } };
 const liveChildren = [];
 const liveList = {
   get children() { return liveChildren; },
@@ -51,6 +52,7 @@ const drawer = { insertAdjacentHTML() {} };
 const panel = { style: { setProperty() {} } };
 const resizeHandle = { attributes: {}, addEventListener() {}, removeEventListener() {}, setAttribute() {}, setPointerCapture() {} };
 const root = {
+  get ownerDocument() { return globalThis.document; },
   _html: '',
   get innerHTML() { return this._html; },
   set innerHTML(value) { this._html = value; snapshots.push(value); },
@@ -98,7 +100,7 @@ for (const siblingPath of siblingPaths) {
 const source = fs.readFileSync(sourcePath, 'utf8');
 const instrumented = source.replace(
   /\n\}\)\(\);\s*$/,
-  '\n  window.__ThomasCodeStopTest = { state, activate: () => { adapterActive = true; }, finishRun, pushLiveEvent, render, stopRun };\n})();',
+  '\n  window.__ThomasCodeStopTest = { state, activate: () => { adapterActive = true; }, finishRun, pushLiveEvent, render, stopRun, steer };\n})();',
 );
 if (instrumented === source) throw new Error('could not instrument Code stop adapter');
 vm.runInThisContext(instrumented, { filename: sourcePath });
@@ -165,6 +167,26 @@ function stopOutcome(counts) {
 
 const report = {};
 
+// A native stop reloads the durable candidate result and its recovery controls.
+{
+  resetState();
+  runningState();
+  state.conversation.self_edit = true;
+  const counts = { stop: 0, changes: 0, tree: 0, conversation: 0 };
+  const ordinaryFetch = stopFetchSurface(counts);
+  fetchHandler = async url => {
+    if (url === '/api/evolve/agent/conversations/c1') {
+      counts.conversation += 1;
+      return response({ ok: true, conversation: { id: 'c1', self_edit: true, project_root: '/repo', turns: [
+        { role: 'agent', run_id: 'run-c1', report: { self_edit: { status: 'failed', reason: 'Stopped safely' } } },
+      ] } });
+    }
+    return ordinaryFetch(url);
+  };
+  if (await api.stopRun() !== true) throw new Error('native stop failed');
+  report.nativeStop = { ...stopOutcome(counts), selfEdit: state.conversation.turns.at(-1)?.report?.self_edit, cardHtml: transcript.cardHtml };
+}
+
 // 1. The drawer Stop button path.
 {
   resetState();
@@ -205,7 +227,7 @@ const report = {};
     if (url.endsWith('/conversations/c1')) return response({ ok: true, conversation: { id: 'c1', project_root: '/repo', turns: [{ role: 'agent', run_id: 'run-c1', reason: 'Finished', transcript: '{"fc":"final","text":"the follow-up answer"}' }] } });
     if (url.includes('/changes?')) return response({ changed: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected durable finish fetch ${url}`);
   };
   await api.finishRun();
@@ -226,6 +248,44 @@ const report = {};
   snapshots.length = 0;
   api.render();
   report.liveFailedWithAnswer = snapshots.at(-1) || '';
+}
+
+// A steer is a continuation in the SAME conversation, never a queued new task.
+{
+  resetState();
+  runningState();
+  const requests = [];
+  fetchHandler = async (url, options) => {
+    if (url === '/api/evolve/agent/steer') {
+      requests.push({ url, body: JSON.parse(options.body) });
+      return response({ ok: true, stop_requested: true, restart_required: true }, 202);
+    }
+    if (url.includes('/status')) return response({ ok: true, running: false, recording: false });
+    if (url === '/api/evolve/agent/send') {
+      requests.push({ url, body: JSON.parse(options.body) });
+      return response({ ok: true, run_id: 'run-continued', conversation_id: 'c1', project_root: '/repo' });
+    }
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
+    throw new Error(`unexpected steering fetch ${url}`);
+  };
+  const applied = await api.steer('Use a clear status');
+  report.steer = { applied, requests, runId: state.runId, status: state.runStatus,
+    events: state.liveEvents.filter(event => event.type === 'steering').map(event => event.text) };
+}
+
+// If continuation is refused, never tell the reader the update was applied.
+{
+  resetState();
+  runningState();
+  fetchHandler = async url => {
+    if (url === '/api/evolve/agent/steer') return response({ ok: true }, 202);
+    if (url.includes('/status')) return response({ ok: true, running: false, recording: false });
+    if (url === '/api/evolve/agent/send') return response({ ok: false, error: 'Continuation rejected' }, 409);
+    if (url === '/api/issues') return response({ ok: true });
+    throw new Error(`unexpected failed steering fetch ${url}`);
+  };
+  report.steerFailure = { applied: await api.steer('Keep this task'), status: state.runStatus,
+    messages: state.liveEvents.map(event => event.text) };
 }
 
 process.stdout.write(JSON.stringify(report));

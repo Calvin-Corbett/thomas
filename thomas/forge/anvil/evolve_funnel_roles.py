@@ -192,11 +192,11 @@ class DefaultModelCall:
 
     def __call__(self, system: str, user: str, profile: str = "") -> str:
         from thomas.core.config import load_config
-        from thomas.core.llm_client import LLMClient
+        from thomas.core.llm_slot import models
 
         cfg = load_config(self.root / "thomas.toml")
         model_cfg = cfg.get_model((profile or self.default_profile) or None)
-        client = LLMClient(model_cfg)
+        client = models().open(model_cfg)
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},

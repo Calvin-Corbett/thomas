@@ -13,8 +13,10 @@ log = logging.getLogger(__name__)
 
 def ensure_task_workspace(execution_id: str) -> Path:
     """Return a per-task workspace outside the source repo when possible."""
+    from thomas.forge.anvil.forge_code_projects import thomas_owned_root
+
     safe_id = "".join(ch for ch in str(execution_id or "") if ch.isalnum() or ch in "-_") or "task"
-    base = Path.home() / ".thomas" / "workspaces" / safe_id
+    base = thomas_owned_root() / "workspaces" / safe_id
     try:
         base.mkdir(parents=True, exist_ok=True)
     except OSError:

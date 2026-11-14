@@ -140,9 +140,10 @@ def test_a_dead_agent_warns_instead_of_blocking(tmp_path) -> None:
         requested_scope=["pyproject.toml"],
     )
     assert result.get("conflicts") == [], "a dead agent still blocks the scope"
-    messages = " ".join(str(w.get("message") or "") for w in result.get("warnings") or [])
+    messages = " ".join(str(w.get("message") or "") for w in result.get("not_live") or [])
     assert "long-gone" in messages, "it went quiet instead of saying who is stale"
     assert "stale" in messages.lower()
+    assert result["warnings"] == []
 
 
 def test_a_live_agent_still_blocks_an_overlapping_scope(tmp_path) -> None:

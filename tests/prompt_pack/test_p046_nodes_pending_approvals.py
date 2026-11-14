@@ -45,7 +45,6 @@ def test_nodes_pending_approvals_missing_config_is_deterministic(monkeypatch):
     from thomas.marketplace.nodes import p046_nodes_pending_approvals as mod
 
     monkeypatch.delenv("THOMAS_STATE_DIR", raising=False)
-    monkeypatch.setattr(mod, "_try_state_dir_from_parity_compat", lambda: None)
     monkeypatch.setattr(mod, "_try_load_thomas_config", lambda: None)
 
     with pytest.raises(mod.NodesPendingApprovalsError) as exc:
@@ -91,7 +90,6 @@ def test_cli_json_error_missing_config(monkeypatch, capsys):
     from thomas.marketplace.nodes import p046_nodes_pending_approvals as core_mod
 
     monkeypatch.delenv("THOMAS_STATE_DIR", raising=False)
-    monkeypatch.setattr(core_mod, "_try_state_dir_from_parity_compat", lambda: None)
     monkeypatch.setattr(core_mod, "_try_load_thomas_config", lambda: None)
 
     rc = cli_mod.cli_main(["--json"])

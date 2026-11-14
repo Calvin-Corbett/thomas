@@ -5,76 +5,50 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import time
 from collections.abc import AsyncIterator
-from pathlib import Path
+from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
 
-from thomas.agent.acceptance_runtime import begin_contract, hold_at_finish
+from thomas.agent import loop_anchors as anchors
+from thomas.agent import loop_interrupts as steers
+from thomas.agent.acceptance_runtime import hold_at_finish
 from thomas.agent.checkin_policy import resolve_checkin_policy
 from thomas.agent.constraint_envelope import ConstraintEnvelope, envelope_events
 from thomas.agent.hook_events import HookEvent, emit_hook
 from thomas.agent.loop_completion import handle_post_loop_completion
 from thomas.agent.loop_core import LoopState
+from thomas.agent.loop_execution_setup import prepare_execution_setup
 from thomas.agent.loop_helpers import (
     _coerce_async_iterator,
     _ensure_llm_hardened_client,
     _validate_benchmark_code_output,
     httpx_ConnectError,
 )
-from thomas.agent.loop_tool_protocol import (
-    _MAX_TOOL_RESULT_CHARS as _MAX_TOOL_RESULT_CHARS,
+from thomas.agent.loop_provider_runtime import (
+    TPM_WAIT_SLICE_SECONDS,
+    ProviderPromptWindow,
+    compact_conversation_if_needed,
+    connection_error_message,
 )
-from thomas.agent.loop_tool_protocol import (
-    _canonical_code_tool_name as _canonical_code_tool_name,
+
+# Compatibility re-exports: callers historically imported these helpers here.
+from thomas.agent.loop_tool_protocol import (  # noqa: F401
+    _MAX_TOOL_RESULT_CHARS,
+    _canonical_code_tool_name,
+    _code_tool_action,
+    _failed_tool_signature,
+    _is_code_mutation_name,
+    _record_failed_tool,
+    _shell_command_is_mutation,
+    _tool_result_with_recovery,
+    _tool_spec_name,
 )
-from thomas.agent.loop_tool_protocol import (
-    _code_tool_action as _code_tool_action,
-)
-from thomas.agent.loop_tool_protocol import (
-    _failed_tool_signature as _failed_tool_signature,
-)
-from thomas.agent.loop_tool_protocol import (
-    _is_code_mutation_name as _is_code_mutation_name,
-)
-from thomas.agent.loop_tool_protocol import (
-    _record_failed_tool as _record_failed_tool,
-)
-from thomas.agent.loop_tool_protocol import (
-    _shell_command_is_mutation as _shell_command_is_mutation,
-)
-from thomas.agent.loop_tool_protocol import (
-    _tool_result_with_recovery as _tool_result_with_recovery,
-)
-from thomas.agent.loop_tool_protocol import (
-    _tool_spec_name as _tool_spec_name,
-)
-from thomas.agent.response_tone import (
-    best_practice_default_hint,
-    simplified_review_default_hint,
-)
-from thomas.agent.routing import PATH_CODING, PATH_MODEL_OWNED
-from thomas.agent.skills_runtime import (
-    format_runtime_skills_context,
-    resolve_runtime_skills,
-)
+from thomas.agent.loop_turn_context import build_turn_messages, context_breakdown_of, prepare_turn_context
+from thomas.agent.tool_result_cap import cap_tool_result, sandbox_root_of
 from thomas.core import capture_context
-from thomas.core.autonomy import autonomy_spec
-from thomas.core.config import load_config
 from thomas.core.events import AgentEvent, EventType
 from thomas.core.llm import LLMError
 from thomas.core.llm_shared import callable_accepts_keyword
-from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
-from thomas.core.token_economy import (
-    build_token_economy_meta,
-    coerce_base_iterations,
-    compute_max_passes,
-    loop_context_budgets,
-    loop_iteration_prompt_caps,
-    normalize_token_economy_level,
-    runtime_overhead_policy,
-)
-from thomas.core.tokens import estimate_tokens
 from thomas.marketplace.observability import derive_messages as honesty_shadow
 
 if TYPE_CHECKING:
@@ -82,27 +56,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_TPM_WINDOW_SECONDS = 60.0
-_TPM_WAIT_SLICE_SECONDS = 20.0
-
-
-def _connection_error_message(llm: Any) -> str:
-    """Name the provider that actually dropped the connection.
-
-    The old template printed ``Cannot connect to LLM at {base_url}. Is Ollama
-    running?`` for every provider — but hosted profiles (ChatGPT/Codex) have
-    no base_url, so a network blip mid-run surfaced as ``at .`` with advice
-    to start Ollama: a diagnosis that was wrong in every part. The Ollama
-    hint belongs only to a local endpoint."""
-    cfg = getattr(llm, "config", None)
-    base_url = str(getattr(cfg, "base_url", "") or "").strip()
-    provider = str(getattr(cfg, "provider", "") or "").strip()
-    model = str(getattr(cfg, "model", "") or "").strip()
-    target = base_url or provider or model or "the configured model provider"
-    message = f"Lost the connection to {target} mid-run (network drop or expired login)."
-    if base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
-        message += " If this is a local Ollama endpoint, check: ollama serve"
-    return message
+_TPM_WAIT_SLICE_SECONDS = TPM_WAIT_SLICE_SECONDS
+_connection_error_message = connection_error_message
 
 
 async def _agent_loop_run(
@@ -127,113 +82,35 @@ async def _agent_loop_run(
     4. Append tool results, loop back to LLM
     5. Stop on: no tool calls, max iterations, context overflow, or error
     """
-    # ``prompt`` is the complete model context. ``intent_text`` remains the
-    # user-visible current turn for receipts, but no deterministic layer
-    # classifies either string before the model sees them.
-    prompt_text = prompt if isinstance(prompt, str) else ""
-    if isinstance(prompt, list):
-        for part in prompt:
-            if isinstance(part, dict) and part.get("type") == "text":
-                prompt_text += str(part.get("text", "")) + "\n"
-        prompt_text = prompt_text.strip()
-    request_text = str(intent_text) if intent_text is not None else prompt_text
-    routing_text = request_text
-    benchmark_mode = str(job_type or "").strip().lower() == "benchmark"
-    current_job_type = str(job_type or "").strip().lower()
-    raw_write_guard_limit = str(os.environ.get("THOMAS_SELF_DEVELOPMENT_WRITE_GUARD_LIMIT") or "6").strip()
-    try:
-        write_guard_limit = int(raw_write_guard_limit)
-    except (TypeError, ValueError, OverflowError):
-        write_guard_limit = 6
-    self._current_job_type = current_job_type
-    self._self_development_write_guard = (
-        {
-            "inspection_count": 0,
-            "write_seen": False,
-            "limit": max(0, min(write_guard_limit, 50)),
-        }
-        if current_job_type == "self_development"
-        else None
+    setup = prepare_execution_setup(
+        self,
+        prompt,
+        intent_text=intent_text,
+        mode=mode,
+        tools_policy=tools_policy,
+        token_economy=token_economy,
+        max_iterations=max_iterations,
+        job_type=job_type,
     )
-
-    # Provider policy and structured tool authorization remain active. Thomas
-    # does not inspect prompt words to pre-reject a natural-language turn.
-    route_input = routing_text
-    route_input_source = "current_turn"
-    route = self._router.decide(
-        routing_text,
-        requested_mode=mode,
-        requested_tools_policy=tools_policy,
-    )
-    prompt_route_path = (
-        PATH_CODING
-        if current_job_type in {"benchmark", "coding", "coding_task", "self_development"}
-        else PATH_MODEL_OWNED
-    )
-    autonomy = autonomy_spec(self._autonomy_level)
-    autonomy_name = str(autonomy.name)
-    effective_mode = route.mode
-    applied_token_economy = normalize_token_economy_level(token_economy)
-    token_economy_meta = build_token_economy_meta(token_economy, applied_token_economy)
-    overhead_policy = runtime_overhead_policy(applied_token_economy)
-    self._memory_include_profile_economy_cap = bool(overhead_policy.include_memory_profile)
-    _budget_economy = applied_token_economy
-    strict_issue_ownership = bool(
-        self._non_coder_profile
-        or str(self._profile_type or "").strip().lower() == "non_coder"
-        or str(self._profile_type or "").strip().lower() == "non-coder"
-    )
-    best_practice_gate_active = bool(overhead_policy.include_best_practice_hint) and bool(self._non_coder_profile)
-    best_practice_gate_source = "profile_non_coder" if bool(self._non_coder_profile) else ""
-
-    review_quality_hint = ""
-    if overhead_policy.include_review_quality_hint:
-        review_quality_hint = simplified_review_default_hint(
-            self._review_depth,
-            non_coder_profile=bool(self._non_coder_profile),
-        )
-    best_practice_hint = ""
-    if overhead_policy.include_best_practice_hint and bool(self._non_coder_profile):
-        best_practice_hint = best_practice_default_hint()
-    code_output_validation_enabled = benchmark_mode
-    runtime_skills_context = ""
-    runtime_skills_payload: dict[str, Any] = {
-        "enabled": False,
-        "discovered_count": 0,
-        "selected_count": 0,
-        "explicit_mentions": [],
-        "pinned_matches": [],
-        "roots": [],
-        "selected": [],
-    }
-    # Runtime skill policy owns explicit/pinned skill handling.  AgentLoop does
-    # not inspect prompt words to decide whether discovery should run.
-    skills_mode = str(overhead_policy.runtime_skills_mode or "off").strip().lower()
-    should_resolve_runtime_skills = skills_mode in {"auto", "explicit"}
-    if should_resolve_runtime_skills:
-        try:
-            runtime_skills = resolve_runtime_skills(
-                self.config,
-                prompt_text=routing_text,
-                relevance_text=route_input,
-                route_path=prompt_route_path,
-                cwd=Path.cwd(),
-            )
-            runtime_skills_context = format_runtime_skills_context(runtime_skills)
-            runtime_skills_payload = runtime_skills.to_event_payload()
-        except Exception as e:  # REVIEWED: log-and-continue — skill discovery optional, graceful fallback
-            log.warning("Runtime skills resolution failed: %s", e)
-            runtime_skills_payload["error"] = f"{type(e).__name__}: {e}"
-    usage_before = self._session_usage_snapshot()
-    stream_usage = self._normalize_usage(0, 0, 0)
-
-    # Effort controls a bounded number of passes. Explicit callers can still
-    # provide an exact pass count; model context fit is enforced per request.
-    configured_max_iter = coerce_base_iterations(getattr(self.config, "max_agent_iterations", None))
-    if max_iterations is not None:
-        max_iter = coerce_base_iterations(max_iterations)
-    else:
-        max_iter = compute_max_passes(applied_token_economy, configured_max_iter)
+    prompt_text = setup.prompt_text
+    request_text = setup.request_text
+    routing_text = setup.routing_text
+    benchmark_mode = setup.benchmark_mode
+    current_job_type = setup.current_job_type
+    route = setup.route
+    route_input_source = setup.route_input_source
+    autonomy_name = setup.autonomy_name
+    effective_mode = setup.effective_mode
+    applied_token_economy = setup.applied_token_economy
+    token_economy_meta = setup.token_economy_meta
+    strict_issue_ownership = setup.strict_issue_ownership
+    best_practice_gate_active = setup.best_practice_gate_active
+    best_practice_gate_source = setup.best_practice_gate_source
+    code_output_validation_enabled = setup.code_output_validation_enabled
+    runtime_skills_payload = setup.runtime_skills_payload
+    usage_before = setup.usage_before
+    stream_usage = setup.stream_usage
+    max_iter = setup.max_iter
     # The model owns whether to answer, clarify, or call a capability.  These
     # counters remain in receipts for compatibility but no prose classifier
     # triggers hidden clarification rewrites.
@@ -241,18 +118,11 @@ async def _agent_loop_run(
     full_auto_reprompt_count = 0
     clarification_questions_asked = 0
     clarification_reprompt_count = 0
-    effective_tools_policy = route.tools_policy
-    forced_tools_policy = autonomy.force_tools_policy
-    if forced_tools_policy == "never":
-        # Chat autonomy is a permission boundary, not an intent guess.
-        effective_tools_policy = "never"
-    elif tools_policy == "auto" and forced_tools_policy in {"auto", "always"}:
-        effective_tools_policy = str(forced_tools_policy)
-
-    tool_specs = self._select_tools(routing_text, policy=effective_tools_policy, route=route)
-
-    preserve_first, preserve_last = self._history_preserve_counts(route)
-    history_token_cap = self._history_token_cap(route)
+    effective_tools_policy = setup.effective_tools_policy
+    tool_specs = setup.tool_specs
+    preserve_first = setup.preserve_first
+    preserve_last = setup.preserve_last
+    history_token_cap = setup.history_token_cap
     state = LoopState()
     iter_token_estimates: list[int] = []
     cumulative_context_tokens = 0
@@ -272,61 +142,19 @@ async def _agent_loop_run(
     pre_edit_inspections = 0
     post_edit_inspections = 0
     runaway_guard_reason: str | None = None
-    memory_text = ""
-    continuity_hint = ""
-    test_visibility_hint = ""
-    library_text = ""
-    memory_tokens = 0
-    mode_context_budget, hard_context_budget, emergency_context_budget = loop_context_budgets(
-        _budget_economy,
-        effective_mode,
-    )
-    iter_prompt_warn_cap, iter_prompt_hard_cap = loop_iteration_prompt_caps(
-        _budget_economy,
-        effective_mode,
-    )
-    try:
-        provider_tpm_limit = int(self._provider_tpm_limit() or 0)
-    except (TypeError, ValueError):
-        provider_tpm_limit = 0
-    provider_tpm_budget = 0
-    if provider_tpm_limit > 0:
-        try:
-            provider_tpm_headroom = float(self._provider_tpm_headroom() or 0.90)
-        except (TypeError, ValueError):
-            provider_tpm_headroom = 0.90
-        provider_tpm_headroom = max(0.5, min(provider_tpm_headroom, 1.0))
-        provider_tpm_budget = max(1, int(provider_tpm_limit * provider_tpm_headroom))
-    provider_prompt_window: list[tuple[float, int]] = []
+    mode_context_budget = setup.mode_context_budget
+    hard_context_budget = setup.hard_context_budget
+    emergency_context_budget = setup.emergency_context_budget
+    iter_prompt_warn_cap = setup.iter_prompt_warn_cap
+    iter_prompt_hard_cap = setup.iter_prompt_hard_cap
+    provider_tpm_limit = setup.provider_tpm_limit
+    provider_tpm_budget = setup.provider_tpm_budget
+    provider_prompt_tracker = ProviderPromptWindow(provider_tpm_budget)
+    provider_prompt_window = provider_prompt_tracker.entries
     provider_tpm_wait_events = 0
     provider_tpm_wait_seconds = 0.0
     provider_prompt_tokens_last_minute = 0
     stream_prompt_prev = 0
-
-    def _prune_prompt_window(now_ts: float) -> None:
-        cutoff = now_ts - _TPM_WINDOW_SECONDS
-        if not provider_prompt_window:
-            return
-        provider_prompt_window[:] = [(ts, tok) for (ts, tok) in provider_prompt_window if ts >= cutoff]
-
-    def _projected_wait_seconds(next_prompt_tokens: int) -> tuple[float, int, int]:
-        if provider_tpm_budget <= 0:
-            return 0.0, 0, 0
-        now_ts = time.monotonic()
-        _prune_prompt_window(now_ts)
-        current_prompt = int(sum(max(0, int(tok)) for _, tok in provider_prompt_window))
-        projected_prompt = current_prompt + max(0, int(next_prompt_tokens))
-        if projected_prompt <= provider_tpm_budget:
-            return 0.0, projected_prompt, current_prompt
-
-        running_prompt = current_prompt
-        wait_s = _TPM_WINDOW_SECONDS
-        for ts, tok in provider_prompt_window:
-            running_prompt -= max(0, int(tok))
-            if running_prompt + max(0, int(next_prompt_tokens)) <= provider_tpm_budget:
-                wait_s = max(0.25, _TPM_WINDOW_SECONDS - (now_ts - ts))
-                break
-        return wait_s, projected_prompt, current_prompt
 
     yield AgentEvent(
         type=EventType.AGENT_START,
@@ -349,61 +177,12 @@ async def _agent_loop_run(
         },
     )
 
-    if not benchmark_mode:
-        self._apply_memory_policy(route)
-
-    # Record user message in memory
-    if request_text and not benchmark_mode:
-        self._record_event("user_message", request_text)
-    if routing_text:
-        if not benchmark_mode:
-            memory_mode = self.config.memory.mode or "auto"
-            if effective_mode == "fast":
-                memory_mode = "fast"
-            if effective_mode == "thinking":
-                memory_mode = "thorough"
-            memory_text = self._retrieve_memory(
-                routing_text,
-                mode=memory_mode,
-                budget_override=route.memory_budget_tokens,
-            )
-    test_visibility_hint = ""
-    library_text = ""
-    if best_practice_gate_active and best_practice_hint and not memory_text:
-        memory_text = str(best_practice_hint)
-    elif best_practice_gate_active and best_practice_hint and best_practice_hint not in memory_text:
-        memory_text = memory_text + "\n\n" + str(best_practice_hint)
-    if overhead_policy.include_library_context and not benchmark_mode:
-        library_text = self._retrieve_library(routing_text, route)
-        extra_context_parts: list[str] = []
-        if memory_text:
-            extra_context_parts.append(str(memory_text))
-        if continuity_hint:
-            extra_context_parts.append(str(continuity_hint))
-        if best_practice_gate_active and best_practice_hint and best_practice_hint not in memory_text:
-            extra_context_parts.append(str(best_practice_hint))
-        if code_output_validation_enabled:
-            extra_context_parts.append("Return ONLY the requested output format for this task, no prose or commentary.")
-        if review_quality_hint:
-            extra_context_parts.append(str(review_quality_hint))
-        if test_visibility_hint:
-            extra_context_parts.append(str(test_visibility_hint))
-        if library_text:
-            extra_context_parts.append(str(library_text))
-        memory_text = "\n\n".join([p for p in extra_context_parts if p is not None and str(p).strip()])
-
-        memory_tokens = estimate_tokens(memory_text)
-
-    # The acceptance contract goes in front of the model before any work, as turn context -
-    # never into the stored conversation (see acceptance_runtime).
-    contract_block = begin_contract(
-        self, prompt_text=prompt_text, route_path=str(route.path or ""), attempt=int(_quality_retry_count)
-    )
-    if contract_block:
-        memory_text = f"{memory_text}\n\n{contract_block}".strip() if memory_text else contract_block
-        memory_tokens = estimate_tokens(memory_text)
-    # Add user message to conversation for history
-    self._conversation.append({"role": "user", "content": prompt})
+    prepare_turn_context(self, setup, quality_retry_count=_quality_retry_count)
+    memory_text = setup.memory_text
+    continuity_hint = setup.continuity_hint
+    test_visibility_hint = setup.test_visibility_hint
+    memory_tokens = setup.memory_tokens
+    anchors.pin_turn_request(self, prompt, quality_retry=int(_quality_retry_count) > 0)
     turn_user_content: Any = prompt
 
     # Mid-run check-in policy (CAP-051): zero overhead unless configured.
@@ -411,74 +190,52 @@ async def _agent_loop_run(
     if checkin_policy is not None:
         self._checkin_policy = checkin_policy
 
-    # Constraint envelope (CAP-048): token ceiling + checkpoint summaries with
-    # deterministic stop reasons. Inert unless configured via env, so default
-    # behavior is unchanged.
+    # Constraint envelope (CAP-048) is inert unless configured via env.
     constraint_envelope = ConstraintEnvelope.from_env()
 
-    for iteration in range(max_iter):
+    iteration = 0
+    while iteration < max_iter:
+        if (run_hold := getattr(self, "run_hold", None)) is not None:  # Build's pause; absent everywhere else
+            await run_hold(iteration)
+        if (drain_signal := os.environ.get("THOMAS_CODE_RELOAD_DRAIN_SIGNAL")) and os.path.isfile(drain_signal):
+            yield AgentEvent.status("Yielding unfinished Build run for landed-code reload.", iteration=iteration)
+            return
         state.iteration = iteration
+        iteration += 1
 
         # Auto-compact conversation if approaching token budget.
         # This runs before _build_messages to avoid hard truncation.
         if iteration >= 1:
-            # Honesty-spine correlation: auto-compact used to run OUTSIDE the
-            # set_capture_run bracket below (which only wrapped the model
-            # call), so its history/compaction event fell back to the
-            # uncorrelated ambient run instead of landing on this turn's own
-            # run_id -- the same tight-scope-reset discipline as the model
-            # call, applied to the one other call site this iteration makes
-            # before it.
-            _compact_capture_token = capture_context.set_capture_run(self._run_id)
-            try:
-                compact_result = await self._auto_compact_if_needed(
-                    hard_cap=self._context_window,
-                    threshold=0.70,
-                    preserve_recent=max(6, preserve_last + 2),
-                )
-                if compact_result:
-                    log.info(
-                        "Auto-compacted conversation: %d -> %d tokens (saved %d)",
-                        compact_result["original_tokens"],
-                        compact_result["compacted_tokens"],
-                        compact_result["tokens_saved"],
-                    )
-            except Exception as _ac_err:
-                log.debug("Auto-compaction check failed (non-fatal): %s", _ac_err)
-            finally:
-                capture_context.reset(_compact_capture_token)
+            await compact_conversation_if_needed(self, preserve_last=preserve_last, setup=setup)
 
-        # Build messages with context window management
-        # Only inject memory on first iteration
+        iteration_preserve_first = preserve_first
+        iteration_preserve_last = preserve_last
+        if self._last_compaction_result is not None:
+            iteration_preserve_first = len(self._conversation)
+            iteration_preserve_last = len(self._conversation)
+
+        # Build messages with context window management; inject memory only once.
         mem = ""
-        if iteration == 0:
-            mem = memory_text
-            if continuity_hint:
-                mem = (mem + "\n\n" + continuity_hint).strip() if mem else continuity_hint
-            if test_visibility_hint:
-                mem = (mem + "\n\n" + test_visibility_hint).strip() if mem else test_visibility_hint
-            if library_text:
-                mem = (mem + "\n\n" + library_text).strip() if mem else library_text
-        self_development_job = current_job_type == "self_development"
+        if state.iteration == 0:
+            context_parts = (memory_text, continuity_hint, test_visibility_hint)  # memory_text holds the library.
+            mem = "\n\n".join(part for part in context_parts if part)
         # The model keeps every tool for the whole run. Thomas used to strip the
         # read tools after 6 inspections, and ALL tools after 6 post-edit reads, so
         # the one action most likely to catch a mistake -- re-reading what you just
         # wrote -- was removed precisely when it mattered.
         iteration_tool_specs = tool_specs
-        messages = self._build_messages(
+        messages, budget_stop = build_turn_messages(
+            self,
             state,
+            setup,
             memory_text=mem,
-            tool_specs=iteration_tool_specs,
-            include_purpose=bool(route.include_purpose) and bool(overhead_policy.include_purpose_brief),
-            preserve_first=preserve_first,
-            preserve_last=preserve_last,
-            history_token_cap=history_token_cap,
-            route_path=prompt_route_path,
-            skills_context=runtime_skills_context,
-            include_autonomy_profile=bool(overhead_policy.include_autonomy_profile),
-            include_editing_policy=bool(overhead_policy.include_editing_policy) and not self_development_job,
-            include_project_instructions=bool(overhead_policy.include_project_instructions),
+            preserve_first=iteration_preserve_first,
+            preserve_last=iteration_preserve_last,
+            iteration=iteration,
         )
+        if budget_stop is not None:
+            yield budget_stop
+            break
         iter_token_estimates.append(int(state.token_estimate))
         cumulative_context_tokens += int(state.token_estimate)
         peak_context_tokens = max(peak_context_tokens, int(state.token_estimate))
@@ -496,11 +253,12 @@ async def _agent_loop_run(
             while True:
                 next_prompt_estimate = int(state.token_estimate)
                 if provider_prompt_window:
-                    observed_avg = int(
-                        sum(max(0, int(tok)) for _, tok in provider_prompt_window) / max(1, len(provider_prompt_window))
+                    next_prompt_estimate = max(
+                        next_prompt_estimate,
+                        provider_prompt_tracker.observed_average(),
                     )
-                    next_prompt_estimate = max(next_prompt_estimate, observed_avg)
-                wait_s, projected_prompt, current_prompt = _projected_wait_seconds(next_prompt_estimate)
+                projected_usage = provider_prompt_tracker.projected_wait_seconds(next_prompt_estimate)
+                wait_s, projected_prompt, current_prompt = projected_usage
                 provider_prompt_tokens_last_minute = int(current_prompt)
                 if wait_s <= 0:
                     break
@@ -533,6 +291,7 @@ async def _agent_loop_run(
                 "token_estimate": state.token_estimate,
                 "context_window": self._context_window,
                 "context_window_profile": str(self.llm.config.name or "").strip().lower(),
+                "context_breakdown": context_breakdown_of(messages, state.token_estimate),
             },
             iteration=iteration,
         )
@@ -599,7 +358,7 @@ async def _agent_loop_run(
                         "arguments": event.data.get("arguments", ""),
                     }
                     pending_tool_calls.append(tc_data)
-                    yield AgentEvent.tool_call_end(tc_data["id"], iteration=iteration)
+                    yield AgentEvent.tool_call_end(tc_data["id"], tc_data["arguments"], iteration=iteration)
 
                 elif event.type == "error":
                     # Some providers surface errors as stream events.
@@ -608,6 +367,8 @@ async def _agent_loop_run(
                     yield AgentEvent.agent_error(err, iteration=iteration)
 
                 elif event.type == "done":
+                    if event.data.get("model"):  # what the provider says answered (build_model_receipt.py)
+                        yield AgentEvent.model_reported(str(event.data["model"]), iteration=iteration)
                     # Don't `break` here: exiting an `async for` early triggers an
                     # `aclose()` on the underlying async generator while it's still
                     # unwinding network I/O, which can produce noisy asyncio/httpx
@@ -629,7 +390,7 @@ async def _agent_loop_run(
 
         except LLMError as e:
             error_msg = str(e)
-            if int(getattr(e, "status", 0) or 0) == 429 and iteration + 1 < max_iter:
+            if int(getattr(e, "status", 0) or 0) == 429 and not e.quota_hint and iteration + 1 < max_iter:
                 remaining_fn = getattr(self.llm, "_rate_limit_remaining", None)
                 remaining = 0.0
                 if callable(remaining_fn):
@@ -656,7 +417,17 @@ async def _agent_loop_run(
             # Detect connection errors and give a helpful message
             if "connect" in error_msg.lower() or "refused" in error_msg.lower():
                 error_msg = _connection_error_message(self.llm)
-            yield AgentEvent.agent_error(error_msg, iteration=iteration)
+            yield AgentEvent(
+                type=EventType.AGENT_ERROR,
+                data={
+                    "error": error_msg,
+                    "status": int(getattr(e, "status", 0) or 0),
+                    "retryable": bool(getattr(e, "retryable", False)),
+                    "error_code": str(getattr(e, "error_code", "") or ""),
+                    "response_headers": dict(getattr(e, "response_headers", {}) or {}),
+                },
+                iteration=iteration,
+            )
             state.error = error_msg
             state.finished = True
             break
@@ -694,10 +465,8 @@ async def _agent_loop_run(
             stream_prompt_now = int(stream_usage.get("prompt_tokens", 0) or 0)
             stream_prompt_delta = max(0, stream_prompt_now - stream_prompt_prev)
             if stream_prompt_delta > 0:
-                provider_prompt_window.append((time.monotonic(), int(stream_prompt_delta)))
                 stream_prompt_prev = stream_prompt_now
-                _prune_prompt_window(time.monotonic())
-                provider_prompt_tokens_last_minute = int(sum(max(0, int(tok)) for _, tok in provider_prompt_window))
+                provider_prompt_tokens_last_minute = provider_prompt_tracker.record(stream_prompt_delta)
             elif stream_prompt_now > stream_prompt_prev:
                 stream_prompt_prev = stream_prompt_now
 
@@ -738,7 +507,8 @@ async def _agent_loop_run(
                         f"{code_output_guard_last_issue}. "
                         "Return only valid Python continuation code meeting code-output requirements."
                     )
-                self._conversation.append({"role": "user", "content": user_prompt})
+                anchors.add_steering(self, user_prompt)
+                turn_user_content = user_prompt
                 continue
             issue_error = f"Code-output guard blocked completion: {code_output_guard_last_issue}".strip()
             state.error = issue_error
@@ -748,6 +518,18 @@ async def _agent_loop_run(
 
         state.aggregate_response += iter_text
 
+        # A steer can arrive while the model is composing its final answer, with no tool call left to trigger the
+        # between-tools check below: it gets another iteration in THIS run, never left queued and unread.
+        steer_kind, steer = steers.read_queued_steer(None if pending_tool_calls else self._message_queue)
+        if steer_kind == steers.STOP:
+            yield steers.stopped_by_you(state, iteration)
+            break
+        if steer_kind == steers.TEXT:
+            anchors.add_amendment(self, steer, reply=iter_text)
+            turn_user_content, max_iter = steer, steers.turn_for_steer(iteration, max_iter)
+            yield AgentEvent.status("Received your update. Continuing this task.", iteration=iteration)
+            continue
+
         # If no tool calls, we're done - unless the acceptance contract says the
         # text was commentary: then its gaps become the next user turn of this
         # same loop and the model keeps working (a text reply is never "done").
@@ -756,7 +538,8 @@ async def _agent_loop_run(
             if hold_text:
                 if iter_text:
                     self._conversation.append({"role": "assistant", "content": iter_text})
-                self._conversation.append({"role": "user", "content": hold_text})
+                anchors.add_steering(self, hold_text)
+                turn_user_content = hold_text
                 yield AgentEvent.status(
                     "Reply checked against the acceptance contract: not finished yet.", iteration=iteration
                 )
@@ -776,11 +559,7 @@ async def _agent_loop_run(
             break
 
         # Build assistant message with tool calls for the message history
-        assistant_msg: dict[str, Any] = {"role": "assistant"}
-        if iter_text:
-            assistant_msg["content"] = iter_text
-        else:
-            assistant_msg["content"] = ""
+        assistant_msg: dict[str, Any] = {"role": "assistant", "content": iter_text or ""}
         assistant_msg["tool_calls"] = [
             {
                 "id": tc["id"],
@@ -807,6 +586,7 @@ async def _agent_loop_run(
 
         tool_results: list[AgentEvent] = []
         tool_results_by_id: dict[str, AgentEvent] = {}
+        batch_amendments: list[dict[str, Any]] = []
 
         async def _bounded_tool_results() -> AsyncIterator[AgentEvent]:
             async for executed in self._execute_tools(execution_tool_calls, iteration):
@@ -852,11 +632,10 @@ async def _agent_loop_run(
             if not result_event.data.get("ok"):
                 result_text = _tool_result_with_recovery(str(tc.get("name") or ""), result_text)
             original_len = len(result_text)
-            if len(result_text) > _MAX_TOOL_RESULT_CHARS:
-                footer = (
-                    f"\n\n... (truncated, {len(result_text):,} chars total. Use start_line/end_line for large files.)"
-                )
-                result_text = result_text[: _MAX_TOOL_RESULT_CHARS - len(footer)] + footer
+            result_text = cap_tool_result(  # head + tail; the full text is saved where fs.read_file reaches it
+                result_text, _MAX_TOOL_RESULT_CHARS, tool_name=str(tc.get("name") or ""), call_id=str(tc_id),
+                sandbox_root=sandbox_root_of(self), run_id=str(getattr(self, "_run_id", "") or ""),
+            )  # fmt: skip
             tool_chars_total += original_len
             tool_chars_kept += len(result_text)
 
@@ -865,37 +644,20 @@ async def _agent_loop_run(
                 "tool_call_id": tc["id"],
                 "content": result_text,
             }
-            self._conversation.append(tool_msg)
+            anchors.store_tool_result(self._conversation, tool_msg, batch_amendments)
+            if (run_hold := getattr(self, "run_hold", None)) is not None:
+                await run_hold(iteration)
 
-            # ── message interruption check ──
-            # Between tool completions, check if the user sent a new message.
-            # This allows graceful cancellation mid-loop for responsive interaction.
-            if self._message_queue is not None:
-                try:
-                    user_interrupt = self._message_queue.get_nowait()
-                    if user_interrupt is None or str(user_interrupt).strip().lower() == "stop":
-                        state.user_interrupted = True
-                        state.finished = True
-                        yield AgentEvent(
-                            type=EventType.AGENT_END,
-                            data={"reason": "user_interrupted", "message": "Run cancelled by user."},
-                            iteration=iteration,
-                        )
-                        break
-                    interrupt_text = str(user_interrupt).strip()
-                    if interrupt_text:
-                        # Inject live follow-up user input into the active run.
-                        # The next iteration will route against this updated request.
-                        self._conversation.append({"role": "user", "content": interrupt_text})
-                        turn_user_content = interrupt_text
-                        yield AgentEvent(
-                            type=EventType.THINKING,
-                            data={"text": "Received additional user instructions. Adapting plan.\n"},
-                            iteration=iteration,
-                        )
-                except Exception:
-                    # Handles both asyncio.QueueEmpty and queue.Empty
-                    pass
+            # ── message interruption check ── Between tool completions, a message from you stops the run
+            # or joins it: the next iteration routes against the updated request (loop_interrupts).
+            steer_kind, steer = steers.read_queued_steer(self._message_queue)
+            if steer_kind == steers.STOP:
+                yield steers.stopped_by_you(state, iteration)
+                break
+            if steer_kind == steers.TEXT:
+                anchors.add_amendment(self, steer, batch=batch_amendments)
+                turn_user_content, max_iter = steer, steers.turn_for_steer(iteration, max_iter)
+                yield steers.adapting(iteration)
 
             state.total_tool_calls += 1
 
@@ -912,8 +674,10 @@ async def _agent_loop_run(
                     if checkin.ack_required:
                         await checkin_policy.wait_until_acknowledged()
 
+            tool_action = _code_tool_action(str(tc.get("name") or ""), args_meta)
+            if tool_action == "mutation" and result_event.data.get("ok"):
+                self._tool_failure_guard.reset_after_mutation(failure_counts)
             if current_job_type == "coding":
-                tool_action = _code_tool_action(str(tc.get("name") or ""), args_meta)
                 if tool_action == "mutation" and result_event.data.get("ok"):
                     code_mutation_seen = True
                     post_edit_inspections = 0
@@ -976,7 +740,7 @@ async def _agent_loop_run(
         yield AgentEvent.agent_error(runaway_guard_reason, iteration=max(0, max_iter - 1))
 
     # Delegate post-loop completion (validation, quality gates, final events) to helper
-    async for completion_event in handle_post_loop_completion(
+    completion_events = handle_post_loop_completion(
         self,
         state,
         routing_text,
@@ -1029,6 +793,8 @@ async def _agent_loop_run(
         provider_tpm_wait_events,
         provider_tpm_wait_seconds,
         quality_tool_events,
-        _prune_prompt_window,
-    ):
-        yield completion_event
+        provider_prompt_tracker.prune,
+    )
+    async with aclosing(completion_events):
+        async for completion_event in completion_events:
+            yield completion_event

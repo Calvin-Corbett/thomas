@@ -38,7 +38,7 @@ function control(id = '') {
   });
   return controls.get(id);
 }
-const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500 };
+const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500, insertAdjacentHTML() {} };
 const liveChildren = [];
 const liveList = {
   get children() { return liveChildren; },
@@ -57,6 +57,7 @@ const drawer = { insertAdjacentHTML() {} };
 const panel = { style: { setProperty() {} } };
 const resizeHandle = { attributes: {}, addEventListener() {}, removeEventListener() {}, setAttribute() {}, setPointerCapture() {} };
 const root = {
+  get ownerDocument() { return globalThis.document; },
   _html: '',
   get innerHTML() { return this._html; },
   set innerHTML(value) { this._html = value; snapshots.push(value); },
@@ -142,7 +143,7 @@ function startSurface(sendBodies, newConversationId) {
       const cid = body.conversation_id || newConversationId;
       return response({ ok: true, conversation_id: cid, project_root: `/proj-${cid}`, run_id: `run-${cid}-${sendBodies.length}`, run_state: 'running' });
     }
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     throw new Error(`unexpected start fetch ${url}`);
   };
 }
@@ -251,6 +252,37 @@ const report = {};
   };
 }
 
+// 6. A send the server cannot start yet (this conversation's run is still saving, then every slot is taken) is
+//    accepted, not refused: the composer says so in quiet lines, asks again, and ends up started -- no error line.
+{
+  resetState();
+  Object.assign(state, { activeId: 'c9', conversation: { id: 'c9', turns: [] }, projectRoot: '/proj-c9' });
+  const bodies = [];
+  const answers = [
+    { ok: true, queued: true, code: 'agent_already_running', notice: 'Queued, runs next', retry_after_s: 1 },
+    { ok: true, waiting_for_slot: true, code: 'agent_already_running', notice: 'Waiting for a free slot', retry_after_s: 1 },
+  ];
+  fetchHandler = async (url, options) => {
+    if (url.endsWith('/send') && options?.method === 'POST') {
+      bodies.push(JSON.parse(options.body));
+      if (answers.length) return response(answers.shift(), 202);
+      return response({ ok: true, conversation_id: 'c9', project_root: '/proj-c9', run_id: 'run-c9', run_state: 'running' });
+    }
+    if (url === '/api/issues') return response({ ok: true });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
+    throw new Error(`unexpected fetch ${url}`);
+  };
+  await api.send('one more thing', {});
+  await settle();
+  report.busySendIsAccepted = {
+    flagSent: bodies.every(body => body.queue_if_busy === true),
+    sendCount: bodies.length,
+    errors: state.liveEvents.filter(event => event.type === 'error').map(event => event.text),
+    lines: state.liveEvents.map(event => event.text),
+    runStatus: state.runStatus,
+  };
+}
+
 // 5. Sidebar history loading states.
 {
   resetState();
@@ -275,7 +307,7 @@ const report = {};
 
   state.historyLoadState = 'pending';
   fetchHandler = async url => {
-    if (url.endsWith('/conversations')) return response({ conversations: [{ id: 'c1', title: 'A task', turn_count: 2 }] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [{ id: 'c1', title: 'A task', turn_count: 2 }] });
     throw new Error(`unexpected history fetch ${url}`);
   };
   const refreshOk = await api.refresh();
@@ -284,7 +316,7 @@ const report = {};
   state.historyLoadState = 'pending';
   fetchHandler = async url => {
     if (url === '/api/issues') return response({ ok: true });
-    if (url.endsWith('/conversations')) return response({ error: 'history unavailable' }, 503);
+    if (url.split('?')[0].endsWith('/conversations')) return response({ error: 'history unavailable' }, 503);
     throw new Error(`unexpected history fetch ${url}`);
   };
   const refreshFailed = await api.refresh();
@@ -318,6 +350,35 @@ const report = {};
     status: state.runStatus,
     text: stoppedEvent ? String(stoppedEvent.text || '') : '',
   };
+}
+
+// A queued turn retains its confirmed role snapshot when personal defaults change.
+{
+  resetState();
+  vm.runInThisContext(fs.readFileSync(sourcePath.replace(/unified_code_mode\.js$/, 'chat_model_selection.js'), 'utf8'));
+  const roleState = {};
+  window.ThomasChatModelSelection.connect({ state: roleState });
+  window.ThomasChatModelSelection.loadRoles({
+    role_profiles: { build_builder: 'openai_codex', build_reviewer: 'openai_codex' },
+    role_model_ids: { build_builder: 'gpt-luna', build_reviewer: 'gpt-sol' },
+  });
+  Object.assign(state, { activeId: 'c1', projectRoot: '/repo', running: true });
+  await api.send('Queued game files', { modelId: 'gpt-sol', ...window.ThomasChatModelSelection.roleContext() });
+  window.ThomasChatModelSelection.loadRoles({
+    role_profiles: { build_builder: 'openai_codex' }, role_model_ids: { build_builder: 'gpt-terra' },
+  });
+  const sendBodies = [];
+  fetchHandler = startSurface(sendBodies, 'c1');
+  state.running = false;
+  api.startNextQueued();
+  await settle();
+  const sent = sendBodies[0];
+  if (sendBodies.length !== 1 || sent.model_id !== 'gpt-sol'
+      || sent.build_roles?.builder?.model_id !== 'gpt-luna'
+      || sent.build_roles?.reviewer?.model_id !== 'gpt-sol') {
+    throw new Error('Queued Build role choices changed before dispatch: ' + JSON.stringify(sendBodies));
+  }
+  report.queuedRoleSnapshot = sent.build_roles;
 }
 
 process.stdout.write(JSON.stringify(report));

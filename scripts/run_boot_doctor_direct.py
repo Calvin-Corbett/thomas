@@ -7,15 +7,17 @@ from __future__ import annotations
 
 import argparse
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
+from thomas.bootdoctor.collaborators import stored_api_key, windows_authorize
+from thomas.core.boot_checks import config_file_path
 from thomas.core.boot_doctor import run_boot_doctor
 from thomas.core.config import AppConfig, load_config
 
 
 def _fallback_report_path(root: Path) -> Path:
-    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return (root / "runtime" / "boot_doctor" / f"boot_doctor_{stamp}.txt").resolve()
 
 
@@ -25,7 +27,7 @@ def _write_failure_report(path: Path, *, reason: str, port: int, exc: BaseExcept
         "\n".join(
             [
                 "Thomas Boot Doctor Report (Direct Fallback)",
-                f"Generated (UTC): {datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                f"Generated (UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 f"Reason: {reason}",
                 f"Port: {int(port)}",
                 "",
@@ -45,15 +47,13 @@ def _write_failure_report(path: Path, *, reason: str, port: int, exc: BaseExcept
 
 
 def _load_config_safe(config_path: str) -> tuple[AppConfig, str]:
-    if not str(config_path or "").strip():
-        try:
-            return load_config(None), ""
-        except Exception as exc:
-            return AppConfig(), f"config load failed ({type(exc).__name__}: {exc}); using defaults"
+    given = str(config_path or "").strip()
     try:
-        return load_config(Path(config_path).expanduser().resolve()), ""
+        return load_config(Path(given).expanduser().resolve() if given else None), ""
     except Exception as exc:
-        return AppConfig(), f"config load failed ({type(exc).__name__}: {exc}); using defaults"
+        # The same file Boot Doctor's offline check reads, so the warning and the report name one file.
+        where = config_file_path(Path.cwd(), given)
+        return AppConfig(), f"config load failed for {where} ({type(exc).__name__}: {exc}); using defaults"
 
 
 def main() -> int:
@@ -94,6 +94,10 @@ def main() -> int:
             auto_repair=not bool(args.no_auto_repair),
             allow_ai=not bool(args.no_ai),
             relaunch=bool(args.relaunch),
+            # The file the runner loaded is the one the offline check must test.
+            config_path=Path(args.config).expanduser() if str(args.config or "").strip() else None,
+            authorize=windows_authorize,
+            secret_lookup=stored_api_key,
         )
         print(out)
         return 0

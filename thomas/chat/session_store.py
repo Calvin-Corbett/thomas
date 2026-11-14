@@ -43,6 +43,16 @@ _SESSION_LOG_KEY = "session_log"
 IMPORTED_EVENT_FAILURES = 0
 
 
+class SessionUnreadable(Exception):
+    """A session file exists on disk but could not be read right now.
+
+    This is not "no session". On Windows a read can be refused while another
+    writer replaces the file; answering ``None`` there let a caller build a
+    near-empty conversation and save it over the real one. A caller that gets
+    this must leave the stored conversation alone and report the failure.
+    """
+
+
 @dataclass
 class SessionMeta:
     """Metadata about a chat session."""
@@ -52,7 +62,17 @@ class SessionMeta:
     context_id: str | None = None
     profile: str = ""
     model_id: str | None = None
-    autonomy_level: int = DEFAULT_AUTONOMY_LEVEL
+    # None = no level chosen yet. A brand-new session must fall through to the
+    # saved thread/user preference (capped by dial_elevation, like every other
+    # dial) instead of silently freezing at a hard default: bind_surface_namespace
+    # used to build this with DEFAULT_AUTONOMY_LEVEL, which made
+    # resolve_chat_runtime_policy treat "never chosen" as "explicitly chose L2"
+    # (saved_meta is not None the moment this object exists) and withhold
+    # send_task from a thread whose saved preference was L4/L5. A turn that
+    # already resolved a level writes the concrete int back here (chat_v2.py)
+    # and that is what persists from then on -- this sentinel only ever
+    # applies to the first turn of a session nobody has configured yet.
+    autonomy_level: int | None = None
     system_prompt: str | None = None
     reasoning_effort: str | None = None
     memory_enabled: bool = True
@@ -141,6 +161,21 @@ class SessionStore:
             if session_id not in self._locks:
                 self._locks[session_id] = asyncio.Lock()
             return self._locks[session_id]
+
+    # The three calls below are the store's public face, so a reader that needs the file itself asks for it here and
+    # never spells the folder or the hashed name. They leak the file layout; Thomas has one backend.
+
+    def lock(self, session_id: str) -> asyncio.Lock:
+        """The lock that guards this session's file in this process. Save and load hold it."""
+        return self._lock_for(session_id)
+
+    def path_of(self, session_id: str) -> Path:
+        """The file this session is kept in. It may not exist yet."""
+        return self._session_path(session_id)
+
+    def files(self) -> list[Path]:
+        """Every session file in the folder, oldest name first. Unreadable ones are listed too: this only names them."""
+        return sorted(self._store_dir.glob("chat_*.json"))
 
     # ── honesty spine: history/imported provenance ──────────────────
 
@@ -329,15 +364,29 @@ class SessionStore:
         self,
         session_id: str,
     ) -> ConversationManager | None:
-        """Load a conversation from disk.  Returns ``None`` if not found."""
+        """Load a conversation from disk.  Returns ``None`` if not found.
+
+        Raises ``SessionUnreadable`` when the file is there but a read of it
+        is refused: that is not an empty session, and must never read as one.
+        """
         target = self._session_path(session_id)
-        if not target.exists():
+        try:
+            present = await asyncio.to_thread(target.exists)
+        except OSError as exc:
+            raise SessionUnreadable(f"session {session_id[:12]} could not be checked: {exc}") from exc
+        if not present:
             return None
 
         lock = self._lock_for(session_id)
         async with lock:
             try:
                 raw = await asyncio.to_thread(target.read_text, "utf-8")
+            except FileNotFoundError:
+                return None
+            except OSError as exc:
+                log.error("Session %s exists but could not be read: %s", session_id[:12], exc)
+                raise SessionUnreadable(f"session {session_id[:12]} could not be read: {exc}") from exc
+            try:
                 data = json.loads(raw)
                 conv_data = data.get("conversation", {})
                 conversation = ConversationManager.from_dict(conv_data)
@@ -355,12 +404,22 @@ class SessionStore:
             return conversation
 
     async def load_meta(self, session_id: str) -> SessionMeta | None:
-        """Load session metadata only."""
+        """Load session metadata only.
+
+        Raises ``SessionUnreadable`` when the file is there but a read of it is refused, as ``load`` does:
+        a caller that saves after this must not mistake a refusal for a session with no settings.
+        """
         target = self._session_path(session_id)
-        if not target.exists():
-            return None
         try:
+            if not await asyncio.to_thread(target.exists):
+                return None
             raw = await asyncio.to_thread(target.read_text, "utf-8")
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            log.error("Session %s meta exists but could not be read: %s", session_id[:12], exc)
+            raise SessionUnreadable(f"session {session_id[:12]} could not be read: {exc}") from exc
+        try:
             data = json.loads(raw)
             meta_data = data.get("meta")
             if meta_data:

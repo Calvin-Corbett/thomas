@@ -16,6 +16,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -34,9 +35,62 @@ except ImportError:  # pragma: no cover
 
     from thomas.core import task_bot_runtime  # type: ignore
 
+from scripts.praxis import board_archive_trigger, worker_liveness
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def _lock_timeout_is_a_failure(func):
+    """A board write that cannot get the board lock in time is a reported failure, not a dead worker.
+
+    record_evidence and the dispatch now hold the board lock (a TimeoutError after 10 s); without this a
+    held lock raised straight out of the worker loop and ended the run.
+    """
+
+    @wraps(func)
+    def guarded(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except TimeoutError as exc:
+            return False, f"board lock timed out: {exc}"
+
+    return guarded
+
+
+def _presence_heartbeat_safe(*, agent: str, state_dir: Path) -> tuple[bool, str]:
+    """Idle liveness goes to this worker's own file, never onto the board and never to a session.
+
+    A board row per idle worker per interval is mail nobody acks, and every later board read and
+    write pays for it. Returns (beat landed, error). See scripts/praxis/worker_liveness.py for why
+    this is not agent_presence.heartbeat_session.
+    """
+    try:
+        worker_liveness.beat(state_dir, agent)
+    except OSError as exc:
+        return False, f"liveness heartbeat failed: {exc}"
+    return True, ""
+
+
+def _board_root(workboard_path: Path) -> Path:
+    """The checkout a board lives in (<root>/plans/thomas/WORKBOARD.md), else this checkout."""
+    parts = workboard_path.resolve().parents
+    if len(parts) > 2 and parts[0].name == "thomas" and parts[1].name == "plans":
+        return parts[2]
+    return ROOT
+
+
+def _archive_board_safe(*, workboard_path: Path, min_board_bytes: int) -> tuple[bool, str]:
+    """Archive old messages when the board is big. Returns (archived, error); logging is the trigger's."""
+    try:
+        result = board_archive_trigger.archive_if_large(
+            workboard_path, root=_board_root(workboard_path), min_bytes=int(min_board_bytes)
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        return False, f"board archive failed: {exc}"
+    return bool(result and result.get("rows_moved")), ""
+
+
+@_lock_timeout_is_a_failure
 def _send_message_safe(
     *,
     workboard_path: Path,
@@ -66,6 +120,7 @@ def _send_message_safe(
     return False, message
 
 
+@_lock_timeout_is_a_failure
 def _release_claim_safe(
     *,
     workboard_path: Path,
@@ -86,6 +141,7 @@ def _release_claim_safe(
     return False, str(payload)
 
 
+@_lock_timeout_is_a_failure
 def _set_task_status_safe(
     *,
     workboard_path: Path,

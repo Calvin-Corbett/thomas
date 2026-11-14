@@ -5,9 +5,14 @@
   //
   // Chat, Code and Work each render their own rows, so this decorates whatever
   // they produced rather than owning the markup: sorting, pin/archive/rename,
-  // the hover card, the full-title tooltip, per-row running dots, and the
-  // collapse. A renderer opts in by tagging each row with data-history-id and
+  // the hover card, the full-title tooltip and per-row running dots. A
+  // renderer opts in by tagging each row with data-history-id and
   // data-history-time; anything untagged is left exactly as it was.
+  //
+  // The list no longer collapses. Its chevron was one of the ⌄/⌃ marks the
+  // Build redesign removed, and the list never needed folding to keep the
+  // workspaces reachable: it scrolls in its own box above them. A `collapsed`
+  // flag an older build saved is simply never read again.
 
   const OVERLAY_KEY = 'thomas_history_overlay_v1';
   const VIEW_KEY = 'thomas_history_view_v1';
@@ -49,8 +54,19 @@
     writeJson(OVERLAY_KEY, all);
   }
 
-  const view = () => Object.assign({ sort: 'recent', showArchived: false, collapsed: false }, readJson(VIEW_KEY, {}));
+  const view = () => Object.assign({ sort: 'recent', showArchived: false }, readJson(VIEW_KEY, {}));
   function patchView(patch) { writeJson(VIEW_KEY, Object.assign(view(), patch)); }
+
+  // One date formatter per style, made once. toLocaleDateString builds a new formatter on every call, and a list
+  // of 400 rows asks hundreds of times: measured 2026-11-06, 324 ms of a 400 ms script. The text is the same.
+  const formatters = {};
+  function formatDate(ms, withYear) {
+    const key = withYear ? 'year' : 'day';
+    if (!formatters[key]) {
+      formatters[key] = new Intl.DateTimeFormat(undefined, withYear ? { year: 'numeric', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' });
+    }
+    return formatters[key].format(new Date(ms));
+  }
 
   // "Last touched" is the last message SENT, not the last time it was opened —
   // opening a chat must never bubble it to the top of the list.
@@ -65,7 +81,7 @@
     if (delta < day) return `${Math.floor(delta / hour)}h ago`;
     if (delta < day * 2) return 'yesterday';
     if (delta < day * 7) return `${Math.floor(delta / day)}d ago`;
-    try { return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+    try { return formatDate(value, false); }
     catch (_) { return ''; }
   }
 
@@ -121,15 +137,21 @@
   function menuItems(row) {
     const id = row.dataset.historyId;
     const current = overlay()[id] || {};
+    const mode = String(row.dataset.historyMode || (window.ThomasUnifiedModes ? window.ThomasUnifiedModes.mode() : 'chat'));
+    // Offered only where it works. Export, share and branch are for chats: on a
+    // Build task they answered with an alert. A Work job has no delete route
+    // here (the menu's delete asked the chat store and failed), so it is
+    // archived from this list and deleted from its own page.
     return [
+      { action: 'tab', icon: 'ph-arrow-square-out', label: 'Open in its own tab' },
       { action: 'rename', icon: 'ph-pencil-simple', label: 'Rename' },
       { action: 'pin', icon: 'ph-push-pin', label: current.pinned ? 'Unpin' : 'Pin to top' },
       { action: 'archive', icon: 'ph-archive', label: current.archived ? 'Unarchive' : 'Archive' },
-      { action: 'export', icon: 'ph-download-simple', label: 'Export as Markdown' },
-      { action: 'snapshot', icon: 'ph-share', label: 'Save as web page to share' },
-      { action: 'branch', icon: 'ph-git-branch', label: 'Branch this chat' },
-      { action: 'delete', icon: 'ph-trash', label: 'Delete', danger: true },
-    ];
+      { action: 'export', icon: 'ph-download-simple', label: 'Export as Markdown', only: ['chat'] },
+      { action: 'snapshot', icon: 'ph-share', label: 'Save as web page to share', only: ['chat'] },
+      { action: 'branch', icon: 'ph-git-branch', label: 'Branch this chat', only: ['chat'] },
+      { action: 'delete', icon: 'ph-trash', label: 'Delete', danger: true, only: ['chat', 'code'] },
+    ].filter(item => !item.only || item.only.includes(mode));
   }
 
   function openMenu(row, x, y) {
@@ -192,6 +214,13 @@
 
   async function runAction(action, row) {
     const id = row.dataset.historyId;
+    if (action === 'tab') {
+      // The tab bar belongs to the top window; this list may be drawn inside a tab's own page.
+      closeMenu();
+      const detail = { chatId: id, mode: row.dataset.historyMode || '', title: titleOf(row) };
+      try { window.top.dispatchEvent(new CustomEvent('thomas:conversation:open-tab', { detail })); } catch (_) { /* no tab bar here */ }
+      return;
+    }
     if (action === 'rename') {
       const next = window.prompt('Rename this to:', titleOf(row));
       closeMenu();
@@ -213,7 +242,7 @@
       // and Claude export). Chat sessions only; a Code run has no v2 session.
       closeMenu();
       const mode = String(row.dataset.historyMode || (window.ThomasUnifiedModes ? window.ThomasUnifiedModes.mode() : 'chat'));
-      if (mode === 'code') { window.alert('Export is for chats; Code runs keep their own transcript.'); return; }
+      if (mode === 'code') { window.alert('Export is for chats; a Build task keeps its own transcript.'); return; }
       // Markdown for editing; a self-contained web page (no scripts, no outside
       // resources) as the local-first shareable read-only snapshot.
       const format = action === 'snapshot' ? 'html' : 'md';
@@ -224,7 +253,7 @@
     if (action === 'branch') {
       closeMenu();
       const mode = String(row.dataset.historyMode || (window.ThomasUnifiedModes ? window.ThomasUnifiedModes.mode() : 'chat'));
-      if (mode === 'code') { window.alert('Branching is for chats; Code runs keep their own transcript.'); return; }
+      if (mode === 'code') { window.alert('Branching is for chats; a Build task keeps its own transcript.'); return; }
       await branchChat(id, titleOf(row));
       return;
     }
@@ -274,21 +303,6 @@
     if (wrap) decorate(wrap);
   }
 
-  function applyCollapse() {
-    const wrap = document.getElementById('tc-chats');
-    const button = document.getElementById('tc-history-collapse');
-    if (!wrap || !button) return;
-    const collapsed = view().collapsed;
-    wrap.hidden = collapsed;
-    wrap.style.flex = collapsed ? '0 0 auto' : '1 1 auto';
-    wrap.style.minHeight = collapsed ? '0' : '60px';
-    button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    button.title = collapsed ? 'Expand the list' : 'Collapse the list';
-    // Rotate the drawn chevron rather than swapping to another glyph.
-    const caret = document.getElementById('tc-history-collapse-icon');
-    if (caret) caret.style.transform = collapsed ? 'rotate(-90deg)' : 'none';
-  }
-
   function decorateRow(row) {
     if (row.dataset.historyReady === '1') return;
     row.dataset.historyReady = '1';
@@ -304,6 +318,43 @@
       hideTip();
       openMenu(row, event.clientX, event.clientY);
     });
+    addMoreControl(row);
+  }
+
+  // Rename, pin, archive and delete were reachable only by right-clicking a
+  // row, which nothing on screen said. Every row now carries a "⋯" that shows
+  // on hover or keyboard focus and opens the same menu. It is a span, not a
+  // button, because the row itself is the button it sits in.
+  function addMoreControl(row) {
+    const line = row.querySelector('.tc-history-line');
+    if (!line || row.querySelector('[data-history-more]')) return;
+    if (!document.getElementById('tc-history-more-style')) {
+      const style = document.createElement('style');
+      style.id = 'tc-history-more-style';
+      style.textContent = '.tc-history-more{margin-left:auto;flex:none;padding:0 6px;border-radius:6px;line-height:18px;letter-spacing:1px;color:var(--c-muted,#8a8f98);opacity:0;cursor:pointer}'
+        + '[data-history-id]:hover .tc-history-more,[data-history-id]:focus-within .tc-history-more,.tc-history-more:focus-visible{opacity:1}'
+        + '.tc-history-more:hover,.tc-history-more:focus-visible{background:var(--c-surface-2,rgba(127,127,127,.18));color:var(--c-text,inherit);outline:none}';
+      document.head.appendChild(style);
+    }
+    const more = document.createElement('span');
+    more.className = 'tc-history-more';
+    more.setAttribute('data-history-more', '');
+    more.setAttribute('role', 'button');
+    more.setAttribute('tabindex', '0');
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-label', `More for ${titleOf(row)}: rename, pin, archive, delete`);
+    more.title = 'Rename, pin, archive, delete';
+    more.textContent = '⋯';
+    const open = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      hideTip();
+      const rect = more.getBoundingClientRect();
+      openMenu(row, rect.left, rect.bottom + 4);
+    };
+    more.addEventListener('click', open);
+    more.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') open(event); });
+    line.appendChild(more);
   }
 
   // Sorting reorders the nodes the renderer produced, so it works the same for
@@ -341,9 +392,7 @@
     if (days <= 0) return 'Today';
     if (days === 1) return 'Yesterday';
     try {
-      return then.toLocaleDateString(undefined, then.getFullYear() === today.getFullYear()
-        ? { month: 'short', day: 'numeric' }
-        : { year: 'numeric', month: 'short', day: 'numeric' });
+      return formatDate(value, then.getFullYear() !== today.getFullYear());
     } catch (_) { return 'Earlier'; }
   }
 
@@ -355,15 +404,33 @@
     return node;
   }
 
-  function clearHeadings(wrap) {
-    Array.from(wrap.querySelectorAll('[data-history-day]')).forEach(node => node.remove());
+  // The headings already in the list, by their text, so a redraw reuses them instead of making new ones.
+  function headingsIn(wrap) {
+    const found = new Map();
+    Array.from(wrap.querySelectorAll(':scope > [data-history-day]')).forEach(node => found.set(node.textContent, node));
+    return found;
+  }
+
+  // Put the wanted nodes in order, touching only what is out of place. appendChild on a row that is already where it
+  // belongs still removes and re-inserts it, and doing that for 650 rows on every redraw is what made the list (and
+  // the page around it) re-lay itself out each time a task was opened.
+  function placeInOrder(wrap, wanted) {
+    let cursor = wrap.firstChild;
+    wanted.forEach(node => {
+      if (cursor === node) { cursor = cursor.nextSibling; return; }
+      wrap.insertBefore(node, cursor);
+    });
+    while (cursor) {
+      const next = cursor.nextSibling;
+      if (cursor.dataset && cursor.dataset.historyDay) cursor.remove();
+      cursor = next;
+    }
   }
 
   function decorate(wrap) {
     if (!wrap) return;
     markCurrent(wrap);
-    applyCollapse();
-    clearHeadings(wrap);
+    const headings = headingsIn(wrap);
     const rows = rowsIn(wrap);
     if (!rows.length) { syncSortLabel(); return; }
     const marks = overlay();
@@ -374,9 +441,9 @@
       row.classList.toggle('is-pinned', Boolean(custom.pinned));
       row.classList.toggle('is-archived', Boolean(custom.archived));
       const label = row.querySelector('[data-history-name]');
-      if (label && custom.title) label.textContent = custom.title;
+      if (label && custom.title && label.textContent !== custom.title) label.textContent = custom.title;
       const meta = row.querySelector('[data-history-meta]');
-      if (meta) meta.textContent = relativeTime(row.dataset.historyTime);
+      if (meta) { const when = relativeTime(row.dataset.historyTime); if (meta.textContent !== when) meta.textContent = when; }
       decorateRow(row);
     });
 
@@ -386,14 +453,16 @@
     const spec = sortSpec(view().sort);
     const stampKey = spec.id === 'created' ? 'historyCreated' : 'historyTime';
     let lastHeading = '';
+    const wanted = [];
     order(rows).forEach(row => {
       if (spec.dated && !row.hidden) {
         const pinned = row.classList.contains('is-pinned');
         const heading = pinned ? 'Pinned' : dayLabel(row.dataset[stampKey] || row.dataset.historyTime);
-        if (heading !== lastHeading) { wrap.appendChild(dayHeading(heading)); lastHeading = heading; }
+        if (heading !== lastHeading) { wanted.push(headings.get(heading) || dayHeading(heading)); lastHeading = heading; }
       }
-      wrap.appendChild(row);
+      wanted.push(row);
     });
+    placeInOrder(wrap, wanted);
     syncSortLabel();
     // After the list is on screen, not before: naming is a nicety and must
     // never delay the rows appearing.
@@ -500,14 +569,11 @@
   }
 
   function bind() {
-    const collapse = document.getElementById('tc-history-collapse');
-    if (collapse) collapse.addEventListener('click', () => { patchView({ collapsed: !view().collapsed }); applyCollapse(); });
     const filter = document.getElementById('tc-history-filter');
     if (filter) filter.addEventListener('click', event => { event.stopPropagation(); openFilterMenu(filter); });
     document.addEventListener('click', event => { if (menu && !event.target.closest('.tc-history-menu')) closeMenu(); });
     document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMenu(); hideTip(); } });
     window.addEventListener('scroll', hideTip, true);
-    applyCollapse();
   }
 
   window.ThomasSidebarHistory = {

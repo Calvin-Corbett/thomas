@@ -14,15 +14,19 @@ process runs, and no health check should be paying for a subprocess.
 
 from __future__ import annotations
 
-import subprocess
 from functools import lru_cache
 from pathlib import Path
 
 from thomas import __version__
+from thomas.core.git_process import run_git
 
 # Git should answer instantly on a warm repo. If it does not -- a stale index
 # lock, a network filesystem, an enormous worktree -- identity is a nicety and
 # must never be the reason the server is slow to say it is alive.
+#
+# That sentence was not true while this used subprocess.run: its ``timeout`` does
+# not bound a git reached through a launcher, so a two-second budget could cost
+# twelve. run_git makes the bound real (thomas/core/git_process.py).
 _GIT_TIMEOUT_S = 2.0
 
 _SOURCE_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -30,20 +34,8 @@ _SOURCE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _git(*args: str) -> str:
     """One git query against the source tree, or "" if git cannot answer."""
-    try:
-        completed = subprocess.run(
-            ["git", *args],
-            cwd=str(_SOURCE_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_S,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""  # git absent, or an installed copy with no repository
-    if completed.returncode != 0:
-        return ""
-    return completed.stdout.strip()
+    result = run_git(args, cwd=_SOURCE_ROOT, timeout=_GIT_TIMEOUT_S)
+    return result.output() if result.ok else ""
 
 
 @lru_cache(maxsize=1)

@@ -40,7 +40,7 @@ def test_evolve_runtime_stays_in_chat_and_posts_followups() -> None:
     end = text.index("async function runChatSendJob")
     evolve_block = text[start:end]
     assert "I'll reply here when it finishes." in evolve_block
-    assert "Mission Control is available from the left sidebar" in evolve_block
+    assert "The System page is available from the left sidebar" in evolve_block
     assert "setSidebarNavMode('mission')" not in evolve_block
     assert "void refreshTaskContinuity({ sessionOverride: chatSessionId, force: true });" in evolve_block
     assert "void missionRefresh({ force: true, silent: true });" in evolve_block
@@ -90,11 +90,11 @@ def test_retired_primary_runtime_bundle_stays_deleted() -> None:
 
 
 def test_chat_shell_defaults_to_a_usable_profile_case_insensitively() -> None:
-    text = _read(CHAT_HTML_PATH)
-    assert "String(prefs.active_profile || d.default || '').trim().toLowerCase()" in text
+    text = _read(CHAT_HTML_PATH.parent / "js" / "chat_boot.js")
+    assert "String(prefs.active_profile || data.default || '').trim().toLowerCase()" in text
     assert "String(p.name || '').trim().toLowerCase() === active" in text
-    assert "profilesData.find(usable) || profilesData[0]" in text
-    assert "profilesData.find(p => !!p.has_api_key) || pick || profilesData[0]" not in text
+    assert "profiles.find(usable) || profiles[0]" in text
+    assert "profiles.find(p => !!p.has_api_key) || pick || profiles[0]" not in text
 
 
 def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
@@ -114,7 +114,8 @@ def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
         "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile, "
         "getProfiles: () => profilesData, getShell: () => shell })"
     ) in text
-    assert "await maybePromptChatGPTConnection(acc);" in text
+    stream = _read(CHAT_HTML_PATH.parent / "js" / "chat_stream_actions.js")
+    assert "await deps.maybePromptChatGPTConnection(acc);" in stream
 
     assert "function shouldPromptChatGPTConnection(assistantText) {" in module
     assert "if (!isChatGPTOAuthProfile(opts.getProfile())) return false;" in module
@@ -128,10 +129,14 @@ def test_root_chat_prompts_and_starts_native_chatgpt_oauth_recovery() -> None:
 
 
 def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> None:
-    text = _read(CHAT_HTML_PATH)
+    text = _read(CHAT_HTML_PATH.parent / "js" / "chat_model_picker.js")
+    composer = _read(CHAT_HTML_PATH)
+    preferences = _read(CHAT_HTML_PATH.parent / "js" / "chat_preferences.js")
 
+    assert '<script src="/static/js/chat_model_picker.js' in composer
+    assert '<script src="/static/js/chat_preferences.js' in composer
     assert "async function hydrateProfileModels() {" in text
-    assert "fetch('/api/openai-codex/models?profile=' + encodeURIComponent(p.name))" in text
+    assert "fetch('/api/models/catalog')" in text
     assert "body: JSON.stringify({ advanced: { model: { active_profile: profileName, model_id: modelId } } })" in text
     # Red since the picker rows became two lines. This required the literal
     # `' · unavailable on this connection'` -- a leading middle dot, from when the
@@ -147,24 +152,25 @@ def test_root_chat_surfaces_gpt56_models_and_distinct_reasoning_efforts() -> Non
     assert re.search(r"m\.available === false\s*\?\s*'unavailable on this connection'", text), (
         "an unavailable model must still say so in the picker"
     )
-    assert "${status}" in text, "the status must reach the row it describes"
-    # Pinned to the vocabulary, not to the tuple's arity. Each option grew a
-    # third element carrying the sentence shown under the dial, so a closing
-    # bracket right after the label stopped existing and these went red without
-    # anything regressing -- the same trap the comment above describes.
+    # The note is handed to the row builder, which draws it inside that row (the 2026-11 menu rebuild).
+    assert "checkRow(name, sel, off, note" in text and "'tc-mm-note', note" in text, (
+        "the status must reach the row it describes"
+    )
+    # The effort dial is defined by chat_preferences.js, loaded by the page.
     for value, label in (("none", "None"), ("xhigh", "xHigh"), ("max", "Max")):
-        assert re.search(rf"\['{value}',\s*'{label}'", text), (
+        assert re.search(rf"\['{value}',\s*'{label}'", preferences), (
             f"the reasoning-effort dial must still offer {label}"
         )
 
 
 def test_root_chat_canvas_hint_requires_visual_object_and_action() -> None:
-    text = _read(CHAT_HTML_PATH)
+    text = _read(CHAT_HTML_PATH.parent / "js" / "chat_activity_view.js")
+    actions = _read(CHAT_HTML_PATH.parent / "js" / "chat_stream_actions.js")
 
     assert "function detectVisualIntent(text)" in text
     assert "playable (browser )?game|interactive (chart|graph|dashboard|site|app|visual)" in text
     assert "return visual.test(lc) && (action.test(lc) || leading.test(lc));" in text
-    assert "_pendingCanvasIntent = !!detectVisualIntent(text);" in text
+    assert "deps._pendingCanvasIntent = !!deps.detectVisualIntent(text);" in actions
 
 
 def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> None:

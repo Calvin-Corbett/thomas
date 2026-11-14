@@ -513,3 +513,81 @@
     transform: none;
   }
 }
+
+
+/* Gate change proposals -- Thomas asking before it edits its own checks.
+   Sits above the job grid because it is a question, not a status: it should be
+   answered or dismissed, not scrolled past. */
+.tc-work-proposals {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--tc-border, rgba(128, 128, 128, 0.3));
+  border-radius: 12px;
+  background: var(--tc-surface-2, rgba(128, 128, 128, 0.06));
+}
+.tc-work-proposals-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.tc-work-proposals-head span {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+.tc-work-proposal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--tc-border, rgba(128, 128, 128, 0.22));
+}
+.tc-work-proposal:first-of-type { border-top: 0; padding-top: 0; }
+.tc-work-proposal-body { flex: 1 1 22rem; min-width: 0; }
+.tc-work-proposal-body p { margin: 4px 0; }
+.tc-work-proposal-body small { opacity: 0.72; }
+.tc-work-proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+
+/* Step rail -- where the job actually is, from the same ledger the gates run on.
+   The states are the ledger's own: locked, open, passed, blocked, waived. */
+.tc-work-rail {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.tc-work-rail-step { display: flex; gap: 10px; align-items: flex-start; }
+.tc-work-rail-mark {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.45;
+}
+.tc-work-rail-text { display: grid; }
+.tc-work-rail-text small { opacity: 0.7; }
+.tc-work-rail-why { opacity: 0.85; }
+.tc-work-rail-step.is-passed .tc-work-rail-mark { background: currentColor; opacity: 0.75; }
+.tc-work-rail-step.is-open .tc-work-rail-mark { opacity: 1; }
+.tc-work-rail-step.is-open strong { font-weight: 700; }
+.tc-work-rail-step.is-locked { opacity: 0.55; }
+/* Blocked and waived are the two the reader must not miss: one is stuck, the
+   other went through without being verified. */
+.tc-work-rail-step.is-blocked .tc-work-rail-mark,
+.tc-work-rail-step.is-waived .tc-work-rail-mark {
+  border-style: dashed;
+  opacity: 1;
+}
+.tc-work-rail-step.is-waived .tc-work-rail-why,
+.tc-work-rail-waived {
+  font-weight: 600;
+}
+.tc-work-rail-waived { margin: 0 0 14px; }

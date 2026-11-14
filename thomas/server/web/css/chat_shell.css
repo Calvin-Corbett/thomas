@@ -24,11 +24,13 @@
 .ph-chalkboard-simple::before, .ph-desktop::before { content: "\25A3"; }
 .ph-sliders-horizontal::before { content: "\2261"; }
 .ph-microphone::before { content: "\25C9"; }
+.ph-waveform::before { content: "\2248"; }
 .ph-arrow-up::before { content: "\2191"; }
 .ph-arrow-right::before { content: "\2192"; }
 .ph-arrow-clockwise::before { content: "\21BB"; }
+.ph-power::before { content: "\23FB"; }
 .ph-server::before { content: "\25A4"; }
-.ph-arrow-square-out::before { content: "\2197"; }
+.ph-arrow-square-out::before, .ph-arrow-up-right::before { content: "\2197"; }
 /* Expand / shrink for the result viewer. Without an entry here a name falls
    through to the `\2022` bullet at the top of this file, so the button renders
    as an unlabelled dot -- which is what the viewer's expand control did until
@@ -96,7 +98,7 @@
 .ph-music-note::before { content: "\266B"; }
 .ph-pen-nib::before { content: "\2712"; }
 .ph-pencil-simple::before { content: "\270F"; }
-.ph-play-circle::before { content: "\25B6"; }
+.ph-play-circle::before, .ph-play::before { content: "\25B6"; } .ph-pause::before { content: "\2016"; }
 .ph-plugs-connected::before { content: "\26AD"; }
 .ph-warning-circle::before, .ph-warning::before { content: "\26A0"; }
 .ph-arrow-bend-down-right::before { content: "\21B3"; }
@@ -202,6 +204,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 /* Living-world visibility is driven by [data-theme] on the shell. */
 .tc-world { display: none; }
+.tc-shell.is-resting .tc-world, .tc-shell.is-resting .tc-world * { animation-play-state: paused !important; }
 .tc-shell[data-theme="nebula"]    .tc-world.is-nebula    { display: block; }
 .tc-shell[data-theme="aurora"]    .tc-world.is-aurora    { display: block; }
 .tc-shell[data-theme="sandstone"] .tc-world.is-sandstone { display: block; }
@@ -344,10 +347,18 @@ html, body { margin: 0; padding: 0; height: 100%; }
   inherits: true;
   initial-value: 0px;
 }
-#tc-shell { --tc-rail-w: 768px; }
+/* One measure for the conversation and the message box in every mode: Build's 860px. Chat and Work were 768 and
+   their box sat higher, above a line of small print (2026-11-10: "the composer for a build is wider and further to
+   the bottom than the other ones ... we want to save space and make it wider"). chat.html still carries 768 inline. */
+#tc-shell { --tc-rail-w: 860px; }
 #tc-welcome { --tc-rail-w: 720px; }
+.tc-rail:not(#tc-welcome) { max-width: var(--tc-rail-w) !important; }
+.tc-composer-note { display: none !important; }
+#tc-shell [data-ui-id="chat.composer"] { padding-bottom: 14px !important; }
 .tc-rail {
-  margin-left: max(16px, calc(50vw - (280px + var(--sidebar-margin, 0px)) / 2 - var(--tc-rail-w, 768px) / 2)) !important;
+  /* The sidebar is 256px in every mode (unified_modes.css). Collapsing still writes -280px, sized for the old Chat
+     sidebar, so the part of it on show is never counted below nothing. */
+  margin-left: max(16px, calc(50vw - max(0px, 256px + var(--sidebar-margin, 0px)) / 2 - var(--tc-rail-w, 860px) / 2)) !important;
   margin-right: auto !important;
 }
 @media (max-width: 1080px) {
@@ -387,8 +398,8 @@ html, body { margin: 0; padding: 0; height: 100%; }
 @keyframes tc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 .tc-create-wrap { position: relative; }
 #tc-attach-btn[aria-expanded="true"] { color: var(--c-text) !important; background: var(--c-surface-2) !important; border-color: var(--c-border-2) !important; }
-#tc-attach-btn .ph { font-size: 18px; transition: transform .15s ease; }
-#tc-attach-btn[aria-expanded="true"] .ph { transform: rotate(45deg); }
+#tc-attach-btn svg { transition: transform .15s ease; }
+#tc-attach-btn[aria-expanded="true"] svg { transform: rotate(45deg); }
 .tc-create-menu {
   position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 70; width: 236px;
   padding: 7px; border: 1px solid var(--c-border-2); border-radius: 14px;
@@ -402,7 +413,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
   gap: 10px; font: 600 13px/1.2 var(--font-sans); text-align: left; cursor: pointer;
 }
 .tc-create-menu button:hover, .tc-create-menu button:focus-visible { background: var(--c-hover); outline: none; }
-.tc-create-menu button .ph { color: var(--c-accent); font-size: 16px; }
+.tc-create-menu button svg { flex: 0 0 auto; color: var(--c-accent); }
 .tc-create-menu button:first-child { margin-bottom: 5px; border-bottom: 1px solid var(--c-border); border-radius: 9px 9px 0 0; padding-bottom: 5px; }
 .tc-media-setup { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: rgba(4, 7, 14, .72); color: var(--c-text); backdrop-filter: blur(5px); }
 .tc-media-setup[hidden] { display: none; }
@@ -445,41 +456,20 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tc-activity-item audio { width: 100%; }
 .tc-activity-item > a { justify-self: start; color: var(--c-accent); font-size: 12px; font-weight: 700; }
 
-/* Tools is a shell panel, not a browser-default form. Keep every label and native
-   option readable against the same dark glass used by the composer. */
-.tc-tools-wrap { position: relative; }
+/* The AI-settings sheet (#tc-tools-menu, built by renderToolsMenu in
+   chat_composer_panels.js). These were inline styles on every node; as rules
+   Build can restyle them (unified_code_mode.css). The open button reads the
+   way the + button's does. The old .tc-tools-* block here styled a temporary
+   chat panel no markup had produced for months, and went with this change. */
 #tc-tools-btn[aria-expanded="true"] { color: var(--c-text) !important; background: var(--c-surface-2) !important; border-color: var(--c-border-2) !important; }
-.tc-tools-menu[hidden] { display: none; }
-.tc-tools-menu {
-  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 70;
-  width: min(312px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
-  box-sizing: border-box; overscroll-behavior: contain;
-  padding: 12px; border: 1px solid var(--c-border-2); border-radius: 14px;
-  background: #111521; color: var(--c-text); box-shadow: var(--c-shadow);
-}
 .tc-tools-heading { padding: 2px 2px 10px; color: var(--c-muted); font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.tc-tools-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; color: var(--c-dim); font-size: 13px; }
-.tc-tools-field select { flex: 0 0 auto; min-width: 150px; padding: 5px 8px; border: 1px solid var(--c-border-2); border-radius: 8px; background: #181d2b; color: var(--c-text); color-scheme: dark; font: 12.5px/1.3 var(--font-sans); cursor: pointer; }
-.tc-tools-field select option { background: #181d2b; color: #eef0fb; }
+.tc-tools-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; font-size: 13px; }
+.tc-tools-field > span { color: var(--c-dim); }
+.tc-tools-field select { flex: 0 0 auto; min-width: 150px; padding: 5px 8px; border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-surface); color: var(--c-text); font-family: inherit; font-size: 12.5px; cursor: pointer; }
 .tc-dial-desc { margin: 0 0 10px; max-width: 100%; color: var(--c-muted); font-size: 11px; line-height: 1.4; }
-.tc-tools-divider { height: 1px; margin: 10px 0; background: var(--c-border); }
-.tc-tools-action { width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--c-text); display: flex; align-items: center; gap: 10px; font: 600 13px/1.2 var(--font-sans); text-align: left; cursor: pointer; }
-.tc-tools-action:hover, .tc-tools-action:focus-visible { background: var(--c-hover); outline: none; }
-.tc-tools-action .ph { color: var(--c-accent); font-size: 16px; }
-.tc-tools-action small { display: block; margin-top: 2px; color: var(--c-muted); font-size: 10.5px; font-weight: 400; }
-.tc-tools-toggle { margin: 4px 0; }
-.tc-tools-toggle > span { display: flex; align-items: center; gap: 10px; }
-.tc-tools-toggle input, .tc-tools-temp-controls input { margin-left: auto; accent-color: var(--c-accent); }
-.tc-tools-temporary { margin-top: 4px; padding: 10px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-surface); }
-.tc-tools-temp-copy, .tc-tools-temp-copy > span { display: flex; align-items: center; gap: 10px; color: var(--c-text); font-size: 13px; }
-.tc-tools-temp-copy > span { display: block; }
-.tc-tools-temporary .ph { color: var(--c-accent); }
-.tc-tools-temporary small { display: block; margin-top: 3px; color: var(--c-muted); font-size: 10.5px; line-height: 1.4; }
-.tc-tools-temp-controls { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
-.tc-tools-temporary select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--c-border-2); border-radius: 8px; background: #181d2b; color: #eef0fb; color-scheme: dark; font: 12px/1.3 var(--font-sans); }
-.tc-tools-temporary select option { background: #181d2b; color: #eef0fb; }
-.tc-tools-keep { width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--c-accent-line); border-radius: 9px; background: var(--c-accent-soft); color: var(--c-text); font: 600 12px/1.2 var(--font-sans); cursor: pointer; }
-.tc-shell.tc-temporary-chat #tc-tools-btn { color: var(--c-accent) !important; border-color: var(--c-accent-line) !important; background: var(--c-accent-soft) !important; }
+.tc-dial-note { margin: -5px 0 9px; color: var(--c-muted); font-size: 11px; line-height: 1.35; }
+.tc-tools-memory { margin: 4px 0 0; cursor: pointer; }
+.tc-tools-memory input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--c-accent); }
 
 /* "Queued — will send when this reply finishes": the note under a message
    typed while Thomas was still answering (js/chat_turn_flow.js attaches it to
@@ -515,6 +505,9 @@ html, body { margin: 0; padding: 0; height: 100%; }
    Never reach for a 'normal' scheme as a transparency hack - it means
    "light only", which mismatches every dark theme. */
 .tc-workspace-frame { color-scheme: dark; }
+/* An old-style workspace that is still switching to the page asked for. Hidden with visibility so it keeps
+   loading and laying out; workspace_shell.js lifts this when the page says it is there. */
+.tc-workspace-frame.is-arriving { visibility: hidden; }
 html[data-theme="light"] .tc-workspace-frame,
 html[data-theme="sandstone"] .tc-workspace-frame { color-scheme: light; }
 
@@ -581,11 +574,30 @@ html[data-theme="sandstone"] .tc-workspace-frame { color-scheme: light; }
   background: transparent; font: 500 12.5px/1.2 var(--font-body); text-align: left;
   cursor: default;
 }
-.tc-shell-menu-item:hover, .tc-shell-menu-item:focus-visible { background: var(--c-surface-hover); outline: none; }
+.tc-shell-menu-item:hover, .tc-shell-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--c-accent) 22%, var(--c-surface-hover)); outline: none; cursor: pointer;
+}
+.tc-shell-menu-item:hover .ph, .tc-shell-menu-item:focus-visible .ph { color: var(--c-accent); }
 .tc-shell-menu-item .ph { color: var(--c-muted); }
 .tc-shell-menu-item-label { flex: 1; }
 .tc-shell-menu-item[data-state="restarting"] .ph-arrow-clockwise { animation: tc-restart-turn .8s cubic-bezier(.5,.1,.4,.9) infinite; }
 .tc-shell-menu-item[data-state="failed"] { color: var(--c-danger, #ef7777); }
+/* The restart strip: what a restart is doing, under the toolbar, until Thomas is back. */
+#tc-restart-strip {
+  position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 10001; max-width: min(92vw, 720px);
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-radius: 12px;
+  border: 1px solid var(--c-border-2); background: color-mix(in srgb, var(--c-sidebar) 94%, transparent);
+  box-shadow: 0 18px 48px rgba(0,0,0,.34); backdrop-filter: blur(18px); color: var(--c-text);
+  font: 500 12.5px/1.3 var(--font-body);
+}
+#tc-restart-strip[hidden] { display: none; }
+#tc-restart-strip .tc-restart-strip-meter { display: block; height: 3px; border-radius: 2px; overflow: hidden; background: var(--c-surface-hover); position: relative; }
+#tc-restart-strip .tc-restart-strip-meter::after { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 2px; background: var(--c-accent); animation: tc-restart-sweep 1.2s linear infinite; }
+#tc-restart-strip[data-state="up"] .tc-restart-strip-meter::after { left: 0; width: 100%; animation: none; }
+#tc-restart-strip[data-state="failed"] { color: var(--c-danger, #ef7777); }
+#tc-restart-strip[data-state="failed"] .tc-restart-strip-meter::after { left: 0; width: 100%; animation: none; background: var(--c-danger, #ef7777); }
+@keyframes tc-restart-sweep { to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { #tc-restart-strip .tc-restart-strip-meter::after { animation: none; left: 0; width: 100%; opacity: .6; } }
 @keyframes tc-shell-menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
 @keyframes tc-restart-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {

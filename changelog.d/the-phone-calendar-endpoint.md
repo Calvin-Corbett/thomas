@@ -1,0 +1,2 @@
+### Added
+- Your phone app can show your calendar agenda for the next 30 days, read from the calendar provider you connected in Thomas. Only each event's title, times, location and id leave your PC; the same access check as the rest of your phone connection runs first. When your calendar is not connected or does not answer, your phone is told to reconnect it in Thomas on your PC instead of being shown an empty day.

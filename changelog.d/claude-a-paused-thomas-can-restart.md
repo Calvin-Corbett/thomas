@@ -1,0 +1,3 @@
+### Fixed
+
+- **A paused Thomas can restart to load a fix.** After a restart Thomas carries on whatever the restart interrupted, and he does not restart again while any of that is still waiting. While he is paused he carries nothing on, so the waiting never ended and no landed fix could load until you resumed him. On 2026-11-09, paused at your word with nothing running, he sat "draining" for a landed fix and did not restart. Now that wait holds a restart only while Thomas is running. What is still waiting is written down for the next server, so it is carried on after you resume. A Build that is running still holds a restart, paused or not.

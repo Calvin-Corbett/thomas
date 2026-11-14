@@ -4,12 +4,16 @@ The 6 Playwright ``Tool`` subclasses in ``thomas/tools/browser.py`` were
 defined but never registered into the agent/server ``ToolRegistry``
 (wiring-audit finding browser-02 / tools-01). These tests lock in that they
 are reachable through both the dedicated ``register_browser_tools`` helper and
-the server's ``_build_tools`` hub when Playwright is installed.
+the server's tool set when Playwright is installed. The server gets them from the
+browser row (``thomas.server.rows.browser``), which lends them, so ``_build_tools``
+on its own no longer carries them.
 """
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
+from pathlib import Path
 
 import pytest
 
@@ -64,9 +68,25 @@ def test_register_browser_tools_gated_on_playwright(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.skipif(not _PLAYWRIGHT_PRESENT, reason="playwright not installed")
-def test_build_tools_includes_browser_tools() -> None:
-    from thomas.core.config import load_config
-    from thomas.server.app_helpers import _build_tools
+def test_a_server_has_the_browser_tools_through_its_row_and_a_bare_tool_set_does_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from aiohttp.test_utils import TestClient, TestServer
 
-    registry = _build_tools(load_config())
-    assert set(registry._tools) >= _EXPECTED_BROWSER_TOOLS
+    from tests import plugin_view_fixture as views
+    from thomas.core.config import load_config
+    from thomas.server import app_core
+    from thomas.server.app_helpers import _build_tools
+    from thomas.server.app_keys import APP_TOOLS
+    from thomas.server.runtime_plugins import APP_RUNTIME_PLUGINS
+
+    monkeypatch.setenv("THOMAS_DATA_DIR", str(tmp_path / "data"))
+    assert not set(_build_tools(load_config())._tools) & _EXPECTED_BROWSER_TOOLS
+
+    async def on_a_server() -> set[str]:
+        app = app_core.create_app(views.config_in(tmp_path))
+        async with TestClient(TestServer(app)):
+            await views.rows_once_started(app[APP_RUNTIME_PLUGINS])
+            return {tool.name for tool in app[APP_TOOLS].list_tools()}
+
+    assert asyncio.run(on_a_server()) >= _EXPECTED_BROWSER_TOOLS

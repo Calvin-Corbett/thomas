@@ -1,6 +1,6 @@
-# Release planning
-
-For installation and current capabilities, see the project README. Development records are maintained privately.
+﻿# Moved Plan
 
 Canonical location:
-- `plans/README.md`
+- `plans/thomas/launch/LAUNCH_V1_PLAN.md`
+
+This file is a compatibility pointer to the canonical plan location.

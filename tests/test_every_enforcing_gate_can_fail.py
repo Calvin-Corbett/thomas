@@ -22,6 +22,7 @@ Hard limit for .py files is 1200 lines (DEFAULT_HARD_LIMITS in monolith_guard.py
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -227,72 +228,286 @@ def _site_visual_proof_violation(tmp_path: Path) -> tuple[list[str], Path]:
     return (["--repo-root", str(repo)], repo)
 
 
+def _untracked_import_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """A committed module importing a file git never learned about.
+
+    The real incident (2026-09-07): four modules under thomas/ were imported by
+    committed files and never `git add`-ed. Every working tree that happened to
+    hold the files passed every hook; a clean clone of dev died with ImportError
+    on the server and on every board command. The fixture reproduces exactly
+    that -- importer tracked, imported module present on disk but untracked --
+    because a fixture that also staged the module would be green for the wrong
+    reason and this gate would go back to being unwatched.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(tmp_path, "init", "-b", "dev", "repo")
+    _git(repo, "config", "user.email", "red@example.com")
+    _git(repo, "config", "user.name", "Red Path")
+    # Inside a real package root: the gate only considers imports whose first
+    # segment is one of PACKAGE_ROOTS, so a bare top-level module would be
+    # filtered out before resolution and this fixture would pass for the wrong
+    # reason. (That filter is a latent blind spot for any NEW top-level package;
+    # measured 2026-09-08 as catching nothing extra on this repo today.)
+    pkg = repo / "thomas"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "red_path_untracked_helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (pkg / "importer.py").write_text("from thomas import red_path_untracked_helper\n", encoding="utf-8")
+    # Only the importer is tracked. The helper stays untracked -- the whole point.
+    _git(repo, "add", "thomas/__init__.py", "thomas/importer.py")
+    _git(repo, "commit", "-m", "importer only")
+    return (["--repo", str(repo), "--all"], repo)
+
+
 # RED_PATH_CASES values are (fixture_builder, expected_token): expected_token
 # is the string that MUST appear in the gate's combined stdout+stderr when it
 # fails, so the parametrized test below cannot pass on a false non-zero exit
 # that never actually named the violation. The ratchet in
 # test_no_gate_enforces_unwatched.py only reads the dict's keys
 # (set(RED_PATH_CASES)), so this shape change does not affect it.
-def _untracked_import_violation(tmp_path: Path) -> tuple[list[str], Path]:
-    """A staged file importing a module git does not track -- the shape that
-    made a clean clone of `dev` fail on 2026-09-07 while every working tree
-    holding the untracked files passed every hook. The importer is staged and
-    the module it needs is not, so the index this commit would create cannot
-    import itself. The module lives under `thomas/` because the gate only
-    follows imports whose root is a real package of this repo (PACKAGE_ROOTS);
-    a bare top-level name is somebody else's dependency, not this gate's
-    business -- a fixture that used one passed and proved nothing."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _git(tmp_path, "init", "-b", "dev", "repo")
-    _git(repo, "config", "user.name", "Test User")
-    _git(repo, "config", "user.email", "test@example.com")
-    pkg = repo / "thomas"
-    pkg.mkdir()
-    (pkg / "red_path_untracked.py").write_text("VALUE = 1\n", encoding="utf-8", newline="\n")
-    (pkg / "importer.py").write_text(
-        "from thomas import red_path_untracked\n", encoding="utf-8", newline="\n"
-    )
-    _git(repo, "add", "thomas/importer.py")  # the module it imports stays untracked
-    return (["--repo", str(repo)], repo)
-
-
 def _workboard_task_plans_violation(tmp_path: Path) -> tuple[list[str], Path]:
-    """An active task owned by this agent with no `## Task Plans` row -- the
-    exact disagreement the gate exists to refuse. Every other required section
-    is present and the claim matches the task, so this fails on the task/plan
-    disagreement alone rather than on board structure. `--agent` matches the
-    task's agent on purpose: another agent's inconsistent plan is a warning and
-    only the committing agent's own is a violation, so a fixture without it
-    would prove nothing."""
+    """A task whose Task Plans row names a different owner than its Active Task.
+
+    The board is hand-written and needs no git: in non-staged mode the gate reads
+    the board file it is given. --agent is passed explicitly because the gate scopes
+    its verdict to the committing agent and otherwise reads THOMAS_AGENT_ID -- run
+    under another agent's environment the same board would downgrade to a warning
+    and exit 0, so this red path would pass or fail depending on who ran the suite.
+    """
     repo = tmp_path / "repo"
     board = repo / "plans" / "thomas" / "WORKBOARD.md"
     board.parent.mkdir(parents=True, exist_ok=True)
     board.write_text(
         "# Test Workboard\n\n"
-        "## Agent Claims\n\n"
-        "- agent=agent1; role=solo; scope=foo; task=task-plans-red-path; status=active\n\n"
+        "## Agent Claims (Active)\n\n"
+        "- agent=agent1; name=Agent One; role=solo; parent=none; scope=src/a.py; "
+        "task=task-plans-red-path\n\n"
         "## Active Tasks\n\n"
-        "- task_id=task-plans-red-path; agent=agent1; scope=foo; summary=do the thing; status=in_progress\n\n"
-        "## Up For Grabs\n\n- none\n\n"
+        "- task_id=task-plans-red-path; agent=agent1; scope=src/a.py; summary=red path; "
+        "status=active\n\n"
         "## Issues / Blockers\n\n- none\n\n"
-        "## Task Plans\n\n- none\n",
+        "## Up For Grabs\n\n- none\n\n"
+        "## Task Plans\n\n"
+        "- task_id=task-plans-red-path; plan=plans/tasks/task-plans-red-path/PLAN.md; "
+        "owner=someone-else; status=in_progress; updated_at=now; summary=red path\n\n"
+        "## Task Problems\n\n"
+        "- task_id=task-plans-red-path; problem=plans/problems/task-plans-red-path/PROBLEM.md; "
+        "owner=agent1; status=in_progress; updated_at=now; summary=red path\n",
         encoding="utf-8",
         newline="\n",
     )
     return (["--workboard", str(board), "--agent", "agent1"], repo)
 
 
+def _new_repo(tmp_path: Path) -> Path:
+    """A fixture git repo with one commit, so `git diff --cached` has a HEAD to
+    compare against. The six Agent Verification Protocol gates below all read
+    the staged index, and several read HEAD as well (shrinkage compares line
+    counts, dependency reads the staged diff) -- an unborn branch would change
+    what git reports and make the fixture prove something other than the
+    violation it is named for."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(tmp_path, "init", "-b", "dev", "repo")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "initial")
+    return repo
+
+
+def _verification_record_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """Staged code files with NO .git/agent_verification.json at all.
+
+    The record is absent rather than stale or incomplete because absence is the
+    one shape that cannot be argued with -- a present-but-bad record exercises
+    the validators (_check_freshness/_check_tests_run/_check_regression), which
+    are their own branches, while "you staged code and produced no evidence at
+    all" is the condition the gate exists for. The count must clear the gate's
+    VERIFICATION_THRESHOLD of 3; below it the gate returns a deliberate PASS.
+
+    41 rather than 3 on purpose. This gate never echoes a filename, so the
+    staged COUNT is the only fixture-specific string it prints, and the count is
+    therefore what the expected_token pins. At 3 files the sentence
+    "You staged 3 code files but no verification record exists." is one an
+    ordinary small commit could also produce -- so if the --repo-root seam ever
+    broke and the gate went back to judging the real Thomas checkout, this red
+    path could pass while testing nothing. 41 is a count no real commit is
+    likely to be holding at the moment the suite runs.
+    """
+    repo = _new_repo(tmp_path)
+    names = [f"unverified_{i:02d}.py" for i in range(41)]
+    for name in names:
+        (repo / name).write_text("VALUE = 1\n", encoding="utf-8")
+    _git(repo, "add", *names)
+    return (["--repo-root", str(repo)], repo)
+
+
+def _commit_scope_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """Sixty staged ADDED .py files -- past the gate's HARD_LIMIT of 50.
+
+    Additions, never moves or removals: _staged_moved_or_removed() subtracts
+    every R and D entry on purpose (a deletion hides nothing in volume, and
+    counting them blocked honest cleanup -- see that function's comment). A
+    fixture built from deletions would therefore be exempt and pass, proving
+    nothing. Sixty also clears the hard limit outright rather than the
+    20-file warn threshold, so this red path does not depend on the absence of
+    a scope_justification in a verification record -- that is a second,
+    separate branch.
+    """
+    repo = _new_repo(tmp_path)
+    names = [f"mod_{i:02d}.py" for i in range(60)]
+    for name in names:
+        (repo / name).write_text("VALUE = 1\n", encoding="utf-8")
+    _git(repo, "add", *names)
+    return (["--repo-root", str(repo)], repo)
+
+
+def _shrinkage_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """A committed 500-line module re-staged at 80 lines, with no verification
+    record to justify it.
+
+    The file must exist in HEAD: _head_line_count() returns None for a new file
+    and the gate skips it, so a fixture that only staged a short file would pass
+    while looking like a 84%-deletion. The shrinkage is measured HEAD-vs-INDEX,
+    not HEAD-vs-worktree, which is why the gutted version is staged rather than
+    merely written to disk. No record is written at all, so
+    `shrinkage.deletions_justified` is absent -- the shape of a silent gutting
+    during "cleanup", which is gap 2, the reason this gate exists.
+    """
+    repo = _new_repo(tmp_path)
+    victim = repo / "gutted_module.py"
+    victim.write_text("\n".join(f"line_{i} = {i}" for i in range(500)) + "\n", encoding="utf-8")
+    _git(repo, "add", "gutted_module.py")
+    _git(repo, "commit", "-m", "add the module at full size")
+    victim.write_text("\n".join(f"line_{i} = {i}" for i in range(80)) + "\n", encoding="utf-8")
+    _git(repo, "add", "gutted_module.py")
+    return (["--repo-root", str(repo)], repo)
+
+
+def _test_coverage_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """Three staged source files under thomas/ and nothing under tests/.
+
+    The paths must sit under a configured source prefix: _is_source_code()
+    requires one of safety_config.source_dirs() (thomas/, scripts/,
+    extensions/), so three bare top-level .py files would not count as source at
+    all and the fixture would pass for the wrong reason. Nothing doc- or
+    config-shaped is staged either: a staged set that is entirely .md/.toml/
+    .json trips the gate's docs-only skip before any counting happens.
+    """
+    repo = _new_repo(tmp_path)
+    pkg = repo / "thomas"
+    pkg.mkdir()
+    names = [
+        "thomas/red_path_module_a.py",
+        "thomas/red_path_module_b.py",
+        "thomas/red_path_module_c.py",
+    ]
+    for name in names:
+        (repo / name).write_text("VALUE = 1\n", encoding="utf-8")
+    _git(repo, "add", *names)
+    return (["--repo-root", str(repo)], repo)
+
+
+def _dependency_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """A staged pyproject.toml that adds a package, with no verification record
+    recording `dependencies_reviewed`.
+
+    pyproject.toml must exist in HEAD and be MODIFIED, not added: the gate reads
+    `git diff --cached -- pyproject.toml` and extracts names from `+` lines, so a
+    brand-new file would hand it every line of the file (including the table
+    headers its filter list does not know) and the fixture would be asserting
+    something other than "one new dependency appeared". The added name is
+    deliberately not in _extract_new_deps_from_pyproject's exclusion list of
+    metadata keys, which is what separates a real dependency addition from a
+    version bump or a description edit.
+    """
+    repo = _new_repo(tmp_path)
+    pyproject = repo / "pyproject.toml"
+    pyproject.write_text(
+        '[project]\nname = "fixture"\nversion = "0.1.0"\ndependencies = [\n    "aiohttp>=3.9",\n]\n',
+        encoding="utf-8",
+    )
+    _git(repo, "add", "pyproject.toml")
+    _git(repo, "commit", "-m", "add pyproject")
+    pyproject.write_text(
+        '[project]\nname = "fixture"\nversion = "0.1.0"\ndependencies = [\n'
+        '    "aiohttp>=3.9",\n    "leftpad>=1.0",\n]\n',
+        encoding="utf-8",
+    )
+    _git(repo, "add", "pyproject.toml")
+    return (["--repo-root", str(repo)], repo)
+
+
+def _frontend_lint_violation(tmp_path: Path) -> tuple[list[str], Path]:
+    """A staged apps/ TypeScript file with a genuine type error, plus the
+    tsconfig.json the gate looks for and a real TypeScript install to check it
+    with. This is the violation shape frontend_lint_gate.py exists to catch
+    (gap 4, "frontend code barely covered").
+    This was a strict xfail for part of 2026-09-19, because the gate could not
+    report the violation on Windows: _find_tsc() returned the EXTENSIONLESS npm
+    shim, which CreateProcess cannot execute, and _run_tsc() caught the resulting
+    OSError and returned (True, ...) -- turning "I could not run the compiler"
+    into a pass. Measured then: the gate printed '"errors": [], "ok": true' while
+    tsc.cmd on the same staged file reported TS2322. Both were fixed (prefer the
+    .cmd shim; fail closed when the checker will not run) and the fixture was
+    promoted here.
+    The compiler is junctioned in rather than stubbed: a stub would only prove the
+    gate can run a stub. If apps/site has no node_modules, the test skips - an
+    honest "not checked" beats a green that checked nothing, which is the precise
+    bug this fixture exists to prevent recurring.
+    """
+    repo = _new_repo(tmp_path)
+    app = repo / "apps" / "site"
+    (app / "src").mkdir(parents=True)
+    real_modules = Path(__file__).resolve().parents[1] / "apps" / "site" / "node_modules"
+    if not (real_modules / ".bin").exists():
+        pytest.skip("apps/site/node_modules is not installed; there is no compiler to check with")
+    link = app / "node_modules"
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(real_modules)], check=True, capture_output=True)
+    else:
+        link.symlink_to(real_modules, target_is_directory=True)
+    (app / "tsconfig.json").write_text(
+        '{"compilerOptions":{"noEmit":true,"strict":true,"target":"es2020",'
+        '"module":"esnext","moduleResolution":"bundler","skipLibCheck":true},'
+        '"include":["src/**/*.ts"]}\n',
+        encoding="utf-8",
+    )
+    (app / "src" / "broken.ts").write_text(
+        'export const broken: number = "definitely not a number";\n', encoding="utf-8"
+    )
+    _git(repo, "add", "apps/site/src/broken.ts", "apps/site/tsconfig.json")
+    return (["--repo-root", str(repo)], repo)
+
+
 RED_PATH_CASES: dict[str, tuple[Callable[[Path], tuple[list[str], Path]], str]] = {
-    "untracked_import_gate.py": (_untracked_import_violation, "red_path_untracked"),
-    "workboard_task_plans.py": (_workboard_task_plans_violation, "task-plans-red-path"),
     "monolith_guard.py": (_monolith_violation, "huge_module.py"),
     "merge_resurrection_gate.py": (_merge_resurrection_violation, "old/retired_module.py"),
     "dead_ref_gate.py": (_dead_ref_violation, "old-experiment"),
     "branch_claim_gate.py": (_branch_claim_violation, "unclaimed-red-path"),
     "workboard_evidence_gate.py": (_workboard_evidence_violation, "evidence-red-path"),
+    "workboard_task_plans.py": (_workboard_task_plans_violation, "Task Plans owner differs"),
     "problem_closure_gate.py": (_problem_closure_violation, "closure-red-path"),
+    "untracked_import_gate.py": (_untracked_import_violation, "red_path_untracked_helper"),
     "site_visual_proof.py": (_site_visual_proof_violation, "apps/site/verification/ui-proof.json"),
+    # The 2026-03-19 Agent Verification Protocol gates, wired into commit.py on
+    # 2026-09-19. All six hardcoded their repo root and ran git with cwd=ROOT, so
+    # they could only ever judge the checkout they live in; each gained the same
+    # --repo-root seam monolith_guard.py already had, which is what makes these
+    # fixtures possible. frontend_lint_gate.py is deliberately absent -- see
+    # test_frontend_lint_gate_has_no_reachable_failure_on_this_toolchain below.
+    "verification_record_gate.py": (
+        _verification_record_violation,
+        "You staged 41 code files but no verification record exists.",
+    ),
+    "commit_scope_gate.py": (_commit_scope_violation, "Commit touches 60 code files"),
+    "shrinkage_gate.py": (_shrinkage_violation, "gutted_module.py"),
+    "test_coverage_gate.py": (_test_coverage_violation, "thomas/red_path_module_a.py"),
+    "dependency_gate.py": (_dependency_violation, "leftpad"),
+    "frontend_lint_gate.py": (_frontend_lint_violation, "broken.ts"),
 }
 
 

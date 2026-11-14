@@ -82,7 +82,8 @@ def test_work_ui_exposes_scoped_memory_readiness_and_automation_controls() -> No
     html = CHAT_HTML.read_text(encoding="utf-8")
 
     assert html.index("unified_work_support.js") < html.index("unified_work_mode.js")
-    assert "userTurns >= 4" in text
+    assert "userTurns >= 4" not in text
+    assert "selectionCameFromTheUser() && modelReportedConfigured()" in text
     assert "state.onboardingPhase === 'workflow_configuration'" in text
     assert "Goal" in text
     assert "Workflow map" in text

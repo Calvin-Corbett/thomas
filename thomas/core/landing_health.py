@@ -40,13 +40,13 @@ Design rules this file is held to:
 
 from __future__ import annotations
 
-import os
 import shutil
-import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from thomas.core.git_process import run_git
 
 # ---------------------------------------------------------------------------
 # Thresholds
@@ -94,15 +94,6 @@ SEVERITY_ACT = "act"
 SEVERITY_UNKNOWN = "unknown"
 
 _SEVERITY_RANK = {SEVERITY_OK: 0, SEVERITY_WATCH: 1, SEVERITY_ACT: 2}
-
-# Every failure a git probe in this module is allowed to meet, named
-# explicitly. A broad ``except Exception`` here would turn a genuine bug in
-# this file into a calm "unknown" reading -- which is exactly the kind of
-# quiet lie this module was written to prevent.
-#   OSError                    -- git not on PATH, working dir gone, dead pipe
-#   subprocess.SubprocessError -- TimeoutExpired and its siblings
-#   ValueError                 -- bad argument shape, undecodable output
-_GIT_ERRORS = (OSError, subprocess.SubprocessError, ValueError)
 
 _SECONDS_PER_DAY = 86400.0
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -171,40 +162,35 @@ class _GitProbe:
     Every command gets its own timeout AND draws from a shared deadline, so a
     repo on a stalled network drive cannot turn this check into a hang no
     matter how many probes it fails.
+
+    That promise is only as good as the timeout behind it, and
+    ``subprocess.run(["git", ...], timeout=N)`` is not one: on Windows, git
+    reached through its launcher hands the pipes to a grandchild that the kill
+    does not touch, and a measured 0.3-second bound returned after 12.29 s.
+    Every command here goes through :func:`thomas.core.git_process.run_git`,
+    which bounds the drain as well as the wait, pins the same two git settings
+    (never prompt a human, never take the index lock to answer a question), and
+    reports a failure instead of raising one. The deadline is also what this
+    probe will queue for: with two seconds of budget left it would rather be
+    told git is busy than wait twenty for a turn it cannot use.
     """
 
     def __init__(self, root: Path, budget_seconds: float = GIT_TOTAL_BUDGET_SECONDS) -> None:
         self.root = root
         self.deadline = time.monotonic() + budget_seconds
-        # git must never stop to ask a human anything, and must never take the
-        # index lock just to answer a question.
-        self.env = dict(os.environ)
-        self.env["GIT_TERMINAL_PROMPT"] = "0"
-        self.env["GIT_OPTIONAL_LOCKS"] = "0"
 
     def run(self, *args: str) -> str | None:
         """Return stripped stdout, or None if the command failed or timed out."""
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             return None
-        try:
-            proc = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
-                ["git", *args],
-                cwd=str(self.root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=min(GIT_COMMAND_TIMEOUT_SECONDS, remaining),
-                stdin=subprocess.DEVNULL,
-                env=self.env,
-                check=False,
-            )
-        except _GIT_ERRORS:
-            return None
-        if proc.returncode != 0:
-            return None
-        return (proc.stdout or "").strip()
+        result = run_git(
+            args,
+            cwd=self.root,
+            timeout=min(GIT_COMMAND_TIMEOUT_SECONDS, remaining),
+            slot_wait=remaining,
+        )
+        return result.output() if result.ok else None
 
     def count_lines(self, *args: str) -> int | None:
         """Number of non-empty output lines, or None if the command failed."""

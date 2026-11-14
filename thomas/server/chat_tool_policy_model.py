@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 
 @dataclass(frozen=True)
@@ -21,6 +20,8 @@ class ToolRuntimePolicy:
     blocked_commands: tuple[str, ...]
 
 
+# Delegation inherits the caller's policy; it grants no child capability itself.
+_DELEGATION_TOOLS = {"task.spawn"}
 _TOOL_PREFIXES = ("functions.", "function.", "tool.", "tools.", "mcp.", "mcp__")
 _WRITE_PREFIXES = (
     "fs.write",
@@ -55,15 +56,8 @@ _WRITE_TOOLS = {
     # image.generate downloads provider output and writes PNG files into the
     # workspace, so it needs both file-write (here) and network (external) authority.
     "image.generate",
-    "intake_set_clipboard",
-    "intake_start_watcher",
     "library_add_entry",
     "library_add_research_note",
-    "marketplace.create_listing",
-    "marketplace.create_order",
-    "marketplace.create_review",
-    "marketplace.publish_listing",
-    "marketplace.register_vendor",
     "messages_create",
     "messages_delete",
     "nodes_create_node",
@@ -101,7 +95,6 @@ _SHELL_TOOLS = {
     "eng.lint",
     "eng.security_scan",
     "flow_execute",
-    "intake_start_watcher",
     "nodes_execute_node",
     "shell.exec",
     "ssh.exec",
@@ -155,9 +148,6 @@ _CHANNEL_TOOLS = {
     "channel_management",
     "companion_get_devices",
     "companion_log_audit_event",
-    "intake_get_clipboard",
-    "intake_set_clipboard",
-    "intake_start_watcher",
     "notify_get_subscriptions",
     "notify_send",
     "notify_subscribe",
@@ -168,6 +158,9 @@ _SAFE_READ_TOOLS = {
     "api.list_imported",
     # ask_user only asks the person and waits; it touches nothing (2026-09-05)
     "ask_user",
+    # settings.request_change only shows the owner a card and waits; any change
+    # it leads to is made by the owner's click and password, on the server.
+    "settings.request_change",
     # todo.write only updates the checklist the page shows; it touches nothing (2026-09-05)
     "todo.write",
     # recent_work.list reads the Build and chat record the Library shows; it touches nothing (2026-09-06)
@@ -201,10 +194,6 @@ _SAFE_READ_TOOLS = {
     "library_get_entry",
     "library_list_entries",
     "library_scan_entries",
-    "marketplace.get_listing",
-    "marketplace.get_order",
-    "marketplace.get_vendor",
-    "marketplace.search_listings",
     "messages_list",
     "nodes_get_node_status",
     "notifications_get_store",
@@ -222,6 +211,16 @@ _SAFE_READ_TOOLS = {
     # _LOCAL_PATH_ARGUMENTS entry.
     "skills.list",
     "skills.use",
+    # self.issues reads Thomas's own issue ledger and returns a summary; it takes
+    # no path and writes nothing. Unclassified, it was denied the moment any
+    # capability was off -- which hid a broken Thomas from the one reader meant
+    # to find out what was broken.
+    "self.issues",
+    # self.unlanded reads the ratchet's census and ledger and returns a summary; it takes
+    # no path and writes nothing. Unclassified, it would be denied whenever any capability is off.
+    "self.unlanded",
+    # self.projects reads the self-change project list, takes no path and writes nothing.
+    "self.projects",
     "template_filters",
     "template_rendering",
     "tray_agent_get_status",

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from thomas.work import WorkConflictError, WorkCorruptStateError, WorkStore, WorkValidationError
+from thomas.work import WorkConflictError, WorkStore, WorkValidationError
 
 
 def _job(store: WorkStore) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -123,12 +123,18 @@ def test_workflow_store_fails_closed_when_more_than_one_flow_has_focus(tmp_path:
     workflows[1]["status"] = "active"
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    with pytest.raises(WorkCorruptStateError, match="workflow focus"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work workflow focus is invalid"
+    assert store.state_path.read_bytes() == original
     workflows[1] = "not-a-workflow"
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
-    with pytest.raises(WorkCorruptStateError, match="workflow entries"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work workflow entries are invalid"
+    assert store.state_path.read_bytes() == original
 
 
 def test_canonical_workflow_container_corruption_is_not_repaired_as_legacy(tmp_path: Path) -> None:
@@ -145,8 +151,11 @@ def test_canonical_workflow_container_corruption_is_not_repaired_as_legacy(tmp_p
     memory["workflows"] = {"corrupt": True}
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    with pytest.raises(WorkCorruptStateError, match="job memory"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work job memory is invalid"
+    assert store.state_path.read_bytes() == original
 
 
 def test_canonical_workflow_metadata_corruption_is_not_repaired_as_legacy(tmp_path: Path) -> None:
@@ -161,8 +170,11 @@ def test_canonical_workflow_metadata_corruption_is_not_repaired_as_legacy(tmp_pa
     state["apps"][app["id"]]["jobs"][job["id"]]["memory"]["metadata"] = {}
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    with pytest.raises(WorkCorruptStateError, match="workflow focus"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work workflow focus is invalid"
+    assert store.state_path.read_bytes() == original
 
 
 def test_canonical_job_memory_object_corruption_is_not_replaced(tmp_path: Path) -> None:
@@ -172,8 +184,11 @@ def test_canonical_job_memory_object_corruption_is_not_replaced(tmp_path: Path) 
     state["apps"][app["id"]]["jobs"][job["id"]]["memory"] = "corrupt"
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    with pytest.raises(WorkCorruptStateError, match="job memory"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work job memory is invalid"
+    assert store.state_path.read_bytes() == original
 
 
 def test_onboarding_job_creation_is_idempotent_for_the_same_session(tmp_path: Path) -> None:
@@ -229,7 +244,7 @@ def test_workflow_aware_onboarding_cannot_skip_goal_and_mapping_phases(tmp_path:
     )
     assert configured["phase"] == "workflow_configuration"
     assert configured["fields"]["session_id"] == "session-123"
-    with pytest.raises(WorkConflictError, match="four user answers"):
+    with pytest.raises(WorkConflictError, match="selection at a recorded user turn"):
         store.update_onboarding(
             app["id"],
             {"state": "ready", "fields": {"selected_workflow_configured": True}},
@@ -311,5 +326,8 @@ def test_persisted_duplicate_automation_identity_fails_closed(tmp_path: Path) ->
     rows.append(dict(rows[0]))
     store.state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    with pytest.raises(WorkCorruptStateError, match="automation ids"):
-        WorkStore(tmp_path)
+    original = store.state_path.read_bytes()
+    reloaded = WorkStore(tmp_path)
+    assert reloaded.list_apps() == []
+    assert reloaded.work_warnings[0]["reason"] == "durable Work automation ids are invalid"
+    assert store.state_path.read_bytes() == original

@@ -20,12 +20,24 @@ import datetime as _dt
 import json
 import re
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+
+@contextmanager
+def _board_locked() -> Iterator[None]:
+    """Hold the shared WORKBOARD lock across a read-modify-write (reentrant, same lock as every other writer)."""
+    from scripts.crew.workboard import board_io
+
+    with board_io.file_lock():
+        yield
+
 
 DEFAULT_WORKBOARD = _REPO_ROOT / "plans" / "thomas" / "WORKBOARD.md"
 
@@ -169,14 +181,15 @@ def record_evidence(
     recorded_at: str | None = None,
 ) -> None:
     """Write `evidence=` and `evidence_recorded_at=` onto the task's Active Task line."""
-    lines = workboard_path.read_text(encoding="utf-8").splitlines(keepends=True)
-    idx = _find_task_line(lines, task_id)
-    fields = _parse_task_line_fields(lines[idx])
-    fields["evidence"] = format_evidence_field(ev)
-    fields["evidence_recorded_at"] = str(recorded_at or _utcnow_iso())
-    newline = "\n" if lines[idx].endswith("\n") else ""
-    lines[idx] = _format_task_line_fields(fields) + newline
-    workboard_path.write_text("".join(lines), encoding="utf-8")
+    with _board_locked():
+        lines = workboard_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        idx = _find_task_line(lines, task_id)
+        fields = _parse_task_line_fields(lines[idx])
+        fields["evidence"] = format_evidence_field(ev)
+        fields["evidence_recorded_at"] = str(recorded_at or _utcnow_iso())
+        newline = "\n" if lines[idx].endswith("\n") else ""
+        lines[idx] = _format_task_line_fields(fields) + newline
+        workboard_path.write_text("".join(lines), encoding="utf-8")
 
 
 def read_evidence(task_id: str, *, workboard_path: Path = DEFAULT_WORKBOARD) -> EvidenceRecord:
@@ -212,17 +225,18 @@ def strip_evidence(task_id: str, *, workboard_path: Path = DEFAULT_WORKBOARD) ->
     hand-flip straight to `done` is caught the ordinary way, as missing
     evidence, not as stale-but-present evidence.
     """
-    lines = workboard_path.read_text(encoding="utf-8").splitlines(keepends=True)
-    idx = _find_task_line(lines, task_id)
-    fields = _parse_task_line_fields(lines[idx])
-    if "evidence" not in fields and "evidence_recorded_at" not in fields:
-        return False
-    fields.pop("evidence", None)
-    fields.pop("evidence_recorded_at", None)
-    newline = "\n" if lines[idx].endswith("\n") else ""
-    lines[idx] = _format_task_line_fields(fields) + newline
-    workboard_path.write_text("".join(lines), encoding="utf-8")
-    return True
+    with _board_locked():
+        lines = workboard_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        idx = _find_task_line(lines, task_id)
+        fields = _parse_task_line_fields(lines[idx])
+        if "evidence" not in fields and "evidence_recorded_at" not in fields:
+            return False
+        fields.pop("evidence", None)
+        fields.pop("evidence_recorded_at", None)
+        newline = "\n" if lines[idx].endswith("\n") else ""
+        lines[idx] = _format_task_line_fields(fields) + newline
+        workboard_path.write_text("".join(lines), encoding="utf-8")
+        return True
 
 
 def _utcnow_iso() -> str:
@@ -336,4 +350,3 @@ def _format_task_line_fields(fields: dict[str, str]) -> str:
         else:
             parts.append(f"{key}={raw}")
     return "- " + "; ".join(parts)
-

@@ -1,0 +1,3 @@
+### Changed
+- A Build team now proves its change with check.run on the test files that cover it, at most 15 in one call, and leaves the wider run to the check before your card. The lesson every team was given told it to run every test file that imports what it changed. On 2026-10-26, four teams built that run themselves: 138-file batches, a hand-made harness, and two check.run calls that hit the 10-minute limit. The check before your card already runs that set in parallel and sends back what fails.
+- A step's start now shows what it is doing even when the model sends a call's arguments only once the call is complete. Every start line one provider wrote that day read `{}`.

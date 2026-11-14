@@ -22,6 +22,7 @@ if str(_REPO_ROOT) not in sys.path:
 # `_REPO_ROOT` sys.path insert above this block guarantees `scripts.*` is
 # importable, so the fallback is no longer needed.
 from scripts import task_specialists
+from scripts.crew.workboard import board_io
 from scripts.crew.workboard import issue as workboard_issue
 from scripts.crew.workboard import message as workboard_message
 from scripts.forge.gates import workboard_claims as claims_gate
@@ -306,6 +307,7 @@ def _specialist_for_task(
     }
 
 
+@board_io.transaction  # one read-modify-write: another writer (or the archiver) cannot land in between
 def dispatch_idle_agents_once(
     *,
     workboard_path: Path | None = None,
@@ -483,5 +485,18 @@ def _dispatch_up_for_grabs_to_idle_agents(**kwargs) -> tuple[bool, dict[str, obj
 
 
 def _monitor_loop(*, cycles: int, **kwargs) -> tuple[bool, dict[str, object]]:
-    _ = kwargs
-    return True, {"cycle_count": cycles}
+    """Run the sweep each cycle (the dead-claim reclaim). Other monitor duties remain stubs."""
+
+    from scripts.crew.tasks.monitor import run_monitor_cycles
+
+    return run_monitor_cycles(
+        cycles=cycles,
+        interval_seconds=float(kwargs.get("interval_seconds", 30.0)),
+        workboard_path=Path(kwargs["workboard_path"]),
+        max_idle_minutes=float(kwargs.get("max_idle_minutes", 30.0)),
+        task_manager_agent=str(kwargs.get("task_manager_agent", "")),
+        now_seed=kwargs.get("now_seed"),
+        require_claims_to_have_active_task=bool(kwargs.get("require_claims_to_have_active_task", False)),
+        apply=bool(kwargs.get("apply", False)),
+        only=kwargs.get("only"),
+    )

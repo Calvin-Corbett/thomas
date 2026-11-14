@@ -60,7 +60,12 @@ class NotificationPrefs(BaseModel):
 
 
 class AutonomyPrefs(BaseModel):
-    default_level: AutonomyLevel = "L1"
+    # L2 Assist -- ask before acting (your rule: never autonomous by
+    # default). A brand-new session's SessionMeta.autonomy_level now starts
+    # unset (thomas/chat/session_store.py) and falls through to this default,
+    # so this value IS what a never-configured session actually resolves to
+    # -- it was "L1" here, which silently dropped that default from 2 to 1.
+    default_level: AutonomyLevel = "L2"
     concurrency_limit: int = Field(default=2, ge=1, le=64)
 
 
@@ -265,6 +270,8 @@ class AdvancedRuntimePrefs(BaseModel):
     isolated_desktop_enabled: bool = False
     isolated_desktop_trust_mode: DesktopTrustMode = "ask_every_time"
     isolated_desktop_hidden_by_default: bool = True
+    # Push dev to GitHub after every landing. On unless you turn it off here.
+    push_dev_after_landing: bool = True
 
     @field_validator("isolated_desktop_trust_mode", mode="before")
     @classmethod

@@ -52,9 +52,7 @@ def test_the_verdict_no_longer_depends_on_which_tool_stumbled(delivered) -> None
     allowlisted = _review(delivered, failed=["fs.read_file"], succeeded=["fs.read_file"])
     ordinary = _review(delivered, failed=["shell"], succeeded=["shell"])
 
-    assert allowlisted == ordinary, (
-        "identical deliverables still get different verdicts based on the tool's name"
-    )
+    assert allowlisted == ordinary, "identical deliverables still get different verdicts based on the tool's name"
 
 
 # --- the controls: loosening this must not gut it -------------------------

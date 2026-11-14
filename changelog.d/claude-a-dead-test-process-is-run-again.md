@@ -1,0 +1,4 @@
+### Fixed
+
+- **One dead test process no longer throws away a whole check.** The check before your card splits a change's tests over many processes. When one of them was killed, for example by the 300-second test timeout on a full PC, it left no report, and the whole check ended "unavailable" to start again from nothing two hours later. On 2026-11-10 that cost a 59-minute check its answer. A process that ends with no report is now run once more before the check gives up.
+- **The check's record now says why each side did not finish.** The same tests run on plain dev only when the change's own run did not finish, and the sentence the check gave then named dev's trouble alone. Eleven checks in two days ended "dev-side", about 124 processor-hours, and none of their records said what had stopped the change's run. The record now keeps both reasons.

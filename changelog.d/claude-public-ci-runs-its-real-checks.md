@@ -1,0 +1,2 @@
+### Fixed
+- **The public branch's CI no longer fails on checks that cannot pass there.** The changed-file ownership gate (in both workflows), the audit backstop gate and the module audit gate now skip `main`, whose published board and module audit ledger are empty on purpose; they still run on every other branch. The Protocol safety step no longer names two test files that were deleted long ago, so it reaches the tests that exist, and the protocol-parity job creates the `.venv` that the gate shim requires.

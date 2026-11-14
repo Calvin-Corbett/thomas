@@ -1,0 +1,6 @@
+### Added
+- Build teams can ask `code.repo_index` for a project-relative source file or exact symbol and receive definitions, call-shaped references, and tests importing the definition's module or file in one response. The index covers Python, JavaScript/TypeScript, Go, and Rust source files.
+- The project-local SQLite index is shared across team processes and reconciles source edits and deletions on lookup, including edits that preserve file size and modification time. Refreshes take a write lock before reading indexed files, so concurrent lookups serialize new-file indexing. Schema upgrades discard stale lookup rows before rebuilding; old extractors are reindexed. Test links identify imports, not measured coverage.
+- Relative JavaScript/TypeScript imports link source files to tests in root or package-local `test/`, `tests/`, and `__tests__/` directories, including multiline imports and root-level `*.test.js` files; Python symbols can be narrowed by module-qualified name, including definitions in a package `__init__.py`. Repeated bindings of one name on a line appear only once in definition results.
+- Isolated Build file writers can use the same lookup against their private snapshots; files omitted from a snapshot remain unavailable to its index.
+- Version 0.19.48 introduces the read-only Build lookup without changing the existing code-search tools.

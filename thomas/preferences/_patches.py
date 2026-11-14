@@ -112,8 +112,14 @@ class AutonomyPatch(BaseModel):
         level_str = str(v or "").strip().upper()
         if not level_str:
             return None
-        # Valid levels: "L1", "L2", "L3", "L4"
-        valid_levels = {"L1", "L2", "L3", "L4"}
+        # Valid levels: "L1".."L5". This validator only decides what CAN be
+        # STORED as a saved default -- it used to also clamp "L5" (Autopilot)
+        # down to "L4", so a saved Autopilot default silently reverted itself.
+        # What actually RUNS is a separate decision: dial_elevation.cap gates
+        # every unapproved raise the same way, at read time (see
+        # thomas/server/chat_runtime_policy.py), so an ungranted L5 preference
+        # still runs capped even though it is now stored as written.
+        valid_levels = {"L1", "L2", "L3", "L4", "L5"}
         if level_str in valid_levels:
             return level_str
         # Try to parse numeric versions
@@ -123,7 +129,7 @@ class AutonomyPatch(BaseModel):
             level_num = level_str
         try:
             num = int(level_num)
-            num = max(1, min(4, num))  # clamp to 1-4
+            num = max(1, min(5, num))  # clamp to 1-5
             return f"L{num}"
         except (ValueError, TypeError):
             # Default to L1 (chat-only)
@@ -262,6 +268,7 @@ class AdvancedRuntimePatch(BaseModel):
     isolated_desktop_enabled: bool | None = None
     isolated_desktop_trust_mode: DesktopTrustMode | None = None
     isolated_desktop_hidden_by_default: bool | None = None
+    push_dev_after_landing: bool | None = None
 
     @field_validator("isolated_desktop_trust_mode", mode="before")
     @classmethod

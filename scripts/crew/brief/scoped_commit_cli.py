@@ -67,9 +67,19 @@ def run(argv: Sequence[str] | None = None, *, core: Any | None = None) -> int:
         default="",
         help="Short approval/audit reason required with --allow-scope-fallback.",
     )
+    parser.add_argument(
+        "--require-slot",
+        action="store_true",
+        help=(
+            "Refuse to land unless this agent holds the landing queue's slot right now (an open ticket in state "
+            "`holding`). Off by default; [landing_queue] require_slot in agent_safety.toml turns it on for everyone. "
+            "A dry run never needs a slot."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
     args = parser.parse_args(argv)
     include_paths = [token.strip() for raw in args.include for token in str(raw or "").split(",") if token.strip()]
+    extra = {"require_slot": True} if args.require_slot else {}
     result = core.commit_scoped_changes(
         message=args.message,
         agent=str(args.agent or "").strip() or None,
@@ -77,6 +87,7 @@ def run(argv: Sequence[str] | None = None, *, core: Any | None = None) -> int:
         dry_run=bool(args.dry_run),
         allow_scope_fallback=bool(args.allow_scope_fallback),
         fallback_reason=str(args.fallback_reason or ""),
+        **extra,
     )
     print(json.dumps(core._result_payload(result), sort_keys=True) if args.json else render_result(result))
     return 0 if result.ok else 1

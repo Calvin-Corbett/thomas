@@ -104,6 +104,7 @@ except ImportError:  # pragma: no cover
 # Import utilities from submodules
 import httpx  # noqa: E402
 
+from . import web_search_broker  # noqa: E402
 from .web_search_parsing import (  # noqa: E402
     _DDGHtmlResultsParser,
     _dedupe_by_url,
@@ -167,8 +168,13 @@ class WebSearchTool(Tool):
         "required": ["query"],
         "additionalProperties": False,
     }
+    # Behind the network fence the search broker searches (web_search_broker.py);
+    # the broker itself turns this off, so it searches for real.
+    use_search_broker: bool = True
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
+        if self.use_search_broker and web_search_broker.broker_url():
+            return await web_search_broker.search(args)
         start = _now_ms()
         timeout_s = _get_timeout_s()
         ua = _get_user_agent()
@@ -429,6 +435,9 @@ class WebFetchTool(Tool):
         ua = _get_user_agent()
         retries = _get_retries()
         max_chars, max_bytes = _get_fetch_limits()
+        if web_search_broker.broker_url():
+            # Behind the network fence: only a page a search returned, read by the broker.
+            return await web_search_broker.fetch(args, max_chars=max_chars)
 
         try:
             url = _safe_str(args.get("url")).strip()

@@ -24,7 +24,7 @@ except ImportError:
 # core/models layers can use them without importing the server layer. They are
 # re-exported here so existing `from thomas.server.openai_codex_oauth import ...`
 # callers keep working.
-from thomas.core.codex_auth import register_access_token_resolver
+from thomas.core.codex_auth import register_access_token_resolver, register_rejected_token_recovery
 from thomas.core.codex_provider import (
     OPENAI_CODEX_BASE_URL,
     OPENAI_CODEX_PROVIDER,
@@ -181,6 +181,7 @@ def import_local_codex_token(
     profile: str | None = None,
     *,
     codex_home: str | Path | None = None,
+    rejected_access_token: str = "",
 ) -> dict[str, Any] | None:
     """Adopt the current Windows-user Codex login into Thomas's secret store.
 
@@ -192,7 +193,7 @@ def import_local_codex_token(
     """
 
     stored = read_openai_codex_token(secret_store, profile)
-    if token_is_access_ready(stored):
+    if token_is_access_ready(stored) and not rejected_access_token:
         return stored
     if str(os.environ.get("THOMAS_IMPORT_LOCAL_CODEX_AUTH", "1")).strip().casefold() in {
         "0",
@@ -200,19 +201,19 @@ def import_local_codex_token(
         "no",
         "off",
     }:
-        return stored
+        return None if rejected_access_token else stored
     configured = str(codex_home or os.environ.get("CODEX_HOME") or "").strip()
     root = Path(configured).expanduser() if configured else Path.home() / ".codex"
     source = root / "auth.json"
     try:
         if not source.is_file() or source.stat().st_size > 1024 * 1024:
-            return stored
+            return None if rejected_access_token else stored
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
-        return stored
+        return None if rejected_access_token else stored
     tokens = payload.get("tokens") if isinstance(payload, dict) else None
     if not isinstance(tokens, dict):
-        return stored
+        return None if rejected_access_token else stored
     imported = {
         "access_token": str(tokens.get("access_token") or "").strip(),
         "refresh_token": str(tokens.get("refresh_token") or "").strip(),
@@ -220,8 +221,10 @@ def import_local_codex_token(
         "account_id": str(tokens.get("account_id") or "").strip(),
     }
     if not imported["access_token"] and not imported["refresh_token"]:
-        return stored
+        return None if rejected_access_token else stored
     candidate = normalize_token_payload(imported)
+    if rejected_access_token and candidate.get("access_token") == rejected_access_token:
+        return candidate  # Report the live login's rejected token without storing it again.
     if stored is not None:
         stored_pair = (
             str(stored.get("access_token") or "").strip(),
@@ -231,12 +234,14 @@ def import_local_codex_token(
             str(candidate.get("access_token") or "").strip(),
             str(candidate.get("refresh_token") or "").strip(),
         )
-        if imported_pair == stored_pair or not token_is_access_ready(candidate):
-            return stored
+        if imported_pair == stored_pair:
+            return None if rejected_access_token else stored
+        if not token_is_access_ready(candidate):
+            return None if rejected_access_token else stored
     try:
         return write_openai_codex_token(secret_store, profile, imported, persist=True)
     except (OpenAICodexOAuthError, OSError, RuntimeError, TypeError, ValueError):
-        return stored
+        return None if rejected_access_token else stored
 
 
 def write_openai_codex_token(
@@ -294,7 +299,22 @@ def access_token_from_store(secret_store: Any, profile: str | None = None) -> st
     return ""
 
 
+_server_secret_store: Any | None = None
+
+
+def bind_server_secret_store(store: Any) -> None:
+    """Use the same in-memory secrets as the running server for OAuth calls."""
+    global _server_secret_store
+    _server_secret_store = store
+
+
 def _default_secret_store() -> Any:
+    if _server_secret_store is not None:
+        secret_root = str(os.environ.get("THOMAS_SECRET_ROOT") or "").strip()
+        if not secret_root or (
+            getattr(_server_secret_store, "_root_dir", None) == Path(secret_root).expanduser().resolve()
+        ):
+            return _server_secret_store
     from thomas.core.config import load_config
     from thomas.server.secrets import SecretStore
 
@@ -426,7 +446,26 @@ async def _resolve_registered_access_token(profile: str | None = None) -> str:
     return await ensure_openai_codex_access_token(profile)
 
 
+async def _recover_rejected_access_token(profile: str | None, rejected_token: str) -> tuple[str | None, bool]:
+    """Discard a rejected stored copy; reuse a newer stored token or read the Codex login."""
+    store = _default_secret_store()
+    stored = read_openai_codex_token(store, profile)
+    stored_access = str((stored or {}).get("access_token") or "").strip()
+    if stored_access == rejected_token:
+        clear_openai_codex_token(store, profile)
+    elif stored_access and token_is_access_ready(stored):
+        return stored_access, False  # Another caller already replaced the rejected token.
+    imported = import_local_codex_token(store, profile, rejected_access_token=rejected_token)
+    replacement = str((imported or {}).get("access_token") or "").strip()
+    if replacement == rejected_token:
+        return None, True
+    if replacement and replacement != rejected_token and token_is_access_ready(imported):
+        return replacement, True  # The retry uses the access token read from the live Codex login.
+    return None, False
+
+
 register_access_token_resolver(_resolve_registered_access_token)
+register_rejected_token_recovery(_recover_rejected_access_token)
 
 
 def public_token_status(token_payload: dict[str, Any] | None) -> dict[str, Any]:

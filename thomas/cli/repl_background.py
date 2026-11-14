@@ -49,12 +49,13 @@ class BackgroundTaskManager:
             try:
                 # Capture the agent's final output text
                 result_parts: list[str] = []
+                from thomas.agent.kernel_wiring import build_agent_loop
                 from thomas.agent.loop import AgentLoop
                 from thomas.core.events import EventType
                 from thomas.core.token_economy import normalize_token_economy_level
 
                 session_id = str(getattr(self._repl, "_repl_session_id", "") or "repl").strip() or "repl"
-                agent = AgentLoop(
+                agent = build_agent_loop(
                     config=self._repl.config,
                     llm=self._repl._get_llm(),
                     tools=self._repl.tools,
@@ -64,6 +65,7 @@ class BackgroundTaskManager:
                     autonomy_level=self._repl._autonomy_level,
                     session_id=session_id,
                     run_id=task_id,
+                    default=AgentLoop,
                 )
                 token_economy = normalize_token_economy_level("optimal")
                 async for event in agent.run(prompt, token_economy=token_economy):

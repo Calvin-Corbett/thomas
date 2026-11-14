@@ -46,6 +46,9 @@ def _redirect_owned_root(monkeypatch: Any, tmp_path: Path) -> Path:
 
 def _mock_spawn(monkeypatch: Any) -> None:
     class _EmptyStdout:
+        async def read(self, _n: int = -1) -> bytes:
+            return await self.readline()
+
         async def readline(self) -> bytes:
             return b""
 
@@ -84,9 +87,7 @@ def test_new_chat_folder_is_renamed_by_its_first_message(tmp_path: Path, monkeyp
     _mock_spawn(monkeypatch)
 
     async def _body(client: TestClient) -> None:
-        created = await (
-            await client.post("/api/evolve/agent/conversations/new", json={})
-        ).json()
+        created = await (await client.post("/api/evolve/agent/conversations/new", json={})).json()
         assert created["ok"] is True, created
         cid = created["conversation"]["id"]
         generic_root = Path(created["conversation"]["project_root"])
@@ -99,9 +100,7 @@ def test_new_chat_folder_is_renamed_by_its_first_message(tmp_path: Path, monkeyp
         payload = await response.json()
         assert response.status == 200, payload
         bound = Path(payload["project_root"])
-        assert bound.name.startswith("Build a pacman game"), (
-            f"folder kept its generic New-chat name: {bound}"
-        )
+        assert bound.name.startswith("Build a pacman game"), f"folder kept its generic New-chat name: {bound}"
         assert not generic_root.exists(), "the generic folder was left behind"
 
         # The conversation still loads, from its renamed home.
@@ -118,9 +117,7 @@ def test_a_folder_with_user_files_is_never_renamed(tmp_path: Path, monkeypatch: 
     _mock_spawn(monkeypatch)
 
     async def _body(client: TestClient) -> None:
-        created = await (
-            await client.post("/api/evolve/agent/conversations/new", json={})
-        ).json()
+        created = await (await client.post("/api/evolve/agent/conversations/new", json={})).json()
         cid = created["conversation"]["id"]
         root = Path(created["conversation"]["project_root"])
         (root / "notes.txt").write_text("mine\n", encoding="utf-8")

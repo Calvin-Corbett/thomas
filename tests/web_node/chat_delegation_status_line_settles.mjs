@@ -8,32 +8,15 @@
 // does (bubbleInner over the stored message + its activity) and asserts the
 // promise settles into a statement of what actually happened — and that a
 // still-running task keeps its honest present tense untouched.
-import fs from 'node:fs';
-import vm from 'node:vm';
+import { installFeature, installInlineCore } from './chat_feature_fixture.mjs';
 
 const htmlPath = process.argv[2];
 if (!htmlPath) throw new Error('usage: node chat_delegation_status_line_settles.mjs <chat.html>');
-const html = fs.readFileSync(htmlPath, 'utf8');
-
-function functionSource(name, nextName) {
-  const start = html.indexOf(`function ${name}(`);
-  let end = html.indexOf(`\n    function ${nextName}(`, start);
-  if (end < 0) end = html.indexOf(`\n    async function ${nextName}(`, start);
-  if (start < 0 || end < 0) throw new Error(`could not extract ${name}`);
-  return html.slice(start, end);
-}
 
 const context = {};
-vm.createContext(context);
-vm.runInContext(
-  [
-    functionSource('esc', 'botHTML'),
-    functionSource('bubbleInner', 'copyMessageText'),
-    functionSource('_mdInline', 'mdToHtml'),
-    functionSource('mdToHtml', 'renderCanvas'),
-  ].join('\n'),
-  context,
-);
+installInlineCore(context, htmlPath);
+installFeature(context, htmlPath, 'markdown', ['mdToHtml']);
+installFeature(context, htmlPath, 'message_view', ['bubbleInner']);
 
 const PROMISE = "On it — this is running now, and I'll share the result when it's ready.";
 

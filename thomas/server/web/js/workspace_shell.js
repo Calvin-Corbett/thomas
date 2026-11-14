@@ -29,15 +29,26 @@
     return view;
   }
   function knownThemes() { overlayView(); return THEMES.slice(); }
+  /* Two looks only: Dark and Light (2026-11-10: "get rid of the theme selector, just make it dark or light ...
+     regular dark and regular light"). Dark keeps the default theme's old name, "nebula", because everything you
+     saved with Redesign is filed under it; tokens.css draws every theme but Light in the one Dark. The other
+     built-in names are still defined, and a choice of one resolves to the nearer of the two, for every page. */
+  const PLAIN = { dark: "nebula", aurora: "nebula", sandstone: "light" };
   function safeTheme(value) {
     overlayView();
     const theme = String(value || "").toLowerCase();
-    return THEMES.includes(theme) ? theme : "nebula";
+    const plain = PLAIN[theme] || theme;
+    return THEMES.includes(plain) ? plain : "nebula";
   }
   function storedTheme() {
     try {
       const stored = String(localStorage.getItem(STORAGE_KEY) || "").toLowerCase();
-      if (stored && knownThemes().includes(stored)) return stored;
+      if (stored && knownThemes().includes(stored)) {
+        const plain = safeTheme(stored);
+        // Kept, so the next page paints it from its first frame instead of the old theme for a moment.
+        if (plain !== stored) localStorage.setItem(STORAGE_KEY, plain);
+        return plain;
+      }
     } catch (_) { /* storage is optional */ }
     return safeTheme(overlayView().default_theme);
   }
@@ -58,11 +69,12 @@
        values from an earlier postMessage. */
     for (let i = root.style.length - 1; i >= 0; i--) {
       const key = root.style[i];
-      if (key && key.indexOf("--c-") === 0) root.style.removeProperty(key);
+      // A colour you saved is pinned here as important (overlay_runtime.js pinShellTokens); a theme repaint leaves it.
+      if (key && key.indexOf("--c-") === 0 && root.style.getPropertyPriority(key) !== "important") root.style.removeProperty(key);
     }
     if (options && options.vars) {
       Object.entries(options.vars).forEach(([key, value]) => {
-        if (key.startsWith("--c-") && typeof value === "string") root.style.setProperty(key, value);
+        if (key.startsWith("--c-") && typeof value === "string" && root.style.getPropertyPriority(key) !== "important") root.style.setProperty(key, value);
       });
     }
     document.querySelectorAll("[data-thomas-theme-select]").forEach((control) => { control.value = name; });
@@ -88,9 +100,27 @@
   // on every relay -- and it should be refused. Thomas's theme and UI-edit
   // traffic is internal, and an app he generated is untrusted content that has
   // no business receiving it. A srcdoc or about:blank frame reports an empty
-  // src and inherits this origin, so it still counts as ours.
+  // src and inherits this origin, so it still counts as ours -- unless it is
+  // sandboxed without allow-same-origin, which is the case a src test cannot see.
+  //
+  // A sandbox WITHOUT allow-same-origin gives the document an OPAQUE origin
+  // ("null") regardless of where its content came from, so `location.origin` can
+  // never match it and the browser refuses every post with the message quoted at
+  // the top of tests/test_shell_does_not_talk_to_generated_pages.py. The src test
+  // alone read all three of Thomas's sandboxed previews as "ours":
+  //   chat_canvas_view.js:85,92,125  .tc-live-frame / .tc-build-frame (Chat)
+  //   unified_code_surface.js:138    .tc-code-file-shot                (Build)
+  // all of them srcdoc with sandbox="allow-scripts" and therefore an empty src.
+  // Every theme switch and every UI-edit relay aimed at them and was refused,
+  // once per frame per message, on the two surfaces used most. Withholding
+  // allow-same-origin is deliberate there -- a generated page must not reach into
+  // Thomas -- so the frame is genuinely foreign and the fix is the same one this
+  // function already makes, applied one attribute further in.
   function isOurFrame(frame) {
-    const src = frame && frame.getAttribute ? String(frame.getAttribute("src") || "") : "";
+    if (!frame || !frame.getAttribute) return false;
+    const sandbox = frame.getAttribute("sandbox");
+    if (sandbox !== null && !/(?:^|\s)allow-same-origin(?:\s|$)/.test(sandbox)) return false;
+    const src = String(frame.getAttribute("src") || "");
     if (!src || src.startsWith("about:")) return true;
     try {
       return new URL(src, location.href).origin === location.origin;
@@ -98,15 +128,27 @@
       return false;
     }
   }
+  // One frame must never cost the others their message. `postMessage` still
+  // throws for reasons the checks above cannot rule out -- a frame can navigate
+  // cross-origin between the test and the call -- and an uncaught throw inside a
+  // forEach abandons the REST of the fan-out, so every frame later in document
+  // order would silently lose its theme or edit-mode update.
+  function postToFrame(frame, message) {
+    try {
+      frame.contentWindow.postMessage(message, location.origin);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
   function sendTheme(frame, theme, vars) {
     if (!frame || !frame.contentWindow || !isOurFrame(frame)) return false;
-    frame.contentWindow.postMessage({ type: "thomas:theme", theme: safeTheme(theme), vars: vars || null }, location.origin);
-    return true;
+    return postToFrame(frame, { type: "thomas:theme", theme: safeTheme(theme), vars: vars || null });
   }
   function relayFrames(message, skipWindow) {
     document.querySelectorAll("iframe").forEach((frame) => {
       if (frame.contentWindow && frame.contentWindow !== skipWindow && isOurFrame(frame)) {
-        frame.contentWindow.postMessage(message, location.origin);
+        postToFrame(frame, message);
       }
     });
   }
@@ -187,11 +229,13 @@
         if (workspaceModeAvailable(normalized) && perform()) {
           workspaceNavPending = null;
           hideWorkspaceNotice();
+          tellParentShown(normalized);
           return;
         }
         if (Date.now() >= pending.deadline) {
           workspaceNavPending = null;
           showWorkspaceNotice(normalized, "unavailable");
+          tellParentShown(normalized);
           return;
         }
         showWorkspaceNotice(normalized, "loading");
@@ -200,6 +244,28 @@
       attempt();
     };
     Promise.resolve(window.__thomasRuntimeReady).then(start, start);
+  }
+  /* The old page boots into its own default view and only then switches to the one that was asked for. Whoever
+     framed it keeps the frame hidden until this says the right page is on screen (2026-11-09: "when I click stuff,
+     I can see other pages load"). One frame later, so the switch has been drawn. */
+  function tellParentShown(mode) {
+    if (window.parent === window) return;
+    window.requestAnimationFrame(() => window.parent.postMessage({ type: "thomas:workspace:shown", mode }, location.origin));
+  }
+  const ARRIVE_GIVE_UP_MS = 9000;
+  function landed(frame, mode) {
+    if (frame.dataset.arriving !== mode) return;
+    delete frame.dataset.arriving;
+    frame.dataset.shownMode = mode;
+    frame.classList.remove("is-arriving");
+  }
+  /* Called by the page that frames an old-style workspace, before it shows the frame. */
+  function arrive(frame, mode) {
+    if (!frame || frame.dataset.shownMode === mode) return;
+    frame.dataset.arriving = mode;
+    frame.classList.add("is-arriving");
+    // A page that never answers must not stay a blank: show whatever it has.
+    window.setTimeout(() => landed(frame, mode), ARRIVE_GIVE_UP_MS);
   }
   function setRemoteEdit(active, save) {
     if (!window.ThomasUiEditMode) return;
@@ -249,7 +315,11 @@
     const suffix = query ? "?" + query : "";
     const css = document.createElement("link");
     css.rel = "stylesheet";
-    css.href = "/static/css/browser_shell.css" + suffix;
+    // Each file carries its own version (the page hands them over in __thomasAssetStamps), the same ones it preloaded,
+    // so a change to one chrome file re-downloads only that file. A file with no entry falls back to the page link's.
+    const stamps = window.__thomasAssetStamps || {};
+    const versionOf = (url) => { const stamp = stamps[url.replace("/static/", "")]; return stamp ? "?v=" + stamp : suffix; };
+    css.href = "/static/css/browser_shell.css" + versionOf("/static/css/browser_shell.css");
     document.head.appendChild(css);
     // Sequential: the shell's IIFE runs on load and needs the other two.
     const chain = [
@@ -260,12 +330,13 @@
       "/static/js/browser_shell_web.js",
       "/static/js/browser_shell_docs_policy.js",
       "/static/js/browser_shell_docs.js",
+      "/static/js/browser_shell_tearoff.js",
       "/static/js/browser_shell.js",
     ];
     (function loadNext(i) {
       if (i >= chain.length) return;
       const el = document.createElement("script");
-      el.src = chain[i] + suffix;
+      el.src = chain[i] + versionOf(chain[i]);
       el.addEventListener("load", () => loadNext(i + 1));
       el.addEventListener("error", () => console.error("[thomas] browser chrome failed to load:", chain[i]));
       document.body.appendChild(el);
@@ -297,6 +368,11 @@
     const message = event.data;
     if (message.type === "thomas:theme") applyTheme(message.theme, { vars: message.vars, persist: true });
     if (message.type === "thomas:workspace:navigate") navigateWorkspace(message.mode);
+    if (message.type === "thomas:workspace:shown") {
+      document.querySelectorAll(".tc-workspace-frame.is-arriving").forEach((frame) => {
+        if (frame.contentWindow === event.source) landed(frame, String(message.mode || ""));
+      });
+    }
     if (message.type === "thomas:ui-edit:set") setRemoteEdit(message.active);
     if (message.type === "thomas:ui-edit:state") {
       if (window.parent === window) {
@@ -319,6 +395,6 @@
     }
   });
 
-  window.ThomasWorkspaceShell = { THEMES, applyTheme, browserChromeDecision, knownThemes, navigateWorkspace, overlayView, relayFrames, safeTheme, sendTheme, storedTheme, workspaceKey };
+  window.ThomasWorkspaceShell = { THEMES, applyTheme, arrive, browserChromeDecision, knownThemes, navigateWorkspace, overlayView, relayFrames, safeTheme, sendTheme, storedTheme, workspaceKey };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true }); else init();
 }());

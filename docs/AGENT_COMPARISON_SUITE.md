@@ -1,6 +1,6 @@
 # Agent Comparison Suite
 
-This is the repeatable benchmark system for measuring Thomas against a reference agent implementation.
+This is the repeatable benchmark system for comparing Thomas against any competitor agent.
 
 ## What It Measures
 

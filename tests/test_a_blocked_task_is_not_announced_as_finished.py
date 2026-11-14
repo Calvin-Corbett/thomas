@@ -53,7 +53,9 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import make_mocked_request
 
+from thomas.chat.session_store import SessionMeta
 from thomas.core import task_bot_runtime
+from thomas.server.app_keys import APP_SESSION_LOCKS, APP_SESSION_LOCKS_LOCK
 from thomas.server.routes import chat_v2 as mod
 from thomas.server.routes import chat_v2_announcements as announcements
 
@@ -70,6 +72,9 @@ class _FakeLLM:
 
 
 class _FakeStore:
+    async def load_meta(self, sid):
+        return SessionMeta(session_id=sid)
+
     def __init__(self) -> None:
         self.conversation = mod.ConversationManager().append_message("user", "build me a thing")
         self.saved = False
@@ -93,6 +98,8 @@ def _assistant_lines(conversation) -> list[str]:  # noqa: ANN001
 def _harness(row: dict, monkeypatch: pytest.MonkeyPatch) -> tuple[web.Application, _FakeStore, list]:
     stamped: list = []
     app = web.Application()
+    app[APP_SESSION_LOCKS] = {}
+    app[APP_SESSION_LOCKS_LOCK] = asyncio.Lock()
     store = _FakeStore()
     app[mod.APP_SESSION_STORE] = store
     app[mod.APP_SESSION_LLM_CACHE] = {"sess-1": SimpleNamespace(llm=_FakeLLM())}
@@ -102,9 +109,7 @@ def _harness(row: dict, monkeypatch: pytest.MonkeyPatch) -> tuple[web.Applicatio
 
 
 def _announce(app: web.Application) -> dict:
-    request = make_mocked_request(
-        "POST", "/x", match_info={"session_id": "sess-1", "execution_id": "exec-9"}, app=app
-    )
+    request = make_mocked_request("POST", "/x", match_info={"session_id": "sess-1", "execution_id": "exec-9"}, app=app)
     response = asyncio.run(mod.handle_announce_delegation(request))
     return json.loads(response.text or "{}")
 
@@ -117,9 +122,7 @@ def _row(state: str, *, verified: bool) -> dict:
         "summary": "build me a thing",
         "progress_summary": "waiting on approval to touch the repo",
         "proof_status": "verified" if verified else "missing",
-        "proof": (
-            {"status": "verified", "artifacts": [{"kind": "text", "path": "notes.md"}]} if verified else {}
-        ),
+        "proof": ({"status": "verified", "artifacts": [{"kind": "text", "path": "notes.md"}]} if verified else {}),
     }
 
 
@@ -163,6 +166,8 @@ def test_announcing_a_blocked_task_does_not_silence_its_real_completion(
     row = _row("blocked", verified=False)
     stamped: list = []
     app = web.Application()
+    app[APP_SESSION_LOCKS] = {}
+    app[APP_SESSION_LOCKS_LOCK] = asyncio.Lock()
     store = _FakeStore()
     app[mod.APP_SESSION_STORE] = store
     app[mod.APP_SESSION_LLM_CACHE] = {"sess-1": SimpleNamespace(llm=_FakeLLM())}

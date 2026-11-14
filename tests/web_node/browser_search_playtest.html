@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thomas Search interaction fixture</title>
+  <link rel="stylesheet" href="../../thomas/server/web/css/tokens.css">
+  <link rel="stylesheet" href="../../thomas/server/web/css/browser_shell.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--c-bg); color: var(--c-text); }
+    #tc-shell { display: flex; flex-direction: column; height: 100vh; position: relative; }
+    #bt-titlebar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; color: var(--c-text); background: var(--c-sidebar); }
+    #bt-omni { flex: 1; padding: 10px 14px; border: 1px solid var(--c-border-2); border-radius: 12px; color: var(--c-text); background: var(--c-composer-bg); }
+    #fixture-note { font: 11px var(--font-mono); color: var(--c-muted); }
+    #bt-body { position: relative; flex: 1; min-height: 0; }
+    #tab { display: none; }
+  </style>
+</head>
+<body>
+  <div id="tc-shell">
+    <div id="bt-titlebar"><span>Thomas</span><input id="bt-omni" aria-label="Address and search bar"><span id="fixture-note">Search interaction fixture</span></div>
+    <div id="bt-body"></div><div id="tab"><span class="bt-tab-ic"></span><span class="bt-tab-title"></span></div>
+  </div>
+  <script src="../../thomas/server/web/js/browser_shell_search.js"></script>
+  <script>
+    // Only the service boundary is stubbed: the markup, layout, fetch/abort,
+    // events and page lifecycle are the production Search implementation.
+    const realFetch = window.fetch.bind(window);
+    let fail = false;
+    window.ThomasChatStreamConsumer = {
+      consume: async (_, emit) => emit({ type: 'text', text: 'Thomas Search keeps the results readable and opens the original source when you select one.' })
+    };
+    window.fetch = async (url, options = {}) => {
+      if (String(url) === '/api/v2/chat') return { ok: true };
+      if (String(url).startsWith('/api/search/web')) {
+        const q = new URL(url, location.href).searchParams.get('q');
+        if (q === 'slow first') await new Promise(resolve => setTimeout(resolve, 700));
+        else await new Promise(resolve => setTimeout(resolve, 100));
+        if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (fail) { fail = false; return { ok: false, status: 503, json: async () => ({ ok: false, error: 'Search temporarily unavailable' }) }; }
+        if (q === 'no results') return { ok: true, json: async () => ({ ok: true, provider: 'Test results', results: [] }) };
+        return { ok: true, json: async () => ({ ok: true, provider: 'Test results', results: [
+          { title: q + ' — documentation', url: 'https://example.com/docs', snippet: 'A real result row driven by the search UI.' },
+          { title: 'Explore ' + q, url: 'https://example.org/guide', snippet: 'Open this result in the current browser tab.' }
+        ] }) };
+      }
+      return realFetch(url, options);
+    };
+    const tab = { id: 'fixture-tab', el: document.querySelector('#tab'), page: null };
+    const bar = document.querySelector('#bt-omni');
+    let browser;
+    const context = {
+      h: html => { const holder = document.createElement('div'); holder.innerHTML = html; return holder.firstElementChild; },
+      body: document.querySelector('#bt-body'), icon: '✦', desktop: null, viewTabs: new Map(),
+      setTitle: (_, title) => { document.title = title + ' — Thomas Search'; },
+      setStatus: (_, status) => { document.body.dataset.status = status; },
+      activate: () => { tab.page.classList.add('is-active'); bar.value = tab.url; },
+      openUrl: url => {
+        if (browser.isSearchUrl(url)) browser.show(tab, url);
+        else { tab.searchController.abort(); tab.page.innerHTML = '<div class="bt-sr-page"><p class="bt-sr-eyebrow">Navigated to web result</p><h1 class="bt-sr-q"></h1></div>'; tab.page.querySelector('h1').textContent = url; bar.value = url; }
+      }
+    };
+    browser = ThomasBrowserSearch.wire(context);
+    bar.addEventListener('keydown', event => { if (event.key === 'Enter') context.openUrl(browser.toUrl(bar.value)); });
+    window.fixture = { search: q => context.openUrl(browser.toUrl(q)), failNext: () => { fail = true; } };
+    window.fixture.search('Thomas browser design');
+  </script>
+</body>
+</html>

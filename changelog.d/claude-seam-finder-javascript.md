@@ -1,0 +1,3 @@
+### Added
+
+- **The seam finder reads JavaScript too.** Function declarations, classes and const bindings are its units there, references by identifier, with strings and comments stripped so a brace in a template does not count. A file wrapped in one closure, which most of Thomas's web modules are, is read one level down and the report says so; a file with no units at all, such as a settings template, is named as such rather than reported as one giant header. On the two oversized JavaScript files it says honestly that one is two halves sharing 26 names, a design job rather than a cut, and the other is a template.

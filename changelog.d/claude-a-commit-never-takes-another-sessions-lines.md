@@ -1,0 +1,3 @@
+### Fixed
+
+- **A commit no longer takes another session's unfinished lines in a file they both changed.** When two sessions work in one checkout and both change one file, whoever committed first used to carry the other's lines under their own message, which is how a Build commit today carried a line of the voice change. A session that leaves files written but not yet committed now holds them, and Thomas's commit tool refuses a held file with a sentence naming the file, who holds it and why, until that work has committed it. A hold ends by itself when its process ends or its lines are committed, so nothing gets stuck.

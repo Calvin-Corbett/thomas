@@ -27,7 +27,7 @@ THOMAS_DIR = REPO_ROOT / "thomas"
 OUTPUT = REPO_ROOT / "MODULE_REGISTRY.md"
 
 # Directories to skip
-SKIP_DIRS = {"__pycache__", ".mypy_cache", ".pytest_cache", "_archived"}
+SKIP_DIRS = {"__pycache__", ".mypy_cache", ".pytest_cache"}
 
 
 def _parse_status_md(path: Path) -> tuple[str, str]:

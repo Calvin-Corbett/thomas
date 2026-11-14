@@ -132,7 +132,7 @@ def _pump_stream(
 
 
 def _run_attempt(
-    shell_cmd: list[str],
+    shell_cmd: list[str] | str,
     cwd: str | None,
     env: dict[str, str] | None,
     timeout: float,
@@ -141,6 +141,15 @@ def _run_attempt(
     lock: threading.Lock,
 ) -> _AttemptResult:
     popen_kwargs: dict[str, object] = {}
+    if isinstance(shell_cmd, str):
+        # A whole command line, handed to the shell exactly as typed. On Windows
+        # an argv list is joined by subprocess.list2cmdline, which escapes inner
+        # quotes as \" -- and cmd.exe does not understand that escape, so any
+        # command containing quotes arrived mangled. Measured 2026-09-22:
+        # `python -c "print(7*6)"` answered "is not recognized" instead of 42.
+        # The process topology is unchanged (cmd.exe is still the direct child),
+        # so kill_process_tree behaves exactly as before.
+        popen_kwargs["shell"] = True
     if sys.platform != "win32":
         # Own process group so kill_process_tree can killpg the whole tree.
         popen_kwargs["start_new_session"] = True
@@ -213,7 +222,7 @@ def _run_attempt(
 
 
 def run_spooled_command(
-    shell_cmd: list[str],
+    shell_cmd: list[str] | str,
     *,
     cwd: str | None = None,
     env: dict[str, str] | None = None,
@@ -225,7 +234,10 @@ def run_spooled_command(
     """Run ``shell_cmd`` with output spooling, hang detection, and retry.
 
     Args:
-        shell_cmd: Argv list (already shell-wrapped by the caller).
+        shell_cmd: Argv list (already shell-wrapped by the caller), or a whole
+            command line string to hand to the shell as typed. Prefer the string
+            on Windows: an argv list is joined by ``subprocess.list2cmdline``,
+            which escapes inner quotes in a way ``cmd.exe`` does not understand.
         cwd: Working directory for the process.
         env: Environment for the process.
         timeout: Hard wall-clock limit per attempt, in seconds.

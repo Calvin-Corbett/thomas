@@ -48,6 +48,9 @@ def _mock_agent_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """Let a run start without spawning the real builder subprocess."""
 
     class _EmptyStdout:
+        async def read(self, _n: int = -1) -> bytes:
+            return await self.readline()
+
         async def readline(self) -> bytes:
             return b""
 
@@ -66,6 +69,13 @@ def _mock_agent_process(monkeypatch: pytest.MonkeyPatch) -> None:
         return _FinishedProcess()
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
+
+    # A GPT run now needs the ChatGPT sign-in before it starts, and refuses with
+    # chatgpt_auth_unavailable without one; these tests are about folders, not auth.
+    async def _oauth(_app: Any, _family: str, **_agent: Any) -> tuple[str, None]:
+        return "test-oauth-token", None
+
+    monkeypatch.setattr(evolve_agent_routes, "prepare_code_oauth_credential", _oauth)
 
 
 # ── The fix: a new task owns its folder ──────────────────────────────────────
@@ -341,7 +351,7 @@ def test_a_catalog_root_that_is_a_real_repository_is_still_honoured(
     elsewhere = tmp_path / "someproject"
     elsewhere.mkdir()
     _init_repo(elsewhere)
-    monkeypatch.setattr(fcp, "thomas_source_repo_root", lambda: None)
+    monkeypatch.setattr(fcp, "thomas_source_repo_root", lambda: tmp_path / "source")
 
     assert evolve_agent_routes._new_task_project_root(elsewhere, "build a thing") == elsewhere.resolve()
 

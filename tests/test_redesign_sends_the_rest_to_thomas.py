@@ -10,7 +10,7 @@ needed no edit.
 
 Now the brief is a directive to change Thomas's own UI source, it names the
 ask and everything the overlay could not do, and the client opens the thread
-and sends it whenever the overlay could not carry the whole ask.
+and leaves it in the composer, unsent, whenever the overlay could not carry the whole ask.
 """
 
 from __future__ import annotations
@@ -60,12 +60,22 @@ def test_the_brief_says_what_the_overlay_already_did() -> None:
     assert "already" in brief.lower() and "backgroundColor" in brief
 
 
-def test_the_client_sends_the_thread_when_the_overlay_could_not_do_the_ask() -> None:
+def test_the_client_opens_the_thread_and_leaves_its_prompt_in_the_composer_unsent() -> None:
+    """When the overlay could not carry the whole ask, the client opens the Code thread and puts the prompt in
+    the composer. It never sends it: a redesign must not start a run that edits source unasked."""
     js = (ROOT / "thomas" / "server" / "web" / "js" / "ui_redesign_select.js").read_text(
         encoding="utf-8", errors="replace"
     )
-    assert "needsCode" in js, "the client still opens a thread only when the overlay changed something"
-    assert "async function sendThread" in js and ".send(prompt" in js, (
-        "the thread is parked in the composer instead of sent"
+    start = js.index("function openThread()")
+    body = js[start : js.index("\n  }\n", start)]
+
+    assert "openConversation(thread.id)" in body, "the thread is not opened"
+    assert "document.getElementById('tc-input')" in body and "field.value = prompt" in body, (
+        "the prompt is not put in the composer"
     )
-    assert "Sent to Thomas" in js
+    for sending in (".send(", "sendThread", ".click()", "requestSubmit", "submit("):
+        assert sending not in body, f"openThread sends the prompt on its own ({sending})"
+    assert "async function sendThread" not in js, "an automatic sender exists again"
+    # What the result panel tells you, and the buttons it offers.
+    assert "Code thread ready" in js
+    assert "Open in Code" in js and "Change stock Thomas too" in js

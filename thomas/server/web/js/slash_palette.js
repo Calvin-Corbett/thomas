@@ -88,7 +88,9 @@
   let items = [];
 
   function composer() {
-    return document.querySelector('textarea[placeholder^="Message Thomas"], textarea[aria-label^="Message Thomas"]');
+    // The one composer, by id. Matching on the placeholder missed Work (whose placeholder differs) and, in Build, found the
+    // side drawer's "Message Thomas…" box first.
+    return document.getElementById('tc-input') || document.querySelector('textarea[placeholder^="Message Thomas"], textarea[aria-label^="Message Thomas"]');
   }
   function styleOnce() {
     if (document.getElementById('thomas-slash-style')) return;

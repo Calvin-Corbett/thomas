@@ -17,8 +17,10 @@ from typing import Any
 
 import httpx
 
-from thomas.core.codex_auth import resolve_access_token
+from thomas.core import provider_trouble
+from thomas.core.codex_auth import current_access_token, recover_rejected_token, resolve_access_token
 from thomas.core.codex_provider import OPENAI_CODEX_BASE_URL
+from thomas.core.llm_request_admission import admitted_stream, finish_admitted_attempt
 from thomas.core.llm_shared import (
     RETRYABLE_STATUS,
     LLMError,
@@ -26,15 +28,20 @@ from thomas.core.llm_shared import (
     TokenUsage,
     ToolCallAccumulator,
     embedded_tool_call,
+    quota_error_fields,
 )
+from thomas.core.llm_stream_args import coerce_args_fragment
 from thomas.core.llm_streaming_anthropic import stream_anthropic
 from thomas.core.llm_streaming_codex import (
     _build_openai_codex_request,
     _extract_responses_usage,
+    _remember_reasoning,
+    _replayable_reasoning,
     _response_item,
 )
 
 log = logging.getLogger(__name__)
+_ASK_AGAIN = ("overloaded", "server_error")  # provider_trouble kinds a codex request is sent again for
 
 __all__ = ["stream_anthropic", "stream_openai", "stream_openai_codex"]
 
@@ -57,6 +64,7 @@ async def stream_openai(
 
     for attempt in range(max_retries):
         lease = await owner.begin_budget_attempt(messages, tools)
+        attempt_state = {"started": False}
         try:
             body = owner._build_openai_request(
                 messages,
@@ -64,21 +72,29 @@ async def stream_openai(
                 stream=True,
                 max_output_tokens=getattr(lease, "output_cap", None),
             )
-            async with client.stream("POST", url, json=body, params=params) as resp:
+            async with admitted_stream(
+                owner, client, "POST", url, attempt_state=attempt_state, json=body, params=params
+            ) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
                     if resp.status_code == 429:
+                        error_code, safe_headers = quota_error_fields(error_body, resp.headers)
                         retry_after_s = owner._retry_after_seconds(getattr(resp, "headers", None))
-                        owner._mark_rate_limited(owner.config, retry_after_s)
                         wait_note = (
                             f" Retry after about {int(retry_after_s)}s."
                             if retry_after_s is not None and retry_after_s > 0
                             else ""
                         )
+                        # The park keeps these words, so the next message is told
+                        # what the provider said rather than what the park says.
+                        detail = f"HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}"
+                        owner._mark_rate_limited(owner.config, retry_after_s, detail)
                         raise LLMError(
-                            f"HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}",
+                            detail,
                             status=429,
                             retryable=True,
+                            error_code=error_code,
+                            response_headers=safe_headers,
                         )
                     if resp.status_code in RETRYABLE_STATUS:
                         last_error = LLMError(
@@ -97,9 +113,12 @@ async def stream_openai(
                         if delay > 0:
                             await asyncio.sleep(delay)
                         continue
+                    error_code, safe_headers = quota_error_fields(error_body, resp.headers)
                     raise LLMError(
                         f"HTTP {resp.status_code}: {error_body.decode(errors='replace')[:500]}",
                         status=resp.status_code,
+                        error_code=error_code,
+                        response_headers=safe_headers,
                     )
 
                 tool_calls: dict[int, ToolCallAccumulator] = {}
@@ -160,16 +179,6 @@ async def stream_openai(
                         return unfinished[0]
                     return None
 
-                def _coerce_args_fragment(raw: Any) -> str:
-                    if raw is None:
-                        return ""
-                    if isinstance(raw, str):
-                        return raw
-                    try:
-                        return json.dumps(raw, ensure_ascii=False)
-                    except Exception:
-                        return str(raw)
-
                 async def _emit_pending_tool_ends() -> None:
                     for tc in tool_calls.values():
                         if not tc.finished:
@@ -184,6 +193,9 @@ async def stream_openai(
                 # `async for` unwind cleanly prevents noisy asyncio/httpx shutdown
                 # errors on some platforms.
                 done_emitted = False
+                # The exact model the provider says answered, carried on `done`
+                # so a Build turn can record it (build_model_receipt.py).
+                reported_model = ""
 
                 async for line in resp.aiter_lines():
                     pending_events: list[StreamEvent] = []
@@ -201,7 +213,7 @@ async def stream_openai(
                         await _emit_pending_tool_ends()
                         for ev in pending_events:
                             yield ev
-                        yield StreamEvent(type="done")
+                        yield StreamEvent(type="done", data={"model": reported_model} if reported_model else {})
                         done_emitted = True
                         break
 
@@ -209,6 +221,8 @@ async def stream_openai(
                         chunk = json.loads(data_str)
                     except json.JSONDecodeError:
                         continue
+                    if isinstance(chunk, dict) and chunk.get("model"):
+                        reported_model = str(chunk["model"])
 
                     # Extract usage if present
                     if "usage" in chunk and chunk["usage"]:
@@ -293,7 +307,7 @@ async def stream_openai(
                         elif tc_id_raw:
                             tool_call_idx_by_id[tc_id_raw] = idx
 
-                        args_delta = _coerce_args_fragment(func_obj.get("arguments", ""))
+                        args_delta = coerce_args_fragment(func_obj.get("arguments", ""))
                         if args_delta:
                             tool_calls[idx].arguments += args_delta
                             pending_events.append(
@@ -330,7 +344,7 @@ async def stream_openai(
                         if legacy_name and not tool_calls[legacy_tool_idx].name:
                             tool_calls[legacy_tool_idx].name = legacy_name
 
-                        legacy_args = _coerce_args_fragment(legacy_fc.get("arguments", ""))
+                        legacy_args = coerce_args_fragment(legacy_fc.get("arguments", ""))
                         if legacy_args:
                             tool_calls[legacy_tool_idx].arguments += legacy_args
                             pending_events.append(
@@ -383,7 +397,7 @@ async def stream_openai(
                 continue
             raise LLMError(f"Connection failed after {max_retries} attempts: {e}")
         finally:
-            await owner.finish_budget_attempt(lease)
+            await finish_admitted_attempt(owner, lease, attempt_state)
 
     raise last_error or LLMError("Request failed after retries")
 
@@ -398,9 +412,15 @@ async def stream_openai_codex(
     """Stream through ChatGPT's native Codex Responses endpoint."""
     base = str(owner.config.base_url or OPENAI_CODEX_BASE_URL).rstrip("/")
     url = base + "/responses"
+    profile = getattr(owner.config, "name", "") or "chatgpt"
     access_token = str(getattr(owner.config, "api_key", "") or "").strip()
-    if not access_token:
-        access_token = await resolve_access_token(getattr(owner.config, "name", "") or "chatgpt")
+    # Only a client that brought its own token (a Build child) keeps a recovered one in its config. A shared config
+    # carries none and reads the store on every call: a token written into it outlived sign-outs and account switches.
+    brought_token = bool(access_token)
+    if access_token:
+        access_token = await current_access_token(profile, access_token)
+    else:
+        access_token = await resolve_access_token(profile)
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
@@ -411,10 +431,16 @@ async def stream_openai_codex(
     max_retries = max(1, int(owner._max_retries))
     base_delay = max(0.0, float(owner._base_retry_delay))
 
-    for attempt in range(max_retries):
+    auth_retry_used = False
+    different_stored_token_retried = False
+    live_token_used = False
+    live_token_available_next_call = False
+    live_token_checked_after_stored_retry = False
+    for attempt in range(max_retries + 1):
         stream_event_emitted = False
         done_emitted = False
         lease = await owner.begin_budget_attempt(messages, tools)
+        attempt_state = {"started": False}
         try:
             output_cap = int(getattr(lease, "output_cap", owner.config.max_tokens) or 0)
             if lease is not None and output_cap < max(1, int(owner.config.max_tokens or 1)):
@@ -430,23 +456,38 @@ async def stream_openai_codex(
                 tools,
                 turn_user_content=turn_user_content,
             )
-            async with client.stream("POST", url, json=body, headers=headers) as resp:
+            # The ChatGPT backend keeps one session's calls together by this header; with only the body's key, 37% of
+            # requests that merely grew at the end were served from cache (2026-11-06).
+            if body.get("prompt_cache_key"):
+                headers["session_id"] = str(body["prompt_cache_key"])
+            async with admitted_stream(
+                owner, client, "POST", url, attempt_state=attempt_state, json=body, headers=headers
+            ) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
                     if resp.status_code == 429:
+                        error_code, safe_headers = quota_error_fields(error_body, resp.headers)
                         retry_after_s = owner._retry_after_seconds(getattr(resp, "headers", None))
-                        owner._mark_rate_limited(owner.config, retry_after_s)
                         wait_note = (
                             f" Retry after about {int(retry_after_s)}s."
                             if retry_after_s is not None and retry_after_s > 0
                             else ""
                         )
+                        # Kept by the park: your plan's limit outlives it by a day
+                        # and a half, and the next message must still name it.
+                        detail = (
+                            f"ChatGPT/Codex HTTP 429 rate limited.{wait_note} "
+                            f"{error_body.decode(errors='replace')[:240]}"
+                        )
+                        owner._mark_rate_limited(owner.config, retry_after_s, detail)
                         raise LLMError(
-                            f"ChatGPT/Codex HTTP 429 rate limited.{wait_note} {error_body.decode(errors='replace')[:240]}",
+                            detail,
                             status=429,
                             retryable=True,
+                            error_code=error_code,
+                            response_headers=safe_headers,
                         )
-                    if resp.status_code in RETRYABLE_STATUS:
+                    if resp.status_code in RETRYABLE_STATUS and attempt < max_retries - 1:
                         last_error = LLMError(
                             f"ChatGPT/Codex HTTP {resp.status_code}: {error_body.decode(errors='replace')[:200]}",
                             status=resp.status_code,
@@ -456,21 +497,78 @@ async def stream_openai_codex(
                         if delay > 0:
                             await asyncio.sleep(delay)
                         continue
+                    error_code, safe_headers = quota_error_fields(error_body, resp.headers)
+                    if resp.status_code == 401:
+                        if not auth_retry_used or different_stored_token_retried:
+                            # A second rejected stored copy still needs checking against
+                            # the live login, but must not get a second request retry.
+                            previously_retried = auth_retry_used
+                            auth_retry_used = True
+                            replacement, live_token_checked = await recover_rejected_token(profile, access_token)
+                            if previously_retried:
+                                live_token_checked_after_stored_retry = live_token_checked
+                                if replacement:
+                                    if brought_token:
+                                        owner.config.api_key = replacement
+                                    live_token_available_next_call = live_token_checked
+                            elif replacement:
+                                live_token_used = live_token_checked
+                                different_stored_token_retried = not live_token_checked
+                                access_token = replacement
+                                # Keep the token for the next model call in this run.
+                                if brought_token:
+                                    owner.config.api_key = replacement
+                                headers["Authorization"] = f"Bearer {access_token}"
+                                continue
+                            else:
+                                live_token_used = live_token_checked
+                        reason = (
+                            "revoked or invalidated"
+                            if error_code == "token_revoked" or b"invalidated oauth token" in error_body.lower()
+                            else "expired"
+                            if error_code in {"token_expired", "expired_token"} or b"expired" in error_body.lower()
+                            else "rejected"
+                        )
+                        source = "The live Codex login" if live_token_used else "The stored token"
+                        guidance = (
+                            " Run `codex login` to sign in again."
+                            if live_token_used
+                            else " A retry with a different stored token was also rejected."
+                            if different_stored_token_retried
+                            else " No retry with a different access token was made."
+                        )
+                        next_call_note = (
+                            " The live Codex login was imported for the next call; it was not retried here."
+                            if live_token_available_next_call
+                            else " The live Codex login still contains the rejected stored token."
+                            if live_token_checked_after_stored_retry
+                            else ""
+                        )
+                        raise LLMError(
+                            f"ChatGPT/Codex HTTP 401: {source} was {reason} by the server.{guidance}{next_call_note}",
+                            status=401,
+                            error_code=error_code,
+                        )
                     raise LLMError(
                         f"ChatGPT/Codex HTTP {resp.status_code}: {error_body.decode(errors='replace')[:500]}",
                         status=resp.status_code,
+                        error_code=error_code,
+                        response_headers=safe_headers,
                     )
 
                 tool_calls: dict[str, ToolCallAccumulator] = {}
-                # Responses-API function calls carry TWO ids: an item id ("fc_...")
-                # and a call_id ("call_..."). output_item.added/done expose both, but
-                # the argument-delta events reference only the item id. We MUST key
-                # every tool call by the canonical call_id (what function_call_output
-                # references back), so map item_id -> call_id and resolve deltas
-                # through it. Otherwise the deltas spawn a second, mis-keyed tool call
-                # that leaks into history and breaks the next turn with
-                # "No tool call found for function call output".
+                # Calls carry an item id ("fc_") and a call_id ("call_"); argument deltas name only the item id.
+                # Key every call by call_id (what function_call_output names) via item_id -> call_id, or deltas
+                # spawn a mis-keyed call: the next turn fails "No tool call found for function call output".
                 item_to_call: dict[str, str] = {}
+                reasoning_items: list[dict[str, Any]] = []  # replayed on the next step (llm_streaming_codex)
+                # `response.model` from response.created/completed: the exact model
+                # the provider says answered, carried on `done` for the Build turn.
+                reported_model = ""
+
+                def _done() -> StreamEvent:
+                    return StreamEvent(type="done", data={"model": reported_model} if reported_model else {})
+
                 event_name = ""
                 data_lines: list[str] = []
 
@@ -488,12 +586,12 @@ async def stream_openai_codex(
                     return pending
 
                 async def _process_sse(payload: str, sse_event: str) -> list[StreamEvent]:
-                    nonlocal done_emitted
+                    nonlocal done_emitted, reported_model
                     events: list[StreamEvent] = []
                     data_str = payload.strip()
                     if not data_str or data_str == "[DONE]":
                         events.extend(await _emit_pending_tool_ends())
-                        events.append(StreamEvent(type="done"))
+                        events.append(_done())
                         done_emitted = True
                         return events
                     try:
@@ -514,6 +612,9 @@ async def stream_openai_codex(
                         return events
 
                     event_type = str(chunk.get("type") or sse_event or "").strip()
+                    response_obj = chunk.get("response")
+                    if isinstance(response_obj, dict) and response_obj.get("model"):
+                        reported_model = str(response_obj["model"])
                     usage = _extract_responses_usage(chunk)
                     if usage is not None:
                         owner.session_usage.add(usage)
@@ -557,6 +658,7 @@ async def stream_openai_codex(
                             events.append(StreamEvent(type="tool_call_delta", data={"id": call_id, "delta": delta}))
                     elif event_type == "response.output_item.done":
                         item = _response_item(chunk)
+                        reasoning_items.extend(_replayable_reasoning(item))
                         if str(item.get("type") or "") == "function_call":
                             call_id = str(item.get("call_id") or item.get("id") or "").strip()
                             if call_id:
@@ -577,8 +679,9 @@ async def stream_openai_codex(
                                     )
                                 )
                     elif event_type == "response.completed":
+                        _remember_reasoning(owner, reasoning_items, list(tool_calls))
                         events.extend(await _emit_pending_tool_ends())
-                        events.append(StreamEvent(type="done"))
+                        events.append(_done())
                         done_emitted = True
                     elif event_type == "response.incomplete":
                         response = chunk.get("response")
@@ -635,15 +738,12 @@ async def stream_openai_codex(
                         continue
                     raise last_error
                 if not stream_event_emitted:
-                    # The response completed and carried nothing. Returning here
-                    # hands the caller an empty stream that is indistinguishable
-                    # from a successful one, and every layer above then invents
-                    # its own explanation: the Canvas worker calls it "empty
-                    # output", retries, and finally reports "Canvas generation
-                    # failed before a verified result was produced" -- while the
-                    # diagnostics show only "0 events, 0 tokens". Someone asking
-                    # for a graph is told the canvas failed, with nothing
-                    # anywhere saying the model returned an empty completion.
+                    # The response completed and carried nothing. Returning here hands the caller an empty stream that
+                    # is indistinguishable from a successful one, and every layer above then invents its own
+                    # explanation: the Canvas worker calls it "empty output", retries, and finally reports "Canvas
+                    # generation failed before a verified result was produced" -- while the diagnostics show only "0
+                    # events, 0 tokens". Someone asking for a graph is told the canvas failed, with nothing anywhere
+                    # saying the model returned an empty completion.
                     raise LLMError(
                         "ChatGPT/Codex completed the response without returning any content. "
                         "This usually means the request was rejected upstream (most often "
@@ -654,6 +754,12 @@ async def stream_openai_codex(
                     )
                 return
 
+        except LLMError as e:  # nothing reached the caller yet: an overloaded model is asked again (2026-10-26)
+            trouble = provider_trouble.classify(str(e), e.status)
+            if stream_event_emitted or attempt >= max_retries - 1 or getattr(trouble, "kind", "") not in _ASK_AGAIN:
+                raise
+            last_error = e
+            await asyncio.sleep(max(base_delay * (2**attempt), 15.0 * (attempt + 1)))
         except httpx.HTTPStatusError as e:
             if e.response.status_code in RETRYABLE_STATUS and attempt < max_retries - 1:
                 delay = base_delay * (2**attempt)
@@ -683,6 +789,6 @@ async def stream_openai_codex(
                 retryable=True,
             ) from e
         finally:
-            await owner.finish_budget_attempt(lease)
+            await finish_admitted_attempt(owner, lease, attempt_state)
 
     raise last_error or LLMError("ChatGPT/Codex request failed after retries")

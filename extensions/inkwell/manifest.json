@@ -26,7 +26,8 @@
     "inkwell.notes",
     "inkwell.sketch",
     "inkwell.reminders",
-    "inkwell.smart_analysis"
+    "inkwell.smart_analysis",
+    "healthcheck"
   ],
   "tags": [
     "productivity",

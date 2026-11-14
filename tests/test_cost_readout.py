@@ -46,6 +46,13 @@ def test_readout_folds_the_stream_and_prices_like_the_cost_tracker() -> None:
     # A local provider is never priced at the cloud defaults.
     assert report["local_line"] == "This reply 4.1k in · 36 out · local, no charge · This chat 4.1k"
     assert report["local_row_line"] == "This reply 4.1k in · 2 out · local, no charge · This chat 4.1k"
+    assert report["background_reply_hidden"]
+    assert report["return_to_original_cost"] == "This reply 10 in · 2 out"
+    assert report["build_hides_chat_cost"]
+    assert report["work_hides_chat_cost"]
+    assert report["second_chat_cost"] == "This reply 30 in · 4 out"
+    assert report["new_chat_hides_old_cost"]
+    assert report["original_receipt_preserved"]
 
 
 def test_the_chat_page_carries_the_readout_once() -> None:

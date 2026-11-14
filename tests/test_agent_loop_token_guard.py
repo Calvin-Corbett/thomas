@@ -1,4 +1,7 @@
 import asyncio
+import re
+
+import pytest
 
 from thomas.agent.loop import AgentLoop
 from thomas.agent.loop_streaming import build_token_report
@@ -7,6 +10,12 @@ from thomas.core.events import EventType
 from thomas.core.llm import LLMError, StreamEvent
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.registry import ToolRegistry
+
+
+@pytest.fixture(autouse=True)
+def _run_from_an_empty_folder(tmp_path, monkeypatch):
+    """A run's finish check walks the working directory; run from a copy of the repo, that is the whole repo."""
+    monkeypatch.chdir(tmp_path)
 
 
 class _AlwaysToolCallingLLM:
@@ -533,6 +542,7 @@ def test_long_multi_pass_run_compacts_context_without_raw_token_abort(monkeypatc
         }
         for index in range(40)
     ]
+    seeded_turns = [m["content"] for m in seeded_conversation]  # the loop edits its list in place
     agent = AgentLoop(cfg, llm, tools, conversation=seeded_conversation, autonomy_level=4)
 
     async def run_once():
@@ -553,15 +563,27 @@ def test_long_multi_pass_run_compacts_context_without_raw_token_abort(monkeypatc
     assert agent._last_compaction_result is not None
     assert agent._last_compaction_result.tokens_saved > 0
     assert any("[context-summary]" in str(message.get("content") or "") for message in agent._conversation)
-    assert any(
-        "earlier messages trimmed to fit context window" in str(message.get("content") or "")
-        for message in llm.message_snapshots[1]
-    )
+    # Compaction order, as measured: the compactor summarises the seeded history first. On the second pass the model
+    # sees the system prompt, then ONE [context-summary] message standing for the oldest turns, then the recent
+    # turns untouched. The summary fits the 8,000-token window, so the trim marker must not appear.
+    second_pass = llm.message_snapshots[1]
+    summaries = [m for m in second_pass if "[context-summary]" in str(m.get("content") or "")]
+    assert len(summaries) == 1
+    assert second_pass.index(summaries[0]) == 1
+    # The count is derived from the fixture, not typed in: the seeded turns that are still verbatim in this pass are
+    # the kept ones, and every other seeded turn is what the summary says it stands for.
+    seen = " ".join(str(m.get("content") or "") for m in second_pass if m is not summaries[0])
+    kept = sum(1 for turn in seeded_turns if turn in seen)
+    stated = re.search(r"\((\d+) messages compacted\)", str(summaries[0].get("content") or ""))
+    assert stated is not None and 0 < kept < len(seeded_turns)
+    assert int(stated.group(1)) == len(seeded_turns) - kept
+    assert not any("earlier messages trimmed to fit context window" in str(m.get("content") or "") for m in second_pass)
     errors = [event for event in events if event.type == EventType.AGENT_ERROR]
     assert not errors
     done = next((event for event in events if event.type == EventType.AGENT_DONE), None)
     assert done is not None
-    assert done.data.get("text") == "CONTEXT_PRESSURE_RUN_DONE"
+    # The model's own answer leads; the run's verification footer follows it.
+    assert str(done.data.get("text") or "").startswith("CONTEXT_PRESSURE_RUN_DONE\n\nVerification: 2/2 checks passed.")
     run_budget = (done.data.get("token_report") or {}).get("run_budget") or {}
     assert run_budget.get("hard_context_budget") is None
     assert run_budget.get("iteration_prompt_hard_cap") is None
@@ -638,7 +660,11 @@ def test_explicit_local_tpm_estimate_never_terminates_a_large_request(monkeypatc
 
     assert not [event for event in events if event.type == EventType.AGENT_ERROR]
     assert any("deferring enforcement to the provider" in str(event.data.get("message") or "") for event in events)
-    assert next(event for event in events if event.type == EventType.AGENT_DONE).data.get("text") == "DONE_FAST"
+    # The answer, then only the contract's trailer: the long request is a requirement held to and reported (cab55497).
+    text = str(next(event for event in events if event.type == EventType.AGENT_DONE).data.get("text"))
+    answer, _, trailer = text.partition("\n\nVerification: ")
+    request = "run the tool and then answer with enough detail to exceed the local estimate " + ("context " * 1_500)
+    assert answer == "DONE_FAST" and "Unchecked" in trailer and request.strip() in trailer, "whole, never a short form"
 
 
 def test_real_provider_429_resumes_in_the_same_task(monkeypatch) -> None:  # noqa: ANN001
@@ -710,3 +736,36 @@ def test_high_iteration_prompt_spend_warns_without_stopping(monkeypatch) -> None
     assert run_budget.get("iteration_prompt_hard_cap") is None
     assert any(flag.get("kind") == "iteration_prompt_spend" for flag in token_report.get("flags") or [])
     assert llm.calls == 2
+
+
+def test_a_window_too_small_for_the_history_sheds_the_oldest_turns_in_the_loop(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.delenv("THOMAS_PROVIDER_TPM_LIMIT", raising=False)
+    # This test measures history, not library context.
+    monkeypatch.setenv("THOMAS_LIBRARY_ENABLED", "0")
+    cfg = AppConfig(
+        models={"local": ModelConfig(name="local", model="dummy")},
+        default_model="local",
+        max_agent_iterations=2,
+        quality=QualityConfig(enabled=False, enforce=False),
+    )
+    tools = ToolRegistry()
+    tools.register(_NoopTool())
+    llm = _ContextPressureThenAnswerLLM()
+    llm.config.context_window = 3_000
+    llm.config.max_tokens = 64
+    seeded = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"Decision {i}: " + "context " * 115}
+        for i in range(40)
+    ]
+    agent = AgentLoop(cfg, llm, tools, conversation=seeded, autonomy_level=4)
+
+    async def run_once() -> None:
+        async for _ in agent.run("finish", tools_policy="always", mode="auto", token_economy="max", max_iterations=2):
+            pass
+
+    asyncio.run(run_once())
+    first_pass = llm.message_snapshots[0]
+    text = " ".join(str(m.get("content") or "") for m in first_pass)
+    assert "Decision 39" in text and "Decision 0:" not in text, "the oldest turns go first, the newest survives"
+    assert len(first_pass) < len(seeded) // 2, "most of the history is gone before the model sees it"
+    assert sum(len(str(m.get("content") or "")) for m in first_pass) < 3_000 * 4, "what is sent fits the window"

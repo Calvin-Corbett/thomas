@@ -37,6 +37,9 @@ Design notes:
   client cannot walk out of the repo.
 * User error never yields a 500: bad paths/ranges/bodies are 400, unknown ids are
   404, and "no suggested edit"/"anchor is orphaned" are 409 conflicts.
+* Every handler, the two reads included, runs the server's access guard before it
+  touches the request. In remote mode that guard demands the api token, so an
+  anonymous caller cannot list annotations or read a workspace file.
 """
 
 from __future__ import annotations
@@ -64,6 +67,7 @@ from thomas.tools.source_annotations import (
 log = logging.getLogger(__name__)
 
 APP_SOURCE_ANNOTATION_RUNTIME = web.AppKey("source_annotation_runtime", object)
+APP_SOURCE_ANNOTATION_GUARD = web.AppKey("source_annotation_guard", object)
 
 # Guard rails on user-supplied input (annotating a 40 MB blob is a mistake, not a feature).
 MAX_SOURCE_BYTES = 2_000_000
@@ -184,6 +188,13 @@ def _runtime(request: web.Request) -> SourceAnnotationRuntime:
     return get_source_annotation_runtime()
 
 
+def _check_access(request: web.Request) -> None:
+    """Run the access guard installed at registration; it raises on refusal."""
+    guard = request.app.get(APP_SOURCE_ANNOTATION_GUARD)
+    if callable(guard):
+        guard(request)
+
+
 # ---------------------------------------------------------------------------
 # Request/response helpers
 # ---------------------------------------------------------------------------
@@ -265,6 +276,7 @@ def _source_lines(runtime: SourceAnnotationRuntime, file: str) -> list[str]:
 
 async def handle_get_source(request: web.Request) -> web.Response:
     """GET /api/source-annotations/source?file=<path> -- lines + live annotations."""
+    _check_access(request)
     runtime = _runtime(request)
     try:
         file = _normalized_file(runtime, request.query.get("file", ""))
@@ -289,6 +301,7 @@ async def handle_get_source(request: web.Request) -> web.Response:
 
 async def handle_list_annotations(request: web.Request) -> web.Response:
     """GET /api/source-annotations[?file=<path>] -- list (re-anchored when scoped)."""
+    _check_access(request)
     runtime = _runtime(request)
     raw_file = request.query.get("file")
     if raw_file is None or not str(raw_file).strip():
@@ -310,6 +323,7 @@ async def handle_list_annotations(request: web.Request) -> web.Response:
 
 async def handle_create_annotation(request: web.Request) -> web.Response:
     """POST /api/source-annotations -- author an annotation on a line range."""
+    _check_access(request)
     runtime = _runtime(request)
     payload = await _read_json_body(request)
     try:
@@ -338,6 +352,7 @@ async def handle_create_annotation(request: web.Request) -> web.Response:
 
 async def handle_open_conversation(request: web.Request) -> web.Response:
     """POST /api/source-annotations/{id}/conversation -- link an agent thread."""
+    _check_access(request)
     runtime = _runtime(request)
     annotation_id = str(request.match_info.get("annotation_id") or "").strip()
     if not annotation_id:
@@ -376,6 +391,7 @@ async def handle_open_conversation(request: web.Request) -> web.Response:
 
 async def handle_emit_diff(request: web.Request) -> web.Response:
     """POST /api/source-annotations/{id}/diff -- unified diff for the suggested edit."""
+    _check_access(request)
     runtime = _runtime(request)
     annotation_id = str(request.match_info.get("annotation_id") or "").strip()
     if not annotation_id:
@@ -427,8 +443,20 @@ async def handle_emit_diff(request: web.Request) -> web.Response:
 # ---------------------------------------------------------------------------
 
 
-def register_source_annotation_routes(app: web.Application, config: Any = None) -> None:
-    """Register the CAP-147 inline annotation API onto ``app``."""
+def register_source_annotation_routes(
+    app: web.Application,
+    config: Any = None,
+    *,
+    require_api_access: Callable[[web.Request], None] | None = None,
+) -> None:
+    """Register the CAP-147 inline annotation API onto ``app``.
+
+    ``require_api_access`` is the server's access guard (the api token in remote
+    mode, loopback otherwise); ``thomas.server.rows.workspace`` passes the one the
+    server gives rows. Without it the routes are open, which only a bare app in
+    a test should be.
+    """
+    app[APP_SOURCE_ANNOTATION_GUARD] = require_api_access if callable(require_api_access) else None
     app[APP_SOURCE_ANNOTATION_RUNTIME] = get_source_annotation_runtime(config)
     app.router.add_get("/api/source-annotations", handle_list_annotations)
     app.router.add_post("/api/source-annotations", handle_create_annotation)

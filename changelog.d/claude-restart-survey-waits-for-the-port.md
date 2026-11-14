@@ -1,0 +1,2 @@
+### Changed
+- **The first page opens about four times sooner after Thomas starts.** The check for runs a restart stopped read every conversation record in pure Python while the server was still starting and while your first page loaded, competing with both. It now waits until the port is open and gives the first page three seconds. On a clocked start the first page went from about 0.9 s to about 0.2 s.

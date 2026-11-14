@@ -9,35 +9,61 @@ def _read_text(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_readme_surfaces_user_first_story() -> None:
-    """A new reader can find the first command, where it lands, and what next.
+_START_WORDS = ("start", "install")
+_INTERNALS_WORDS = ("architecture", "contributor", "internals")
+
+
+def _reader_cannot_start(readme: str) -> list[str]:
+    """What stops a new reader of this README from starting Thomas; empty when nothing does.
 
     This used to pin three exact sentences ("Fresh install: run `run-ui.cmd`",
-    "## Everyday Use", "## Grow Into Advanced Thomas Safely"). Pinning copy
-    makes any rewrite a test failure while saying nothing about whether the
-    README still works -- it broke when the public README was rewritten even
-    though the rewrite kept every one of these facts. Assert the property the
-    heading names -- can someone start? -- not the wording that carried it.
+    "## Everyday Use", "## Grow Into Advanced Thomas Safely"), so every rewrite
+    of the README failed it while it said nothing about whether a reader could
+    still start. It checks the facts a reader needs instead: the entry command,
+    the address it serves on, the setup step, where to go next, and a section on
+    starting that comes before any section on internals.
     """
+    problems = [
+        f"does not mention {fact}"
+        for fact in ("run-ui.cmd", "127.0.0.1:8899", "Easy Setup", "ONBOARDING.md")
+        if fact not in readme
+    ]
+    headings = [line[3:].lower() for line in readme.splitlines() if line.startswith("## ")]
+    start = next((i for i, h in enumerate(headings) if any(w in h for w in _START_WORDS)), None)
+    internals = next((i for i, h in enumerate(headings) if any(w in h for w in _INTERNALS_WORDS)), None)
+    if start is None:
+        problems.append("has no section about starting or installing")
+    elif internals is not None and internals < start:
+        problems.append(f"reaches '## {headings[internals]}' before '## {headings[start]}'")
+    return problems
+
+
+def test_readme_surfaces_user_first_story() -> None:
     readme = _read_text("README.md")
     assert readme.startswith("# Thomas")
-    # The entry command, the address it serves on, and the setup step.
-    assert "run-ui.cmd" in readme
-    assert "127.0.0.1:8899" in readme
-    assert "Easy Setup" in readme
-    # Somewhere to go after the first run.
-    assert "ONBOARDING.md" in readme
-    # The first section a reader meets is about starting, not internals.
-    headings = [line for line in readme.splitlines() if line.startswith("## ")]
-    assert headings, "README has no sections"
-    assert "start" in headings[0].lower() or "install" in headings[0].lower()
+    assert _reader_cannot_start(readme) == []
+
+
+def test_the_readme_check_catches_a_readme_a_reader_cannot_start_from() -> None:
+    facts = "run-ui.cmd at 127.0.0.1:8899, then Easy Setup, then ONBOARDING.md\n"
+    assert _reader_cannot_start("# Thomas\n## Fresh install\n" + facts + "## The architecture\n") == []
+    assert _reader_cannot_start("# Thomas\n## What Thomas is\n" + facts) == [
+        "has no section about starting or installing"
+    ]
+    assert _reader_cannot_start("# Thomas\n## The architecture\n## Fresh install\n" + facts) == [
+        "reaches '## the architecture' before '## fresh install'"
+    ]
+    assert _reader_cannot_start("# Thomas\n## Install\n") == [
+        "does not mention run-ui.cmd",
+        "does not mention 127.0.0.1:8899",
+        "does not mention Easy Setup",
+        "does not mention ONBOARDING.md",
+    ]
 
 
 def _read_all_runtime_js() -> str:
     runtime_dir = ROOT / "thomas/server/web/js/runtime"
-    return "\n".join(
-        path.read_text(encoding="utf-8", errors="replace") for path in sorted(runtime_dir.glob("*.js"))
-    )
+    return "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in sorted(runtime_dir.glob("*.js")))
 
 
 def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:

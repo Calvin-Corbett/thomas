@@ -42,26 +42,58 @@ function Invoke-Native {
   }
 }
 
-function Find-SystemPython {
-  $cmd = Get-Command python -ErrorAction SilentlyContinue
-  if ($cmd) { return @{ Kind = "python"; Path = $cmd.Source } }
-  $cmd = Get-Command py -ErrorAction SilentlyContinue
-  if ($cmd) { return @{ Kind = "py"; Path = $cmd.Source } }
-  return $null
+function Test-PythonRuns {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [string[]]$LauncherArgs = @()
+  )
+
+  # On a Windows machine without Python, "python.exe" still resolves: it is the
+  # Microsoft Store alias, a stub that exits 9009 with an install hint. Trust an
+  # interpreter only after it has run and reported a version Thomas supports
+  # (pyproject.toml: requires-python >= 3.10, no upper bound).
+  $probe = 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 10) else 1)'
+  # The Python install manager's py.exe installs a runtime it is asked for and lacks; a probe
+  # must not. Only AUTOMATIC_INSTALL is its off switch: CONFIRM=0 skips the prompt, so it would install.
+  $saved = $env:PYTHON_MANAGER_AUTOMATIC_INSTALL
+  $env:PYTHON_MANAGER_AUTOMATIC_INSTALL = '0'
+  try {
+    return ((Invoke-NativeQuiet $Path @($LauncherArgs + @('-c', $probe))) -eq 0)
+  } catch {
+    # A broken alias can refuse to start at all, which is also "not Python".
+    return $false
+  } finally {
+    $env:PYTHON_MANAGER_AUTOMATIC_INSTALL = $saved
+  }
 }
 
-$SysPy = Find-SystemPython
-if (-not $SysPy) {
-  Write-Host "[thomas] ERROR: Python not found in PATH."
-  Write-Host "[thomas] Install Python 3.10+ and try again."
-  exit 2
+function Find-SystemPython {
+  foreach ($cmd in @(Get-Command python -All -ErrorAction SilentlyContinue | Where-Object { $_.CommandType -eq 'Application' })) {
+    if ($cmd.Source -and (Test-PythonRuns -Path $cmd.Source)) { return @{ Kind = "python"; Path = $cmd.Source } }
+  }
+  # "py -3" is the newest Python installed, so the versions Thomas is tested on are
+  # asked for first; a machine with 3.12 and 3.14 gets 3.12 and one with only 3.14 gets that.
+  foreach ($cmd in @(Get-Command py -All -ErrorAction SilentlyContinue | Where-Object { $_.CommandType -eq 'Application' })) {
+    foreach ($flag in @('-3.13', '-3.12', '-3.11', '-3.10', '-3')) {
+      if ($cmd.Source -and (Test-PythonRuns -Path $cmd.Source -LauncherArgs @($flag))) { return @{ Kind = "py"; Path = $cmd.Source; Flag = $flag } }
+    }
+  }
+  return $null
 }
 
 $VenvPy = Join-Path $Root ".venv\\Scripts\\python.exe"
 if (-not (Test-Path $VenvPy)) {
+  # A system Python is only needed to create the venv; a working .venv never asks.
+  $SysPy = Find-SystemPython
+  if (-not $SysPy) {
+    Write-Host "[thomas] ERROR: Python 3.10 or newer was not found."
+    Write-Host "[thomas] Install Python 3.10 or newer from https://www.python.org/downloads/ and try again."
+    exit 2
+  }
+
   Write-Host "[thomas] Creating venv in .venv..."
   if ($SysPy.Kind -eq "py") {
-    & $SysPy.Path -3 -m venv .venv
+    & $SysPy.Path $SysPy.Flag -m venv .venv
   } else {
     & $SysPy.Path -m venv .venv
   }
@@ -86,7 +118,7 @@ function Uses-OllamaLocal {
   $cfgPath = Join-Path $Root "thomas.toml"
   if (-not (Test-Path $cfgPath)) { return $false }
   $t = Get-Content $cfgPath -Raw
-  if ($t -match 'default_model\\s*=\\s*\"local\"' -and $t -match 'base_url\\s*=\\s*\"http://(localhost|127\\.0\\.0\\.1):11434') {
+  if ($t -match 'default_model\s*=\s*\"local\"' -and $t -match 'base_url\s*=\s*\"http://(localhost|127\.0\.0\.1):11434') {
     return $true
   }
   return $false
@@ -96,7 +128,7 @@ function Get-DefaultModelName {
   $cfgPath = Join-Path $Root "thomas.toml"
   if (-not (Test-Path $cfgPath)) { return "" }
   $t = Get-Content $cfgPath -Raw
-  $m = [regex]::Match($t, '(?m)^\\s*default_model\\s*=\\s*\"(?<value>[^\"]+)\"')
+  $m = [regex]::Match($t, '(?m)^\s*default_model\s*=\s*\"(?<value>[^\"]+)\"')
   if (-not $m.Success) { return "" }
   return $m.Groups["value"].Value.Trim().ToLowerInvariant()
 }
@@ -107,9 +139,9 @@ function Get-ProfileApiKeyFromToml {
   if (-not (Test-Path $cfgPath)) { return "" }
   $t = Get-Content $cfgPath -Raw
   $escaped = [regex]::Escape($Profile)
-  $section = [regex]::Match($t, "(?ms)^\\[models\\.$escaped\\]\\s*(?<body>.*?)(?=^\\[|\\z)")
+  $section = [regex]::Match($t, "(?ms)^\[models\.$escaped\]\s*(?<body>.*?)(?=^\[|\z)")
   if (-not $section.Success) { return "" }
-  $api = [regex]::Match($section.Groups["body"].Value, '(?m)^\\s*api_key\\s*=\\s*\"(?<key>[^\"]*)\"')
+  $api = [regex]::Match($section.Groups["body"].Value, '(?m)^\s*api_key\s*=\s*\"(?<key>[^\"]*)\"')
   if (-not $api.Success) { return "" }
   return $api.Groups["key"].Value.Trim()
 }

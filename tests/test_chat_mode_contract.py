@@ -4,6 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
 from thomas.chat.session_store import SessionMeta
 from thomas.server.app_routes_init import _v2_sessions_as_chats
 from thomas.server.routes.chat_surface_namespace import (
@@ -22,25 +23,57 @@ CODE_LIFECYCLE_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_co
 # Siblings chat.html loads ahead of unified_code_mode.js. The node harnesses
 # below have to load them in the same order the browser does, or the adapter
 # hands its collaborators to a module that is not there yet.
+CODE_ARTIFACTS_JS = REPO_ROOT / "thomas/server/web/js/unified_code_artifacts.js"
 CODE_RESULTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
 CODE_PROJECTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_projects.js"
 # The event-render cluster left unified_code_mode.js to get it under its size
 # ceiling. It is a sibling like the rest: loaded first, configured at load time.
 CODE_EVENTS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_events.js"
-CODE_SIBLING_JS = (CODE_RESULTS_JS, CODE_PROJECTS_JS, CODE_EVENTS_JS)
+# The pieces a turn is drawn from since the 2026-10 Build redesign (work rows,
+# cards, the head); the event cluster calls into them, so they load before it.
+CODE_CARDS_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "unified_code_cards.js"
+CODE_VIEW_STATE_JS = REPO_ROOT / "thomas/server/web/js/unified_code_view_state.js"
+CODE_LIVE_VIEW_JS = REPO_ROOT / "thomas/server/web/js/unified_code_live_view.js"
+CODE_SURFACE_JS = REPO_ROOT / "thomas/server/web/js/unified_code_surface.js"
+CODE_RUN_STREAM_JS = REPO_ROOT / "thomas/server/web/js/unified_code_run_stream.js"
+# The 2026-10 Build redesign's modules: the agents (roster, drawer, side chat),
+# the live diff, the composer's controls, and the run controls that wire them.
+CODE_REDESIGN_JS = tuple(
+    REPO_ROOT / "thomas/server/web/js" / f"unified_code_{name}.js"
+    for name in ("roster", "drawer", "agent_chat", "live_diff", "composer")
+)
+CODE_QUESTIONS_JS = REPO_ROOT / "thomas/server/web/js/unified_code_questions.js"
+CODE_CONTROLS_JS = REPO_ROOT / "thomas/server/web/js/unified_code_controls.js"
+CODE_CONTINUATION_JS = REPO_ROOT / "thomas/server/web/js/unified_code_continuation.js"
+CODE_HISTORY_ROWS_JS = REPO_ROOT / "thomas/server/web/js/unified_code_history_rows.js"
+CODE_LOADING_JS = REPO_ROOT / "thomas/server/web/js/unified_code_loading.js"
+CODE_SIBLING_JS = (
+    CODE_VIEW_STATE_JS,
+    CODE_ARTIFACTS_JS,
+    CODE_RESULTS_JS,
+    CODE_PROJECTS_JS,
+    *CODE_REDESIGN_JS,
+    CODE_CARDS_JS,
+    CODE_EVENTS_JS,
+    CODE_LIVE_VIEW_JS,
+    CODE_SURFACE_JS,
+    CODE_RUN_STREAM_JS,
+    CODE_QUESTIONS_JS,
+    CODE_CONTROLS_JS,
+    CODE_CONTINUATION_JS,
+    CODE_HISTORY_ROWS_JS,
+    CODE_LOADING_JS,
+)
 # Assertions about how a run is rendered do not care which side of that split
 # the code sits on, so they read both. A negative assertion gets stronger this
 # way: the markup must be absent from the pair, not merely from one file.
-CODE_RENDER_SOURCES = (CODE_JS, CODE_EVENTS_JS)
+CODE_RENDER_SOURCES = (CODE_JS, CODE_CARDS_JS, CODE_EVENTS_JS, CODE_LIVE_VIEW_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS)
 CODE_LIFECYCLE_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_code_mode_lifecycle.mjs"
 WORK_SUPPORT_HARNESS = REPO_ROOT / "tests" / "web_node" / "unified_work_support_lifecycle.mjs"
-CHAT_MARKDOWN_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_markdown_renderer.mjs"
-CHAT_ANNOUNCEMENT_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_completion_announcement_retry.mjs"
-CHAT_MODEL_ATTRIBUTION_HARNESS = REPO_ROOT / "tests" / "web_node" / "chat_message_model_attribution.mjs"
 
 
 def test_primary_chat_has_accessible_three_mode_selector_above_search() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     selector = text.index('id="tc-mode-switch"')
     search = text.index('id="tc-search"')
@@ -53,7 +86,7 @@ def test_primary_chat_has_accessible_three_mode_selector_above_search() -> None:
 
 
 def test_primary_chat_loads_real_mode_adapters_not_classic_iframes() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     assert "/static/js/unified_mode_shell.js" in text
     assert "/static/js/unified_code_lifecycle.js" in text
@@ -78,23 +111,33 @@ def test_primary_chat_loads_real_mode_adapters_not_classic_iframes() -> None:
     # unified_code_mode.js hands its state, escaper and render to the siblings at
     # load time, so every one of them must already be on the page. Ordering is
     # the whole contract between these four files.
-    for sibling in ("unified_code_lifecycle.js", "unified_code_results.js",
-                    "unified_code_projects.js", "unified_code_events.js"):
+    for sibling in (
+        "unified_code_lifecycle.js",
+        "unified_code_artifacts.js",
+        "unified_code_results.js",
+        "unified_code_projects.js",
+        "unified_code_events.js",
+        "unified_code_live_view.js",
+        "unified_code_surface.js",
+        "unified_code_run_stream.js",
+        "unified_code_questions.js",
+        "unified_code_controls.js",
+    ):
         assert text.index(f"/static/js/{sibling}") < text.index("/static/js/unified_code_mode.js")
 
 
 def test_chat_busy_transitions_refresh_shared_mode_chrome() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
-    assert "state.streaming = true; setExternalBusy();" in text
+    assert "deps.state.streaming = true; deps.setExternalBusy();" in text
     assert (
-        "state.streaming = false; abortController = null;\n        updateStreamingBubble(idx); renderActivity(idx); setExternalBusy();"
-        in text
+        "deps.state.streaming = false; deps.abortController = null;\ndeps.updateStreamingBubble(idx); deps.renderActivity(idx); deps.setExternalBusy();"
+        in "\n".join(line.strip() for line in text.splitlines())
     )
 
 
 def test_verified_artifacts_offer_explicit_attachment_downloads() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     assert "function artifactDownloadUrl(url)" in text
     assert "data-artifact-download" in text
@@ -102,7 +145,7 @@ def test_verified_artifacts_offer_explicit_attachment_downloads() -> None:
 
 
 def test_primary_modes_do_not_duplicate_legacy_forge_or_workforce_navigation() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
     workspace_list = text[text.index("const workspaces = [") : text.index("];", text.index("const workspaces = ["))]
 
     assert "label: 'Forge'" not in workspace_list
@@ -110,11 +153,17 @@ def test_primary_modes_do_not_duplicate_legacy_forge_or_workforce_navigation() -
 
 
 def test_primary_chat_cancel_button_requests_durable_session_scoped_cancellation() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     assert "async function requestTaskCancel(sessionId, executionId)" in text
     assert "'/delegations/' + encodeURIComponent(executionId) + '/cancel'" in text
-    assert "Promise.allSettled(executionIds.map(id => requestTaskCancel" in text
+    # Cancellation moved into the helper that the live shell calls. Inspect both
+    # sides of that binding so an unreferenced passing helper cannot satisfy it.
+    flow = (REPO_ROOT / "thomas/server/web/js/chat_turn_flow.js").read_text(encoding="utf-8")
+    assert "return window.ThomasChatTurnFlow.cancelTask({" in text
+    assert "getController: () => deps.abortController" in text
+    assert "cancelTask: cancelTask" in flow
+    assert "Promise.allSettled(executionIds.map(id => requestTaskCancel" in flow
     assert "payload.ok !== true" in text
     assert "unreadable cancellation response" in text
     assert "catch (error) { payload = {}; }" not in text
@@ -122,7 +171,7 @@ def test_primary_chat_cancel_button_requests_durable_session_scoped_cancellation
 
 
 def test_primary_chat_renders_honest_tool_and_observed_model_receipts() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     assert "finishToolStep(idx, evt.ok !== false)" in text
     assert "function applyModelRuntimeReceipt(idx, runtime)" in text
@@ -130,69 +179,6 @@ def test_primary_chat_renders_honest_tool_and_observed_model_receipts() -> None:
     assert "fallback used" in text
     assert "Verified: this model produced this reply" in text
     assert "const observedId =" in text
-
-
-def test_primary_chat_renders_safe_structured_markdown_for_assistant_only() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
-
-    # The assistant branch still routes through mdToHtml; since 2026-08-05 it
-    # first settles a completed delegation's stale "running now" promise
-    # (_settledStatusText) before rendering, so the pin follows the line.
-    assert "let html = isUser ? esc(m.text) : mdToHtml(m.streaming ? m.text : (_settledStatusText(m) ?? m.text));" in text
-    assert "tc-bubble${isUser ? '' : ' tc-markdown'}" in text
-    # The markdown rules moved with the rest of the shell's inline CSS into
-    # chat_shell.css; the class the renderer emits still has to be styled.
-    assert ".tc-markdown h1, .tc-markdown h2, .tc-markdown h3" in CHAT_SHELL_CSS.read_text(encoding="utf-8")
-    assert "html += '<pre><code>' + esc(code.join('\\n')) + '</code></pre>'" in text
-    assert 'target="_blank" rel="noopener noreferrer"' in text
-
-    completed = subprocess.run(
-        ["node", str(CHAT_MARKDOWN_HARNESS), str(CHAT_HTML)],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=10,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert '"userLiteral":true' in completed.stdout
-    assert '"escapedHtml":true' in completed.stdout
-
-
-def test_a_saved_reply_reports_the_model_that_wrote_it() -> None:
-    """Which model answered is a fact about the past, not about the picker.
-
-    ``mapRealMessages`` stamped ``state.modelLabel || 'GPT-5.6 Sol'`` onto every
-    assistant message it restored, discarding the model the conversation row
-    actually carries. Measured on a live store: 370 of 476 saved chats record a
-    real model across EIGHT of them -- 185 gpt-5.6-sol, 136 codex, 37
-    openai_codex, 5 local, 4 qwen2.5-coder:7b, plus gpt-5.5, terra and luna --
-    and every one of them was displayed as whatever was selected right now.
-    Opening a codex chat with Terra selected showed "GPT-5.6 Terra" on a reply
-    codex wrote, on screen, under Thomas's name.
-
-    The harness runs the real function with a ``state`` whose modelLabel is set,
-    so a reintroduced fallback is caught rather than merely spelled around. The
-    unknown case is the load-bearing one: a truthy row model hides the bug.
-    """
-
-    completed = subprocess.run(
-        ["node", str(CHAT_MODEL_ATTRIBUTION_HARNESS), str(CHAT_HTML)],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=10,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert '"codexKeepsItsOwnModel":true' in completed.stdout
-    assert '"unknownIsNotInvented":true' in completed.stdout
-    assert '"neverBorrowsThePicker":true' in completed.stdout
-
-    # The renderer must not put the fallback back either: an unknown model shows
-    # no chip at all rather than naming one.
-    text = CHAT_HTML.read_text(encoding="utf-8")
-    assert "GPT-5.6 Sol" not in text, "a hardcoded model name is a claim about which model answered"
 
 
 def test_session_meta_round_trips_surface_namespace() -> None:
@@ -257,6 +243,12 @@ def test_work_onboarding_uses_structured_state_and_explicit_selection() -> None:
             str(WORK_SUPPORT_HARNESS),
             str(REPO_ROOT / "thomas/server/web/js/unified_work_support.js"),
             str(WORK_JS),
+            # A refused steer is worded once for every surface that has a steer
+            # box; the adapter reads that table, so the harness loads it too.
+            str(REPO_ROOT / "thomas/server/web/js/steering_language.js"),
+            # The Work card's live tasks and steer boxes live in their own
+            # module, which the adapter creates when it loads.
+            str(REPO_ROOT / "thomas/server/web/js/unified_work_mode_steer.js"),
         ],
         cwd=REPO_ROOT,
         text=True,
@@ -270,10 +262,16 @@ def test_work_onboarding_uses_structured_state_and_explicit_selection() -> None:
     assert '"firstTurnHiddenCompletion":true' in completed.stdout
     assert '"reconciliationExecuted":true' in completed.stdout
     assert '"activeDraftRequeued":true' in completed.stdout
+    assert '"workSteerSameTask":true' in completed.stdout
+    assert '"workSteerRefusalExplained":true' in completed.stdout
+    # Several tasks can run at once, and each steer box keeps its own half-typed
+    # note through the repaint that every progress line causes.
+    assert '"workSteerDraftsPerTask":true' in completed.stdout
+    assert '"workProgressStates":true' in completed.stdout
 
 
 def test_work_styles_are_decomposed_and_loaded_in_order() -> None:
-    text = CHAT_HTML.read_text(encoding="utf-8")
+    text = read_chat_sources(CHAT_HTML)
 
     mode = text.index("/static/css/unified_work_mode.css")
     details = text.index("/static/css/unified_work_details.css")
@@ -317,7 +315,9 @@ def test_work_adapter_contains_async_ui_failures_and_clears_stale_error() -> Non
 
 
 def test_code_adapter_uses_real_forge_runtime_and_change_controls() -> None:
-    text = CODE_JS.read_text(encoding="utf-8") + CODE_LIFECYCLE_JS.read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (CODE_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS)
+    ).replace("deps.", "") + CODE_LIFECYCLE_JS.read_text(encoding="utf-8")
     text += "".join(path.read_text(encoding="utf-8") for path in CODE_SIBLING_JS)
 
     assert "'/api/evolve/agent/send'" in text
@@ -333,27 +333,34 @@ def test_code_adapter_uses_real_forge_runtime_and_change_controls() -> None:
 
 
 def test_code_adapter_contains_async_failures_at_ui_boundaries() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (CODE_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS, CODE_CONTROLS_JS)
+    ).replace("deps.", "")
 
     assert "async function safely(action, fallback)" in text
-    # Both stop entry points -- the drawer button and the mode adapter -- run
-    # the SAME routine. There used to be a second `stop()` behind the adapter
-    # with different wording and no refresh; pinning the shared call is what
-    # keeps a third stop from drifting in again.
+    # Both stop entry points -- the composer's primary button (Stop for a run
+    # that cannot pause; it replaced the drawer's Stop in the 2026-10 redesign)
+    # and the mode adapter -- run the SAME routine. There used to be a second
+    # `stop()` behind the adapter with different wording and no refresh;
+    # pinning the shared call is what keeps a third stop from drifting in again.
     assert text.count("void safely(() => stopRun()") == 2
     assert "void safely(() => loadTree" in text
     assert "void safely(() => loadFile" in text
     assert "void safely(approvePending" in text
-    assert "void safely(() => steer" in text
+    # The queue's Steer falls back to the stop-and-continue steer, guarded too.
+    assert "await safely(() => steer(" in text
     # newConversation takes a project root and label (the library picker names
     # what it chose), so match the containment rather than a zero-argument form.
-    assert "safely(() => newConversation(projectRoot, projectLabel)" in text
-    assert "send: (message, context) => safely(() => send(message, context)" in text
+    assert "safely(() => newConversation(projectRoot, projectLabel, options)" in text
+    # Only what you typed in the composer can answer an open question.
+    assert "send: (message, context) => safely(() => send(message, context, { typed: true })" in text
     assert "Promise.allSettled" in text
 
 
 def test_code_adapter_preserves_terminal_stream_states() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (CODE_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS)
+    ).replace("deps.", "")
 
     assert "state.source !== source" in text
     assert "state.runStatus = terminalRunStatus(payload)" in text
@@ -386,23 +393,30 @@ def test_code_adapter_collapses_terminal_and_tool_evidence_behind_details() -> N
 
     assert "function isTerminalTool(name)" in text
     assert "function annotateTerminalEvent(event, tracker)" in text
-    assert "function groupedTechnicalEvents(events)" in text
-    # The third parameter carries the run's outcome, so an ok run's recovered
-    # tool errors read "failed attempts, recovered" instead of "issues".
-    assert "function technicalActivityHtml(events, saved, ok)" in text
-    assert '<details class="tc-code-saved-activity' in text
-    assert '<div class="tc-code-technical' in text
+    # 2026-10 Build redesign: the grouped "Worked through …" block is gone and
+    # every step is one work row -- a <details> whose summary is a single dim
+    # line and whose body holds the full output. Repeats still merge into ×N.
+    assert "function workRowHtml(ev, opts)" in text
+    assert '<details class="tc-code-work tc-code-receipt tc-code-technical' in text
+    assert "<pre>${esc(full)}</pre>" in text, "the full output no longer sits behind the row"
+    assert "tc-code-receipt-count" not in text, "identical rows are not merged into a count"
     assert '<details class="tc-code-technical' not in text
     assert "Ran terminal command" in text
     assert "Read terminal result" in text
+    # The run's outcome still frames recovered tool errors ("failed attempts,
+    # recovered" on an ok run, "issues" otherwise).
     assert "Worked through" in text
-    assert "tc-code-tech-count" in text
+    assert "technicalSummary(technicalEvents, turn.ok === true)" in text
     assert ".tc-code-technical-log" in css
-    assert ".tc-code-technical code" in css
+    assert ".tc-code-technical:not(.tc-code-receipt) code" in css
+    # The old icon/body grid must not squeeze a disclosure summary into its
+    # 16px icon column. Receipts have their own full-width flex summary.
+    assert ".tc-code-technical { display: grid" not in css
+    assert ".tc-code-technical:not(.tc-code-receipt) { display: grid" in css
     assert "function projectActionsHtml()" not in text
     assert "data-code-drawer-close" in text
     assert "Build a game" not in text
-    assert "Show details" in text
+    assert "show work" not in text, "a long run's steps fold behind nothing: every row shows"
 
 
 def test_code_history_is_global_title_only_and_omits_empty_drafts() -> None:
@@ -484,12 +498,15 @@ def test_code_history_replays_persisted_run_activity() -> None:
     # is unchanged, so it is asserted against the current renderers.
     assert "interleavedActivityHtml(activityEvents, true)" in text
     assert "technicalSummary(technicalEvents, turn.ok === true)" in text
-    assert "tc-code-saved-activity" in text
+    # The replayed steps are work rows (2026-10 redesign), marked as saved.
+    assert "cards().workRowsHtml(" in text
     assert 'data-saved="true"' in text
 
 
 def test_code_surface_uses_chat_conversation_with_collapsible_activity_drawer() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (CODE_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS)
+    ).replace("deps.", "")
     css = (REPO_ROOT / "thomas/server/web/css/unified_code_mode.css").read_text(encoding="utf-8")
     html = (REPO_ROOT / "thomas/server/web/chat.html").read_text(encoding="utf-8")
 
@@ -500,9 +517,9 @@ def test_code_surface_uses_chat_conversation_with_collapsible_activity_drawer() 
     assert "state.drawerOpen = !state.drawerOpen" in text
     assert "data-code-drawer-close" in text
     assert 'class="tc-code-project"' not in text
-    assert 'aria-label="Code conversation"' in text
+    assert 'aria-label="Build conversation"' in text
     assert 'id="tc-code-live-technical"' in text
-    assert 'aria-label="Code activity"' in text
+    assert 'aria-label="Build activity"' in text
     assert "turns.flatMap(turn => turn.artifacts || [])" in text
     assert ".tc-code-turn.is-user" in css
     assert ".tc-code-message-head" in css
@@ -526,43 +543,28 @@ def test_code_surface_uses_chat_conversation_with_collapsible_activity_drawer() 
     assert ".ph-file-code::before" in shell_css
 
 
-def test_chat_completion_announcement_retries_until_durably_reported() -> None:
-    html = (REPO_ROOT / "thomas/server/web/chat.html").read_text(encoding="utf-8")
-
-    assert "function queueCompletionAnnouncement(step, eid, attempt = 0)" in html
-    assert "queueCompletionAnnouncement(s, rid)" in html
-    assert "step._announced = true" in html
-    assert "setTimeout(() =>" in html
-    assert "queueCompletionAnnouncement(step, eid, attempt + 1)" in html
-    assert "d.skipped === 'already_reported'" in html
-    assert "Thomas completion announcement remains retryable" in html
-
-    completed = subprocess.run(
-        ["node", str(CHAT_ANNOUNCEMENT_HARNESS), str(CHAT_HTML)],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=10,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-
-
 def test_code_stream_preserves_steering_and_updates_activity_incrementally() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (CODE_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS)
+    ).replace("deps.", "") + CODE_LIVE_VIEW_JS.read_text(encoding="utf-8")
     stream_handler = text[text.index("source.onmessage = event =>") : text.index("source.onerror = () =>")]
 
-    assert "function captureRenderState(root)" in text
-    assert "function restoreRenderState(root, saved)" in text
-    assert "steerValue" in text and "setSelectionRange" in text
+    view_state = CODE_VIEW_STATE_JS.read_text(encoding="utf-8")
+    assert "window.ThomasCodeViewState.capture(root" in text
+    assert "window.ThomasCodeViewState.restore(root" in text
+    # A field being typed in keeps its caret across a redraw (the in-transcript
+    # steer box it was written for is gone; the side chat's box uses it now).
+    assert "fieldStart" in view_state and "setSelectionRange" in view_state
+    assert "window.ThomasCodeViewState.replaceActivity(surface(), list" in text
     assert "function appendLiveEvent(event, replaceLast)" in text
     assert "appendLiveEvent(payload, replaced)" in stream_handler
     assert "render();" not in stream_handler
 
 
 def test_code_revert_approval_is_presented_and_retried_with_receipt() -> None:
-    text = CODE_JS.read_text(encoding="utf-8")
+    text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (CODE_JS, CODE_SURFACE_JS, CODE_RUN_STREAM_JS)
+    ).replace("deps.", "")
 
     assert "data.code === 'approval_required'" in text
     assert "replacePendingApproval(data, { kind: 'change', action, file, request_id: body.request_id })" in text

@@ -179,6 +179,76 @@
 
 .tc-mode-history-row:disabled { opacity: .68; cursor: default; }
 
+/* ==== The sidebar in Build (design handoff, screen 3a) =====================
+   One sidebar serves every mode; in Build it takes the design's measure.
+   `!important` only where chat.html carries the value inline. The labels
+   themselves ("Recent tasks", "New task", "Search tasks") come from MODES in
+   unified_mode_shell.js. */
+/* Every mode takes this measure, so the message box sits in one place (2026-11-10). Outside Build it applies only
+   while the sidebar still carries the 280px chat.html ships inline: a width you set with Redesign replaces that
+   inline value, stops matching, and is left alone. */
+#tc-shell[data-surface-mode="code"] .tc-sidebar, #tc-shell .tc-sidebar[style*="width: 280px"] { width: 256px !important; }
+@media (min-width: 761px) {
+  /* Collapsing writes --sidebar-margin: -280px, sized for the Chat sidebar;
+     past this one's 256px that would drag the main column off the left edge.
+     Below 761px the sidebar overlays and chat_shell.css owns its margin. */
+  #tc-shell[data-surface-mode="code"] .tc-sidebar, #tc-shell .tc-sidebar[style*="width: 280px"] { margin-left: max(var(--sidebar-margin, 0px), -256px) !important; }
+}
+#tc-shell .tc-sidebar-top { padding: 12px 10px 10px !important; }
+#tc-shell .tc-sidebar-nav { padding: 0 10px 10px !important; }
+/* Settings is in the browser bar's profile menu; a tab document drops its copy. */
+html.is-embedded #tc-shell[data-surface-mode="code"] .tc-sidebar-foot { display: none; }
+
+#tc-shell[data-surface-mode="code"] #tc-mode-switch { gap: 3px; padding: 3px; border-radius: 9px; background: var(--c-surface); }
+#tc-shell[data-surface-mode="code"] .tc-mode-button { min-height: 32px; border-radius: 7px; font-family: var(--font-sans); }
+#tc-shell[data-surface-mode="code"] .tc-mode-button.is-active { box-shadow: none; }
+/* SVG width/height attributes yield to CSS, so the hydrated 16px faces grow too. */
+#tc-shell[data-surface-mode="code"] .tc-mode-icon,
+#tc-shell[data-surface-mode="code"] .tc-mode-icon svg { width: 18px; height: 18px; }
+#tc-shell[data-surface-mode="code"] #tc-newchat { height: 32px !important; border-radius: 8px !important; }
+#tc-shell[data-surface-mode="code"] .tc-search-field { padding: 8px 11px !important; border-radius: 8px !important; }
+#tc-shell[data-surface-mode="code"] #tc-search { font-size: 13px !important; }
+
+/* Task rows. The state mark has its own column so every title starts on one
+   line: a pulsing dot while the task runs, a green tick once it is done, a
+   still red dot when it failed. unified_code_mode.js sets .is-running /
+   .is-done / .is-failed and writes the sub-label (.tc-history-sub). */
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row {
+  position: relative;
+  margin: 0 0 2px;
+  padding: 8px 10px 8px 26px;
+  border-radius: 8px;
+  font: 600 13px/18px var(--font-sans);
+  white-space: normal;
+}
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row.is-active { font-weight: 650; }
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row .tc-history-dot,
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row::before {
+  position: absolute;
+  top: 14px;
+  left: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: none;
+}
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row.is-running:not(:has(.tc-history-dot))::before {
+  content: "";
+  background: var(--c-accent);
+  animation: tc-history-pulse 1.4s ease-in-out infinite;
+}
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row.is-failed::before { content: ""; background: var(--c-danger); }
+#tc-shell[data-surface-mode="code"] .tc-mode-history-row.is-done::before {
+  content: "\2713";
+  top: 8px;
+  left: 9px;
+  width: 11px;
+  height: 18px;
+  border-radius: 0;
+  color: var(--c-success);
+  font: 700 11px/18px var(--font-sans);
+}
+
 .tc-mode-status {
   display: inline-flex;
   align-items: center;
@@ -206,4 +276,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tc-mode-button { transition: none; }
+  #tc-shell[data-surface-mode="code"] .tc-mode-history-row::before { animation: none; }
 }
+
+/* Chat's welcome line in the weight and size of Build's home heading; chat.html carries the old ones inline. */
+#tc-shell[data-surface-mode="chat"] #tc-welcome-title { font-size: 28px !important; font-weight: 700 !important; letter-spacing: -0.01em !important; }

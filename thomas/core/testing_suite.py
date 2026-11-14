@@ -66,6 +66,9 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from thomas.core.config import resolve_thomas_data_dir
+from thomas.core.pause import paused
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -79,7 +82,11 @@ DAILY_BUDGET_USD: float = 0.50  # max estimated spend per day
 APPROX_COST_PER_CYCLE_USD: float = 0.02
 MAX_CYCLES_PER_SESSION: int = 20
 
-RESULTS_FILE = Path("thomas_test_results.jsonl")
+RESULTS_FILE = "thomas_test_results.jsonl"
+
+
+def _suite_data_dir() -> Path:
+    return resolve_thomas_data_dir() / "testing_suite"
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +257,7 @@ class TestingSuite:
     def __init__(self) -> None:
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._executor_fn: Callable | None = None
         self._notify_fn: Callable | None = None
         self._last_user_ts: float = time.monotonic()
@@ -257,6 +265,7 @@ class TestingSuite:
         self._cycle_count: int = 0
         self._session_cycles: int = 0
         self._results: list[CycleResult] = []
+        self._last_write_failure: tuple[str, str] | None = None
         self._daily_spend: float = 0.0
         self._today: str = ""
         self._lock = threading.Lock()
@@ -275,12 +284,14 @@ class TestingSuite:
         if self._running:
             return
         self._running = True
+        self._stopping.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="thomas-testing")
         self._thread.start()
         log.info("TestingSuite: started.")
 
     def stop(self) -> None:
         self._running = False
+        self._stopping.set()
 
     def record_user_message(self) -> None:
         self._last_user_ts = time.monotonic()
@@ -293,14 +304,15 @@ class TestingSuite:
     # ------------------------------------------------------------------
 
     def _loop(self) -> None:
-        while self._running:
-            time.sleep(60)
+        while self._running and not self._stopping.wait(60):
             try:
                 self._tick()
             except (RuntimeError, ValueError, TypeError, OSError) as e:
                 log.error("TestingSuite tick: %s", e)
 
     def _tick(self) -> None:
+        if paused():
+            return
         if not self.is_idle():
             return
         now = time.monotonic()
@@ -349,15 +361,7 @@ class TestingSuite:
         with self._lock:
             self._results.append(r)
 
-        try:
-            with RESULTS_FILE.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(r.to_dict()) + "\n")
-        # Opening/appending the results file is OSError; serialising the cycle
-        # result is TypeError (a non-JSON value in the dict) or ValueError (a
-        # NaN/inf score, or a circular reference). Losing one results line must
-        # not stop the background cycle, which is why this is caught at all.
-        except (OSError, TypeError, ValueError) as e:
-            log.warning("TestingSuite: write failed: %s", e)
+        self._write_result(r)
 
         if r.complete_composite is None:
             log.info("TestingSuite: cycle %d complete composite unavailable", n)
@@ -373,6 +377,20 @@ class TestingSuite:
     # ------------------------------------------------------------------
     # Report
     # ------------------------------------------------------------------
+
+    def _record_write_failure(self, kind: str, error: OSError | TypeError | ValueError) -> None:
+        with self._lock:
+            self._last_write_failure = (datetime.now(timezone.utc).isoformat(), f"{kind} write failed: {error}")
+
+    def _write_result(self, result: CycleResult) -> None:
+        try:
+            output_dir = _suite_data_dir()
+            output_dir.mkdir(parents=True, exist_ok=True)
+            with (output_dir / RESULTS_FILE).open("a", encoding="utf-8") as file:
+                file.write(json.dumps(result.to_dict()) + "\n")
+        except (OSError, TypeError, ValueError) as error:
+            self._record_write_failure("results", error)
+            log.warning("TestingSuite: write failed: %s", error)
 
     def _generate_report(self) -> None:
         with self._lock:
@@ -393,7 +411,7 @@ class TestingSuite:
             else "**Complete composite:** unavailable (autonomy skipped)"
         )
         today = date.today().isoformat()
-        rp = Path(f"thomas_test_report_{today}.md")
+        rp = _suite_data_dir() / f"thomas_test_report_{today}.md"
         lines = [
             f"# Thomas Test Report — {today}",
             "",
@@ -423,6 +441,7 @@ class TestingSuite:
                 f"{r.cost_efficiency:.0f} | {complete} | {r.composite:.1f} |"
             )
         try:
+            rp.parent.mkdir(parents=True, exist_ok=True)
             rp.write_text("\n".join(lines), encoding="utf-8")
             if complete_avg is None:
                 self._notify(f"📋 **Test Report** ({len(results)} cycles) — complete composite unavailable → `{rp}`")
@@ -431,6 +450,7 @@ class TestingSuite:
                     f"📋 **Test Report** ({len(results)} cycles) — complete composite **{complete_avg:.1f}** → `{rp}`"
                 )
         except (OSError, TypeError, ValueError) as e:
+            self._record_write_failure("report", e)
             log.error("TestingSuite: report write error: %s", e)
 
     def _auto_improve(self, r: CycleResult) -> None:
@@ -454,19 +474,21 @@ class TestingSuite:
     def summary_text(self) -> str:
         with self._lock:
             results = list(self._results)
+            failure = self._last_write_failure
+        failure_text = f" | last write failure at {failure[0]}: {failure[1]}" if failure else ""
         if not results:
-            return "Testing suite: 0 cycles."
+            return "Testing suite: 0 cycles." + failure_text
         avg = sum(r.composite for r in results) / len(results)
         complete_scores = [score for r in results if (score := r.complete_composite) is not None]
         if not complete_scores:
             return (
                 f"Testing suite: {len(results)} cycles | complete composite unavailable "
-                f"| legacy avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
+                f"| legacy avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}{failure_text}"
             )
         complete_avg = sum(complete_scores) / len(complete_scores)
         return (
             f"Testing suite: {len(results)} cycles | avg complete composite {complete_avg:.1f} "
-            f"| legacy avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}"
+            f"| legacy avg composite {avg:.1f} | est spend ${self._daily_spend:.3f}{failure_text}"
         )
 
     def _notify(self, msg: str) -> None:

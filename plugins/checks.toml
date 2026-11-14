@@ -1,0 +1,118 @@
+# The checks plugin: the check before your card (thomas/server/precard) and its proof machinery (thomas/server/proof).
+# Spec: docs/superpowers/specs/2026-10-29-kernel-plugins-fast-checks-design.md.
+# tests = the tests that import this code and nothing of Thomas outside the kernel, this code and its needs, directly
+# or through the test helpers they import (tests/test_plugins_stay_fenced.py holds that). Tests that also reach other
+# parts of Thomas (30 on 2026-10-29: project storage, the ratchet, hand-in holds, the server's startup, the fixtures of
+# test_a_change_is_checked_before_your_card.py, ...) are integration tests: they stay in the full check, which runs
+# whenever a change reaches past one plugin.
+# needs = every Thomas module outside the kernel this code still imports or needs loaded (measured 2026-10-29): each
+# one is a debt that the carving replaces with a kernel seam, a moved function or a passed-in value, and the list
+# only shrinks. openai_codex_oauth registers the ChatGPT token resolver the second look asks for; llm is the client
+# the second look's test fakes stand in for.
+# door = the only modules of this code that code outside it may touch (tests/test_nothing_reaches_past_a_plugins_door.py
+# holds that): the two packages' own names, and three services used too widely to wrap. Whatever sits behind it can
+# change with only this plugin's tests to answer for it. scripts/cage uses proof/environment.py and is pinned, so that
+# one stays until a card.
+name = "checks"
+code = [
+    "thomas/server/precard/**",
+    "thomas/server/proof/**",
+]
+door = [
+    "thomas/server/precard/__init__.py",
+    "thomas/server/precard/clocks.py",
+    "thomas/server/precard/review.py",
+    "thomas/server/precard/workers.py",
+    "thomas/server/proof/__init__.py",
+    "thomas/server/proof/environment.py",
+]
+tests = [
+    "tests/test_a_change_that_will_not_apply_says_where.py",
+    "tests/test_a_changed_page_selects_the_tests_that_read_it.py",
+    "tests/test_a_check_runs_in_its_own_process.py",
+    "tests/test_a_check_with_a_refused_shard_still_reports_what_it_proved_alone.py",
+    "tests/test_a_check_with_no_answer_records_why.py",
+    "tests/test_a_completed_second_look_releases_its_process_group.py",
+    "tests/test_a_failed_check_cancels_its_second_look.py",
+    "tests/test_a_failure_counts_unless_it_is_noise_or_fails_alone_on_dev.py",
+    "tests/test_a_hand_in_never_follows_a_link.py",
+    "tests/test_a_report_cannot_substitute_a_same_stem_folder.py",
+    "tests/test_a_second_look_asks_chatgpt_with_no_tools.py",
+    "tests/test_a_shard_collects_the_tests_folder_and_never_drops_a_file.py",
+    "tests/test_a_shard_never_runs_when_the_ledger_cannot_be_used.py",
+    "tests/test_a_shard_that_did_not_finish_proves_and_measures_nothing.py",
+    "tests/test_a_version_bump_selects_what_reads_the_version.py",
+    "tests/test_an_exit_its_report_cannot_explain_says_why.py",
+    "tests/test_an_unavailable_check_names_its_cause.py",
+    "tests/test_asset_readers_keep_their_covering_importers.py",
+    "tests/test_check_clocks_keep_failed_and_repeated_work.py",
+    "tests/test_check_failures_and_lazy_copy_keep_their_clocks.py",
+    "tests/test_checker_faults_hold_the_card_and_clean_scratch.py",
+    "tests/test_checks_share_one_machine_wide_pool.py",
+    "tests/test_covering_imports_cross_source_roots.py",
+    "tests/test_dev_runs_in_full_only_for_what_the_change_leaves_to_it.py",
+    "tests/test_dev_runs_the_tests_it_has.py",
+    "tests/test_each_check_run_keeps_its_own_data_folder.py",
+    "tests/test_every_selected_file_must_appear_in_its_report.py",
+    "tests/test_failed_checks_stop_review_before_scratch_cleanup.py",
+    "tests/test_known_dev_failures_only_order_confirmations.py",
+    "tests/test_lazy_baseline_failures_are_held_and_cleaned.py",
+    "tests/test_one_notice_per_usage_limit_and_it_says_what_is_known.py",
+    "tests/test_one_reservation_ledger_for_every_server.py",
+    "tests/test_precard_runs_every_covering_file.py",
+    "tests/test_proof_costs_follow_source_bytes.py",
+    "tests/test_proof_selection_follows_production_imports.py",
+    "tests/test_proof_selection_skips_unrelated_parsing.py",
+    "tests/test_proof_shards_balance_without_losing_tests.py",
+    "tests/test_proof_timing_hints_are_optional.py",
+    "tests/test_pytest_exit_must_agree_with_its_report.py",
+    "tests/test_second_look_cli_has_its_own_clock.py",
+    "tests/test_second_looks_take_turns_and_wait_out_a_usage_limit.py",
+    "tests/test_slim_checkout.py",
+    "tests/test_the_change_runs_once_and_dev_only_when_needed.py",
+    "tests/test_the_check_before_the_card_starts_sooner.py",
+    "tests/test_the_check_finds_the_real_git_first.py",
+    "tests/test_the_check_load_other_load_holds_up.py",
+    "tests/test_the_check_load_run_records_other_load.py",
+    "tests/test_the_check_load_run_starts_checks_together.py",
+    "tests/test_the_check_load_summary_says_what_ran.py",
+    "tests/test_the_check_runs_up_to_360_files.py",
+    "tests/test_the_checker_answers_as_its_own_account.py",
+    "tests/test_the_checker_rejects_a_forged_report.py",
+    "tests/test_the_checker_runs_tests_as_a_separate_identity.py",
+    "tests/test_the_checkers_answer_rests_on_tests_that_ran.py",
+    "tests/test_the_checks_tests_run_as_a_green.py",
+    "tests/test_the_known_dev_failures_folder_stays_small.py",
+    "tests/test_the_known_failures_prune_never_follows_a_junction.py",
+    "tests/test_the_parallel_check_can_be_turned_off.py",
+    "tests/test_the_pinned_plugin_is_whole_and_a_folder_is_not_a_file.py",
+    "tests/test_the_proof_step_stands_on_its_own.py",
+    "tests/test_the_runners_reports_are_not_the_tests_data.py",
+    "tests/test_the_second_look_dial_set_to_one_lets_one_run.py",
+    "tests/test_the_timeline_reads_the_check_clocks.py",
+    "tests/test_unfinished_confirmation_cannot_excuse_a_failure.py",
+    "tests/test_what_the_conftest_names_selects_every_test.py",
+]
+needs = [
+    "thomas/core/atomic_json.py",
+    "thomas/core/cage_account.py",
+    "thomas/core/chatgpt_review.py",
+    "thomas/core/claude_plan.py",
+    "thomas/core/contained_process.py",
+    "thomas/core/git_launcher.py",
+    "thomas/core/git_process.py",
+    "thomas/core/green_place.py",
+    "thomas/core/llm.py",
+    "thomas/core/machine_capacity.py",
+    "thomas/core/machine_load.py",
+    "thomas/core/provider_limits.py",
+    "thomas/core/step_log.py",
+    "thomas/forge/anvil/bridge_config.py",
+    "thomas/server/capacity_ledger.py",
+    "thomas/server/capacity_ledger_locks.py",
+    "thomas/server/green_checkout.py",
+    "thomas/server/green_handoff.py",
+    "thomas/server/issue_ledger.py",
+    "thomas/server/openai_codex_oauth.py",
+    "thomas/tools/shell_spool.py",
+]

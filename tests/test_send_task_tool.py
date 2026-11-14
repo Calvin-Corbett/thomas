@@ -1,3 +1,12 @@
+"""The send_task tool — organic, no-regex, honest dispatch.
+
+Proves the mechanism deterministically (mocked LLM, no live model): when the
+model calls send_task, the reasoning specialist actually invokes the dispatch
+callback (so any "handed off" claim is TRUE), emits a task_request, and replies
+with a runtime-owned receipt. When the model doesn't call it, nothing
+dispatches and nothing is faked. This is the fix for the dishonesty Calvin found
+("I'll get that started" with nothing behind it).
+"""
 
 import json
 import unittest
@@ -291,7 +300,7 @@ class TestSendTaskTool(unittest.IsolatedAsyncioTestCase):
     async def test_governed_operator_call_returns_effect_receipt_to_model(self):
         captured = {}
 
-        async def operate(*, action, key="", value=None):
+        async def operate(*, action, key="", value=None, reason=""):
             captured.update({"action": action, "key": key, "value": value})
             return {
                 "ok": True,

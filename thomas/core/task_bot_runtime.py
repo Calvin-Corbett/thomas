@@ -1,24 +1,25 @@
 from __future__ import annotations
 
-import json
 import secrets
-import time
 from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from thomas.core import task_checklist, task_checklist_runtime
+from thomas.core import task_checklist, task_checklist_runtime, task_execution_roots
+from thomas.core.task_bot_first_ending import refused_ending  # keep_first_terminal: the first ending stays
 
 # The vocabulary of an execution -- its states, and the shape of a stored record --
 # lives beside this module. Re-exported here because this module is the front door:
 # every caller in the repo says `from thomas.core import task_bot_runtime`.
+from thomas.core.task_bot_lock import _now, _PathLock, _read_json, _to_iso, _write_json, lock_factories
 from thomas.core.task_bot_records import (  # noqa: F401
     _WORKER_PROTOCOL_RE,
     RuntimeTransition,
     _empty_proof,
     _new_record,
+    _no_evidence_summary,
     _transition_entry,
     _user_facing_summary,
 )
@@ -35,13 +36,22 @@ from thomas.core.task_checklist_runtime import record_checklist_evidence, set_ta
 ROOT = Path(__file__).resolve().parents[2]
 STATE_DIRNAME = "task_bots"
 SUMMARY_FILENAME = "executions-summary.json"
+
+
+class StaleExecutionError(RuntimeError):
+    """The record changed on disk between this update's read and its write; re-read and retry."""
+
+
 DEFAULT_STALE_MINUTES = 5.0
 
 
 def coordination_dir(repo_root: str | Path | None = None) -> Path:
+    # shared_root_sandbox: in a test process a shared root (the checkout, the data dir) becomes a throwaway
+    # one, so a test's prompt never becomes a card in your project library. Any other root is untouched.
     from thomas.core.project_root import resolve_project_root
+    from thomas.core.shared_root_sandbox import coordination_root
 
-    return resolve_project_root(explicit=repo_root) / "runtime" / "coordination"
+    return coordination_root(resolve_project_root(explicit=repo_root)) / "runtime" / "coordination"
 
 
 def runtime_dir(repo_root: str | Path | None = None) -> Path:
@@ -53,15 +63,13 @@ def summary_path(repo_root: str | Path | None = None) -> Path:
 
 
 def execution_path(execution_id: str, repo_root: str | Path | None = None) -> Path:
-    return runtime_dir(repo_root) / f"{str(execution_id or '').strip()}.json"
+    eid = str(execution_id or "").strip()
+    return runtime_dir(task_execution_roots.execution_root(eid, repo_root, ROOT)) / f"{eid}.json"
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _to_iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+_record_lock, _summary_lock, _locked_by_execution_id = lock_factories(
+    lambda execution_id, repo_root: execution_path(execution_id, repo_root), lambda repo_root: summary_path(repo_root)
+)
 
 
 def _from_iso(value: str | None) -> datetime | None:
@@ -75,36 +83,6 @@ def _from_iso(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    last_error: Exception | None = None
-    for attempt in range(6):
-        tmp = path.with_suffix(f"{path.suffix}.{secrets.token_hex(4)}.tmp")
-        try:
-            tmp.write_text(serialized, encoding="utf-8")
-            tmp.replace(path)
-            return
-        except PermissionError as exc:
-            last_error = exc
-            with suppress(Exception):
-                tmp.unlink(missing_ok=True)
-            time.sleep(0.02 * (attempt + 1))
-        except Exception:
-            with suppress(Exception):
-                tmp.unlink(missing_ok=True)
-            raise
-    if last_error is not None:
-        raise last_error
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return default
 
 
 def _summary_row(record: dict[str, Any], *, stale_after_minutes: float) -> dict[str, Any]:
@@ -147,12 +125,38 @@ def _summary_row(record: dict[str, Any], *, stale_after_minutes: float) -> dict[
     }
 
 
+def _aged(row: dict[str, Any], *, stale_after_minutes: float) -> dict[str, Any]:
+    """A cached summary row with its stale flag recomputed from its own cached timestamps (the incremental path must age rows)."""
+    fresh = dict(row)
+    fresh["stale"] = _summary_row(row, stale_after_minutes=stale_after_minutes)["stale"]
+    return fresh
+
+
 def _write_summary(
-    repo_root: str | Path | None = None, *, stale_after_minutes: float = DEFAULT_STALE_MINUTES
+    repo_root: str | Path | None = None, *, stale_after_minutes: float = DEFAULT_STALE_MINUTES, changed: dict[str, Any] | None = None, removed: str | None = None
 ) -> dict[str, Any]:
+    with _summary_lock(repo_root):
+        return _write_summary_locked(repo_root, stale_after_minutes=stale_after_minutes, changed=changed, removed=removed)
+
+
+def _write_summary_locked(repo_root, *, stale_after_minutes, changed, removed):
+    summary = _build_summary(repo_root, stale_after_minutes=stale_after_minutes, changed=changed, removed=removed)
+    _write_json(summary_path(repo_root), summary)
+    return summary
+
+
+def _build_summary(repo_root, *, stale_after_minutes=DEFAULT_STALE_MINUTES, changed=None, removed=None):
     root = runtime_dir(repo_root)
     rows: list[dict[str, Any]] = []
-    if root.exists():
+    cached = _read_json(summary_path(repo_root), None) if (changed is not None or removed is not None) else None
+    cached_rows = cached.get("executions") if isinstance(cached, dict) else None
+    if isinstance(cached_rows, list) and cached_rows and all(isinstance(r, dict) and r.get("execution_id") for r in cached_rows):
+        # incremental path: replace or drop one row; every other row keeps its cached fields with its stale flag re-aged
+        skip = {str(changed.get("execution_id") or "") if changed is not None else "", str(removed or "")}
+        rows = [_aged(r, stale_after_minutes=stale_after_minutes) for r in cached_rows if str(r.get("execution_id") or "") not in skip]
+        if changed is not None:
+            rows.append(_summary_row(changed, stale_after_minutes=stale_after_minutes))
+    elif root.exists():
         for path in sorted(root.glob("*.json")):
             if path.name == SUMMARY_FILENAME:
                 continue
@@ -172,7 +176,6 @@ def _write_summary(
         "awaiting_proof_count": sum(1 for row in rows if str(row.get("state") or "") == "awaiting_proof"),
         "executions": rows,
     }
-    _write_json(summary_path(repo_root), summary)
     return summary
 
 
@@ -191,6 +194,11 @@ def list_executions(
     payload = read_summary(repo_root, refresh=refresh, stale_after_minutes=stale_after_minutes)
     rows = payload.get("executions")
     return list(rows) if isinstance(rows, list) else []
+
+
+def list_user_executions(*, refresh: bool = True) -> list[dict[str, Any]]:
+    read = _build_summary if refresh else lambda root: read_summary(root, refresh=False)
+    return task_execution_roots.user_rows(ROOT, read, runtime_dir, _to_iso(_now()))
 
 
 def get_execution(execution_id: str, repo_root: str | Path | None = None) -> dict[str, Any] | None:
@@ -227,6 +235,7 @@ def create_execution(
     repo_root: str | Path | None = None,
     task_type: str = "",
 ) -> dict[str, Any]:
+    repo_root = task_execution_roots.register_root(repo_root)
     execution_id = f"exec-{secrets.token_hex(6)}"
     created_at = _to_iso(_now())
     payload = _new_record(
@@ -245,11 +254,13 @@ def create_execution(
         runtime_profile=runtime_profile,
     )
     task_checklist_runtime.attach_checklist_at_creation(payload, task_type)
-    _write_json(execution_path(execution_id, repo_root), payload)
-    _write_summary(repo_root)
+    with _record_lock(execution_id, repo_root):  # rev 3: record and summary written under one record lock, no window for a delete
+        _write_json(execution_path(execution_id, repo_root), payload)
+        _write_summary(repo_root, changed=payload)
     return payload
 
 
+@_locked_by_execution_id
 def update_execution(
     execution_id: str,
     *,
@@ -270,14 +281,19 @@ def update_execution(
     actor: str = "",
     repo_root: str | Path | None = None,
     force: bool = False,
+    keep_first_terminal: bool = False,
 ) -> dict[str, Any]:
+    repo_root = task_execution_roots.execution_root(execution_id, repo_root, ROOT)
     payload = get_execution(execution_id, repo_root)
     if payload is None:
         raise FileNotFoundError(f"execution `{execution_id}` not found")
+    read_revision = int(payload.get("revision") or 0)
 
     now_iso = _to_iso(_now())
     current_state = _normalize_state(str(payload.get("state") or ""), default="requested")
     next_state = _normalize_state(state, default=current_state) if state is not None else current_state
+    if keep_first_terminal and current_state in TERMINAL_STATES and next_state in TERMINAL_STATES:
+        return refused_ending(execution_id, repo_root, payload, next_state, blocker, progress_summary, actor)
     if force:
         if next_state not in VALID_STATES:
             raise ValueError(f"invalid runtime state `{next_state}`")
@@ -382,8 +398,13 @@ def update_execution(
             )
         )
     payload["transitions"] = transitions[-50:]
-    _write_json(execution_path(execution_id, repo_root), payload)
-    _write_summary(repo_root)
+    record_path = execution_path(execution_id, repo_root)
+    on_disk = _read_json(record_path, None)
+    if isinstance(on_disk, dict) and int(on_disk.get("revision") or 0) != read_revision:
+        raise StaleExecutionError(f"execution `{execution_id}` changed on disk during update (revision {read_revision} -> {on_disk.get('revision')}); re-read and retry")
+    payload["revision"] = read_revision + 1
+    _write_json(record_path, payload)
+    _write_summary(repo_root, changed=payload)
     return payload
 
 
@@ -429,6 +450,7 @@ def sync_task_state(
     )
 
 
+@_locked_by_execution_id
 def attach_proof(
     execution_id: str,
     *,
@@ -459,6 +481,7 @@ def attach_proof(
     )
 
 
+@_locked_by_execution_id
 def mark_verified(
     execution_id: str,
     *,
@@ -490,33 +513,7 @@ def mark_verified(
     )
 
 
-def _no_evidence_summary(summary: str) -> str:
-    """What a person reads when a run claimed done and could show nothing for it.
-
-    The verdict used to be a fallback -- ``summary or "No verifiable result..."`` --
-    and so it was unreachable: the only caller that can reach this branch builds its
-    summary with ``_build_result_summary``, which has no empty return path (its last
-    line is "The worker returned no output."). The sentence explaining the failure
-    had therefore never once been shown.
-
-    What was shown instead is the worker's own prose, which in this branch is a
-    claim under dispute by definition -- the branch fires precisely when a worker
-    said it finished and produced no artifact and no confirmed tool success. A run
-    stamped failed/no_evidence was carrying the text "I created the report and
-    verified the output." as its summary.
-
-    So the verdict leads and the claim is attributed rather than dropped: the worker
-    may have said something worth reading, but it does not get to narrate its own
-    result.
-    """
-
-    verdict = "No verifiable result: nothing was produced and no tool success was confirmed."
-    claim = str(summary or "").strip()
-    if not claim or claim == verdict:
-        return verdict
-    return f"{verdict} The worker reported: {claim}"
-
-
+@_locked_by_execution_id
 def complete_execution(
     execution_id: str,
     *,
@@ -526,6 +523,7 @@ def complete_execution(
     verified_success: bool = False,
     read_paths: list[str] | None = None,
     output_text: str = "",
+    keep_first_terminal: bool = False,
 ) -> dict[str, Any]:
     """Mark an execution completed — but ONLY when there is evidence.
 
@@ -540,6 +538,8 @@ def complete_execution(
     payload = get_execution(execution_id, repo_root)
     if payload is None:
         raise FileNotFoundError(f"execution `{execution_id}` not found")
+    if keep_first_terminal and _normalize_state(str(payload.get("state") or "")) in TERMINAL_STATES:
+        return refused_ending(execution_id, repo_root, payload, "completed", "", summary, actor)
     # A run the user ended stays ended. Completion writes with force=True, which
     # bypasses the transition table, so a worker that kept going and reached its
     # own finish line used to overwrite the stop: the screen showed "Stopped by
@@ -599,6 +599,7 @@ def fail_execution(
     proof_status: str | None = None,
     salvaged_artifacts: list[str] | None = None,
     repo_root: str | Path | None = None,
+    keep_first_terminal: bool = False,
 ) -> dict[str, Any]:
     """Record a terminal failure, optionally keeping what the run had produced.
 
@@ -618,6 +619,7 @@ def fail_execution(
         actor=actor,
         repo_root=repo_root,
         force=True,
+        keep_first_terminal=keep_first_terminal,
     )
 
 
@@ -629,6 +631,7 @@ def fail_execution(
 # missing — steering a RUNNING task, not only the synchronous chat turn.
 
 
+@_locked_by_execution_id
 def steer_execution(
     execution_id: str,
     instruction: str,
@@ -660,6 +663,7 @@ def steer_execution(
     )
 
 
+@_locked_by_execution_id
 def take_pending_instructions(execution_id: str, *, repo_root: str | Path | None = None) -> list[str]:
     """Return and CLEAR the queued follow-up instructions (worker-side consume)."""
     payload = get_execution(execution_id, repo_root)
@@ -672,6 +676,7 @@ def take_pending_instructions(execution_id: str, *, repo_root: str | Path | None
     return pending
 
 
+@_locked_by_execution_id
 def request_cancel(
     execution_id: str,
     *,
@@ -713,6 +718,8 @@ def delete_session_executions(
     sid = str(session_id or "").strip()
     if not sid:
         return 0
+    if repo_root is None:
+        return sum(delete_session_executions(sid, repo_root=root) for root in task_execution_roots.roots_for_user(ROOT))
     removed = 0
     directory = runtime_dir(repo_root)
     if not directory.is_dir():
@@ -723,13 +730,13 @@ def delete_session_executions(
             continue
         if str(record.get("conversation_id") or "") != sid and str(record.get("thread_id") or "") != sid:
             continue
-        try:
-            path.unlink()
+        with _PathLock(path):  # rev 3: fail closed; a lock or unlink failure raises and truncates nothing
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
             removed += 1
-        except OSError:  # pragma: no cover - a locked file must not fail the delete
-            log_path = path
-            with suppress(Exception):
-                log_path.write_text("", encoding="utf-8")
+            _write_summary(repo_root, removed=str(record.get("execution_id") or path.stem))
     if removed:
         with suppress(Exception):
             list_executions(repo_root, refresh=True)
@@ -743,6 +750,7 @@ def cancel_execution(
     summary: str = "",
     salvaged_artifacts: list[str] | None = None,
     repo_root: str | Path | None = None,
+    keep_first_terminal: bool = False,
 ) -> dict[str, Any]:
     """End a run because the user stopped it. Not a failure.
 
@@ -764,6 +772,7 @@ def cancel_execution(
         actor=actor or "user",
         repo_root=repo_root,
         force=True,
+        keep_first_terminal=keep_first_terminal,
     )
 
 

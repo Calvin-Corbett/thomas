@@ -37,7 +37,13 @@ try:
         _strip_blocked_task_violations,
         _write_section_entries,
     )
-    from scripts.crew.tasks.plan_metadata import PlanMetadata, normalize_status, reconcile_metadata
+    from scripts.crew.tasks.plan_metadata import (
+        PlanMetadata,
+        PlanMetadataError,
+        normalize_status,
+        parse_metadata,
+        reconcile_metadata,
+    )
 except ImportError:  # pragma: no cover
     from crew.tasks import plan_metadata  # type: ignore
     from crew.tasks.base import (
@@ -53,7 +59,29 @@ except ImportError:  # pragma: no cover
         _strip_blocked_task_violations,
         _write_section_entries,
     )
-    from crew.tasks.plan_metadata import PlanMetadata, normalize_status, reconcile_metadata  # type: ignore
+    from crew.tasks.plan_metadata import (  # type: ignore
+        PlanMetadata,
+        PlanMetadataError,
+        normalize_status,
+        parse_metadata,
+        reconcile_metadata,
+    )
+
+
+def _stamp_if_unchanged(text: str, expected: PlanMetadata) -> str:
+    """The plan's own ``Updated At`` when reconciling would change nothing else, else "".
+
+    Stamping ``expected`` first and comparing afterwards can never come out equal
+    once the clock has moved, so every sync used to rewrite every tracked plan.
+    """
+    try:
+        current = parse_metadata(text)
+    except PlanMetadataError:
+        return ""
+    kept = PlanMetadata(
+        owner=expected.owner, status=expected.status, updated_at=current.updated_at, scope=expected.scope
+    )
+    return current.updated_at if reconcile_metadata(text, kept) == text else ""
 
 
 def _default_plan_path(task_id: str, plan_root: str) -> str:
@@ -203,6 +231,7 @@ def _sync_task_plans(
         status = status_by_task[task_id]
         plan_status = normalize_status(status)
 
+        plan_updated_at = now_iso
         plan_abs = (ROOT / plan_path).resolve()
         if not plan_abs.exists():
             missing_plans.append(plan_path)
@@ -222,17 +251,17 @@ def _sync_task_plans(
                 created_plans.append(plan_path)
         elif apply:
             original_plan = plan_abs.read_text(encoding="utf-8")
-            reconciled = reconcile_metadata(
-                original_plan,
-                PlanMetadata(owner=owner, status=plan_status, updated_at=now_iso, scope=scope),
-            )
-            if reconciled != original_plan:
-                plan_abs.write_text(reconciled, encoding="utf-8")
+            expected = PlanMetadata(owner=owner, status=plan_status, updated_at=now_iso, scope=scope)
+            kept_stamp = _stamp_if_unchanged(original_plan, expected)
+            if kept_stamp:
+                plan_updated_at = kept_stamp
+            else:
+                plan_abs.write_text(reconcile_metadata(original_plan, expected), encoding="utf-8")
                 reconciled_plans.append(plan_path)
         updated_plan_entries.append(
             f"- task_id={_sanitize('task_id', task_id)}; plan={_sanitize('plan', plan_path)}; "
             f"owner={_sanitize('owner', owner)}; status={_sanitize('status', plan_status)}; "
-            f"updated_at={_sanitize('updated_at', now_iso)}; "
+            f"updated_at={_sanitize('updated_at', plan_updated_at)}; "
             f"summary={_sanitize('summary', summary)}"
         )
 

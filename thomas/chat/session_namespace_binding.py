@@ -19,9 +19,9 @@ async def bind_surface_namespace(
 ) -> tuple[ConversationManager, SessionMeta] | None:
     """Persist the first namespace claim while holding SessionStore's SID lock."""
 
-    lock = store._lock_for(session_id)
+    lock = store.lock(session_id)
     async with lock:
-        target = store._session_path(session_id)
+        target = store.path_of(session_id)
         conversation = ConversationManager()
         meta: SessionMeta | None = None
         if target.exists():

@@ -1,3 +1,11 @@
+"""A conversation exists once across tabs, and so does each mode.
+
+Calvin's rule (2026-08-25): a conversation exists once. A row already held by
+a tab focuses that tab from anywhere, the Build button focuses the Build tab
+rather than opening a second one, Settings opens one workspace tab from
+anywhere, and a theme change reaches every document. Driven against
+``tests/web_fixtures/thomas_chat_fixture.py`` in headless Chromium.
+"""
 
 from __future__ import annotations
 
@@ -96,7 +104,10 @@ def test_a_theme_change_reaches_every_document(shell, tmp_path) -> None:
     )
     home_bg = page.evaluate("() => getComputedStyle(document.getElementById('tc-shell')).backgroundColor")
     for doc in shell.docs():
-        assert doc.evaluate("() => getComputedStyle(document.getElementById('tc-shell')).backgroundColor") == home_bg
+        # Build used to keep its Dark ground whatever was chosen. With two looks only, Light is Light everywhere
+        # (2026-11-10: "just make it dark or light").
+        expected = home_bg
+        assert doc.evaluate("() => getComputedStyle(document.getElementById('tc-shell')).backgroundColor") == expected
         assert doc.evaluate("() => getComputedStyle(document.getElementById('tc-theme-menu')).display") == "none"
     page.screenshot(path=str(tmp_path / "light.png"))
     assert not shell.errors, shell.errors

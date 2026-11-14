@@ -361,10 +361,15 @@ def doctor_cmd(
     from thomas.agent.guidance import guidance_bootstrap_report
 
     config: AppConfig = ctx.obj["config"]
+    # Set when thomas.toml would not parse; the CLI then hands doctor the defaults
+    # so this command can still say what is wrong instead of dying on it.
+    config_error = str(ctx.obj.get("config_error") or "")
 
     click.echo(f"Thomas {__version__}")
 
     errors = config.validate()
+    if config_error:
+        errors.insert(0, f"{config_error} (Thomas is using built-in defaults until this is fixed)")
     if errors:
         click.echo("\nConfig issues:")
         for e in errors:
@@ -440,6 +445,10 @@ def doctor_cmd(
     click.echo("\nQuick start (Windows): run-ui.cmd")
     if not full:
         click.echo("Run `thomas doctor --full` to test all provider API keys.")
+    if config_error:
+        # The report above is complete, but Thomas cannot start on this config, so
+        # scripts (repair.cmd reads this exit code) must not see a clean pass.
+        ctx.exit(1)
 
 
 def live_browser_smoke_cmd(

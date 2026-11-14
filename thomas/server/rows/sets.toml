@@ -1,0 +1,73 @@
+# Ready-made sets of plugins and the groups the long list is shown under. Read by thomas/server/rows/plugin_sets.py.
+# Every plugin id in default.toml must be in exactly one group, and every id named here must exist: tests hold both.
+# A set names the plugins it leaves on. Applying it turns off every other plugin that can be turned off.
+
+[[set]]
+id = "everyday"
+title = "Everyday"
+about = "Chat, Build and the things you reach for most days: your schedules, search, the Marketplace, saved sessions and the pages in the sidebar, including the Virtual Office and Agents."
+rows = [
+  "chat", "build", "work", "models", "openai_codex", "secrets", "setup", "onboarding", "search", "spend",
+  "cooldown_and_logs", "schedules", "catalog", "media", "canvas_studio", "chat_titles", "chat_export",
+  "chat_feedback", "workspace", "overlay", "browser", "notifications", "project_queue", "project_change",
+  "issues", "plugin_sets", "praxis", "office_state", "system_map", "agents", "pause", "contributors",
+]
+
+[[set]]
+id = "just_chat_and_build"
+title = "Just chat and build"
+about = "The smallest set that still works: Chat, Build with the parts a Build run needs (its team helpers and your library of projects), choosing a model and signing in. Everything else is turned off."
+rows = ["chat", "build", "praxis", "workspace", "models", "openai_codex", "secrets", "setup", "plugin_sets", "pause"]
+
+[[set]]
+id = "everything"
+title = "Everything"
+about = "Every plugin turned on, including the ones that are off until you ask for them."
+rows = [
+  "companion", "consolidation", "goals", "mention_context", "search", "spend", "secrets", "memory_routes",
+  "office_state", "engine_actions", "schedules", "cooldown_and_logs", "webhooks", "observability", "catalog", "setup",
+  "runs", "pr_review", "agent_panels", "asset_studio", "media", "machine_capacity", "realtime", "ratchet", "overlay",
+  "aliveness", "discord", "desktop", "onboarding", "workspace", "gateway", "praxis", "work", "models", "openai_codex",
+  "canvas_studio", "chat_titles", "chat_export", "chat_feedback", "notifications", "browser", "build", "chat",
+  "file_audit", "issues", "self_review", "task_ledger", "server_diagnostics", "system_map", "agents", "windows",
+  "project_queue", "project_change", "plugin_sets", "pause", "contributors", "public_release", "voice", "display", "settings_knowledge",
+]
+
+[[group]]
+title = "Chat and sessions"
+about = "Talking to Thomas, choosing a model, signing in, and what happens to a conversation afterwards."
+rows = [
+  "chat", "chat_titles", "chat_export", "chat_feedback", "models", "openai_codex", "secrets", "cooldown_and_logs",
+  "search", "voice", "display",
+]
+
+[[group]]
+title = "Build and projects"
+about = "Build runs, Work, the Agents page, your workspaces and projects, and the tools Thomas uses while it builds."
+rows = [
+  "build", "work", "agents", "workspace", "project_queue", "project_change", "praxis", "goals", "ratchet", "canvas_studio",
+  "media", "asset_studio", "browser", "notifications",
+]
+
+[[group]]
+title = "Memory and files"
+about = "What Thomas remembers, what you saved, and the record of files it changed."
+rows = ["memory_routes", "mention_context", "office_state", "overlay", "file_audit", "task_ledger"]
+
+[[group]]
+title = "Connections"
+about = "Other programs, services and devices that talk to Thomas, and the Marketplace."
+rows = ["discord", "webhooks", "gateway", "catalog", "companion", "desktop", "realtime", "public_release"]
+
+[[group]]
+title = "Safety"
+about = "Checks on Thomas's own work and on what you ask it to review."
+rows = ["pr_review", "self_review", "consolidation", "machine_capacity"]
+
+[[group]]
+title = "Behind the scenes"
+about = "Setup, reports, schedules and housekeeping that run quietly in the background."
+rows = [
+  "setup", "onboarding", "spend", "schedules", "engine_actions", "observability", "runs", "server_diagnostics",
+  "system_map", "windows", "aliveness", "agent_panels", "issues", "plugin_sets", "pause", "contributors", "settings_knowledge",
+]

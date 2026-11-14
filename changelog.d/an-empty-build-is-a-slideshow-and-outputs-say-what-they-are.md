@@ -1,0 +1,8 @@
+### Changed
+
+- **An empty Build shows a slowly turning slideshow instead of "What should we make?".** You asked for something larger that rotates through what Thomas can show you. It turns every eight seconds, stops while you hover over it or have a key focused in it, and shows arrows on hover; the arrows, the dots and the left and right keys move it. The slides: how Thomas is doing (landed, working now, finished or stopped, all tasks), tasks worked on per day for the last seven days, tokens for the last seven days (a bar per day, the total, the last three days, prompt against reply), what Thomas has noticed (tasks in a repair round, still running, landed), your five most recent tasks, and the starting ideas as the last slide. A slide with nothing real to say says so: no recorded usage reads as no usage, and while the server is still reading your task list the slides say "Still counting your tasks…" instead of showing zeros. Cached tokens are not recorded anywhere yet, so the token slide shows prompt and reply and says so.
+- **The drawer's Outputs say what they are.** A line under "Outputs" explains that they are the files this task changed, that Keep accepts a change, and that Revert undoes it and puts the file back as it was before the task. Click a file's name to open it.
+
+### Fixed
+
+- **A report card's count and its words are a space apart again.** The redesign had turned "1/2" and "checks passed" into two pieces with a visual gap but no space between them in the text, so copying the card or reading it aloud gave "1/2checks passed". They are two items with a real gap again, which `tests/test_build_clarity_browser.py` caught.

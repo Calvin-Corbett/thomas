@@ -1,0 +1,33 @@
+# Where the caged Thomas may connect through the network fence (scripts/cage/egress_proxy.py).
+# enable_network_fence.ps1 copies this into C:\ProgramData\ThomasPins\egress.allow, which
+# only an administrator can change; editing this repo copy changes nothing until that
+# script runs again at a UAC prompt. One host per line; "*.name" allows its subdomains.
+
+# Model providers: the hosts thomas.toml configures, and the Codex sign-in refresh.
+chatgpt.com
+auth.openai.com
+api.openai.com
+api.anthropic.com
+generativelanguage.googleapis.com
+openrouter.ai
+api.mistral.ai
+api.groq.com
+api.together.xyz
+api.deepinfra.com
+api.fireworks.ai
+api.x.ai
+api.cerebras.ai
+api.perplexity.ai
+open.bigmodel.cn
+
+# The Claude CLI's sign-in refresh, measured 2026-09-24 (Claude Code 2.1.278, nonessential
+# traffic off): with an expired sign-in it opened CONNECT platform.claude.com:443, then
+# api.anthropic.com:443 (already above); with a current one, api.anthropic.com only.
+# The fence works per host, so this makes the whole platform.claude.com host (the
+# Anthropic Console) reachable from the cage, not only its /v1/oauth/token path.
+platform.claude.com
+
+# Package installs inside caged tasks.
+pypi.org
+files.pythonhosted.org
+registry.npmjs.org

@@ -20,14 +20,25 @@ Pick the path for your OS. All paths end the same way: a local server on
 
 Advanced/manual setup instead: run `setup.cmd`.
 
+The server runs without a window, so closing the browser leaves Thomas running. The first Start
+Menu launch that works shows a message saying so, once. To stop it, use **Stop Thomas** in the Start
+Menu folder, or run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-ui.ps1 -Stop`
+from the install folder: it exits 0 when it ended a Thomas, 3 while a Build run is active (that
+Thomas is left running), 5 when it found none and 6 when one would not stop. **Restart Thomas**, or
+`-Restart`, replaces the running one once no Build run is active. Each launch writes a log under
+`runtime\logs` (the newest five are kept).
+
 ### macOS / Linux
 
 ```bash
 bash install.sh
 ```
 
-`install.sh` provisions a virtual environment, installs dependencies, and sets up a
-starter profile. When it finishes, open `http://127.0.0.1:8899`.
+Run it from a checkout of the repository. `install.sh` offers to create a virtual environment
+(`.venv`; the default answer is yes, and `THOMAS_NO_VENV=1` skips it), installs Thomas with the
+web server dependencies, and sets up a starter profile. It then offers to start the UI. If you
+answer no, start it yourself with `source .venv/bin/activate` (only if you accepted the `.venv`)
+and `thomas serve`, then open `http://127.0.0.1:8899`.
 
 ### Docker (any platform)
 

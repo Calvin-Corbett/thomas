@@ -1,0 +1,2 @@
+### Fixed
+- The express window no longer refuses a change for what its second look was not shown. On 2026-10-26 a team's 37-file change (123,000 characters of diff) passed the check before your card, then the window's second look was given only its first 100,000 characters and, told that what it cannot see is not safe, refused it for the files it was not shown, sending it back to its team. The second look now reads up to 300,000 characters of change and 400,000 of the files it touches, and a change larger than that goes to your card instead of being judged on a part of it.

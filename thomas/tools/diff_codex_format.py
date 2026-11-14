@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from thomas.tools.diff_transaction import PatchFormatError
+from thomas.tools.fs_scope import scopes
 
 _BEGIN = "*** Begin Patch"
 _END = "*** End Patch"
@@ -106,10 +107,10 @@ def _inside(base: Path, rel: str) -> Path:
     clean = rel.strip().replace("\\", "/")
     if not clean:
         raise PatchFormatError("a file marker names no path")
-    target = (base / clean).resolve()
-    if not target.is_relative_to(base):
-        raise PatchFormatError(f"{clean}: path escapes the project")
-    return target
+    try:
+        return scopes().scope(base).resolve(clean)
+    except ValueError:
+        raise PatchFormatError(f"{clean}: path escapes the project") from None
 
 
 def _sections(text: str) -> list[tuple[str, str, list[str]]]:

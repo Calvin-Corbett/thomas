@@ -842,7 +842,7 @@ async function runEvolveMissionJob(sendJob, { profile = '', modelId = '' } = {})
     const assistantMessageId = `mission-evolve-queued-${jobId}`;
     const assistantContent = `${jobName} is running in the background.
 
-I'll reply here when it finishes. Mission Control is available from the left sidebar if you want live details.
+I'll reply here when it finishes. The System page is available from the left sidebar if you want live details.
 
 Green-side evolve mode is syncing blue -> green, running a self-improvement pass, and verifying before any promotion.`;
     if (appendAssistantChatHistoryMessage(assistantContent, assistantMessageId)) {

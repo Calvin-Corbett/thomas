@@ -1,4 +1,8 @@
-"""Thumbs up or down on a reply is kept, so Thomas can learn from it (frontier parity: ChatGPT, Claude.ai)."""
+"""Thumbs up or down on a reply is kept, so Thomas can learn from it (frontier parity: ChatGPT, Claude.ai).
+
+The routes are registered by ``thomas.server.rows.chat_feedback``, which this file does not import. It is named here so a
+change to the row runs these tests.
+"""
 
 from __future__ import annotations
 
@@ -64,3 +68,20 @@ def test_the_icon_map_holds_no_collapsed_escapes() -> None:
     assert controls == [], f"control characters on lines {controls}: a collapsed escape"
     assert '.ph-thumbs-down::before { content: "\\2212"; }' in css
     assert '.ph-share::before { content: "\\2197"; }' in css
+
+
+def test_a_refusal_names_the_one_field_that_is_wrong(tmp_path: Path) -> None:
+    """The page can say "rating must be up or down" rather than list both requirements for every mistake."""
+    app = web.Application()
+    setup_chat_feedback_routes(app, store_path=tmp_path / "feedback.jsonl", require_api_access=lambda _r: None)
+
+    async def scenario():
+        async with TestClient(TestServer(app)) as client:
+            no_id = await client.post("/api/chat/feedback", json={"rating": "up"})
+            assert no_id.status == 400
+            assert (await no_id.json()) == {"ok": False, "error": "message_id is required", "field": "message_id"}
+            bad_rating = await client.post("/api/chat/feedback", json={"message_id": "m1", "rating": "meh"})
+            assert bad_rating.status == 400
+            assert (await bad_rating.json()) == {"ok": False, "error": "rating must be up or down", "field": "rating"}
+
+    asyncio.run(scenario())

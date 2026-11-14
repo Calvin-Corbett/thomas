@@ -7,6 +7,7 @@ import inspect
 import json
 import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 try:
@@ -14,9 +15,11 @@ try:
 except ImportError:
     pass  # type: ignore[assignment]
 
+from thomas.agent.kernel_wiring import build_agent_loop
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
 from thomas.core.llm import LLMClient
+from thomas.core.llm_slot import models
 from thomas.demo.agentic_benchmark_core import (
     _ensure_usage_telemetry,
     _extract_reported_first_token_ms,
@@ -50,9 +53,10 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-def _build_tools(config: AppConfig) -> ToolRegistry:
+def _build_tools(config: AppConfig, scope: Any = None) -> ToolRegistry:
+    """The benchmark's tool set; a files-slot ``scope``, when given, replaces the configured sandbox root."""
     registry = ToolRegistry()
-    sandbox = config.tools.sandbox_path
+    sandbox = config.tools.sandbox_path if scope is None else Path(scope.root).resolve()
     register_filesystem_tools(registry, sandbox, config.tools.max_file_size)
     if config.tools.allow_shell:
         register_shell_tools(
@@ -77,7 +81,7 @@ async def _run_raw_task(
     watch_prefix: str = "",
 ) -> dict[str, Any]:
     model_cfg = config.get_model(profile)
-    llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
+    llm = models().open(model_cfg, default=LLMClient, fallback_configs=[], failover_enabled=False)
     started = time.monotonic()
     text = ""
     usage: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -157,15 +161,16 @@ async def _run_single_agent_lane(
     text_delta_hook: Callable[[str], Any] | None = None,
 ) -> dict[str, Any]:
     model_cfg = config.get_model(profile)
-    llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
+    llm = models().open(model_cfg, default=LLMClient, fallback_configs=[], failover_enabled=False)
     tools = _build_tools(config)
-    agent = AgentLoop(
+    agent = build_agent_loop(
         config,
         llm,
         tools,
         conversation=[],
         memory=None,
         thread_id=f"bench-{int(time.time() * 1000)}",
+        default=AgentLoop,
     )
     started = time.monotonic()
     text_parts: list[str] = []

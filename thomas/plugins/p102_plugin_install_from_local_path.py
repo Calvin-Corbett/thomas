@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass
@@ -245,6 +246,13 @@ def _derive_plugin_name(source_path: Path) -> str:
     )
 
 
+def _is_link_or_reparse_point(path: Path) -> bool:
+    info = os.lstat(path)
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
 def _validate_source_tree(source_path: Path) -> None:
     """Reject link escapes and unexpectedly large local plugin trees before copying."""
 
@@ -252,10 +260,10 @@ def _validate_source_tree(source_path: Path) -> None:
     total_bytes = 0
     try:
         for entry in source_path.rglob("*"):
-            if entry.is_symlink():
+            if _is_link_or_reparse_point(entry):
                 raise PluginInstallFromLocalPathError(
                     "unsafe_source_tree",
-                    "Plugin source must not contain symbolic links.",
+                    "Plugin source must not contain symbolic links, junctions or other reparse points.",
                     details={"path": str(entry)},
                 )
             if not entry.is_file():

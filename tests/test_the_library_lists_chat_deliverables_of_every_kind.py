@@ -15,6 +15,7 @@ lists every one of them, newest first, with a working open URL.
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -23,7 +24,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
-from thomas.server.routes import deliverable_aiohttp
+from thomas.server.routes import deliverable_listing
 from thomas.server.routes import local_projects_aiohttp as local_projects
 
 # One finished chat deliverable per kind the detector can produce. None of
@@ -59,8 +60,7 @@ class TestLibraryListsChatDeliverablesOfEveryKind(AioHTTPTestCase):
             (workspace / filename).write_text(content, encoding="utf-8", newline="\n")
 
         self._records = [
-            _record(execution_id, minute)
-            for minute, (execution_id, _f, _c, _k) in enumerate(_DELIVERABLES)
+            _record(execution_id, minute) for minute, (execution_id, _f, _c, _k) in enumerate(_DELIVERABLES)
         ]
         by_id = {row["execution_id"]: row for row in self._records}
 
@@ -71,10 +71,14 @@ class TestLibraryListsChatDeliverablesOfEveryKind(AioHTTPTestCase):
             ),
             # Point the REAL workspace resolver at the seeded directory so the
             # real deliverable_kind/entry/url functions do the classification.
-            patch.object(deliverable_aiohttp, "_WORKSPACES_BASE", self._workspaces),
+            # Patch the names where they are read: deliverable_listing owns the
+            # base (deliverable_aiohttp only re-exports it), and the catalogue
+            # reads list_user_executions. Patching the old names left all three
+            # tests failing on an unbroken Library.
+            patch.object(deliverable_listing, "_WORKSPACES_BASE", self._workspaces),
             patch.object(
                 local_projects.task_bot_runtime,
-                "list_executions",
+                "list_user_executions",
                 return_value=list(reversed(self._records)),  # ledger is newest-first
             ),
             patch.object(
@@ -104,10 +108,14 @@ class TestLibraryListsChatDeliverablesOfEveryKind(AioHTTPTestCase):
         return create_app(cfg)
 
     async def _generated_rows(self) -> list[dict]:
-        resp = await self.client.get("/api/local/projects")
-        assert resp.status == 200
-        body = await resp.json()
-        return [row for row in (body.get("projects") or []) if row.get("generated")]
+        for _ in range(100):
+            resp = await self.client.get("/api/local/projects")
+            assert resp.status == 200
+            body = await resp.json()
+            if not body.get("refreshing"):
+                return [row for row in (body.get("projects") or []) if row.get("generated")]
+            await asyncio.sleep(0.02)
+        self.fail("The Library catalogue did not finish refreshing")
 
     async def test_every_finished_deliverable_is_listed_with_its_kind(self):
         rows = await self._generated_rows()

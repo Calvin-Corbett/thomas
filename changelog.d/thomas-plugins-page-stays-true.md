@@ -1,0 +1,9 @@
+### Fixed
+
+- **The Plugins page finds out by itself when Thomas goes away.** With nothing starting or stopping it used to read once and never again, so it could go on saying "Everything is on." beside a live-looking switch while Thomas was gone, and a plugin that failed during a restart still read On. It now reads every five seconds while the section is on screen and the page is visible, says "Thomas isn't answering" without you pressing anything, and recovers by itself.
+- **A slow read no longer says Thomas isn't answering.** A browser gives one server six connections, so with enough other Thomas tabs streaming, this page's read can wait without ever leaving the browser. The page now says Thomas is taking a while to answer, and the rows read "Checking..." until a connection frees up. The stronger words are kept for when Thomas really refuses or drops the read.
+- **"Stopped partway" now means something was.** Stop now can land just after the work finished by itself. The server now says whether anything was cut, and the page only repeats that.
+- **Try again no longer says "It still didn't start." when no retry ran.** If the press never reached Thomas, you now get the same "Thomas couldn't save that. Try again." as a switch, and "still" takes an answer from Thomas.
+- **"Thomas couldn't save that" goes when it stops being true.** It leaves when you leave the section, or when that plugin changes in another tab.
+- **The note about damaged choices goes once a fresh copy is saved.** It used to stay until Thomas restarted, still promising to save one.
+- **A screen reader now hears what changes.** It is told when Thomas comes back, what a stop is waiting for, and when Stop now appears. While there is no answer a switch is no longer exposed as on or off, and Try again, Leave it off, Ask Thomas why and Stop now each carry their plugin's name, so two failed plugins no longer give two identical buttons.

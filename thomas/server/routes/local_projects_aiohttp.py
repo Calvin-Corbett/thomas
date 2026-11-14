@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -17,6 +18,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.core import task_bot_runtime
+from thomas.core.event_loop_offload import off_loop
 from thomas.server.routes import local_projects_helpers_aiohttp as _helpers
 from thomas.server.routes.deliverable_aiohttp import (
     _workspace_dir,
@@ -56,6 +58,7 @@ from thomas.server.routes.local_projects_helpers_aiohttp import (
     _utc_now_iso,
     _write_registry,
 )
+from thomas.server.routes.local_projects_registry import CATALOGUE_CACHE_KEY, REGISTRY_LOCK_KEY, registry_mutation
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -97,8 +100,6 @@ _helpers.subprocess = subprocess
 _helpers._run_command = _run_command
 
 
-
-
 # Building the catalogue costs seconds: list_executions(refresh=True) rebuilds a
 # summary from every execution record on disk, each row is then re-read
 # individually, and each project is walked with rglob. All of it is synchronous
@@ -111,20 +112,29 @@ _helpers._run_command = _run_command
 # (reopening the picker is instant). Writers call _invalidate_projects_cache() so
 # a newly imported project never fails to appear.
 _PROJECTS_CACHE_TTL_S = 20.0
+log = logging.getLogger(__name__)
 # Cache state lives on the application, not in module globals: each app has its
 # own registry, and a shared cache would serve one app's projects to another.
 # A mutable container is installed once at registration, because aiohttp forbids
 # assigning new application keys after startup.
-_CACHE_KEY = "_thomas_projects_cache"
+_CACHE_KEY = CATALOGUE_CACHE_KEY
 
 
 def _build_projects_catalogue(app: web.Application) -> list[dict[str, Any]]:
     """Assemble the full catalogue. Blocking -- call from a worker thread."""
     projects = _refresh_projects(app)
-    generated = _generated_deliverable_projects(
-        start_index=len(projects), limit=max(0, _MAX_PROJECTS - len(projects))
-    )
+    generated = _generated_deliverable_projects(start_index=len(projects), limit=max(0, _MAX_PROJECTS - len(projects)))
     return projects + generated
+
+
+def _existing_project_root_index(projects: list[dict[str, Any]], root: Path) -> int:
+    """Compare resolved project roots in a worker; path resolution can touch disk."""
+    root_key = _project_root_key(root)
+    for index, row in enumerate(projects):
+        row_root = _safe_text(row.get("root_path"))
+        if row_root and _project_root_key(Path(row_root)) == root_key:
+            return index
+    return -1
 
 
 def _registry_stamp(app: web.Application) -> tuple[int, int]:
@@ -154,33 +164,46 @@ def _cache_is_fresh(app: web.Application, cached: tuple[float, tuple[int, int], 
 def _cache_slot(app: web.Application) -> dict[str, Any]:
     slot = app.get(_CACHE_KEY)
     if slot is None:
-        slot = {"entry": None, "lock": None}
+        slot = {"entry": None, "task": None}
         app[_CACHE_KEY] = slot
     return slot
 
 
-async def _projects_catalogue(app: web.Application) -> list[dict[str, Any]]:
-    """The catalogue, off the event loop, cached briefly, built at most once."""
+async def _rebuild_catalogue(app: web.Application, slot: dict[str, Any]) -> None:
+    """Publish a complete snapshot without holding up a listing or a writer."""
+    try:
+        stamp = await off_loop("local_projects.registry_stamp", _registry_stamp, app)
+        projects = await off_loop("local_projects.catalogue_build", _build_projects_catalogue, app)
+        if await off_loop("local_projects.registry_stamp", _registry_stamp, app) == stamp:
+            slot["entry"] = (time.monotonic(), stamp, projects)
+    except Exception:
+        # A failed scan must not prevent another request from trying again.
+        log.exception("Could not refresh the project catalogue")
+    finally:
+        slot["task"] = None
+
+
+async def _projects_catalogue(app: web.Application) -> tuple[list[dict[str, Any]], bool]:
+    """Return the latest snapshot now; fill cold and stale snapshots in the background."""
     slot = _cache_slot(app)
     cached = slot.get("entry")
-    if _cache_is_fresh(app, cached):
-        return cached[2]
-    lock = slot.get("lock")
-    if lock is None:
-        lock = asyncio.Lock()
-        slot["lock"] = lock
-    # Single-flight: several callers arriving during a cold rebuild wait for the
-    # one in progress instead of each starting their own multi-second scan.
-    async with lock:
-        cached = slot.get("entry")
-        if _cache_is_fresh(app, cached):
-            return cached[2]
-        stamp = _registry_stamp(app)
-        projects = await asyncio.to_thread(_build_projects_catalogue, app)
-        slot["entry"] = (time.monotonic(), stamp, projects)
-        return projects
-
-
+    stamp = await off_loop("local_projects.registry_stamp", _registry_stamp, app)
+    stale = cached is None or stamp != cached[1] or (time.monotonic() - cached[0]) >= _PROJECTS_CACHE_TTL_S
+    if stale and slot["task"] is None:
+        slot["task"] = asyncio.create_task(_rebuild_catalogue(app, slot))
+    if cached is not None and stamp == cached[1]:
+        # TTL expiry alone does not invalidate the complete cards we already have.
+        return cached[2], stale or slot["task"] is not None
+    # On a cold start (or after a write) the saved registry is enough to show
+    # projects immediately; the slower generated/dossier scan follows shortly.
+    projects = await off_loop("local_projects.read_registry", _read_registry, app)
+    if cached:
+        previous = {
+            row.get("id"): row for row in cached[2] if not row.get("generated") and not row.get("source_execution_id")
+        }
+        projects = [{**previous.get(row.get("id"), row), "name": row.get("name")} for row in projects]
+    generated = [row for row in cached[2] if row.get("generated") or row.get("source_execution_id")] if cached else []
+    return projects + generated, True
 
 
 def register_local_project_routes(
@@ -193,20 +216,30 @@ def register_local_project_routes(
     """Register all local project API routes."""
 
     _cache_slot(app)  # install before startup; aiohttp seals new keys afterwards
+    app[REGISTRY_LOCK_KEY] = asyncio.Lock()
 
     async def api_local_projects_list(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
-        projects = await _projects_catalogue(request.app)
-        return web.json_response({"ok": True, "count": len(projects), "projects": projects})
+        projects, refreshing = await _projects_catalogue(request.app)
+        return web.json_response({"ok": True, "count": len(projects), "projects": projects, "refreshing": refreshing})
 
     async def api_local_projects_boards(request: web.Request) -> web.Response:
         """The user-level index over every Praxis board: yours first, then one per project."""
         require_api_access(request)
         require_loopback(request)
-        projects = await _projects_catalogue(request.app)
+        projects, _ = await _projects_catalogue(request.app)
         return web.json_response({"ok": True, **boards_index(projects)})
 
+    async def _refresh_off_loop(app: web.Application) -> list[dict[str, Any]]:
+        return await off_loop("local_projects.refresh", _refresh_projects, app)
+
+    async def _generated_project(project_id: str, *, index: int) -> dict[str, Any] | None:
+        return await off_loop(
+            "local_projects.generated_lookup", _find_generated_deliverable_project, project_id, index=index
+        )
+
+    @registry_mutation
     async def api_local_projects_import(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -215,22 +248,19 @@ def register_local_project_routes(
             payload = {}
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
-        root = _resolve_project_root(payload.get("path") or payload.get("root_path"))
+        root = await off_loop(
+            "local_projects.resolve_root", _resolve_project_root, payload.get("path") or payload.get("root_path")
+        )
         name = _safe_text(payload.get("name") or payload.get("display_name"))
         import_method = _safe_text(payload.get("import_method") or "path") or "path"
 
-        projects = _read_registry(request.app)
-        root_key = _project_root_key(root)
-        existing_index = -1
-        existing_row: dict[str, Any] | None = None
-        for index, row in enumerate(projects):
-            row_root = _safe_text(row.get("root_path"))
-            if row_root and _project_root_key(Path(row_root)) == root_key:
-                existing_index = index
-                existing_row = row
-                break
+        projects = await off_loop("local_projects.read_registry", _read_registry, request.app)
+        existing_index = await off_loop("local_projects.match_root", _existing_project_root_index, projects, root)
+        existing_row = projects[existing_index] if existing_index >= 0 else None
 
-        project = _build_project_dossier(
+        project = await off_loop(
+            "local_projects.build_dossier",
+            _build_project_dossier,
             root,
             existing=existing_row,
             name=name or None,
@@ -243,7 +273,7 @@ def register_local_project_routes(
         else:
             projects.append(project)
         projects = _sort_projects(projects)[:_MAX_PROJECTS]
-        _write_registry(request.app, projects)
+        await off_loop("local_projects.write_registry", _write_registry, request.app, projects)
         return web.json_response(
             {
                 "ok": True,
@@ -271,21 +301,23 @@ def register_local_project_routes(
             _PICK_FOLDER_STATE["busy"] = False
         if not path_value:
             return web.json_response({"ok": True, "cancelled": True, "path": ""})
-        return web.json_response({"ok": True, "cancelled": False, "path": str(_resolve_project_root(path_value))})
+        root = await off_loop("local_projects.resolve_root", _resolve_project_root, path_value)
+        return web.json_response({"ok": True, "cancelled": False, "path": str(root)})
 
     async def api_local_project_detail(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
         project_id = _safe_text(request.match_info.get("project_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         try:
             _, project = _find_project(projects, project_id)
         except web.HTTPNotFound:
-            project = _find_generated_deliverable_project(project_id, index=len(projects))
+            project = await _generated_project(project_id, index=len(projects))
             if project is None:
                 raise
         return web.json_response({"ok": True, "project": project})
 
+    @registry_mutation
     async def api_local_project_layout(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -297,11 +329,11 @@ def register_local_project_routes(
         y = _safe_int(payload.get("y"), -1)
         if x < 0 or y < 0:
             raise web.HTTPBadRequest(text="x and y are required integer coordinates")
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         try:
             index, project = _find_project(projects, project_id)
         except web.HTTPNotFound:
-            project = _find_generated_deliverable_project(project_id, index=len(projects))
+            project = await _generated_project(project_id, index=len(projects))
             if project is None:
                 raise
             project["board_position"] = {"x": x, "y": y}
@@ -309,9 +341,10 @@ def register_local_project_routes(
         project["board_position"] = {"x": x, "y": y}
         project["updated_at"] = _utc_now_iso()
         projects[index] = project
-        _write_registry(request.app, projects)
+        await off_loop("local_projects.write_registry", _write_registry, request.app, projects)
         return web.json_response({"ok": True, "project": project})
 
+    @registry_mutation
     async def api_local_project_action(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -325,16 +358,18 @@ def register_local_project_routes(
         project_id = _safe_text(request.match_info.get("project_id"))
         action = _safe_text(payload.get("action")).lower() or "launch"
 
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         try:
             index, project = _find_project(projects, project_id)
         except web.HTTPNotFound:
-            project = _find_generated_deliverable_project(project_id, index=len(projects))
+            project = await _generated_project(project_id, index=len(projects))
             if project is None:
                 raise
-            final_action, result = _perform_generated_project_action(project, action)
+            final_action, result = await off_loop(
+                "local_projects.generated_action", _perform_generated_project_action, project, action
+            )
             return web.json_response({"ok": True, "action": final_action, "project": project, "result": result})
-        final_action, result = _perform_project_action(project, action)
+        final_action, result = await off_loop("local_projects.action", _perform_project_action, project, action)
         now = _utc_now_iso()
         project["updated_at"] = now
         if final_action in {"launch", "open_entry", "open_folder", "test"}:
@@ -343,17 +378,18 @@ def register_local_project_routes(
         if final_action == "prepare":
             project["last_prepared_at"] = now
         projects[index] = project
-        _write_registry(request.app, projects)
+        await off_loop("local_projects.write_registry", _write_registry, request.app, projects)
         return web.json_response({"ok": True, "action": final_action, "project": project, "result": result})
 
+    @registry_mutation
     async def api_local_projects_delete(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
         project_id = _safe_text(request.match_info.get("project_id"))
-        projects = _read_registry(request.app)
+        projects = await off_loop("local_projects.read_registry", _read_registry, request.app)
         index, project = _find_project(projects, project_id)
         projects.pop(index)
-        _write_registry(request.app, projects)
+        await off_loop("local_projects.write_registry", _write_registry, request.app, projects)
         return web.json_response(
             {
                 "ok": True,
@@ -363,6 +399,7 @@ def register_local_project_routes(
             }
         )
 
+    @registry_mutation
     async def api_local_project_context(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -370,16 +407,19 @@ def register_local_project_routes(
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
         project_id = _safe_text(request.match_info.get("project_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         if "objective" in payload:
             workspace["objective"] = _safe_text(payload.get("objective"))[:2000]
         if "instructions" in payload:
             workspace["instructions"] = _safe_text(payload.get("instructions"))[:4000]
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "workspace": workspace})
 
+    @registry_mutation
     async def api_local_project_chat_attach(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -390,7 +430,7 @@ def register_local_project_routes(
         session_id = _safe_text(payload.get("session_id") or payload.get("sessionId"))
         if not session_id:
             raise web.HTTPBadRequest(text="session_id is required")
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         owner = _find_session_owner(projects, session_id)
         if owner and owner != project_id:
@@ -407,9 +447,12 @@ def register_local_project_routes(
         if existing is None:
             chats.append(record)
         workspace["chats"] = chats[-100:]
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "chat": record, "preview": preview})
 
+    @registry_mutation
     async def api_local_project_chat_update(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -418,7 +461,7 @@ def register_local_project_routes(
             raise web.HTTPBadRequest(text="payload must be a JSON object")
         project_id = _safe_text(request.match_info.get("project_id"))
         session_id = _safe_text(request.match_info.get("session_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         record = next(
@@ -431,24 +474,30 @@ def register_local_project_routes(
             record["title"] = _safe_text(payload.get("title"))[:200] or "Project chat"
         if "pinned" in payload:
             record["pinned"] = bool(payload.get("pinned"))
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "chat": record})
 
+    @registry_mutation
     async def api_local_project_chat_remove(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
         project_id = _safe_text(request.match_info.get("project_id"))
         session_id = _safe_text(request.match_info.get("session_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         before = len(workspace["chats"])
         workspace["chats"] = [row for row in workspace["chats"] if _safe_text(row.get("session_id")) != session_id]
         if len(workspace["chats"]) == before:
             raise web.HTTPNotFound(text="chat is not attached to this project")
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "removed_session_id": session_id})
 
+    @registry_mutation
     async def api_local_project_library_add(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -456,9 +505,11 @@ def register_local_project_routes(
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
         project_id = _safe_text(request.match_info.get("project_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
-        receipt = _library_file_receipt(
+        receipt = await off_loop(
+            "local_projects.library_receipt",
+            _library_file_receipt,
             project,
             _safe_text(payload.get("path")),
             title=_safe_text(payload.get("title")),
@@ -467,29 +518,34 @@ def register_local_project_routes(
         workspace["library"] = [row for row in workspace["library"] if _safe_text(row.get("id")) != receipt["id"]] + [
             receipt
         ]
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "entry": receipt})
 
+    @registry_mutation
     async def api_local_project_library_remove(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
         project_id = _safe_text(request.match_info.get("project_id"))
         entry_id = _safe_text(request.match_info.get("entry_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         before = len(workspace["library"])
         workspace["library"] = [row for row in workspace["library"] if _safe_text(row.get("id")) != entry_id]
         if len(workspace["library"]) == before:
             raise web.HTTPNotFound(text="library entry not found")
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "removed_entry_id": entry_id})
 
     async def api_local_project_resume(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
         project_id = _safe_text(request.match_info.get("project_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         _, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         chat_previews = [
@@ -499,7 +555,10 @@ def register_local_project_routes(
             }
             for chat in workspace["chats"]
         ]
-        library = [_library_entry_status(project, row) for row in workspace["library"]]
+        library = await off_loop(
+            "local_projects.library_status",
+            lambda: [_library_entry_status(project, row) for row in workspace["library"]],
+        )
         return web.json_response(
             {
                 "ok": True,
@@ -515,6 +574,7 @@ def register_local_project_routes(
             }
         )
 
+    @registry_mutation
     async def api_local_project_share_create(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
@@ -522,7 +582,7 @@ def register_local_project_routes(
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
         project_id = _safe_text(request.match_info.get("project_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         include_all_chats = bool(payload.get("include_all_chats", False))
@@ -535,8 +595,11 @@ def register_local_project_routes(
             if preview["available"]:
                 chats.append({"title": _safe_text(row.get("title")), "messages": preview["messages"]})
         library = []
-        for row in workspace["library"]:
-            status = _library_entry_status(project, row)
+        statuses = await off_loop(
+            "local_projects.library_status",
+            lambda: [_library_entry_status(project, row) for row in workspace["library"]],
+        )
+        for row, status in zip(workspace["library"], statuses, strict=True):
             if not status["stale"]:
                 library.append(
                     {
@@ -568,7 +631,9 @@ def register_local_project_routes(
             "snapshot": json.loads(json.dumps(snapshot, ensure_ascii=False)),
         }
         workspace["shares"].append(share_record)
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response(
             {
                 "ok": True,
@@ -585,7 +650,7 @@ def register_local_project_routes(
         share_id = _safe_text(request.match_info.get("share_id"))
         token = _safe_text(request.query.get("token"))
         record = None
-        for project in _refresh_projects(request.app):
+        for project in await _refresh_off_loop(request.app):
             workspace = _workspace_state(project)
             record = next((row for row in workspace["shares"] if _safe_text(row.get("share_id")) == share_id), None)
             if record is not None:
@@ -599,19 +664,22 @@ def register_local_project_routes(
             raise web.HTTPGone(text="share expired")
         return web.json_response({"ok": True, "share": dict(record.get("snapshot") or {})})
 
+    @registry_mutation
     async def api_local_project_share_revoke(request: web.Request) -> web.Response:
         require_api_access(request)
         require_loopback(request)
         project_id = _safe_text(request.match_info.get("project_id"))
         share_id = _safe_text(request.match_info.get("share_id"))
-        projects = _refresh_projects(request.app)
+        projects = await _refresh_off_loop(request.app)
         index, project = _find_project(projects, project_id)
         workspace = _workspace_state(project)
         before = len(workspace["shares"])
         workspace["shares"] = [row for row in workspace["shares"] if _safe_text(row.get("share_id")) != share_id]
         if len(workspace["shares"]) == before:
             raise web.HTTPNotFound(text="share not found")
-        _save_project_workspace(request.app, projects, index, project, workspace)
+        await off_loop(
+            "local_projects.save_workspace", _save_project_workspace, request.app, projects, index, project, workspace
+        )
         return web.json_response({"ok": True, "project_id": project_id, "revoked_share_id": share_id})
 
     app.router.add_get("/api/local/projects", api_local_projects_list)

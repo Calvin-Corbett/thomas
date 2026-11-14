@@ -88,7 +88,10 @@ class TestConfigGeneration(unittest.TestCase):
             "anthropic", "https://api.anthropic.com", "sk-ant-test", "claude-sonnet-4-20250514", "casual"
         )
         self.assertIn('provider = "anthropic"', config)
-        self.assertIn('style = "casual"', config)
+        # The style is saved to the identity preferences, not to thomas.toml,
+        # where load_config reports [personality] as an unknown core key.
+        self.assertNotIn("style =", config)
+        self.assertIn('default_model = "default"', config)
 
     def test_generate_local_config_no_key(self):
         from thomas.cli.commands.setup_wizard import _generate_config
@@ -115,7 +118,7 @@ class TestConfigGeneration(unittest.TestCase):
         config = _generate_config("openai", "https://api.openai.com/v1", "k", "m", "balanced")
         self.assertIn("[memory]", config)
         self.assertIn("[tools]", config)
-        self.assertIn("[personality]", config)
+        self.assertNotIn("[personality]", config)
 
 
 class TestDetectExistingConfig(unittest.TestCase):

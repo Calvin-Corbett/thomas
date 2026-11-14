@@ -11,8 +11,9 @@
  *    dropdown is invisible whenever a web tab is active. The profile menu
  *    becomes a real OS menu; theme picking still drives the shell's own
  *    switcher rather than reimplementing it.
- *  - TAB EVENTS. Titles, URLs, load state, crashes and downloads arrive from
- *    the main process and land on the matching tab.
+ *  - TAB EVENTS. Titles, URLs, load state, which way the view's own history
+ *    can move, crashes and downloads arrive from the main process and land on
+ *    the matching tab.
  *  - GEOMETRY AND RESTORE. Native views are positioned by the main process,
  *    so the page reports its content rect whenever it changes, and reopens
  *    the tabs the last session left behind.
@@ -23,7 +24,7 @@
   function wire(ctx) {
     const { desktop, bodyRow, profBtn, omni, viewTabs, toast, setTitle, setStatus,
       setFavicon, openWebTab, openWorkspaceTab, openHistoryTab, activate,
-      homeTabId, getActiveId, reportBounds } = ctx;
+      homeTabId, getActiveId, reportBounds, syncNav } = ctx;
     if (!desktop) return { nativeMenus: false };
 
     /* ── Native profile menu ──────────────────────────────────────────── */
@@ -48,6 +49,7 @@
       const themes = (window.ThomasChatThemes && window.ThomasChatThemes.THEMES) || {};
       const active = currentThemeKey();
       const items = [
+        { id: "new-window", label: "New window	Ctrl+N" },
         { id: "settings", label: "Settings" },
         { id: "history", label: "History" },
         { type: "separator" },
@@ -66,7 +68,8 @@
       }
       if (chosen === "__unsupported__") return false;   // caller shows the HTML menu
       if (!chosen) return true;                          // dismissed
-      if (chosen === "settings") openWorkspaceTab("settings");
+      if (chosen === "new-window") desktop.newWindow();
+      else if (chosen === "settings") openWorkspaceTab("settings");
       else if (chosen === "history") openHistoryTab();
       else if (chosen === "redesign") { const b = document.getElementById("tc-redesign-btn"); if (b) b.click(); }
       else if (chosen.startsWith("theme:")) pickTheme(chosen.slice(6));
@@ -87,7 +90,15 @@
       if (evt.type === "favicon" && evt.value) setFavicon(tab, evt.value);
       else if (evt.type === "title" && evt.value && evt.value !== tab.title) setTitle(tab, evt.value);
       else if (evt.type === "url" && evt.value) { tab.url = evt.value; if (tab.id === getActiveId()) omni.value = evt.value; }
-      else if (evt.type === "loading") setStatus(tab, evt.value ? "working" : "done");
+      // A native view owns a history this page cannot read, so the main
+      // process says after every navigation whether it has anywhere to go.
+      // Without it Back and Forward are lit on every web tab and simply do
+      // nothing at the ends of the history -- which reads as a broken button.
+      else if (evt.type === "nav" && evt.value) {
+        tab.canBack = !!evt.value.back;
+        tab.canFwd = !!evt.value.forward;
+        if (tab.id === getActiveId()) syncNav();
+      } else if (evt.type === "loading") setStatus(tab, evt.value ? "working" : "done");
       else if (evt.type === "crashed") { setStatus(tab, "error"); toast("That tab’s renderer crashed (" + evt.value + ") — reload it."); }
     });
 

@@ -18,6 +18,7 @@ try:
 except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore
 
+from thomas.cli.commands.setup_config import save_personality, toml_string
 from thomas.cli.product_shell import print_section_heading
 
 logger = logging.getLogger(__name__)
@@ -37,22 +38,21 @@ def _detect_ollama_models() -> list:
 def _write_minimal_config(base_url: str, api_key: str, model: str, provider: str) -> Path:
     """Write a minimal thomas.toml."""
     provider_type = "anthropic" if provider == "anthropic" else "openai_compat"
-    key_line = f'api_key = "{api_key}"' if api_key else "# No API key needed"
+    key_line = f"api_key = {toml_string(api_key)}" if api_key else "# No API key needed"
 
     content = f"""# Thomas Quick Config
+default_model = "default"
+
 [models.default]
-provider = "{provider_type}"
-base_url = "{base_url}"
+provider = {toml_string(provider_type)}
+base_url = {toml_string(base_url)}
 {key_line}
-model = "{model}"
+model = {toml_string(model)}
 max_tokens = 4096
 context_window = 8192
 
 [memory]
 root = "./runtime"
-
-[personality]
-style = "balanced"
 """
     path = Path("thomas.toml")
     path.write_text(content, encoding="utf-8")
@@ -85,6 +85,7 @@ def run_quickstart() -> str | None:
         model = models[0]
         click.echo(f"  Using: {model}")
         path = _write_minimal_config("http://localhost:11434/v1", "", model, "ollama")
+        save_personality("balanced", overwrite=False)
         click.echo(click.style(f"  OK: Config saved: {path}", fg="green"))
         click.echo(click.style('\n  Next: thomas chat "hello"', fg="yellow"))
         return str(path)
@@ -110,6 +111,7 @@ def run_quickstart() -> str | None:
         return None
 
     path = _write_minimal_config(base_url, api_key, model, provider)
+    save_personality("balanced", overwrite=False)
     click.echo(click.style(f"\n  OK: Config saved: {path}", fg="green"))
     click.echo(click.style('  Next: thomas chat "hello"', fg="yellow"))
     click.echo("")

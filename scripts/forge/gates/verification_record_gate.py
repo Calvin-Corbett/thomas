@@ -2,11 +2,9 @@
 """Require agents to produce a verification record before committing.
 
 The verification record is a JSON file proving the agent:
-1. Ran tests for its changes
+1. Ran tests for its changes, with a real runner and a real count
 2. Ran regression tests (existing tests still pass)
-3. Reviewed its own changes
-4. Justified any significant code deletions
-5. Justified large commit scope (if applicable)
+3. Did both for THIS change, not one from weeks ago
 
 The record lives at .git/agent_verification.json and is checked
 at commit time. If it's missing or incomplete, the commit is blocked.
@@ -14,16 +12,22 @@ at commit time. If it's missing or incomplete, the commit is blocked.
 The agent creates this record by running:
     python scripts/create_verification_record.py
 
-Gaps closed: 1 (bad logic), 2 (silent deletion), 3 (no tests),
-             7 (huge commits), 10 (no runtime verification)
+Deletions (gap 2) and commit scope (gap 7) are NOT judged here. They have their
+own gates, shrinkage_gate.py and commit_scope_gate.py, which read the same record
+for their justification fields. This file carried duplicates of both until
+2026-09-19; see the note above VERIFICATION_THRESHOLD for why they were worse.
+
+Gaps closed: 1 (bad logic), 3 (no tests), 10 (no runtime verification)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -31,17 +35,86 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 ROOT = Path(__file__).resolve().parents[3]
-RECORD_PATH = ROOT / ".git" / "agent_verification.json"
+
+
+def _record_path(root: Path) -> Path:
+    """Where this checkout keeps its record: .git/ normally, its own git dir in a linked worktree (.git is a file there)."""
+    fallback = root / ".git" / "agent_verification.json"
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-path", "agent_verification.json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return fallback
+    found = done.stdout.strip()
+    if done.returncode != 0 or not found:
+        return fallback
+    path = Path(found)
+    return path if path.is_absolute() else root / path
+
+
+RECORD_PATH = _record_path(ROOT)
+
+
+def _rebind_root(raw: str | None) -> None:
+    """Point the gate at another checkout so it can be run against a fixture.
+
+    Without this the gate always judges the repo it lives in, so it could never have
+    a red-path selftest - and the enforcement ratchet will not let an unprovable gate
+    enforce. Same option, same default, as monolith_guard.py.
+    """
+    global ROOT, RECORD_PATH
+    if not raw:
+        return
+    ROOT = Path(raw).resolve()
+    RECORD_PATH = _record_path(ROOT)
+
+
+# A record is evidence about the change in front of it. Found live 2026-09-19: a
+# record from three months earlier still satisfied today's commit, claiming a pass
+# from `python -c print(123)` with a regression check recorded as "skipped".
+MAX_RECORD_AGE = timedelta(hours=24)
+REGRESSION_HINT = "python -m pytest tests/test_architecture.py -x --tb=short -q"
+_TEST_RUNNERS = ("pytest", "unittest", "vitest", "jest", "npm test", "node --test", "cargo test", "go test")
+# The shape of a real runner invocation: the command STARTS with the runner (create_verification_record.py runs whatever
+# --test-command it is given through a shell, and the record keeps that string). `echo pytest` or `true # pytest` names a
+# runner without running one. A record is still a file anyone can write: this stops a careless or lazy one, not a forgery.
+_RUNNER_SHAPE = re.compile(
+    r"^\s*(?:(?:\S*[\\/])?(?:python[\d.]*|py)(?:\.exe)?\s+(?:-\S+\s+)*-m\s+(?:pytest|unittest)\b"
+    r"|(?:\S*[\\/])?pytest(?:\.exe)?\b"
+    r"|(?:npm|pnpm|yarn)\s+(?:run\s+)?test\b|npx\s+(?:vitest|jest)\b|(?:vitest|jest)\b"
+    r"|node\s+--test\b|cargo\s+test\b|go\s+test\b)",
+    re.IGNORECASE,
+)
+_CHAINING = re.compile(r";|\|\||`|\$\(|\bor\s+true\b", re.IGNORECASE)
+
+
+def _names_a_test_runner(command: str) -> bool:
+    """True only when the command is a test-runner invocation, not a command that merely mentions one."""
+    return bool(_RUNNER_SHAPE.match(command)) and not _CHAINING.search(command)
+
+
+def _count(value: object) -> int | None:
+    """A pass/fail count as an int, or None when the record carries something else (a string, a list, a bool)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
 
 # How many code files trigger the verification requirement
 VERIFICATION_THRESHOLD = 3
 
-# Max files before scope justification is required
-SCOPE_WARN_THRESHOLD = 20
-SCOPE_HARD_LIMIT = 50
-
-# Max percentage a file can shrink before justification is needed
-SHRINKAGE_THRESHOLD = 0.30  # 30%
+# Scope and shrinkage are NOT checked here. This file used to carry its own copies
+# of both, and they were the cruder ones: the scope copy had no exemption for files
+# a commit merely moves or removes, so it hard-blocked cleanup (measured 2026-09-19
+# against commit 93415742, which removed 1,584 dead listings), and the shrinkage
+# copy sat below the 3-code-file threshold above, so it never saw the one-file
+# gutting it existed to catch. Both live in their own gates, which this one does
+# not duplicate: commit_scope_gate.py and shrinkage_gate.py.
 
 
 def _staged_files() -> list[str]:
@@ -66,34 +139,45 @@ def _staged_code_files(staged: list[str]) -> list[str]:
 
 
 def _load_record() -> dict | None:
+    """The record as a dict, or None when there is none. A record that is not a JSON object is returned as {}: present but empty."""
     if not RECORD_PATH.exists():
         return None
     try:
-        return json.loads(RECORD_PATH.read_text(encoding="utf-8"))
+        data = json.loads(RECORD_PATH.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    return data if isinstance(data, dict) else {}
 
 
 def _check_tests_run(record: dict) -> list[str]:
     """Verify the record shows tests were actually run."""
     errors = []
     tests = record.get("tests_run")
-    if not tests:
+    if not tests or not isinstance(tests, dict):
         errors.append("Verification record missing 'tests_run' section.")
         errors.append("  You must run tests and record the results.")
         return errors
 
-    command = tests.get("command", "")
+    command = str(tests.get("command", "") or "")
     if not command:
         errors.append("Verification record 'tests_run.command' is empty.")
         errors.append("  Record what test command you ran.")
+    elif not _names_a_test_runner(command):
+        # Found live: a record claiming a pass from `python -c print(123)`.
+        errors.append(f"Verification record 'tests_run.command' does not name a test runner: {command!r}")
+        errors.append(f"  Use one of: {', '.join(sorted(_TEST_RUNNERS))}.")
 
-    passed = tests.get("passed", -1)
-    failed = tests.get("failed", -1)
-    if passed < 0 and failed < 0:
+    passed, failed = _count(tests.get("passed", -1)), _count(tests.get("failed", -1))
+    if passed is None or failed is None:
+        errors.append("Verification record 'tests_run' pass/fail counts are not whole numbers.")
+        errors.append("  Re-run: python scripts/create_verification_record.py")
+    elif passed < 0 and failed < 0:
         errors.append("Verification record 'tests_run' has no pass/fail counts.")
+    elif passed <= 0 and failed <= 0:
+        errors.append("Verification record shows no tests ran (0 passed, 0 failed).")
+        errors.append("  A run that tested nothing is not evidence; run the tests that cover your change.")
 
-    if failed and int(failed) > 0:
+    if failed is not None and failed > 0:
         errors.append(f"Verification record shows {failed} FAILED test(s).")
         errors.append("  Fix failing tests before committing.")
 
@@ -104,9 +188,20 @@ def _check_regression(record: dict) -> list[str]:
     """Verify regression tests were run."""
     errors = []
     regression = record.get("regression_check")
-    if not regression:
+    if not regression or not isinstance(regression, dict):
         errors.append("Verification record missing 'regression_check' section.")
         errors.append("  Run: python -m pytest tests/test_architecture.py -x --tb=short -q")
+        return errors
+
+    command = str(regression.get("command", "") or "").strip()
+    if not command or command.lower() == "skipped":
+        # Found live: "command": "skipped" recorded alongside "passed": true.
+        errors.append("Verification record shows the regression check was skipped.")
+        errors.append(f"  Run: {REGRESSION_HINT}")
+        return errors
+    if not _names_a_test_runner(command):
+        errors.append(f"Verification record 'regression_check.command' is not a test-runner invocation: {command!r}")
+        errors.append(f"  Run: {REGRESSION_HINT}")
         return errors
 
     passed = regression.get("passed", False)
@@ -117,82 +212,39 @@ def _check_regression(record: dict) -> list[str]:
     return errors
 
 
-def _check_shrinkage(record: dict, staged: list[str]) -> list[str]:
-    """Check if files shrank significantly and justification exists."""
-    errors = []
+def _check_freshness(record: dict) -> list[str]:
+    """A record covers the work in front of it, not work from weeks ago.
 
-    # Get line counts for staged files vs HEAD
-    shrunk_files = []
-    for filepath in staged:
-        if not _is_code_file(filepath):
-            continue
-        full_path = ROOT / filepath
-        if not full_path.exists():
-            continue
-
-        # Get HEAD line count
-        proc = subprocess.run(
-            ["git", "show", f"HEAD:{filepath}"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            continue  # New file, no shrinkage possible
-
-        head_lines = len(proc.stdout.splitlines())
-        if head_lines == 0:
-            continue
-
-        current_lines = len(full_path.read_text(encoding="utf-8").splitlines())
-        shrinkage = (head_lines - current_lines) / head_lines
-
-        if shrinkage > SHRINKAGE_THRESHOLD:
-            shrunk_files.append(
-                {
-                    "file": filepath,
-                    "head_lines": head_lines,
-                    "current_lines": current_lines,
-                    "shrinkage_pct": round(shrinkage * 100),
-                }
-            )
-
-    if shrunk_files:
-        justification = record.get("shrinkage", {}).get("deletions_justified", "")
-        if not justification or len(str(justification).strip()) < 10:
-            errors.append(f"Found {len(shrunk_files)} file(s) that shrank by >{int(SHRINKAGE_THRESHOLD * 100)}%:")
-            for sf in shrunk_files[:5]:
-                errors.append(
-                    f"  - {sf['file']}: {sf['head_lines']} -> {sf['current_lines']} lines ({sf['shrinkage_pct']}% removed)"
-                )
-            errors.append("")
-            errors.append("Verification record needs 'shrinkage.deletions_justified' explaining why.")
-
-    return errors
-
-
-def _check_scope(record: dict, staged_code: list[str]) -> list[str]:
-    """Check commit scope and require justification for large commits."""
-    errors = []
-
-    if len(staged_code) > SCOPE_HARD_LIMIT:
-        errors.append(f"Commit touches {len(staged_code)} code files (hard limit: {SCOPE_HARD_LIMIT}).")
-        errors.append("  Split this into smaller, focused commits.")
-        return errors
-
-    if len(staged_code) > SCOPE_WARN_THRESHOLD:
-        justification = record.get("scope_justification", "")
-        if not justification or len(str(justification).strip()) < 10:
-            errors.append(f"Commit touches {len(staged_code)} code files (>{SCOPE_WARN_THRESHOLD}).")
-            errors.append("  Add 'scope_justification' to the verification record explaining why.")
-
-    return errors
+    Found live: a record from 2026-06-26 still satisfied a commit in September."""
+    raw = str(record.get("timestamp", "") or "").strip()
+    if not raw:
+        return ["Verification record has no timestamp.", "  Re-run: python scripts/create_verification_record.py"]
+    try:
+        stamped = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return [f"Verification record timestamp is unreadable: {raw!r}"]
+    if stamped.tzinfo is None:
+        stamped = stamped.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - stamped
+    if age > MAX_RECORD_AGE:
+        hours = int(age.total_seconds() // 3600)
+        return [
+            f"Verification record is {hours}h old (limit {int(MAX_RECORD_AGE.total_seconds() // 3600)}h).",
+            "  Re-run the tests for the change you are committing now.",
+        ]
+    return []
 
 
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root (default: inferred from script location).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
+    _rebind_root(args.repo_root)
 
     staged = _staged_files()
     staged_code = _staged_code_files(staged)
@@ -242,10 +294,9 @@ def run(argv: list[str] | None = None) -> int:
 
     # Validate the record
     all_errors = []
+    all_errors.extend(_check_freshness(record))
     all_errors.extend(_check_tests_run(record))
     all_errors.extend(_check_regression(record))
-    all_errors.extend(_check_shrinkage(record, staged))
-    all_errors.extend(_check_scope(record, staged_code))
 
     ok = len(all_errors) == 0
 

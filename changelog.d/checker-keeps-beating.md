@@ -1,0 +1,2 @@
+### Fixed
+- The express lane's checker keeps showing that it is alive. Its heartbeat thread stopped for good the first time Windows refused to replace the heartbeat file while something was reading it, which happened three times on 2026-10-23 and 24. The checker kept running, but nothing could see it, so the express window landed nothing for five hours. A refused write is now logged and tried again on the next beat.

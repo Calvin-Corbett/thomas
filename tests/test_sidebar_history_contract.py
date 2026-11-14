@@ -3,6 +3,9 @@
 Each mode renders its own rows, so the shared behaviour — sorting, pin,
 archive, rename, the hover card, the full-title tooltip, per-row running dots
 and the collapse — lives in one decorator that every renderer tags into.
+
+The titles it asks for come from ``thomas.server.rows.chat_titles``, which registers the one route that
+``thomas.server.routes.chat_titles_runtime`` holds, so a change to either runs this file.
 """
 
 from __future__ import annotations
@@ -10,12 +13,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.chat_sources import read_chat_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "thomas" / "server" / "web"
 
 
 def _read(rel: str) -> str:
-    return (WEB / rel).read_text(encoding="utf-8", errors="replace")
+    return (
+        read_chat_sources(WEB / rel)
+        if rel == "chat.html"
+        else (WEB / rel).read_text(encoding="utf-8", errors="replace")
+    )
 
 
 def test_there_is_exactly_one_way_to_start_something_new() -> None:
@@ -39,7 +48,9 @@ def test_the_create_button_sits_above_the_search_box_and_is_short() -> None:
 
 def test_every_mode_tags_its_rows_for_the_shared_decorator() -> None:
     html = _read("chat.html")
-    code = _read("js/unified_code_mode.js")
+    code = _read("js/unified_code_mode.js") + _read(
+        "js/unified_code_history_rows.js"
+    )  # the rows are built in the second
     work = _read("js/unified_work_mode.js")
 
     for source, name in ((html, "chat"), (code, "code"), (work, "work")):
@@ -51,7 +62,9 @@ def test_every_mode_tags_its_rows_for_the_shared_decorator() -> None:
 
 
 def test_code_timestamps_are_parsed_not_coerced() -> None:
-    code = _read("js/unified_code_mode.js")
+    code = _read("js/unified_code_mode.js") + _read(
+        "js/unified_code_history_rows.js"
+    )  # the rows are built in the second
 
     # The API returns ISO strings; Number() on those is NaN, which would sort
     # every code task as epoch zero.
@@ -61,13 +74,15 @@ def test_code_timestamps_are_parsed_not_coerced() -> None:
 
 def test_rows_show_a_running_dot_per_conversation() -> None:
     html = _read("chat.html")
-    code = _read("js/unified_code_mode.js")
+    code = _read("js/unified_code_mode.js") + _read(
+        "js/unified_code_history_rows.js"
+    )  # the rows are built in the second
     css = _read("css/sidebar_history.css")
 
     # The mode tabs had an activity indicator; the list never said WHICH chat
     # or task the run belonged to.
-    assert "running: active && state.running" in code
-    assert "sel && state.streaming" in html
+    assert "const running = active && state.running" in code
+    assert "sel && deps.state.streaming" in html
     assert ".tc-history-dot" in css
 
 
@@ -115,14 +130,36 @@ def test_sorting_and_archived_visibility_are_user_controlled() -> None:
     assert "if (left.pinned !== right.pinned) return left.pinned - right.pinned;" in history
 
 
-def test_the_list_collapses_so_workspaces_stay_reachable() -> None:
+def test_the_list_has_no_collapse_chevron_and_workspaces_stay_reachable() -> None:
+    """The Build redesign removed every chevron, the list's collapse with them.
+
+    The workspaces never needed the list folded away to stay reachable: the
+    list scrolls in its own flexible box and the workspaces keep theirs. And a
+    `collapsed: true` an older build saved must not leave the list hidden with
+    no control left to bring it back, so nothing reads that flag any more.
+    """
     history = _read("js/sidebar_history.js")
     html = _read("chat.html")
 
-    assert 'id="tc-history-collapse"' in html
-    assert 'aria-controls="tc-chats"' in html
-    assert "function applyCollapse(" in history
-    assert "collapsed" in history
+    assert "tc-history-collapse" not in html
+    assert "function applyCollapse(" not in history
+    assert "view().collapsed" not in history
+    assert "wrap.hidden" not in history
+    chats = html[html.index('id="tc-chats"') :]
+    chats = chats[: chats.index(">")]
+    assert "flex: 1 1 auto" in chats and "overflow-y: auto" in chats
+    workspaces = html[html.index('id="tc-workspaces"') :]
+    workspaces = workspaces[: workspaces.index(">")]
+    assert "flex: 0 0 auto" in workspaces
+
+
+# A class built from a template (`ph-${...}`) is invisible to the name scan, so
+# each such template is listed with every name it can produce. The Work job's
+# pause and resume buttons were bare dots this way.
+_TEMPLATE_BUILT_ICONS = {
+    "ph-${action === 'pause' ? 'pause' : 'play'}": {"ph-pause", "ph-play"},
+    "ph-${job.status === 'paused' ? 'play' : 'pause'}": {"ph-pause", "ph-play"},
+}
 
 
 def test_every_icon_the_shell_uses_is_actually_in_the_icon_map() -> None:
@@ -133,9 +170,17 @@ def test_every_icon_the_shell_uses_is_actually_in_the_icon_map() -> None:
     mapped = set(re.findall(r"\.(ph-[a-z0-9-]+)::before", css))
 
     used: set[str] = set()
+    unlisted: list[str] = []
     sources = [WEB / "chat.html"] + sorted((WEB / "js").glob("*.js"))
     for path in sources:
-        used |= set(re.findall(r"\bph-[a-z0-9-]+\b", path.read_text(encoding="utf-8", errors="replace")))
+        text = path.read_text(encoding="utf-8", errors="replace")
+        used |= set(re.findall(r"\bph-[a-z0-9-]+\b", text))
+        for template in re.findall(r"\bph-\$\{[^}]*\}", text):
+            if template in _TEMPLATE_BUILT_ICONS:
+                used |= _TEMPLATE_BUILT_ICONS[template]
+            else:
+                unlisted.append(f"{path.name}: {template}")
+    assert not unlisted, f"list the names these templates can produce in _TEMPLATE_BUILT_ICONS: {unlisted}"
     # Names built at runtime from user/model input are validated elsewhere.
     used -= {"ph-caret", "ph-circle"}
 
@@ -244,10 +289,9 @@ def test_the_sidebar_controls_are_drawn_not_glyphs() -> None:
     html = _read("chat.html")
 
     head = html[html.index('class="tc-history-head"') : html.index('id="tc-chats"')]
-    # The icon map's caret is "\2304", a thin stray mark, and its funnel did
-    # not exist at all. Both are inline SVG now.
+    # The icon map's funnel did not exist at all, so the sort chip draws its
+    # three lines inline. (The collapse caret is gone with the collapse.)
     assert "<svg" in head
-    assert 'id="tc-history-collapse-icon"' in html
     assert "ph-caret-down" not in head
     assert "ph-funnel-simple" not in head
 
@@ -301,9 +345,12 @@ def test_the_modes_are_three_faces_of_thomas() -> None:
         tab = tab[: tab.index("</button>")]
         assert f'data-thomas-icon="{tool}"' in tab
         assert "ph-" not in tab, f"{mode} still uses a Unicode stand-in"
-    # Build wears a hammer, not an anvil.
+    # Build wears code brackets and Work a tick, both drawn as lines (2026-11-10). The hammer and the briefcase went:
+    # "i also dont like the builds forge icon or the breif case doenst looks good the chat one is fine."
     build = icons[icons.index("build: HEAD") : icons.index("work: HEAD")]
-    assert "rotate(-22 12 12)" in build
+    work = icons[icons.index("work: HEAD") : icons.index("const S =")]
+    assert "M9.3 9 6.6 12l2.7 3M14.7 9l2.7 3-2.7 3M12.9 8.2l-1.8 7.6" in build and "rotate(" not in build
+    assert "M7.5 12.3l3.1 3.1 5.9-6.6" in work and "<rect" not in work
 
     # The sidebar header stays the Thomas mark.
     header = html[html.index('class="tc-sidebar"') : html.index('id="tc-mode-switch"')]
@@ -316,8 +363,11 @@ def test_code_is_called_build_but_keeps_its_adapter_id() -> None:
 
     cfg = shell[shell.index("code: {") : shell.index("};", shell.index("code: {"))]
     assert "label: 'Build'" in cfg
-    assert "history: 'Builds'" in cfg
-    assert "create: 'New build'" in cfg
+    # The design's words: a Build is a task you start and come back to.
+    assert "history: 'Recent tasks'" in cfg
+    assert "create: 'New task'" in cfg
+    assert "search: 'Search tasks'" in cfg
+    assert "prompt: 'Message Thomas…'" in cfg
     # The key is the adapter id, the surface-mode attribute and half the API's
     # vocabulary — renaming it would unwire the mode, not relabel it.
     assert "code: {" in shell

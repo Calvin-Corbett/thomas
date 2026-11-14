@@ -34,6 +34,12 @@ except ImportError:
     CODE_PREFIXES = ("src/", "scripts/")
 
 CODE_EXTENSIONS = {".py", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".css", ".html"}
+FRAGMENT_PREFIX = "changelog.d/"
+
+
+def _is_fragment(path: str) -> bool:
+    """A per-agent changelog fragment counts as the changelog (see scripts/forge/changelog_fragments.py)."""
+    return path.startswith(FRAGMENT_PREFIX) and path.endswith(".md") and not path.endswith("README.md")
 
 
 def _changed_files(*, base: str | None = None, head: str | None = None) -> list[str]:
@@ -64,7 +70,7 @@ def _changelog_diff_content(base: str | None = None, head: str | None = None) ->
         diff_args.extend([base, head])
     else:
         diff_args.append("--cached")
-    diff_args.extend(["--", CHANGELOG_PATH])
+    diff_args.extend(["--", CHANGELOG_PATH, FRAGMENT_PREFIX])
     proc = subprocess.run(
         diff_args,
         cwd=ROOT,
@@ -108,13 +114,25 @@ def run(argv: list[str] | None = None) -> int:
 
     staged = _changed_files(base=args.base, head=args.head) if args.base else _staged_files()
     code_files = [f for f in staged if _is_code_file(f)]
-    changelog_staged = CHANGELOG_PATH in staged
+    fragments = [f for f in staged if _is_fragment(f)]
+    changelog_staged = CHANGELOG_PATH in staged or bool(fragments)
     threshold = max(1, args.threshold)
 
     ok = True
     reason = ""
 
-    if len(code_files) >= threshold and not changelog_staged:
+    fragment_problems: list[str] = []
+    if fragments:
+        try:
+            from scripts.forge.changelog_fragments import check_fragment
+
+            fragment_problems = [p for f in fragments for p in check_fragment(ROOT / f)]
+        except ImportError:
+            fragment_problems = []
+    if fragment_problems:
+        ok = False
+        reason = "changelog fragment is malformed: " + "; ".join(fragment_problems)
+    elif len(code_files) >= threshold and not changelog_staged:
         ok = False
         reason = f"You staged {len(code_files)} code file(s) (threshold: {threshold}) but CHANGELOG.md is not staged."
     elif len(code_files) >= threshold and changelog_staged:

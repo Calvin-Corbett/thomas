@@ -89,8 +89,7 @@ These frequently misidentified files are normal source today:
   `thomas/agent/loop_streaming.py`, `thomas/agent/loop_tools.py`, and other named
   helpers.
 - `thomas/server/routes/chat_aiohttp.py` is a compatibility shim with normal
-  imports from `thomas/server/routes/chat_aiohttp_handlers.py` and
-  `thomas/server/routes/chat_aiohttp_helpers.py`.
+  imports from `thomas/server/routes/chat_aiohttp_helpers.py`.
 - `scripts/crew/tasks/manager.py` is a normal module that imports
   `scripts/crew/tasks/base.py`, `scripts/crew/tasks/messages.py`,
   `scripts/crew/tasks/plans.py`, `scripts/crew/tasks/reactivate.py`,

@@ -13,6 +13,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -29,6 +30,8 @@ _MEMORY_RETRIEVAL_TIMEOUT_S = 10.0
 _MEMORY_INTERRUPT_JOIN_S = 0.5
 
 _MEMORY_POLICY_WARNED_SET: set[int] = set()
+
+
 def _context_preserve_mode(agent: AgentLoop) -> str:
     """Read the current context-preserve behavior for memory policy."""
     if agent is None:
@@ -348,6 +351,34 @@ _LIBRARY_CAPTURE_MIN_CHARS = {
     "debug_audit": 200,
     "coding_task": 300,
 }
+# Mirrors CONTINUATION_PREFIX and STEER_LINE in thomas/server/routes/autopilot_goal.py;
+# agent cannot import server.
+_CONTROL_REQUEST_OPENINGS = ("Autopilot: continuing", "Steering update:")
+_REFUSAL_OPENINGS = (
+    "i can't",
+    "i cannot",
+    "i couldn't",
+    "i could not",
+    "could not",
+    "i'm sorry",
+    "i am sorry",
+    "i'm unable",
+    "i am unable",
+    "unable to",
+    "blocked",
+    "i'm blocked",
+    "i am blocked",
+    "i won't",
+    "i will not",
+)
+_WORKER_LABEL_OPENING = re.compile(r"^\s*TASK_TYPE\s*[:=]\s*[A-Za-z_]+\s*")
+
+
+def _opens_with_refusal(answer: str) -> bool:
+    opening = answer.replace("\u2019", "'")
+    opening = _WORKER_LABEL_OPENING.sub("", opening, count=1)
+    opening = opening.lstrip(" \t\r\n*_#>`-").lower()
+    return opening.startswith(_REFUSAL_OPENINGS)
 
 
 def auto_capture_research(
@@ -373,6 +404,9 @@ def auto_capture_research(
     a = str(answer or "").strip()
     min_chars = _LIBRARY_CAPTURE_MIN_CHARS.get(rpath, 200)
     if len(q) < 5 or len(a) < min_chars:
+        return
+    # Filter what the library keeps, not whether the run succeeded; read only the answer's opening.
+    if q.startswith(_CONTROL_REQUEST_OPENINGS) or _opens_with_refusal(a):
         return
     try:
         lib.add_research_note(

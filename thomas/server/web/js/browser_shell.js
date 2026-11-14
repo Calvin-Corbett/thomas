@@ -2,15 +2,16 @@
  *
  * Loaded LAST by chat.html (after the inline shell script), this layers the
  * browser chrome onto the live shell: Chrome-style tabs on a titlebar with
- * window controls, the omnibox, a bookmarks bar, a contextual side panel,
- * and the Ask Thomas quick chat (real backend via ThomasWorkspaceChatTransport).
+ * window controls, the omnibox, a bookmarks bar and a contextual side panel.
  *
  * Design rules it implements (owner direction, 2026-08-25):
  *  - Sidebar clicks FOCUS an existing tab, never duplicate; a conversation
  *    exists once. Fresh workspace instances come from the + page's tiles.
- *  - One Thomas mark (titlebar); the top bars stay thin.
+ *  - One Thomas mark (titlebar); the top bars stay thin. The Build redesign
+ *    took the Ask Thomas pill out of the titlebar: the tab strip runs straight
+ *    into the window controls.
  *  - No AI-mode toggle and no page-vision toggle: Thomas is the AI and he
- *    already knows which tab you're on (the quick chat shows what he sees).
+ *    already knows which tab you're on.
  *  - Profile avatar drops down Settings / theme switcher / Redesign; the
  *    side-panel toggle sits far right of the bookmarks bar, the sidebar
  *    collapse far left.
@@ -21,8 +22,6 @@
  *  - Every other Chat, Build or Work tab is its OWN chat.html document in an
  *    iframe (browser_shell_docs.js); the top-level page is the pinned home
  *    tab and is never driven by the strip. A tab is a document.
- *  - The quick chat calls ThomasWorkspaceChatTransport.beginTurn() — the same
- *    POST /api/v2/chat NDJSON pipeline as the composer, surface_mode 'chat'.
  *
  * Escape hatch: ?browser=0 or localStorage thomas_browser_shell='off'.
  */
@@ -63,6 +62,8 @@
     eye: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>',
     globe: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>',
     panel: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
+    // The same frame as `panel`, with its bar on the other side: the two ends of the bookmarks row are a pair.
+    sidebar: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>',
     up: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
     ext: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M10 5H5v14h14v-5"/></svg>',
     gear: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>',
@@ -74,19 +75,15 @@
      Mirrors the inline shell's WORKSPACE_ROUTES; plugins are merged from the
      same marketplace endpoint it uses. */
   const MODERN_ROUTES = {
-    mission: "/mission?embed=1",
     my_stuff: "/my-stuff?embed=1",
     settings: "/settings?embed=1",
-    agent_ops: "/agent-ops?embed=1",
-    system_map: "/system-map?embed=1",
+    agents: "/agents?embed=1",
+    system: "/system?embed=1",
   };
   const CLASSIC_ROUTE = "/classic?embed=1";
   const BUILTIN_WS = {
-    "Mission Control": { mode: "mission", icon: "mission" },
-    "System Map": { mode: "system_map", icon: "trading" },
-    "Agent Ops": { mode: "agent_ops", icon: "search" },
+    "System": { mode: "system", icon: "mission" },
     "Virtual Office": { mode: "office", icon: "office" },
-    "Canvas": { mode: "app_builder", icon: "canvas" },
     "Library": { mode: "my_stuff", icon: "library" },
     "Channels": { mode: "channels", icon: "channels" },
     "Token Economy": { mode: "token_economy", icon: "tokens" },
@@ -97,6 +94,7 @@
     wsByMode[w.mode] = { label, icon: w.icon, route: MODERN_ROUTES[w.mode] || CLASSIC_ROUTE };
   });
   wsByMode.settings = { label: "Settings", icon: "settings", route: MODERN_ROUTES.settings };
+  wsByMode.agents = wsByMode.system;      // the old Agents address shows System, in a System tab
   const wsByLabel = {};                   // sidebar label -> mode
   Object.entries(BUILTIN_WS).forEach(([label, w]) => { wsByLabel[label] = w.mode; });
 
@@ -117,6 +115,14 @@
       annotateWorkspaceButtons();
     } catch (_) { /* the built-ins are enough */ }
   }
+  // Uninstalled from the sidebar row's menu: its open tabs close, and the name stops opening a page that is gone.
+  window.addEventListener("thomas:workspace:uninstalled", e => {
+    const mode = e.detail && e.detail.mode;
+    if (!mode || !wsByMode[mode]) return;
+    // One of Thomas's own five keeps its entry: installing it again needs no reload to open.
+    if (!Object.values(BUILTIN_WS).some(w => w.mode === mode)) delete wsByMode[mode];
+    tabs.filter(t => t.kind === "ws" && t.mode === mode).forEach(t => closeTab(t.id));
+  });
 
   /* ── Chrome DOM: titlebar / nav row / bookmarks bar above the old shell ── */
   shell.style.flexDirection = "column";
@@ -128,7 +134,6 @@
   const titlebar = h('<div id="bt-titlebar">'
     + '<span class="bt-appmark" title="Thomas"><span></span><span></span></span>'
     + '<div id="bt-tabstrip" role="tablist" aria-label="Open tabs"></div>'
-    + '<button id="bt-askthomas" type="button" title="Quick question — opens a side chat, no full tab needed">' + SVG.spark + " Ask Thomas</button>"
     + '<span class="bt-wincluster">'
     + '<button class="bt-winbtn" id="bt-min" type="button" title="Minimize">' + SVG.min + "</button>"
     + '<button class="bt-winbtn" id="bt-max" type="button" title="Maximize">' + SVG.max + "</button>"
@@ -181,6 +186,9 @@
     + (desktop ? '<button class="bt-pm-item" id="bt-pm-history" type="button">' + SVG.reload + " History</button>" : "")
     + '<div class="bt-pm-label">Appearance & tools</div>'
     + '<div class="bt-pm-hosted" id="bt-pm-hosted"></div>';
+  // Which account answers (email and plan) lives here, not in the model dropdown.
+  const accountLine = document.getElementById("tc-model-account");
+  if (accountLine) profMenu.querySelector(".bt-pm-head").after(accountLine);
   const hosted = profMenu.querySelector("#bt-pm-hosted");
   // Rehome only the real theme switcher; chat actions stay in the chat header.
   const themeWrap = document.querySelector("[data-theme-switch]");
@@ -218,7 +226,7 @@
   const bookbar = h('<div id="bt-bookmarks"></div>');
   shell.insertBefore(bookbar, rowWrap);
   const sidebarToggle = document.getElementById("tc-sidebar-toggle");
-  if (sidebarToggle) bookbar.appendChild(sidebarToggle);
+  if (sidebarToggle) { bookbar.appendChild(sidebarToggle); sidebarToggle.innerHTML = SVG.sidebar; }
   // The toggle folds home through its own handler; every tab document follows.
   if (sidebarToggle) sidebarToggle.addEventListener("click", () => docs.onSidebarToggle(), true);
   const DEFAULT_BOOKMARKS = [
@@ -373,22 +381,27 @@
       asideEl.inert = false;
       tab.page.classList.add("is-active");
       const inp = tab.page.querySelector("input");
-      if (inp) setTimeout(() => inp.focus(), 60);
+      if (inp && tab.kind !== "search") setTimeout(() => inp.focus(), 60);
     }
     // The browser bar is the one model control for every Thomas document.
-    if (modelWrap) modelWrap.style.display = "";
+    // Its own layout, not "": clearing the inline display drops the wrapper to block, and the Agent picker beside
+    // the model chip then wraps onto a second row (the bar grew from 41 to 72 px on 2026-09-25).
+    if (modelWrap) modelWrap.style.display = "flex";
     omni.value = tab.url || "";
     syncNav();
     panel.sync();
   }
-  function closeTab(id) {
+  // keepView: the tab is leaving for another window, so its native view stays alive there.
+  function closeTab(id, keepView) {
     const i = tabs.findIndex(t => t.id === id);
     if (i < 0) return;
     const tab = tabs[i];
     if (tab.pinned) return;                       // home stays in this version
     if (tab.kind === "doc") docs.remove(tab);
+    if (tab.searchController) tab.searchController.abort();
+    tab.webRequest = (tab.webRequest || 0) + 1;
     tab.el.remove();
-    if (tab.viewId != null && desktop) { desktop.closeTab(tab.viewId); viewTabs.delete(tab.viewId); }
+    if (tab.viewId != null && desktop) { if (!keepView) desktop.closeTab(tab.viewId); viewTabs.delete(tab.viewId); }
     // Adopted originals (tc-ws-frame) survive tab close; our own frames don't.
     if (tab.frame && tab.frame.classList.contains("bt-frame") && !tab.adopted) tab.frame.remove();
     else if (tab.frame) { tab.frame.style.display = "none"; tab.frame.classList.remove("is-active"); }
@@ -414,8 +427,10 @@
     const wrap = document.getElementById("tc-workspaces");
     if (!wrap) return;
     wrap.querySelectorAll("button:not([data-bt-mode])").forEach(btn => {
-      const label = (btn.textContent || "").trim();
-      const mode = wsByLabel[label];
+      // The row says which workspace it is (data-mode). Its text does not: a row can be renamed, and it carries a
+      // "⋯" control, so matching the text alone left every row untagged and none of them opened as a tab.
+      const label = btn.dataset.defaultLabel || ((btn.querySelector("span") || btn).textContent || "").trim();
+      const mode = wsByMode[btn.dataset.mode] ? btn.dataset.mode : wsByLabel[label];
       if (mode) {
         btn.dataset.btMode = mode;
         btn.title = "Opens as a tab; clicking again focuses it. Fresh instances live on the + page.";
@@ -428,7 +443,9 @@
 
   document.addEventListener("click", e => {
     const btn = e.target.closest("#tc-workspaces button[data-bt-mode]");
-    if (!btn) return;
+    // The row's "⋯" and its rename box are inside the button. They are theirs to answer: taken here, in the capture
+    // phase, the "⋯" opened the workspace and its menu never showed.
+    if (!btn || e.target.closest(".tc-ws-more, .tc-ws-rename")) return;
     e.preventDefault();
     e.stopPropagation();                 // capture phase: the old single-frame path never runs
     openWorkspaceTab(btn.dataset.btMode);
@@ -465,6 +482,8 @@
     frame.dataset.workspaceMode = mode;
     frame.addEventListener("load", () => { syncFrame(frame, mode, meta.route); setStatus(tab, "idle"); });
     setStatus(tab, "working");
+    // An old-style page shows its own default view first; keep it out of sight until it shows this one.
+    if (meta.route === CLASSIC_ROUTE && window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.arrive(frame, mode);
     frame.src = meta.route;
     bodyRow.appendChild(frame);
     tab.frame = frame;
@@ -508,7 +527,10 @@
   const web = window.ThomasBrowserWeb.wire({
     desktop, bodyRow, h, esc, SVG, icons, wsByMode, bookmarks, makeTab, byId, activate,
     setTitle, setStatus, toast, viewTabs, reportBounds, openWorkspaceTab, omni,
+    // Hoisted: syncNav is declared below, with the toolbar it reads.
+    syncNav: () => syncNav(),
     getActiveId: () => activeId,
+    getTabs: () => tabs.slice(),
     websearch: () => websearch,
     keys: () => keys,
   });
@@ -517,21 +539,67 @@
   /* ── Toolbar wiring ─────────────────────────────────────────────────── */
   const backBtn = navrow.querySelector("#bt-back"), fwdBtn = navrow.querySelector("#bt-fwd");
   function syncNav() {
-    const t = byId(activeId), web = t && t.kind === "web";
-    backBtn.disabled = !web;
-    fwdBtn.disabled = !web;
+    const t = byId(activeId);
+    // Both buttons are dark exactly when the step they would take is "none",
+    // so what the bar shows and what a click does come from one decision. The
+    // results page is the one page here you arrive at by going back, which is
+    // why Forward can act on it while Back cannot. Read from the module
+    // export rather than the wired instance so this never depends on the
+    // wiring order further down this file.
+    const nav = window.ThomasBrowserSearch;
+    backBtn.disabled = nav.backStep(t) === "none";
+    fwdBtn.disabled = nav.forwardStep(t) === "none";
+  }
+  /* Re-opening an address this chrome recorded. Which page kind it is decides
+   * how: a results address is a page we render ourselves, a web address goes
+   * in the frame, and a tab currently showing results has to hand its page
+   * over to that frame first. `step` says which direction it was walked, so
+   * the record itself stays straight -- a page reached by Back belongs ahead,
+   * not back on the trail it just came off. */
+  function goTo(t, url, step) {
+    if (websearch.isSearchUrl(url)) websearch.show(t, url, step);
+    else if (t.kind === "search") web.convertNtpToWeb(t, url, step);
+    else web.navigateWebTab(t, url, step);
+    syncNav();
+  }
+  /* Taking a step that backStep/forwardStep have already decided. Both
+   * buttons answer with the same four words, and a desktop view answers late
+   * -- so the code that turns a word into a navigation is written once and
+   * used twice by each button: before the view is asked, and again with what
+   * it said. "view" and "none" are not ours to act on. */
+  function takeStep(t, step, origin) {
+    if (step === "trail") goTo(t, t.trail.pop(), "back");
+    else if (step === "ahead") goTo(t, t.ahead.pop(), "forward");
+    else if (step === "search") websearch.show(t, origin || t.searchOrigin, "back");
   }
   backBtn.addEventListener("click", () => {
     const t = byId(activeId);
-    if (!t || t.kind !== "web") return;
-    if (t.desktop) desktop.back(t.viewId);
-    else if (t.frame) { try { t.frame.contentWindow.history.back(); } catch (_) { } }
+    if (!t) return;
+    // Who owes the step is decided by websearch.backStep, which is pinned in
+    // tests: in the browser the record this chrome kept is the tab's history,
+    // because a framed page on another origin cannot be stepped from here at
+    // all; in the desktop app the view's own history is asked first, and the
+    // record is what is left when that view says it could not move.
+    const step = websearch.backStep(t);
+    if (step !== "view") return void takeStep(t, step);
+    const origin = t.searchOrigin;
+    Promise.resolve(desktop.back(t.viewId)).then(moved => {
+      if (byId(activeId) === t) takeStep(t, websearch.backStep(t, moved), origin);
+    }).catch(() => { });
   });
   fwdBtn.addEventListener("click", () => {
     const t = byId(activeId);
-    if (!t || t.kind !== "web") return;
-    if (t.desktop) desktop.forward(t.viewId);
-    else if (t.frame) { try { t.frame.contentWindow.history.forward(); } catch (_) { } }
+    if (!t) return;
+    // The twin of Back: a page Back took you off is a page Forward owes you,
+    // and on the results page that page is the result you were reading. A
+    // desktop view is asked first here too, and a view that had nothing ahead
+    // leaves the step with the record rather than ending the tab's history --
+    // that view was made after the page Back stepped off.
+    const step = websearch.forwardStep(t);
+    if (step !== "view") return void takeStep(t, step);
+    Promise.resolve(desktop.forward(t.viewId)).then(moved => {
+      if (byId(activeId) === t) takeStep(t, websearch.forwardStep(t, moved));
+    }).catch(() => { });
   });
   const reloadBtn = navrow.querySelector("#bt-reload");
   let reloadAnimationTimer = 0;
@@ -563,6 +631,7 @@
       ));
     }
     if (t.kind === "doc") { docs.reload(t); return finish(); }
+    if (t.kind === "search") { websearch.show(t, t.url); return finish(); }
     if (t.desktop && t.viewId != null) { setStatus(t, "working"); desktop.reload(t.viewId); }
     else if (t.frame) { setStatus(t, "working"); try { t.frame.src = t.frame.src; } catch (_) { } }
     return finish();
@@ -603,21 +672,19 @@
     setTimeout(() => toast("The browser refused to close this window — use the window's own close button."), 150);
   });
 
-  /* ── Side panel + quick chat (its own module) ───────────────────────── */
+  /* ── Side panel (its own module) ────────────────────────────────────── */
   const panel = window.ThomasBrowserPanel.create({
-    desktop, bodyRow: rowWrap, esc, h, SVG, byId, setStatus, navrow, activate,
+    desktop, bodyRow: rowWrap, esc, h, SVG, byId, setStatus, navrow,
     getActiveId: () => activeId,
-    homeTabId: () => homeTab.id,
     openWorkspaceTab,
     onBoundsChange: () => reportBounds(),
   });
   panel.attach(panelBtn);
-  titlebar.querySelector("#bt-askthomas").addEventListener("click", panel.openQuickChat);
 
   /* ── Desktop-only wiring lives in its own module ────────────────────── */
   const desktopWiring = window.ThomasBrowserDesktop.wire({
     desktop, bodyRow, profBtn, omni, viewTabs, toast, setTitle, setStatus, setFavicon,
-    openWebTab, openWorkspaceTab, openHistoryTab, activate, reportBounds,
+    openWebTab, openWorkspaceTab, openHistoryTab, activate, reportBounds, syncNav,
     getActiveId: () => activeId,
     homeTabId: () => homeTab.id,
   });
@@ -662,6 +729,46 @@
     faceFor: mode => ({ chat: "chat", code: "build", work: "work" }[mode] || "chat"),
   });
   docs.installOn(homeTab, document);
+
+  /* ── Title bar: window drag, tab reorder, tear-off (its own module) ──── */
+  let bornFromTearOff = false;
+  if (window.ThomasBrowserTearoff) window.ThomasBrowserTearoff.wire({
+    desktop, titlebar, strip, newBtn, activate,
+    getTabs: () => tabs.slice(),
+    // The strip's order is the tabs' order, so Ctrl+Tab and Ctrl+1..9 follow it.
+    reorderTabs: els => tabs.sort((a, b) => els.indexOf(a.el) - els.indexOf(b.el)),
+    // What a new window needs to bring a tab back to life, or null when this
+    // kind of tab cannot leave (the home tab, History, a search page).
+    specFor: tab => {
+      if (tab.pinned) return null;
+      if (tab.kind === "web" && tab.desktop && tab.viewId != null) return { kind: "web", viewId: tab.viewId, title: tab.title, url: tab.url };
+      if (tab.kind === "doc") return { kind: "doc", mode: tab.mode, chatId: tab.chatId || "", title: tab.title };
+      if (tab.kind === "ws") return { kind: "ws", mode: tab.mode, title: tab.title };
+      if (tab.kind === "ntp") return { kind: "ntp", title: tab.title };
+      return null;
+    },
+    releaseTab: tab => closeTab(tab.id, true),
+    // A window made by tearing a tab off exists to hold that tab: once it is
+    // gone and only the home tab is left, the window closes, as a browser's does.
+    afterTear: () => { if (bornFromTearOff && tabs.length === 1 && desktop) desktop.windowControl("close"); },
+    adopt: spec => {
+      if (!spec) return;
+      if (spec.tornOff) bornFromTearOff = true;
+      if (spec.kind === "web") web.adoptWebView(spec);
+      else if (spec.kind === "doc") docs.open({ mode: spec.mode, chatId: spec.chatId, title: spec.title });
+      else if (spec.kind === "ws") openWorkspaceTab(spec.mode, true);
+      else if (spec.kind === "ntp") openNtp();
+    },
+  });
+  // The page the active tab shows, for the Agent picker: home is this one, a
+  // Chat/Build/Work tab its own frame, anything else no Thomas document at all.
+  // openTab: a Build deliverable's "Open in a tab" opens here, as a tab.
+  window.ThomasBrowserShell = { activeWindow: () => {
+    const tab = byId(activeId);
+    if (!tab) return null;
+    if (tab.kind === "chat-home") return window;
+    try { return tab.kind === "doc" && tab.frame ? tab.frame.contentWindow : null; } catch (_) { return null; }
+  }, openTab: url => openWebTab(url) };
 
   /* ── Search is a page we serve, not a site we hand you to ──────────── */
   const websearch = window.ThomasBrowserSearch.wire({

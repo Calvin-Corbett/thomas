@@ -2,12 +2,12 @@
 
 The handler used to run a 15-30s synchronous LLM generation inline, so any
 caller with an ordinary timeout saw HTTP_000 -- a working instrument reading
-as dead.
+as dead (`.superpowers/sdd/2026-08-25-phase2-recon/recon.md` Section 4 #5).
 The fix serves an app-scoped, TTL-cached, stamped report and refreshes it in
 the background, single-flighted. These tests never call a real model --
 `generate_self_review` is monkeypatched at the module level.
 
-Fix round 1 found two Important issues in the first cut
+Fix round 1 (`task-4-review.md`) found two Important issues in the first cut
 of this fix and this file grew tests for both: an exception escaping
 `generate_self_review` outside its own internal tuple left the cache's
 attempt clock unstamped, so the TTL never throttled and the entry never
@@ -16,6 +16,9 @@ reached its error path (every caller saw a permanently healthy-looking
 `stale`, so an arbitrarily old report could be served with `stale: false`
 and no error visible. See `_refresh_self_review_entry`'s two separate clocks
 (`built_at` for attempt-throttling, `result_built_at` for report age).
+
+These are the proofs of `thomas.server.routes.self_review` for the cache and its clocks. The route is registered by the
+row `thomas.server.rows.self_review`, which `tests/test_turning_self_review_off_touches_only_its_routes.py` holds.
 """
 
 from __future__ import annotations

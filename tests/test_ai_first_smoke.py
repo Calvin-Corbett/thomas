@@ -93,19 +93,24 @@ async def test_root_slash_opens_picker_and_dispatches_command() -> None:
 async def test_repl_model_persist_failure_logs_warning(monkeypatch, caplog) -> None:
     runtime = _SmokeSlashRuntime()
 
-    fake_module = types.ModuleType("thomas.server.model_preferences")
+    fake_module = types.ModuleType("thomas.preferences.model_prefs")
+    persist_calls = []
 
-    def _boom(**_kwargs):
+    def _boom(**kwargs):
+        persist_calls.append(kwargs)
         raise RuntimeError("db write failed")
 
     fake_module.persist_user_model_preferences = _boom  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "thomas.server.model_preferences", fake_module)
+    monkeypatch.setitem(sys.modules, "thomas.preferences.model_prefs", fake_module)
 
     with caplog.at_level("WARNING", logger="thomas.cli.repl_runtime"):
         await runtime._persist_repl_model_selection(profile="codex", model_id="gpt-5")
 
+    assert persist_calls == [{"user_id": "default", "profile": "codex", "model_id": "gpt-5"}]
     assert any(
-        "Failed to persist REPL model selection profile=codex model_id=gpt-5" in rec.message for rec in caplog.records
+        "Failed to persist REPL model selection profile=codex model_id=gpt-5: RuntimeError: db write failed"
+        in rec.message
+        for rec in caplog.records
     )
 
 

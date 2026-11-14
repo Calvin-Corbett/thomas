@@ -33,10 +33,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODE_CSS = ROOT / "thomas" / "server" / "web" / "css" / "unified_code_mode.css"
-CODE_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_mode.js"
+# The drawer's head (title, project, close) is drawn by unified_code_drawer.js
+# since the 2026-10 Build redesign, and styled with the agents.
+AGENTS_CSS = ROOT / "thomas" / "server" / "web" / "css" / "unified_code_agents.css"
+CODE_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_surface.js"
 
 
-def _rule(selector_pattern: str) -> str:
+def _rule(selector_pattern: str, sheet: Path = MODE_CSS) -> str:
     """Every declaration block for a selector, comments stripped first.
 
     Comments first because the rules under test are documented directly above
@@ -51,18 +54,12 @@ def _rule(selector_pattern: str) -> str:
     applies both, so this has to look at both.
     """
 
-    css = re.sub(r"/\*.*?\*/", "", MODE_CSS.read_text(encoding="utf-8"), flags=re.S)
-    return "\n".join(
-        m.group(1) for m in re.finditer(selector_pattern + r"[^{}]*\{([^}]*)\}", css)
-    )
+    css = re.sub(r"/\*.*?\*/", "", sheet.read_text(encoding="utf-8"), flags=re.S)
+    return "\n".join(m.group(1) for m in re.finditer(selector_pattern + r"[^{}]*\{([^}]*)\}", css))
 
 
 def _truncates(body: str) -> bool:
-    return (
-        "overflow: hidden" in body
-        and "text-overflow: ellipsis" in body
-        and "white-space: nowrap" in body
-    )
+    return "overflow: hidden" in body and "text-overflow: ellipsis" in body and "white-space: nowrap" in body
 
 
 def test_the_file_tree_truncates_a_long_name() -> None:
@@ -81,18 +78,15 @@ def test_the_tree_markup_actually_emits_that_span() -> None:
 
     js = CODE_JS.read_text(encoding="utf-8")
     assert re.search(r"data-code-tree-file=.{0,120}<span>", js, re.S), (
-        "the tree row no longer wraps its filename in a span, so the truncation "
-        "rule matches nothing"
+        "the tree row no longer wraps its filename in a span, so the truncation rule matches nothing"
     )
 
 
 def test_the_drawer_subtitle_truncates_and_its_wrapper_can_shrink() -> None:
-    subtitle = _rule(r"\.tc-code-drawer-head small")
-    assert _truncates(subtitle), (
-        f"the drawer subtitle must truncate; got {subtitle.strip()!r}"
-    )
+    subtitle = _rule(r"\.tc-agents-head-text small", AGENTS_CSS)
+    assert _truncates(subtitle), f"the drawer subtitle must truncate; got {subtitle.strip()!r}"
 
-    wrapper = _rule(r"\.tc-code-drawer-head > div")
+    wrapper = _rule(r"\.tc-agents-head-text", AGENTS_CSS)
     assert "min-width: 0" in wrapper, (
         "the subtitle's flex wrapper defaults to min-width:auto and will not "
         "shrink, so the ellipsis never engages and the label still runs out of "

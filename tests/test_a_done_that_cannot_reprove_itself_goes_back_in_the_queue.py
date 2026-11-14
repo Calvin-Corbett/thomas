@@ -163,7 +163,7 @@ def test_done_task_with_attested_gate_evidence_never_expires_in_phase_1_4(tmp_pa
         workboard_path=workboard,
         ttl_hours=0.0001,
         now=datetime.now(timezone.utc),
-        repo_root=Path("."),
+        repo_root=tmp_path,
         db_path=None,
     )
 
@@ -185,7 +185,7 @@ def test_done_task_with_no_evidence_and_no_timestamp_expires_immediately_as_lega
         workboard_path=workboard,
         ttl_hours=1_000_000.0,  # huge TTL -- proves this is NOT gated by TTL
         now=datetime.now(timezone.utc),
-        repo_root=Path("."),
+        repo_root=tmp_path,
         db_path=None,
     )
 
@@ -293,7 +293,7 @@ def test_malformed_stored_evidence_on_a_done_task_is_skipped_not_expired(tmp_pat
         workboard_path=workboard,
         ttl_hours=0.0001,  # tiny TTL -- proves this is not TTL-gated into expiring
         now=datetime.fromisoformat("2026-01-01T00:00:00+00:00"),
-        repo_root=Path("."),
+        repo_root=tmp_path,
         db_path=None,
     )
 
@@ -361,7 +361,7 @@ def test_run_evidence_without_run_store_db_is_skipped_and_task_stays_untouched(
         workboard_path=workboard,
         ttl_hours=0.0001,
         now=datetime.now(timezone.utc),
-        repo_root=Path("."),
+        repo_root=tmp_path,
         db_path=None,  # no --run-store-db
     )
 
@@ -394,7 +394,7 @@ def test_run_evidence_with_run_store_db_and_a_genuinely_missing_run_expires_past
         workboard_path=workboard,
         ttl_hours=1.0,
         now=datetime.fromisoformat("2026-01-01T00:00:00+00:00"),
-        repo_root=Path("."),
+        repo_root=tmp_path,
         db_path=run_db,
     )
 
@@ -422,7 +422,7 @@ def test_run_evidence_with_run_store_db_and_a_valid_run_never_expires(tmp_path: 
         workboard_path=workboard,
         ttl_hours=0.0001,
         now=datetime.fromisoformat("2026-01-01T00:00:00+00:00"),
-        repo_root=Path("."),
+        repo_root=tmp_path,
         db_path=run_db,
     )
 

@@ -513,15 +513,15 @@ function moduleStudioBindComfyPanel(container, wb) {
     }
 }
 
-// [duplicate removed] const moduleRenderWorkbenchStudioOssOriginal = moduleRenderWorkbenchStudioOss;
-moduleRenderWorkbenchStudioOss = function moduleRenderWorkbenchStudioOssWithComfy(container, wb) {
-    const rendered = moduleRenderWorkbenchStudioOssOriginal(container, wb);
-    if (rendered) {
-        try {
-            moduleStudioBindComfyPanel(container, wb);
-        } catch (error) {
-            console.warn('Comfy Studio panel binding failed', error);
-        }
+// Replace the OSS-only hook: the fallback editor needs the same controls.
+moduleRenderWorkbenchStudioOss = moduleRenderWorkbenchStudioOssOriginal;
+const moduleRenderWorkbenchStudioOriginal = moduleRenderWorkbenchStudio;
+moduleRenderWorkbenchStudio = function moduleRenderWorkbenchStudioWithComfy(container, wb) {
+    const rendered = moduleRenderWorkbenchStudioOriginal(container, wb);
+    try {
+        moduleStudioBindComfyPanel(container, wb);
+    } catch (error) {
+        console.warn('Comfy Studio panel binding failed', error);
     }
     return rendered;
 };

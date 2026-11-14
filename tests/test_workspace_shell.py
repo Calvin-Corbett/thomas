@@ -19,12 +19,16 @@ def test_shared_shell_uses_the_exact_five_chat_theme_names_and_core_tokens() -> 
 
     assert 'const THEMES = ["nebula", "dark", "light", "aurora", "sandstone"]' in shell
     assert "css/tokens.css" in css
-    for value in ("#070912", "#16181c", "#fafbfc", "#08151a", "#f4ede1"):
+    for value in ("#070912", "#16181c", "#ffffff", "#08151a", "#f4ede1"):
         assert value in tokens
     # These are the canonical accessible accents from tokens.css.
     for value in ("#8b8cff", "#6e9bff", "#2b62f3", "#34e0b0", "#a84e30"):
         assert value in tokens
-    for value in ('"Manrope", system-ui, sans-serif', '"JetBrains Mono", ui-monospace, monospace', '"Newsreader", Georgia, serif'):
+    for value in (
+        '"Manrope", system-ui, sans-serif',
+        '"JetBrains Mono", ui-monospace, monospace',
+        '"Newsreader", Georgia, serif',
+    ):
         assert value in tokens
     for value in ("--r-card: 8px", "--r-card: 12px", "--r-card: 14px", "--r-card: 16px"):
         assert value in tokens
@@ -52,12 +56,14 @@ def test_classic_runtime_fetches_in_parallel_but_preserves_execution_order() -> 
 
 def test_chat_routes_bounded_workspaces_without_reloading_on_every_return() -> None:
     chat = _read("chat.html")
+    navigation = _read("js/chat_workspace_navigation.js")
 
-    assert "mission: '/mission?embed=1'" in chat
-    assert "my_stuff: '/my-stuff?embed=1'" in chat
-    assert "settings: '/settings?embed=1'" in chat
+    assert "agents: '/agents?embed=1'" in navigation
+    assert "my_stuff: '/my-stuff?embed=1'" in navigation
+    assert "settings: '/settings?embed=1'" in navigation
     assert "f.removeAttribute('src')" not in chat
-    assert "ThomasWorkspaceShell.sendTheme" in chat
+    assert "f.removeAttribute('src')" not in navigation
+    assert "ThomasWorkspaceShell.sendTheme" in navigation
 
 
 def test_embedded_settings_retires_its_duplicate_world_layer() -> None:
@@ -71,17 +77,18 @@ def test_embedded_settings_retires_its_duplicate_world_layer() -> None:
 
 def test_chat_header_is_literal_persistent_chrome_above_every_workspace() -> None:
     chat = _read("chat.html")
+    navigation = _read("js/chat_workspace_navigation.js")
 
     header = chat.index('data-ui-id="chat.topbar"')
     body = chat.index('id="tc-body-row"')
     frame = chat.index('id="tc-ws-frame"')
     assert header < body < frame
-    assert "const CLASSIC_WORKSPACE_ROUTE = '/classic?embed=1'" in chat
-    assert "id = 'tc-direct-frame'" in chat
-    assert "document.querySelectorAll('.tc-workspace-frame')" in chat
-    assert 'type: "thomas:workspace:navigate"' in chat
-    assert "primary.style.visibility = 'hidden'" in chat
-    assert "primary.inert = true" in chat
+    assert "const CLASSIC_WORKSPACE_ROUTE = '/classic?embed=1'" in navigation
+    assert "id = 'tc-direct-frame'" in navigation
+    assert "document.querySelectorAll('.tc-workspace-frame')" in navigation
+    assert 'type: "thomas:workspace:navigate"' in navigation
+    assert "primary.style.visibility = 'hidden'" in navigation
+    assert "primary.inert = true" in navigation
     assert "/static/css/ui_edit_mode.css" in chat
     assert "/static/js/ui_edit_layout.js" in chat
     assert "/static/js/ui_edit_mode.js" in chat
@@ -124,7 +131,7 @@ def test_shared_shell_relays_theme_navigation_edit_mode_and_ai_edit() -> None:
         "thomas:ui-ai-edit",
     ):
         assert event_type in shell
-    assert "document.querySelectorAll(\"iframe\")" in shell
+    assert 'document.querySelectorAll("iframe")' in shell
 
 
 def test_embedded_documents_carry_the_active_theme_scheme_never_normal() -> None:
@@ -138,8 +145,11 @@ def test_embedded_documents_carry_the_active_theme_scheme_never_normal() -> None
     chat_css = _read("css/chat_shell.css")
     tokens = _read("css/tokens.css")
 
-    for name in ("css/workspace_shell.css", "mission.style01.css",
-                 "css/token_economy_widget.css", "css/chat_shell.css"):
+    for name in (
+        "css/workspace_shell.css",
+        "css/token_economy_widget.css",
+        "css/chat_shell.css",
+    ):
         assert "color-scheme: normal" not in _read(name), name
     # applyTheme pins the theme's explicit scheme on every document root it
     # runs in (top shell and every embed reached via the sendTheme channel).

@@ -10,7 +10,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.crew.workboard import board_io
+from scripts.crew.workboard import backstop_order, board_io
 from scripts.crew.workboard import issue as workboard_issue
 from scripts.crew.workboard import message as workboard_message
 
@@ -60,7 +60,7 @@ def queue_task(
             del lines[idx]
             if idx < section_end:
                 section_end -= 1
-        lines.insert(section_end, row)
+        lines.insert(backstop_order.insert_index(lines, section_start, section_end), row)
 
     new_text = "\n".join(lines) + ("\n" if original_text.endswith("\n") else "")
     ok, violations = workboard_issue._validate_and_write(  # type: ignore[attr-defined]

@@ -1,0 +1,3 @@
+### Fixed
+
+- **The caged server keeps a log, including how it ended.** It is started by a scheduled task that keeps no console, and `thomas serve` logs only to the console, so it ran with no record at all: when the keepalive found it gone six times on 2026-09-25 and 26, nothing said why, and every Build run it hosted was cut off each time. `scripts/cage/caged_server.py` now appends its console to `thomas.log.console` in its logs folder, with a line when it starts and one saying how it ended (a console Ctrl+C, an exit, a crash with its error, or a normal return). `GET /api/logs/export` includes the file. It takes effect the next time the caged server starts.

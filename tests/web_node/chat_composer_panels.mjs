@@ -49,6 +49,7 @@ const doc = {
 };
 const ctx = { window: win, document: doc, setTimeout: () => 0, clearTimeout: () => {} };
 vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(modulePath.replace(/chat_composer_panels\.js$/, 'chat_mic.js'), 'utf8'), ctx);
 vm.runInContext(fs.readFileSync(modulePath, 'utf8'), ctx);
 
 if (!win.ThomasChatComposerPanels || typeof win.ThomasChatComposerPanels.create !== 'function') {

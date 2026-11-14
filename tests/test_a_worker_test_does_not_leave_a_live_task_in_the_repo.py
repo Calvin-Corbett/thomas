@@ -44,6 +44,7 @@ on its own, which is exactly why this hid rather than reported.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import re
 from pathlib import Path
@@ -64,6 +65,32 @@ _LIVE_CHECKOUT_REPO_ROOT = re.compile(
 )
 
 
+def _prose_line_numbers(text: str) -> set[int]:
+    """The lines a bare string statement occupies -- module, class and function docstrings.
+
+    This lint reads call sites, and the files most likely to spell out
+    ``repo_root`` pointed at the checkout are the ones documenting the hazard:
+    this module's own docstring, and the one in
+    `test_a_test_run_does_not_create_a_project_in_your_list.py` that explains
+    what this lint cannot see. A `#` comment was already exempt; a docstring is
+    the same prose under different punctuation.
+
+    Only strings that stand alone as a statement are dropped. Blanking every
+    string token instead would also blank the ``"."`` inside the call being
+    hunted, and the lint would pass on a real offender.
+    """
+
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()  # not parseable, so read every line rather than trust nothing
+    prose: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            prose.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return prose
+
+
 def test_no_test_aims_a_worker_at_the_live_checkout() -> None:
     """The repo root a test hands the worker is where the worker writes.
 
@@ -76,9 +103,10 @@ def test_no_test_aims_a_worker_at_the_live_checkout() -> None:
         if path.name == Path(__file__).name:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
+        prose = _prose_line_numbers(text)
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if line.lstrip().startswith("#"):
-                continue  # a comment explaining the hazard is not a call site
+            if line.lstrip().startswith("#") or lineno in prose:
+                continue  # a comment or docstring explaining the hazard is not a call site
             if _LIVE_CHECKOUT_REPO_ROOT.search(line):
                 offenders.append(f"{path.relative_to(TESTS_DIR.parent).as_posix()}:{lineno}: {line.strip()}")
 
@@ -98,7 +126,11 @@ def test_the_worker_still_records_its_task_under_the_root_it_was_given(tmp_path:
     the checkout's own task_bots directory gains nothing (0 files).
     """
 
-    real_dir = task_bot_runtime.runtime_dir()
+    # The checkout's ledger BY PATH, not by asking the resolver. `task_bot_runtime.runtime_dir()` no longer
+    # answers this directory inside a test process -- `shared_root_sandbox` sends a shared root to a
+    # throwaway folder -- and pointing this at the sandbox would leave the assertion below measuring a
+    # directory nothing in the repo reads, while still passing.
+    real_dir = TESTS_DIR.parent / "runtime" / "coordination" / task_bot_runtime.STATE_DIRNAME
     before = {p.name for p in real_dir.glob("*.json")} if real_dir.exists() else set()
 
     execution_id = str(

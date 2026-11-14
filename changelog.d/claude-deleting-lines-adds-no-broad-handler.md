@@ -1,0 +1,3 @@
+### Fixed
+
+- **Deleting lines from a file is no longer refused as adding a broad exception handler.** When a change added no line to a file, the exception gate took "nothing was added" for "the change could not be read" and flagged every handler already in the file that does not log and raise again. A commit that removed eight lines from one file was refused for a handler written long before. The gate now compares the handlers before and after such a change and flags only one the earlier version did not hold. That also catches something it missed: a handler that stops meeting the rule because its `raise` or its log line was deleted. A change that really cannot be read is still refused in full.

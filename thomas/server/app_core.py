@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 from thomas import __version__ as THOMAS_VERSION
 from thomas.core.config import AppConfig, load_config
+from thomas.core.event_loop_offload import off_loop
+from thomas.core.kernel import late, seams
 from thomas.marketplace.observability import file_audit as _file_audit
 from thomas.marketplace.observability.task_ledger import TaskLedgerStore, resolve_task_ledger_db_path
 from thomas.preferences.store import PreferencesStore
@@ -84,7 +86,7 @@ except (ImportError, ModuleNotFoundError, AttributeError, RuntimeError):  # prag
 
 
 def _require_api_access(request: Any) -> None:
-    """Default access check used by audit/realtime routes.
+    """Default access check used by audit routes.
 
     Reads the closure populated by app_middleware_handlers.setup_middleware_and_handlers
     from request.app[APP_REQUIRE_API_ACCESS]. Tests that need a custom behavior
@@ -142,6 +144,17 @@ def create_app(config: AppConfig | None = None):
         raise ValueError("Configuration validation failed:\n" + "\n".join(validation_errors))
 
     app = web.Application(client_max_size=25 * 1024 * 1024)  # 25 MB
+    from .page_response_timing import page_response_timing
+
+    app.middlewares.append(page_response_timing)
+    # Freeze the loaded build before the checkout can advance while this process runs.
+    try:
+        from thomas.core.build_info import build_info
+
+        running_build = build_info().copy()
+    except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, AttributeError) as exc:
+        log.debug("build identity unavailable: %s", exc)
+        running_build = {"version": str(THOMAS_VERSION)}
     app[APP_BOOT_DOCTOR_ROOT] = Path(__file__).resolve().parents[2]
     app[APP_CONFIG] = config
     app[APP_TOOLS] = _build_tools(config)
@@ -151,6 +164,18 @@ def create_app(config: AppConfig | None = None):
     except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as secret_exc:
         log.warning("SecretStore initialization failed: %s", secret_exc)
         app[APP_SECRETS] = _FallbackSecretStore()
+    from thomas.server.openai_codex_oauth import bind_server_secret_store
+
+    bind_server_secret_store(app[APP_SECRETS])
+    from thomas.core.llm_slot import models as _models_slot
+    from thomas.server.model_credentials import embed_credentials
+
+    _undo_credentials = _models_slot().credentials(lambda cfg, name: embed_credentials(cfg, name, app[APP_SECRETS]))
+
+    async def _drop_credentials(_app: Any) -> None:
+        _undo_credentials()
+
+    app.on_cleanup.append(_drop_credentials)
     app[APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK] = asyncio.Lock()
     app[APP_SESSIONS] = {}
     app[APP_SESSION_LOCKS] = OrderedDict()
@@ -207,14 +232,6 @@ def create_app(config: AppConfig | None = None):
         log.warning("Run store unavailable (persistence disabled): %s", e)
     _diagnostics["run_store"] = run_store_mod is not None
 
-    if run_store_mod is not None:
-        try:
-            from thomas.server.routes.runs import register_runs_routes
-
-            register_runs_routes(app, config)
-        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-            log.warning("Run store routes unavailable (persistence still enabled): %s", e)
-
     # Optional: durable action audit trail
     try:
         from thomas.marketplace.policy.redact import Redactor
@@ -230,39 +247,12 @@ def create_app(config: AppConfig | None = None):
         app[APP_ACTION_AUDIT] = None
     _diagnostics["action_audit"] = app.get(APP_ACTION_AUDIT) is not None
 
-    # Optional: File-change audit log
+    # Optional: File-change audit log. Its two routes belong to the file_audit row; the store starts here.
     try:
-        from thomas.server.routes.audit import handle_audit_files, handle_audit_run_files
-
         audit_db_path = config.memory.root_path / ".thomas" / "file_audit.db"
         _file_audit.init_audit(audit_db_path)
-
-        def _safe_error_body(body: bytes, status: int) -> bytes:
-            # Avoid leaking exception text / stack traces to clients. On server
-            # errors the underlying handler embeds str(exc) in the body; replace
-            # it with a generic message (the real detail is logged server-side by
-            # the handler via log.exception). Keep the original status code.
-            if status >= 500:
-                log.error("audit handler returned server error (status=%s); body suppressed", status)
-                return json.dumps({"error": "internal server error"}).encode()
-            return body
-
-        async def _audit_files_handler(request: web.Request) -> web.Response:
-            _require_api_access(request)
-            body, status, headers = await handle_audit_files(request)
-            return web.Response(body=_safe_error_body(body, status), status=status, headers=headers)
-
-        async def _audit_run_files_handler(request: web.Request) -> web.Response:
-            _require_api_access(request)
-            run_id = request.match_info.get("run_id", "")
-            body, status, headers = await handle_audit_run_files(request, run_id)
-            return web.Response(body=_safe_error_body(body, status), status=status, headers=headers)
-
-        app.router.add_get("/api/audit/files", _audit_files_handler)
-        app.router.add_get("/api/audit/runs/{run_id}/files", _audit_run_files_handler)
-        log.info("File audit routes registered")
     except (ImportError, ModuleNotFoundError, OSError, RuntimeError) as e:
-        log.warning("File audit routes unavailable: %s", e)
+        log.warning("File audit unavailable: %s", e)
         _diagnostics["file_audit"] = False
     else:
         _diagnostics["file_audit"] = True
@@ -340,34 +330,11 @@ def create_app(config: AppConfig | None = None):
         log.warning("Guardrails unavailable: %s", e)
     _diagnostics["guardrails"] = app.get(APP_GUARDRAILS_ENABLED, False)
 
-    # Optional: realtime routes
-    _realtime_ok = False
-    try:
-        from thomas.marketplace.realtime.routes import setup_realtime_routes
+    # Not optional: without it a raised dial has nowhere to ask, and the server
+    # would hold every chat at the level below it with no way out.
+    from thomas.server.routes.dial_elevation_routes import setup_dial_elevation_routes
 
-        setup_realtime_routes(app, require_api_access=_require_api_access)
-        _realtime_ok = True
-    except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-        log.warning("Realtime routes unavailable: %s", e)
-    _diagnostics["realtime"] = _realtime_ok
-
-    # Base behavior never writes the user overlay directory; every page reads
-    # it at request time, and these routes are its only writer.
-    _overlay_ok = False
-    try:
-        from thomas.server.routes.ui_overlay_routes import setup_overlay_routes
-
-        setup_overlay_routes(app, require_api_access=_require_api_access)
-        _overlay_ok = True
-    except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
-        log.warning("Overlay routes unavailable: %s", e)
-    _diagnostics["overlay"] = _overlay_ok
-
-    # Frontier-parity surfaces (questions, export, schedules, feedback) register
-    # from their own module so this file stays under the size guard.
-    from thomas.server.parity_routes import register_parity_routes
-
-    _diagnostics.update(register_parity_routes(app, config=config, require_api_access=_require_api_access, log=log))
+    setup_dial_elevation_routes(app, require_api_access=_require_api_access)
 
     # Optional: autonomy engine
     _autonomy_ok = False
@@ -396,10 +363,9 @@ def create_app(config: AppConfig | None = None):
 
     # Background engines: ALL engines via unified EngineManager
     try:
-        from thomas.core.engine_manager import get_engine_manager
+        from thomas.server.aliveness_default import start_engines
 
-        engine_manager = get_engine_manager()
-        results = engine_manager.start_all()
+        engine_manager, results = start_engines()
         log.info("EngineManager: started all engines - %s", results)
         app[APP_ENGINE_MANAGER] = engine_manager
     except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
@@ -413,36 +379,56 @@ def create_app(config: AppConfig | None = None):
     app[APP_BOOT_DURATION] = time.time() - _boot_start
     app[APP_CRASH_COUNT] = 0
 
-    def _build_identity() -> dict[str, object]:
-        """Never let build identity, a display nicety, break the health check.
-
-        build_info already swallows a missing, failing or hanging git, so the
-        realistic failures left are import-time ones. Whatever gets through,
-        health still answers with the version it does know.
-        """
-        try:
-            from thomas.core.build_info import build_info
-
-            return build_info()
-        except (ImportError, ModuleNotFoundError, OSError, ValueError, TypeError, AttributeError) as exc:
-            log.debug("build identity unavailable: %s", exc)
-            return {"version": str(THOMAS_VERSION)}
-
     async def api_health(request: web.Request) -> web.Response:
         diag = request.app.get(APP_DIAGNOSTICS, {})
         boot_time = request.app.get(APP_BOOT_TIME, 0)
         degraded = [k for k, v in diag.items() if not v]
         protected_mode = False
-        try:
+
+        def _protected_mode() -> bool:
             from thomas.preferences.store import PreferencesStore, get_db_path
 
-            protected_mode = (
-                str(PreferencesStore(get_db_path()).get().advanced.security.enforcement_mode or "").strip().lower()
-                == "protected"
-            )
+            mode = PreferencesStore(get_db_path()).get().advanced.security.enforcement_mode
+            return str(mode or "").strip().lower() == "protected"
+
+        try:
+            # Off the loop: the store opens SQLite and checks its schema, and while the database was busy every request
+            # waited behind it for up to its 30 s timeout (freeze dumps, 2026-10-27).
+            protected_mode = await off_loop("health.protected_mode", _protected_mode)
         except (AttributeError, ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
             log.debug("Protected-mode preference unavailable: %s", exc)
             protected_mode = False
+
+        # The checkout may have moved since boot; health must describe the code
+        # loaded by this process, never a later HEAD observed by a request.
+        build = running_build.copy()
+        if build.get("commit") and build.get("root"):
+            from thomas.core.git_process import run_git
+            from thomas.core.head_sha import head_sha
+
+            # Read from .git's own files (a few microseconds, remembered until HEAD moves); asking git cost a
+            # process start per health check, 1.4 s each while the machine was busy.
+            quick = head_sha(str(build["root"]))
+            if quick:
+                latest_short = quick[:8]
+            else:
+                latest = await off_loop(
+                    "health.latest_commit",
+                    lambda: run_git(
+                        ("rev-parse", "--short=8", "HEAD"),
+                        cwd=Path(str(build["root"])),
+                        timeout=2.0,
+                    ),
+                )
+                latest_short = latest.output() if latest.ok else ""
+            if latest_short:
+                build["latest_commit"] = latest_short
+                # A landing swapped into the running rows is served already (landed_code_reload.APP_LANDED_SWAP_BASE),
+                # so the corner says "newer code is available" only past the last swap, not past boot.
+                swapped = str(request.app.get("landed_swap_base") or "")
+                build["stale"] = latest_short != (swapped[:8] if swapped else build["commit"])
+                if swapped:
+                    build["swapped_commit"] = swapped[:8]
 
         # A credential that dies AFTER boot was invisible here: health reported
         # "ok" while every chat turn failed with a 401. Model auth is checked
@@ -457,6 +443,11 @@ def create_app(config: AppConfig | None = None):
             log.debug("model auth health unavailable: %s", exc)
         if not auth_health.get("ok", True):
             degraded = [*degraded, "model_auth"]
+        # The restart the page follows: draining or not, what it waits for, the full-restart notice and the rows a
+        # landing swapped in place. On health because every page polls it already and the shell adds no routes.
+        from thomas.server import owner_restart
+
+        restart = owner_restart.status(request.app)
 
         return web.json_response(
             {
@@ -465,7 +456,8 @@ def create_app(config: AppConfig | None = None):
                 # The version alone cannot tell two instances apart -- several
                 # worktrees here sit on the same version string at once -- so
                 # health also names the commit it was built from.
-                "build": _build_identity(),
+                "build": build,
+                "restart": restart,
                 "uptime_s": round(time.time() - boot_time, 1) if boot_time else 0,
                 "pid": os.getpid(),
                 "features": diag,
@@ -706,45 +698,6 @@ def create_app(config: AppConfig | None = None):
             raise web.HTTPServiceUnavailable(text="advanced rescue unavailable")
         return web.json_response({"ok": True, "action": action, "message": "Advanced rescue opened."})
 
-    # Issue ledger: "watch it like a report" — GET the failure summary, POST a
-    # client-side (UI) failure. See thomas/server/issue_ledger.py.
-    async def api_issues(request: web.Request) -> web.Response:
-        from thomas.server.issue_ledger import summarize
-
-        try:
-            hours = max(1, min(24 * 14, int(request.query.get("hours", "24"))))
-        except (TypeError, ValueError):
-            hours = 24
-        return web.json_response({"ok": True, **summarize(hours=hours)})
-
-    async def api_issues_report(request: web.Request) -> web.Response:
-        from thomas.server.issue_ledger import record_issue
-
-        try:
-            body = await request.json()
-        except (ValueError, TypeError):
-            body = {}
-        record_issue(
-            surface=str((body or {}).get("surface") or "ui"),
-            kind=str((body or {}).get("kind") or "client_error"),
-            message=str((body or {}).get("message") or ""),
-            context=body.get("context") if isinstance((body or {}).get("context"), dict) else {},
-        )
-        return web.json_response({"ok": True})
-
-    app.router.add_get("/api/issues", api_issues)
-    app.router.add_post("/api/issues", api_issues_report)
-    from thomas.server.routes.self_review import APP_SELF_REVIEW_CACHE, handle_self_review
-
-    # Registered here (still inside create_app, before the runner freezes the
-    # app) rather than lazily on first request: aiohttp's AppRunner.setup()
-    # freezes the Application, and writing a new key into it afterward emits
-    # a DeprecationWarning on aiohttp 3.13.5 -- harmless today but a future
-    # hard error, and a warning unit tests can never see since they never
-    # freeze the app they build. self_review._self_review_cache() keeps a
-    # lazy fallback for exactly that test case.
-    app[APP_SELF_REVIEW_CACHE] = {"lock": asyncio.Lock(), "entries": {}}
-    app.router.add_get("/api/self-review", handle_self_review)
     app.router.add_get("/api/health", api_health)
     app.router.add_get("/healthz", api_health)
     app.router.add_get("/api/bootdoctor/recovery_notice", api_bootdoctor_recovery_notice)
@@ -761,4 +714,8 @@ def create_app(config: AppConfig | None = None):
     from .app_middleware_handlers import setup_middleware_and_handlers
 
     setup_middleware_and_handlers(app, config, web_dir, chat_store_dir, chat_store_lock)
+
+    from thomas.server import chat_offers, self_project_queue_tick  # noqa: F401 -- each provides calls by name
+
+    late.require(seams.CALLS)
     return app

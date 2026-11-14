@@ -1,3 +1,9 @@
+"""The key store and its routes, which reach the server through the row ``thomas.server.rows.secrets``.
+
+The routes are in ``thomas.server.routes.secrets_aiohttp``. This file imports neither that module nor the row, because
+it asks a real server, so a check finds it only because both dotted names are spelled out here.
+"""
+
 from __future__ import annotations
 
 import os

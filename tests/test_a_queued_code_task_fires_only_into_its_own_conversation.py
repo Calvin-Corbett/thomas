@@ -34,9 +34,24 @@ HARNESS = REPO_ROOT / "tests" / "web_node" / "code_queue_affinity.mjs"
 # because the adapter configures them at load time.
 SIBLINGS = (
     WEB_JS / "unified_code_lifecycle.js",
+    WEB_JS / "unified_code_artifacts.js",
     WEB_JS / "unified_code_results.js",
     WEB_JS / "unified_code_projects.js",
+    WEB_JS / "unified_code_roster.js",
+    WEB_JS / "unified_code_drawer.js",
+    WEB_JS / "unified_code_agent_chat.js",
+    WEB_JS / "unified_code_cards.js",
+    WEB_JS / "unified_code_live_diff.js",
+    WEB_JS / "unified_code_composer.js",
     WEB_JS / "unified_code_events.js",
+    WEB_JS / "unified_code_live_view.js",
+    WEB_JS / "unified_code_surface.js",
+    WEB_JS / "unified_code_run_stream.js",
+    WEB_JS / "unified_code_questions.js",
+    WEB_JS / "unified_code_controls.js",
+    WEB_JS / "unified_code_history_rows.js",
+    WEB_JS / "unified_code_loading.js",
+    WEB_JS / "unified_code_view_state.js",
 )
 
 
@@ -64,8 +79,7 @@ def test_a_new_task_sent_while_another_conversations_run_is_live_starts_at_once(
     )
     assert seen["sendCount"] == 1, "the new task never reached the server"
     assert seen["sentConversationId"] is None, (
-        "the new task was bound to an existing conversation instead of "
-        "letting the server create its own"
+        "the new task was bound to an existing conversation instead of letting the server create its own"
     )
     assert seen["activeId"] == "c-new", "the new conversation was not adopted"
     assert seen["result"] is True
@@ -74,12 +88,10 @@ def test_a_new_task_sent_while_another_conversations_run_is_live_starts_at_once(
 def test_an_entry_without_a_cid_becomes_its_own_conversation_never_the_active_one() -> None:
     seen = _drive()["orphanEntryNeverAdopts"]
     assert seen["sentConversationId"] != "c2", (
-        "a cid-less queued entry was fired into the ACTIVE conversation -- "
-        "the measured overwrite shape"
+        "a cid-less queued entry was fired into the ACTIVE conversation -- the measured overwrite shape"
     )
     assert seen["sendCount"] == 1 and seen["sentConversationId"] is None, (
-        "the cid-less entry was neither dropped nor started as its own new "
-        f"conversation: {seen}"
+        f"the cid-less entry was neither dropped nor started as its own new conversation: {seen}"
     )
     assert seen["activeId"] == "c-fresh"
     assert seen["queued"] == 0
@@ -95,9 +107,7 @@ def test_a_stamped_entry_drains_into_exactly_its_own_conversation() -> None:
 def test_an_entry_for_a_parked_conversation_waits_without_being_dropped() -> None:
     seen = _drive()["parkedCidWaits"]
     assert seen["sendCount"] == 0, "a parked conversation's task fired elsewhere"
-    assert seen["queued"] == 1 and seen["queuedCid"] == "c1", (
-        "the waiting entry was dropped or restamped"
-    )
+    assert seen["queued"] == 1 and seen["queuedCid"] == "c1", "the waiting entry was dropped or restamped"
 
 
 def test_the_queue_never_drains_while_a_run_is_live() -> None:

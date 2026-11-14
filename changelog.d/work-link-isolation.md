@@ -1,0 +1,3 @@
+### Fixed
+- Work sets aside untrusted app records, including incompatible workflow-to-automation links and other app-local validation faults, instead of leaving all Work routes unavailable. `/api/work/apps` reports the excluded app and rejection reason (with job and workflow IDs where known) for the Work page; healthy-app writes preserve the excluded app's stored record. Store-level faults still fail closed.
+- Scheduled workflows now accept a one-time automation on creation and reload, and the Once option in the Work setup form now sends its run-at value. Incompatible links, such as a scheduled workflow using a manual trigger, remain rejected.

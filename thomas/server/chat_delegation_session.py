@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
+import os
+import threading
+import time
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 from urllib.parse import quote
 
-from thomas.core import task_bot_runtime
+from thomas.core import owner_wait, task_bot_runtime, task_execution_roots
 from thomas.core.action_receipt import delegated_action_receipt
 from thomas.server.chat_delegation_artifact_verification import verification_scope_label
 from thomas.server.chat_delegation_worker_config import TASK_MANAGER_BACKEND
@@ -17,12 +20,150 @@ ROOT = Path(__file__).resolve().parents[2]
 
 _TERMINAL_TASK_STATES = {"completed", "verified", "failed", "abandoned", "cancelled", "canceled", "done"}
 
+# How long a board read stays usable when no execution record has changed. Short,
+# because a running task's progress is what this feeds; long enough that one chat
+# turn -- which asks for the board three times -- pays for it once.
+_BOARD_TTL_S = 2.0
+_board_lock = threading.Lock()
+# repo root -> (board signature, monotonic stamp, rows)
+_board_cache: dict[str, tuple[Any, float, list[dict[str, Any]]]] = {}
+
+
+def _board_signature(root: Path) -> tuple[int, int]:
+    """(newest record mtime_ns, record count) for the execution board.
+
+    Stat-ing the directory is the cheap question. Answering it by reading and
+    re-parsing every record -- which is what a refresh does -- is the expensive
+    one, and it is the same answer whenever nothing has been written.
+    """
+    newest = 0
+    count = 0
+    try:
+        with os.scandir(task_bot_runtime.runtime_dir(root)) as entries:
+            for entry in entries:
+                if not entry.name.endswith(".json") or entry.name == task_bot_runtime.SUMMARY_FILENAME:
+                    continue
+                count += 1
+                try:
+                    newest = max(newest, entry.stat().st_mtime_ns)
+                except OSError:
+                    continue
+    except OSError:
+        return (0, 0)
+    return (newest, count)
+
+
+def board_rows(root: Path) -> list[dict[str, Any]]:
+    """Every execution on the board, re-derived only when the board has moved.
+
+    ``task_bot_runtime.list_executions(refresh=True)`` REWRITES the whole summary
+    file in order to read it. Measured 2026-09-24 on the live 637-record board:
+    218-303 ms for that rewrite, and a single chat turn triggered it three times
+    (the active-task list twice and the digest once) -- so a message cost about a
+    second of the server's only thread re-answering an identical question, and
+    one session with 28 rows measured 0.77-1.64 s.
+
+    Nothing is served stale past :data:`_BOARD_TTL_S`, and any write to any
+    record changes the signature and invalidates immediately.
+    """
+    key = str(root)
+    signature = _board_signature(root)
+    now = time.monotonic()
+    with _board_lock:
+        cached = _board_cache.get(key)
+    if cached is not None and cached[0] == signature and now - cached[1] < _BOARD_TTL_S:
+        return cached[2]
+    rows = task_bot_runtime.list_executions(root, refresh=True)
+    with _board_lock:
+        _board_cache[key] = (signature, now, rows)
+    return rows
+
+
+def user_board_rows() -> list[dict[str, Any]]:
+    """Memoize read-only rows across known projects until a board changes."""
+    roots = task_execution_roots.roots_for_user(task_bot_runtime.ROOT)
+    signature = tuple((str(root), _board_signature(root)) for root in roots)
+    key = "\0user-board"
+    now = time.monotonic()
+    with _board_lock:
+        cached = _board_cache.get(key)
+    if cached is not None and cached[0] == signature and now - cached[1] < _BOARD_TTL_S:
+        return cached[2]
+    rows = task_bot_runtime.list_user_executions()
+    with _board_lock:
+        _board_cache[key] = (signature, now, rows)
+    return rows
+
+
+def reset_board_cache() -> None:
+    """Forget every memoized board. For tests that write records behind the stat."""
+    with _board_lock:
+        _board_cache.clear()
+
 
 def _resolve_repo_root(repo_root: str | Path | None = None) -> Path:
     # The root is the project the work is about, not where Thomas is installed.
     from thomas.core.project_root import resolve_project_root
 
     return resolve_project_root(explicit=repo_root)
+
+
+def _partial_artifacts(row: dict[str, Any]) -> list[dict[str, str]]:
+    """Link recorded leftovers only within the existing guarded download workspace."""
+    if str(row.get("state") or "").lower() not in {"failed", "abandoned", "cancelled", "canceled"}:
+        return []
+    from thomas.server.routes.deliverable_aiohttp import _is_noise_path, _safe_id, _workspace_dir
+
+    execution_id = str(row.get("execution_id") or "")
+    if not execution_id or _safe_id(execution_id) != execution_id:
+        return []
+    try:
+        workspace = _workspace_dir(execution_id)
+    except (OSError, RuntimeError, ValueError):
+        return []
+    names = row.get("salvaged_artifacts")
+    if workspace is None or not isinstance(names, list):
+        return []
+    artifacts = []
+    seen = set()
+    for raw in names:
+        if not isinstance(raw, str):
+            continue
+        name = raw.strip().replace("\\", "/")
+        path = Path(name)
+        if (
+            not name
+            or name in seen
+            or path.is_absolute()
+            or PureWindowsPath(name).drive
+            or ".." in path.parts
+            or ":" in name
+            or _is_noise_path(path)
+        ):
+            continue
+        try:
+            target = (workspace / path).resolve()
+            if (
+                not target.is_relative_to(workspace)
+                or not target.is_file()
+                or _is_noise_path(target.relative_to(workspace))
+                or target.stat().st_nlink > 1
+            ):
+                continue
+        except (OSError, RuntimeError, ValueError):
+            continue
+        seen.add(name)
+        artifacts.append(
+            {
+                "id": f"{execution_id}:partial:{name}",
+                "path": name,
+                "name": path.name,
+                "kind": "file",
+                "status": "unverified",
+                "url": f"/deliverable/{quote(execution_id, safe='')}/{quote(name, safe='/')}?download=1",
+            }
+        )
+    return artifacts
 
 
 def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -52,10 +193,15 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
         from thomas.server.routes.deliverable_aiohttp import deliverable_entry, deliverable_kind, deliverable_url
 
         if reviewed_success:
-            artifact_url = deliverable_url(execution_id)
+            # One walk of the workspace per row, not three. Resolving the entry
+            # is an rglob of the whole workspace, and the URL, the name and the
+            # kind were each resolving it again for the same answer -- on every
+            # read of this board, which is every chat turn and every poll the
+            # Chat UI makes while work is running.
             entry = deliverable_entry(execution_id) or ""
+            artifact_url = deliverable_url(execution_id, entry=entry)
             artifact_name = entry.rsplit("/", 1)[-1]
-            artifact_kind = deliverable_kind(execution_id)
+            artifact_kind = deliverable_kind(execution_id, entry=entry)
     except (ImportError, RuntimeError, OSError, ValueError, TypeError, AttributeError):
         artifact_url = artifact_name = artifact_kind = ""
     for index, raw_artifact in enumerate(proof_artifacts if reviewed_success else []):
@@ -159,6 +305,7 @@ def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
         "artifact_name": artifact_name,
         "artifact_kind": artifact_kind,
         "artifacts": artifacts,
+        "partial_artifacts": _partial_artifacts(row),
         # Server-authored wording for the deliverable card. The client used to
         # invent "Verified <name>" from the artifact list, which read as "it
         # works" when only existence/render checks ran (gauntlet g-fieldgoal:
@@ -210,7 +357,11 @@ def _heartbeat_age_s(record: dict[str, Any] | None) -> float | None:
         return None
     if stamped.tzinfo is None:
         stamped = stamped.replace(tzinfo=timezone.utc)
-    return max(0.0, (datetime.now(timezone.utc) - stamped.astimezone(timezone.utc)).total_seconds())
+    age = max(0.0, (datetime.now(timezone.utc) - stamped.astimezone(timezone.utc)).total_seconds())
+    # Waiting for the owner is not being stuck: a password prompt or question
+    # card open on the owner's screen pauses the clock (core/owner_wait.py).
+    since_owner = owner_wait.seconds_since_owner_wait()
+    return age if since_owner is None else min(age, since_owner)
 
 
 def _worker_has_started_progress(record: dict[str, Any] | None) -> bool:
@@ -223,15 +374,20 @@ def session_active_delegations(
     *,
     repo_root: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    root = _resolve_repo_root(repo_root)
-    rows = task_bot_runtime.list_executions(root, refresh=True)
+    root = _resolve_repo_root(repo_root) if repo_root is not None else None
+    rows = board_rows(root) if root is not None else user_board_rows()
     session_rows: list[dict[str, Any]] = []
     for row in rows:
         if str(row.get("conversation_id") or "") != str(session_id or ""):
             continue
         execution_id = str(row.get("execution_id") or "")
-        full = task_bot_runtime.get_execution(execution_id, root)
-        session_rows.append(_normalize_record(full if isinstance(full, dict) else row))
+        record_root = root if root is not None else row.get("_record_root")
+        full = task_bot_runtime.get_execution(execution_id, record_root)
+        normalized = _normalize_record(full if isinstance(full, dict) else row)
+        # Where this row was read from, set here and never taken from the record, so that
+        # marking it reported in chat writes to the same record (background_completions).
+        normalized["ledger_root"] = str(record_root or "")
+        session_rows.append(normalized)
     session_rows.sort(key=lambda item: (item.get("updated_at", ""), item.get("execution_id", "")), reverse=True)
     return session_rows
 
@@ -332,7 +488,7 @@ def apply_task_update(
     eid = resolve_active_task_ref(session_id, task_ref, repo_root=repo_root)
     if not eid:
         return {"ok": False, "error": f"No running task matches reference '{task_ref}'."}
-    root = _resolve_repo_root(repo_root)
+    root = _resolve_repo_root(repo_root) if repo_root is not None else None
     try:
         if cancel:
             record = task_bot_runtime.request_cancel(eid, actor="user", repo_root=root)

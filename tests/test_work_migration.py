@@ -13,7 +13,7 @@ def test_work_store_reads_runtime_workforce_and_user_work_apps(tmp_path: Path) -
         json.dumps(
             {
                 "app_id": "freedom-transit",
-                "name": "Example Logistics",
+                "name": "Freedom Transit",
                 "goal": "Operate freight dispatch",
                 "connector_grants": [
                     {

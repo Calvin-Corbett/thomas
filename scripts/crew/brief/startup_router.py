@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.util
 import json
 import re
@@ -22,11 +23,13 @@ if str(ROOT) not in sys.path:
 
 try:
     from scripts import gate_response_policy
-    from scripts.crew.brief import incident_surfacing, trunk_health
+    from scripts.crew.brief import incident_surfacing, landing_briefing, trunk_health
+    from scripts.crew.workboard import coordination_root
     from scripts.forge import fleet_stall, trunk_divergence
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     import gate_response_policy  # type: ignore
-    from crew.brief import incident_surfacing, trunk_health  # type: ignore
+    from crew.brief import incident_surfacing, landing_briefing, trunk_health  # type: ignore
+    from crew.workboard import coordination_root  # type: ignore
 
     from forge import fleet_stall, trunk_divergence  # type: ignore
 
@@ -75,6 +78,12 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
         _unique,
     )
 
+# Claims are scanned on this checkout's board, where claim.py and the commit
+# gates keep them. The inbox, the current thread and the message audit are read
+# on the board the coordinator sends to (coordination_root.coordination_board):
+# the primary checkout's, by the same rule as the message tool and the gates, so
+# a worker in a linked worktree is told about the blocker addressed to it
+# instead of reading its own untouched checkout copy.
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
 LANE_CARD_PATHS = {
@@ -160,6 +169,7 @@ def _is_risky_path(path: str) -> bool:
         "AGENTS.md",
         "README.md",
         "PROJECT_INDEX.md",
+        "KNOWN_ISSUES.md",
         "docs/REPO_STRUCTURE_PROTOCOL.md",
         "docs/AGENT_FILE_EDITING_RULES.md",
         "GUARDRAILS.md",
@@ -313,6 +323,7 @@ def classify_task(
     }[lane]
     return {
         "lane": lane,
+        "landing_queue": [landing_briefing.FIRST, landing_briefing.SECOND] if lane != "benchmark" else [],
         "workflow_mode": workflow_mode,
         "edit_intent": bool(edit_intent),
         "workboard_required": bool(workboard_required),
@@ -367,7 +378,13 @@ def build_startup_payload(
     cwd: Path | None = None,
     agent: str = "",
     peer: str = "",
+    coordination_board: Path | None = None,
 ) -> dict[str, Any]:
+    board = (
+        Path(coordination_board)
+        if coordination_board is not None
+        else coordination_root.coordination_board(workboard_path)
+    )
     payload = classify_task(
         summary=summary,
         paths=paths,
@@ -380,9 +397,10 @@ def build_startup_payload(
         workboard_path=workboard_path,
     )
     payload["preflight"] = agent_preflight.evaluate_preflight(root=ROOT, cwd=cwd)
-    payload["inbox"] = _startup_inbox(workboard_path, agent=agent)
-    payload["current_thread"] = _startup_current_thread(workboard_path, agent=agent, peer=peer)
-    payload["message_audit"] = _startup_message_audit(workboard_path, agent=agent, peer=peer)
+    payload["coordination_board"] = str(board)
+    payload["inbox"] = {**_startup_inbox(board, agent=agent), "workboard": str(board)}
+    payload["current_thread"] = _startup_current_thread(board, agent=agent, peer=peer)
+    payload["message_audit"] = _startup_message_audit(board, agent=agent, peer=peer)
     payload["branch_scan"] = _scan_related_branches(summary, paths)
     payload["orphaned_state"] = _detect_orphaned_dirty_state(ROOT)
     payload["worktree_inventory"] = _startup_worktree_inventory(ROOT)
@@ -432,6 +450,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the saved workflow mode preference.",
     )
     parser.add_argument("--workboard", default=str(DEFAULT_WORKBOARD), help="Path to WORKBOARD.md.")
+    parser.add_argument(
+        "--coordination-board",
+        default="",
+        help="Board the inbox, thread and audit signals read (default: the shared coordination board).",
+    )
     parser.add_argument("--agent", default="", help="Agent identity for startup inbox surfacing.")
     parser.add_argument("--peer", default="", help="Optional peer identity for startup current-thread surfacing.")
     parser.add_argument("--json", action="store_true", help="Emit JSON.")
@@ -442,6 +465,11 @@ def _text_output(payload: dict[str, Any]) -> str:
     preflight = dict(payload.get("preflight") or {})
     policy = dict(preflight.get("policy") or {})
     lines = ["Thomas agent startup router"]
+    lines.append(
+        "HOW TO USE THOMAS (owner rule): drive the real Thomas DESKTOP APP through its built-in agent "
+        "bridge (desktop/main.js startBridge; port+token in runtime/browser_profile/bridge.json). "
+        "NEVER open Thomas on a port in a browser or the Browser pane, and never use the owner's mouse."
+    )
     worktree_inventory = dict(payload.get("worktree_inventory") or {})
     if worktree_inventory.get("ok"):
         lines.append(str(worktree_inventory.get("header") or worktree_inventory.get("summary") or ""))
@@ -466,6 +494,8 @@ def _text_output(payload: dict[str, Any]) -> str:
             lines.append("*** WORKTREE MERGE-DEBT WARNING ***")
             lines.extend(warning.splitlines())
     inbox = dict(payload.get("inbox") or {})
+    board_raw = str(payload.get("coordination_board") or inbox.get("workboard") or "")
+    board_argument = coordination_root.board_argument(Path(board_raw)) if board_raw else ""
     inbox_agent = str(inbox.get("agent") or "")
     inbox_count = int(inbox.get("unread_count") or 0)
     if inbox.get("ok"):
@@ -478,7 +508,9 @@ def _text_output(payload: dict[str, Any]) -> str:
                 f"{_brief_text(row.get('summary'))}"
             )
         if inbox_count:
-            lines.append(f"inbox_action: python scripts/crew/workboard/message.py --inbox --agent {inbox_agent}")
+            lines.append(
+                f"inbox_action: python scripts/crew/workboard/message.py --inbox --agent {inbox_agent}{board_argument}"
+            )
     else:
         lines.append(f"inbox: unavailable; {inbox.get('error', 'unknown inbox error')}")
     current_thread = dict(payload.get("current_thread") or {})
@@ -502,7 +534,8 @@ def _text_output(payload: dict[str, Any]) -> str:
         if thread_count:
             peer_arg = f" --peer {thread_peer}" if thread_peer else ""
             lines.append(
-                f"current_thread_action: python scripts/crew/workboard/message.py --current --agent {thread_agent}{peer_arg}"
+                "current_thread_action: python scripts/crew/workboard/message.py --current "
+                f"--agent {thread_agent}{peer_arg}{board_argument}"
             )
     elif current_thread:
         lines.append(f"current_thread: unavailable; {current_thread.get('error', 'unknown current-thread error')}")
@@ -553,6 +586,9 @@ def _text_output(payload: dict[str, Any]) -> str:
     )
     if payload.get("bootstrap_command"):
         lines.append(f"bootstrap_command: {payload['bootstrap_command']}")
+    if payload.get("landing_queue"):
+        lines.append("landing_queue:")
+        lines.extend(payload["landing_queue"])
     gate_handling = dict(payload.get("gate_handling") or {})
     if gate_handling:
         lines.append(f"gate_handling: {gate_handling.get('summary', '')}")
@@ -636,6 +672,13 @@ def _text_output(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _json_default(value: object) -> object:
+    """The trunk-divergence and fleet-stall reports are dataclasses; --json must not crash on them."""
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return dataclasses.asdict(value)
+    return str(value)
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -652,9 +695,12 @@ def run(argv: list[str] | None = None) -> int:
         workboard_path=Path(str(args.workboard)).expanduser(),
         agent=str(args.agent or ""),
         peer=str(args.peer or ""),
+        coordination_board=(
+            Path(str(args.coordination_board)).expanduser() if str(args.coordination_board or "").strip() else None
+        ),
     )
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default))
     else:
         print(_text_output(payload))
     return 0

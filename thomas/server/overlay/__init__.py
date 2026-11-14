@@ -1,6 +1,7 @@
 """The user overlay: a directory the base never writes, read at request time.
 
-See docs/OVERLAY.md for the contract. The public surface is small on
+See docs/OVERLAY.md for the contract and docs/superpowers/plans/
+2026-09-02-fork-by-overlay.md for the design. The public surface is small on
 purpose: where the overlay lives (paths), what is in it (manifest.load /
 resolve), and the one way anything gets in (manifest.append).
 """

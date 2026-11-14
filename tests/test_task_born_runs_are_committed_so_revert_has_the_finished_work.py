@@ -139,6 +139,9 @@ def test_a_snapshot_that_cannot_commit_reports_instead_of_raising(tmp_path: Path
 
 
 class _EmptyStdout:
+    async def read(self, _n: int = -1) -> bytes:
+        return await self.readline()
+
     async def readline(self) -> bytes:
         return b""
 

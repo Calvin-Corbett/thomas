@@ -5,6 +5,10 @@ injected ``root_resolver`` pointing at a temp ``.thomas/`` and a no-op auth
 guard, then exercise the in-process logic. Only the MVP (no-LLM) routes are
 covered here — spec persistence round-trips and deterministic codegen. The
 wave-2 LLM routes shell out to a model and are out of scope for unit tests.
+
+The routes are registered by ``thomas.server.rows.canvas_studio``, which this file does not import. It is named here so a
+change to that row selects these tests, and ``tests/test_turning_canvas_studio_off_touches_only_its_routes.py`` holds
+the row itself.
 """
 
 from __future__ import annotations

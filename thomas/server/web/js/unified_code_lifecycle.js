@@ -57,6 +57,14 @@
       // still takes the placeholder above.
       model: modelId ? (modelId.startsWith('gpt-') ? modelId : 'claude:sonnet') : undefined,
       model_id: modelId,
+      build_roles: context.roleProfiles || context.roleModelIds ? Object.fromEntries(
+        ['builder', 'reviewer'].map(role => {
+          const key = 'build_' + role;
+          const profile = (context.roleProfiles || {})[key];
+          const id = (context.roleModelIds || {})[key];
+          return [role, profile || id ? { profile: profile || '', model_id: id || '' } : null];
+        })
+      ) : undefined,
       reasoning_effort: dials.effort || 'medium',
       autonomy_level: dials.autonomy || 3,
       file_access: dials.fileAccess || 'project',
@@ -64,6 +72,22 @@
       thomas_guardrails: dials.guardrails || 'guarded',
       token_economy: dials.tokenEconomy || 'balanced',
     };
+  }
+
+  // POST a run request. A 202 "queued" (this conversation's run is still going or being saved) or "waiting_for_slot"
+  // (every run slot is taken) is not a failure: say so once in a quiet line, then ask again until the server accepts.
+  // `hooks.alive()` turns false when the person stops or leaves; the wait then ends without an error.
+  async function postRun(body, hooks) {
+    const said = {};
+    for (;;) {
+      const response = await fetch('/api/evolve/agent/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await response.json();
+      if (response.status !== 202 || !(data.queued || data.waiting_for_slot)) return { response, data, stopped: false };
+      const kind = data.queued ? 'queued' : 'waiting';
+      if (!said[kind]) { said[kind] = true; hooks.notice(data.queued ? 'Queued, runs next' : 'Waiting for a free slot…'); }
+      await new Promise(resolve => { setTimeout(resolve, (Number(data.retry_after_s) || 5) * 1000); });
+      if (!hooks.alive()) return { response, data, stopped: true };
+    }
   }
 
   function runRequest(state, message, context) {
@@ -74,6 +98,8 @@
     const images = Array.isArray(context.images) ? context.images.filter(im => im && im.data_url) : [];
     const base = {
       message,
+      // Build never turns a message away: a busy conversation or a full machine answers 202, not 409.
+      queue_if_busy: true,
       conversation_id: state.activeId || undefined,
       // An open conversation names its own folder (the server verifies it
       // against the registry). A NEW task may only name a root somebody
@@ -88,8 +114,17 @@
     if (docs.length) base.docs = docs;
     if (images.length) base.images = images;
     const retry = state.retryRequest;
-    if (retry && retry.message === base.message && retry.conversation_id === base.conversation_id && retry.project_root === base.project_root) return { ...retry };
+    if (retry && requestIdentity(retry) === requestIdentity(base)) return { ...retry };
     return { ...base, request_id: requestId('run') };
+  }
+
+  function requestIdentity(body) {
+    const { request_id, ...content } = body;
+    // Only retry the same action. Object key order does not change its content.
+    return JSON.stringify(content, (_key, value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+      return Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]));
+    });
   }
 
   function contextToken(state) {
@@ -146,6 +181,7 @@
     registerRunProof,
     requestSettings,
     runIsDurable,
+    postRun,
     runRequest,
     streamUrl,
   };

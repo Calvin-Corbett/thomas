@@ -3,6 +3,11 @@
 POST /api/chats/{chat_id}/branch copies the v2 session file to a fresh chat id,
 optionally keeping only the first ``upto`` messages, so the person can explore a
 different direction without losing the original.
+
+The route turns off and on with the row in ``thomas.server.rows.chat_export``, which holds the export route too, because
+this file's route imports that one. The route is ``thomas.server.routes.chat_branch_routes`` and the one it imports is
+``thomas.server.routes.chat_export_routes``, which ``tests/test_chat_export.py`` covers. A change to the row or to
+either file runs both.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from pathlib import Path
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from thomas.chat.session_store import SessionStore
 from thomas.server.routes.chat_branch_routes import setup_chat_branch_routes
 
 
@@ -45,7 +51,7 @@ def _run(app: web.Application, method: str, url: str, **kw):
 
 def _app(sessions_dir: Path) -> web.Application:
     app = web.Application()
-    setup_chat_branch_routes(app, sessions_dir=sessions_dir, require_api_access=lambda _r: None)
+    setup_chat_branch_routes(app, store=SessionStore(sessions_dir), require_api_access=lambda _r: None)
     return app
 
 
@@ -65,7 +71,9 @@ def test_a_branch_is_a_new_chat_with_the_first_n_messages_and_no_run_log(tmp_pat
 
     import hashlib
 
-    copy = json.loads((tmp_path / f"chat_{hashlib.sha256(new_id.encode()).hexdigest()[:16]}.json").read_text(encoding="utf-8"))
+    copy = json.loads(
+        (tmp_path / f"chat_{hashlib.sha256(new_id.encode()).hexdigest()[:16]}.json").read_text(encoding="utf-8")
+    )
     assert copy["session_id"] == new_id
     assert copy["meta"]["session_id"] == new_id
     assert copy["meta"]["branched_from"] == "chat_0123456789abcdef"

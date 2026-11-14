@@ -1,0 +1,3 @@
+### Fixed
+
+- **A self-fix that deletes a file lands.** On 2026-09-25 the junk sweep you asked for was the first Thomas project to delete files, and you approved its card, but it never landed: the promoter moved `dev`, then removed the deleted files from the running copy with `git rm` after HEAD already pointed at the new commit, so git called each one a staged change and refused. `dev` was put back, and the rollback failed the same way on the files the change added, leaving its new changelog fragment staged in your checkout. The promoter now removes those files outright (`git rm -f`), which is safe because it has already refused any change whose files hold uncommitted work, and a landing that fails leaves nothing staged behind.

@@ -14,6 +14,7 @@ Verifies:
 
 from __future__ import annotations
 
+import datetime as _dt
 from pathlib import Path
 
 import pytest
@@ -93,7 +94,11 @@ def test_native_auth_override_approved_allows_write(sandbox: Path, monkeypatch: 
     )
     assert result is None  # write allowed
     assert len(calls) == 1
-    assert calls[0][0] == "Test write to protected path"
+    # The prompt is worded by code, never by the caller: in production the
+    # caller's description carries the model's own reason (2026-09-22).
+    assert calls[0][0] != "Test write to protected path"
+    assert "Test write to protected path" not in calls[0][0] + calls[0][1]
+    assert calls[0][0].startswith("Let Thomas change ")
     assert "protected runtime" in calls[0][1]
 
 
@@ -188,8 +193,11 @@ def test_runtime_protection_disabled_flag_still_works(sandbox: Path, monkeypatch
     (sandbox / "runtime").mkdir(parents=True, exist_ok=True)
     (sandbox / "runtime" / ".runtime_protection_key").write_text(key.hex() + "\n")
 
-    issued_at = "2026-05-27T12:00:00Z"
-    issued_by = "test-user"
+    # Now, not a fixed date: break-glass is a window, and a flag that has aged
+    # out of it no longer disables protection (_within_disable_window, 2026-09-08).
+    # This test asserts the flag IS honoured, so it has to be inside the window.
+    issued_at = _dt.datetime.now(_dt.UTC).isoformat()
+    issued_by = "calvin"
     repo = str(sandbox.resolve())
     sig = _hmac.new(
         key,

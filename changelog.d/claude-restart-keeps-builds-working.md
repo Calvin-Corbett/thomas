@@ -1,0 +1,3 @@
+### Changed
+
+- **A restart no longer leaves your Builds idle while it waits for checks.** You said: "dude again just thoma swiaitng oin brojken checks". On 2026-11-13 a restart stopped every Build at once and then waited an hour for one check before a card to finish. Now a restart first waits for running checks while Builds keep working and new ones may start; no new check starts meanwhile, and a hand-in that arrives waits and is tried again after the restart without counting against it. Only when no check is running do Builds yield for the restart itself. The restart shows the step as "checks finishing".

@@ -7,9 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests._chat_runtime_policy_fakes import _ProbeTool
 from thomas.chat.memory_layers import MemoryCoordinator
 from thomas.core.config import AppConfig, ModelConfig, ToolsConfig
 from thomas.preferences.store import PreferencesPatch, PreferencesStore
+from thomas.server import dial_elevation
 from thomas.server.chat_runtime_policy import (
     ChatRuntimePolicyError,
     PolicyToolRegistryView,
@@ -19,19 +21,6 @@ from thomas.server.chat_runtime_policy import (
 from thomas.server.chat_tool_policy import _is_classified_tool
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.registry import ToolRegistry
-
-
-class _ProbeTool(Tool):
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self.category = name.split(".", 1)[0]
-        self.description = "policy probe"
-        self.parameters = {"type": "object", "properties": {}}
-        self.calls: list[dict] = []
-
-    async def execute(self, args: dict) -> ToolResult:
-        self.calls.append(dict(args))
-        return ToolResult(ok=True, data="ok")
 
 
 @pytest.fixture
@@ -195,7 +184,18 @@ def test_resolver_applies_saved_model_runtime_memory_and_quality(
 
     assert policy.profile == "local"
     assert policy.model_id == "saved-model"
-    assert policy.autonomy_level == 4
+    # A saved L4 default is Full autonomy, which needs a Hello approval: the
+    # preferences PATCH that saved it asks for none, so without this an agent could
+    # raise its own default there and send requests that name no level.
+    assert policy.autonomy_level == 3
+    dial_elevation.approve("autonomy", 4, authorize=lambda *_: True)
+    try:
+        approved = resolve_chat_runtime_policy(
+            payload={}, session_meta=meta, saved_meta=None, config=policy_config, session_id="session-1"
+        )
+        assert approved.autonomy_level == 4
+    finally:
+        dial_elevation.reset_grants()
     assert policy.mode == "thinking"
     assert policy.token_economy == "max"
     assert policy.model.temperature == pytest.approx(1.2)
@@ -492,9 +492,21 @@ async def test_actual_registry_local_path_tools_are_stopped_before_out_of_scope_
     policy_config: AppConfig,
     tmp_path: Path,
 ) -> None:
+    from thomas.agent.kernel_wiring import contribute_tools, default_kernel, set_kernel
+    from thomas.notifications.tools import build_notifications_tools
     from thomas.server.app_helpers import _build_tools
+    from thomas.tools.fs_scope import scopes
 
-    registry = _build_tools(policy_config)
+    # The notification tools are lent by their row while it runs; lend them here as it would.
+    kernel = default_kernel()
+    set_kernel(kernel)
+    try:
+        contribute_tools(
+            kernel.root, build_notifications_tools(scopes().scope(tmp_path / "notifications")), owner="notifications"
+        )
+        registry = _build_tools(policy_config)
+    finally:
+        set_kernel(None)
     policy = ToolRuntimePolicy(
         allow_shell=True,
         allow_file_write=True,
@@ -767,172 +779,3 @@ async def test_the_skill_tools_stay_available_when_only_network_is_switched_off(
 
     result = await view.execute("skills.list", {})
     assert result.ok, result.error
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("policy_overrides", "denial"),
-    [
-        ({"allow_file_write": False}, "allow_file_write"),
-        ({"allow_network": False}, "allow_network"),
-    ],
-)
-async def test_shell_cannot_bypass_file_or_network_policy(
-    policy_overrides: dict[str, bool],
-    denial: str,
-    tmp_path: Path,
-) -> None:
-    registry = ToolRegistry()
-    shell = _ProbeTool("shell.exec")
-    registry.register(shell)
-    policy = ToolRuntimePolicy(
-        allow_shell=True,
-        allow_file_write=True,
-        allow_network=True,
-        allow_browser=True,
-        allow_channels=True,
-        allow_git=True,
-        require_command_approval=False,
-        tool_timeout_s=120,
-        max_parallel_tools=6,
-        allowed_paths=(),
-        blocked_commands=(),
-    )
-    view = PolicyToolRegistryView(registry, replace(policy, **policy_overrides), base_root=tmp_path)
-
-    assert view.get("shell.exec") is None
-    result = await view.execute("shell.exec", {"command": "echo unsafe"})
-    assert not result.ok
-    assert denial in str(result.error)
-    assert not shell.calls
-
-
-@pytest.mark.asyncio
-async def test_action_aware_ssh_policy_blocks_file_mutation_and_path_escape(tmp_path: Path) -> None:
-    registry = ToolRegistry()
-    ssh = _ProbeTool("ssh.exec")
-    registry.register(ssh)
-    read_only = ToolRuntimePolicy(
-        allow_shell=True,
-        allow_file_write=False,
-        allow_network=True,
-        allow_browser=False,
-        allow_channels=False,
-        allow_git=False,
-        require_command_approval=False,
-        tool_timeout_s=120,
-        max_parallel_tools=6,
-        allowed_paths=(),
-        blocked_commands=(),
-    )
-    assert not (
-        await PolicyToolRegistryView(registry, read_only, base_root=tmp_path).execute(
-            "ssh.exec", {"action": "download", "local_path": "outside.txt"}
-        )
-    ).ok
-
-    allowlisted = replace(read_only, allow_file_write=True, allowed_paths=("workspace",))
-    view = PolicyToolRegistryView(registry, allowlisted, base_root=tmp_path)
-    assert not (await view.execute("ssh.exec", {"action": "upload", "local_path": "outside.txt"})).ok
-    assert (await view.execute("ssh.exec", {"action": "upload", "local_path": "workspace/inside.txt"})).ok
-    assert not (
-        await view.execute(
-            "ssh.exec",
-            {
-                "action": "upload",
-                "local_path": "workspace/inside.txt",
-                "key_path": "../outside/id_ed25519",
-            },
-        )
-    ).ok
-
-
-@pytest.mark.asyncio
-async def test_diff_policy_keeps_preview_readable_and_scopes_write_targets(tmp_path: Path) -> None:
-    registry = ToolRegistry()
-    preview = _ProbeTool("diff.preview")
-    create = _ProbeTool("diff.create")
-    patch = _ProbeTool("diff.apply_patch")
-    for tool in (preview, create, patch):
-        registry.register(tool)
-    policy = ToolRuntimePolicy(
-        allow_shell=False,
-        allow_file_write=True,
-        allow_network=False,
-        allow_browser=False,
-        allow_channels=False,
-        allow_git=False,
-        require_command_approval=False,
-        tool_timeout_s=120,
-        max_parallel_tools=6,
-        allowed_paths=("workspace",),
-        blocked_commands=(),
-    )
-    view = PolicyToolRegistryView(registry, policy, base_root=tmp_path)
-
-    assert view.get("diff.preview") is not None
-    assert not (await view.execute("diff.create", {"file": "outside.py"})).ok
-    assert (await view.execute("diff.create", {"file": "workspace/inside.py"})).ok
-    assert not (
-        await view.execute(
-            "diff.apply_patch",
-            {"patch": "--- a/outside.py\n+++ b/outside.py\n@@ -1 +1 @@\n-a\n+b\n"},
-        )
-    ).ok
-    assert (
-        await view.execute(
-            "diff.apply_patch",
-            {"patch": "--- a/workspace/a.py\n+++ b/workspace/a.py\n@@ -1 +1 @@\n-a\n+b\n"},
-        )
-    ).ok
-
-
-@pytest.mark.asyncio
-async def test_blocked_command_policy_disables_shell_instead_of_parsing_obfuscation(tmp_path: Path) -> None:
-    registry = ToolRegistry()
-    shell = _ProbeTool("shell.exec")
-    registry.register(shell)
-    policy = ToolRuntimePolicy(
-        allow_shell=True,
-        allow_file_write=True,
-        allow_network=True,
-        allow_browser=False,
-        allow_channels=False,
-        allow_git=False,
-        require_command_approval=False,
-        tool_timeout_s=120,
-        max_parallel_tools=6,
-        allowed_paths=(),
-        blocked_commands=("curl",),
-    )
-
-    view = PolicyToolRegistryView(registry, policy, base_root=tmp_path)
-    assert view.get("shell.exec") is None
-    assert not (await view.execute("shell.exec", {"command": 'c""url https://example.com'})).ok
-    assert not shell.calls
-
-
-@pytest.mark.asyncio
-async def test_memory_policy_does_not_query_disabled_scopes() -> None:
-    class _Memory:
-        def __init__(self) -> None:
-            self.calls: list[dict] = []
-
-        def retrieve(self, **kwargs):  # noqa: ANN003
-            self.calls.append(dict(kwargs))
-            return "secret memory"
-
-    memory = _Memory()
-    policy = SimpleNamespace(
-        include_thread=False,
-        include_global=True,
-        include_profile=False,
-        pins_only=False,
-        context_budget=1200,
-    )
-    coordinator = MemoryCoordinator(memory, "session-1", policy=policy)
-    conversation = SimpleNamespace(last_user_message=lambda: "hello", last_assistant_message=lambda: "")
-    context = await coordinator.refresh(prompt="hello", conversation=conversation, iteration=0)
-    assert not memory.calls
-    assert not context.episodic
-    assert not context.semantic

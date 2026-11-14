@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 import thomas.cli.agents_runtime as agents_runtime
 import thomas.cli.parity_commands as parity_commands
+from tests.sleep_support import skip_sleeps
 from thomas.cli.parity_commands import register_parity_commands
 from thomas.cli.parity_compat import register_compat_commands
 
@@ -121,7 +122,7 @@ def test_agents_start_detached_records_gateway_state(tmp_path: Path, monkeypatch
         _fake_probe_gateway,
     )
     monkeypatch.setattr(agents_runtime, "_gateway_spawn", lambda **_kwargs: SimpleNamespace(pid=4242))
-    monkeypatch.setattr(agents_runtime.time, "sleep", lambda _seconds: None)
+    skip_sleeps(monkeypatch)
 
     res = runner.invoke(root, ["agents", "start", "--json"], obj={"config": cfg, "config_path": ""})
     assert res.exit_code == 0, res.output
@@ -654,7 +655,7 @@ def test_gateway_run_json_suppresses_auto_port_banner(tmp_path: Path, monkeypatc
     monkeypatch.setattr(parity_commands, "_gateway_spawn", lambda **_kwargs: SimpleNamespace(pid=4242))
     monkeypatch.setattr(parity_commands, "_probe_gateway", lambda host, port, token="": {"healthy": True})
     monkeypatch.setattr(parity_commands, "_save_gateway_state", lambda config, payload: None)
-    monkeypatch.setattr(parity_commands.time, "sleep", lambda _seconds: None)
+    skip_sleeps(monkeypatch)
 
     res = runner.invoke(root, ["gateway", "run", "--json"], obj={"config": cfg, "config_path": ""})
     assert res.exit_code == 0, res.output

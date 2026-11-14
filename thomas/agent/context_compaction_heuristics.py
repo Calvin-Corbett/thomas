@@ -20,6 +20,8 @@ import json
 import logging
 from typing import Any
 
+from thomas.core.tokens import tool_group_spans
+
 log = logging.getLogger(__name__)
 
 # Rough token estimate: 1 token ~ 4 characters
@@ -171,21 +173,33 @@ def _apply_heuristic_compaction(
     messages: list[dict[str, Any]],
     target_tokens: int,
     preserve_recent: int,
+    pinned: set[int] | None = None,
 ) -> int:
     """Apply heuristic compaction directly on the message list (in-place).
 
     Progressive strategy:
     1. Truncate tool results in older messages
     2. Summarize older assistant messages
-    3. Drop oldest non-system messages
+    3. Drop oldest non-system messages, a tool call together with its results,
+       never a pinned message (the active task or current steering)
 
     Returns the count Pass 3 dropped -- nonzero means messages in the range
     were removed outright, not replaced 1:1 (the caller's splice signal).
     """
     compactable_end = max(0, len(messages) - preserve_recent)
+    pinned_ids = set(pinned or ())
+    # A pinned message protects its entire tool exchange, including content and identity.
+    protected_positions = {
+        index
+        for start, end in tool_group_spans(messages)
+        if any(id(messages[position]) in pinned_ids for position in range(start, end))
+        for index in range(start, end)
+    }
 
     # Pass 1: Truncate tool results
     for i in range(compactable_end):
+        if i in protected_positions:
+            continue
         msg = messages[i]
         if msg.get("role") == "tool" or (msg.get("role") == "assistant" and isinstance(msg.get("tool_calls"), list)):
             content = msg.get("content", "")
@@ -198,6 +212,8 @@ def _apply_heuristic_compaction(
 
     # Pass 2: Summarize assistant messages
     for i in range(compactable_end):
+        if i in protected_positions:
+            continue
         msg = messages[i]
         if msg.get("role") == "assistant" and not _is_compaction_summary(msg):
             content = msg.get("content", "")
@@ -221,21 +237,30 @@ def _apply_heuristic_compaction(
     # by looking, which is what the heading above always said this did.
     dropped = 0
     while current_tokens > target_tokens and compactable_end > 0:
-        drop_at = next(
-            (
-                i
-                for i in range(compactable_end)
-                if messages[i].get("role") != "system" and not _is_compaction_summary(messages[i])
-            ),
-            None,
-        )
-        if drop_at is None:
-            # Everything still compactable is protected; shedding more would cost
-            # the system prompt or the summary, which is never the cheaper trade.
+        # A tool call and its results are dropped together, and a pinned message (the
+        # active task or current steering) is never dropped. A group reaching into the
+        # preserved recent messages is not dropped either.
+        drop_span: tuple[int, int] | None = None
+        for start, end in tool_group_spans(messages):
+            if start >= compactable_end or end > compactable_end:
+                break
+            if any(
+                messages[i].get("role") == "system"
+                or _is_compaction_summary(messages[i])
+                or id(messages[i]) in pinned_ids
+                for i in range(start, end)
+            ):
+                continue
+            drop_span = (start, end)
             break
-        messages.pop(drop_at)
-        compactable_end -= 1
-        dropped += 1
+        if drop_span is None:
+            # Everything still compactable is protected; shedding more would cost
+            # the system prompt, the summary or the task, which is never the cheaper trade.
+            break
+        del messages[drop_span[0] : drop_span[1]]
+        count = drop_span[1] - drop_span[0]
+        compactable_end -= count
+        dropped += count
         current_tokens = estimate_conversation_tokens(messages)
 
     if dropped > 0:

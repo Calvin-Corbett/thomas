@@ -60,8 +60,8 @@ def test_an_answer_gets_no_build_verification_scorecard() -> None:
     assert "open risk" not in html
     assert "unverified" not in html
     assert "checked" not in html.lower() or "nothing to verify" in html.lower()
-    # Not silence either: one line says WHY there is nothing to verify.
-    assert "answer" in html.lower()
+    # An answer is just the answer: no card and no explanatory note either.
+    assert html == ""
 
 
 def test_a_stopped_run_is_not_graded_as_an_unverified_build() -> None:

@@ -25,7 +25,8 @@
     "life_manager.tasks",
     "life_manager.agenda",
     "life_manager.habits",
-    "life_manager.goals"
+    "life_manager.goals",
+    "healthcheck"
   ],
   "tags": [
     "productivity",

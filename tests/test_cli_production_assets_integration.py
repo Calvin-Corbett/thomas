@@ -20,23 +20,33 @@ def _run(*args: str) -> dict:
     return json.loads(proc.stdout)
 
 
-def test_browser_workflow_commands_are_runtime_integrated() -> None:
-    listed = _run("browser", "workflows", "list", "--json", "--limit", "5")
-    assert int(listed.get("count") or 0) == 5
-    profiles = listed.get("profiles")
-    assert isinstance(profiles, list) and profiles
-    profile_id = str(profiles[0].get("profile_id") or "")
-    assert profile_id
+def test_generated_browser_workflow_assets_do_not_return() -> None:
+    assert not (ROOT / "scripts" / "generate_gap_assets.py").exists()
+    assert not (ROOT / "thomas" / "browser" / "workflow_runtime.py").exists()
+    assert not (ROOT / "thomas" / "browser" / "workflows" / "registry.py").exists()
+    assert not list((ROOT / "thomas" / "browser" / "workflows").glob("workflow_profile_*.py"))
+    assert not list((ROOT / "thomas" / "browser" / "workflow_corpus").glob("case_*.json"))
+    assert not list((ROOT / "tests" / "browser_workflow_corpus").glob("case_*.json"))
 
-    shown = _run("browser", "workflows", "show", profile_id, "--json")
-    assert str(shown.get("profile_id") or "") == profile_id
 
-    validation = _run("browser", "workflow-cases", "validate", "--json", "--limit", "25")
-    assert int(validation.get("total") or 0) == 25
-    assert int(validation.get("invalid") or 0) == 0
+def test_browser_cli_does_not_advertise_generated_workflows() -> None:
+    proc = subprocess.run(
+        [sys.executable, "-m", "thomas", "browser", "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    commands = {line.strip().split()[0] for line in proc.stdout.splitlines() if line.startswith("  ") and line.strip()}
+    assert "workflows" not in commands
+    assert "workflow-cases" not in commands
+    assert {"open", "smoke", "status"}.issubset(commands)
 
 
 def test_extension_catalog_command_is_runtime_integrated() -> None:
     payload = _run("plugins", "extension-catalog", "--json")
-    assert int(payload.get("total") or 0) >= 480
+    catalog = json.loads((ROOT / "extensions" / "catalog.json").read_text(encoding="utf-8-sig"))
+    assert int(payload.get("total") or 0) == len(catalog["packs"])
+    assert int(payload.get("total") or 0) > 0
     assert int(payload.get("invalid") or 0) == 0

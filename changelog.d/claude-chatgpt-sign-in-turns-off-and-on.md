@@ -1,0 +1,3 @@
+### Changed
+
+- **Sign in with ChatGPT can now be turned off and on while Thomas runs.** The six `/api/openai-codex` routes moved out of the server's fixed list into a row called Sign in with ChatGPT, which ships on, so nothing changes until you turn it off. While it is off you cannot sign in from Easy Setup or from the Connect ChatGPT box in Chat, and the email and plan at the top of the model menu go once the page is reloaded. A model you already signed in to keeps answering, because chat reads the saved sign-in without these routes. Turning it off also closes the listener a sign-in opens on this computer for ChatGPT's reply, and a sign-in that is waiting for you holds the stop until it ends, up to five minutes from Easy Setup or Chat.

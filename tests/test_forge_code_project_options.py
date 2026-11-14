@@ -37,6 +37,39 @@ def _thomas_root() -> Path | None:
     return Path(opt.root) if opt else None
 
 
+def test_picker_refuses_to_guess_when_source_inspection_fails(catalog: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unknown() -> Path:
+        raise forge_code_projects.ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", unknown)
+    with pytest.raises(forge_code_projects.ForgeCodeInspectionUnavailable):
+        project_options(catalog)
+    with pytest.raises(forge_code_projects.ForgeCodeInspectionUnavailable):
+        resolve_selection("project", catalog_root=catalog, requested_project=catalog)
+
+
+def test_thomas_option_re_raises_inspection_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unknown() -> Path:
+        raise forge_code_projects.ForgeCodeInspectionUnavailable("Thomas source root could not be inspected")
+
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", unknown)
+    with pytest.raises(forge_code_projects.ForgeCodeInspectionUnavailable, match="could not be inspected"):
+        thomas_option()
+
+
+def test_picker_omits_thomas_only_for_a_definitive_non_repository(
+    catalog: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(forge_code_projects, "thomas_source_repo_root", lambda: None)
+    assert [option.id for option in project_options(catalog)] == [SCRATCH_ID]
+    repo = catalog / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    assert resolve_selection("project", catalog_root=catalog, requested_project=repo) == repo
+    with pytest.raises(forge_code_projects.ForgeCodeProjectError, match="not a git checkout"):
+        resolve_selection(THOMAS_ID, catalog_root=catalog)
+
+
 def test_picker_offers_scratch_first_and_thomas_as_a_named_option(catalog: Path) -> None:
     options = project_options(catalog)
     assert options[0].id == SCRATCH_ID

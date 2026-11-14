@@ -31,6 +31,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_CSS = ROOT / "thomas" / "server" / "web" / "css" / "unified_code_results.css"
 RESULTS_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
@@ -106,12 +108,12 @@ def test_the_two_shapes_still_use_the_elements_the_scoping_assumes() -> None:
     makes.
     """
 
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
 
-    assert re.search(r"<div class=\"tc-code-artifact\">\s*\n?\s*<div class=\"tc-code-artifact-row\">", js), (
-        "the transcript card is no longer `<div class=\"tc-code-artifact\">` "
-        "wrapping `.tc-code-artifact-row`; the `section` scoping that keeps the "
-        "border off it may no longer apply"
+    # The 2026-10 redesign dropped the row wrapper: the transcript card is a bare <div> holding the open button.
+    assert re.search(r"<div class=\"tc-code-artifact\$\{[^`]*?\}\"><button class=\"tc-code-artifact-open\"", js), (
+        'the transcript card is no longer a `<div class="tc-code-artifact">` holding the open button; the `section` '
+        "scoping that keeps the border off it may no longer apply"
     )
     assert '<section class="tc-code-artifact"><header>' in js, (
         "the drawer preview is no longer a `<section>` with a header, so the "

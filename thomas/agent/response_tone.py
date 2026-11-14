@@ -10,17 +10,7 @@ from __future__ import annotations
 import re
 
 from thomas.agent.prompt_templates import format_input_continuity_hint
-
-_SANDBOX_LINK_RE = re.compile(r"\[([^\]]*)\]\(\s*(?:sandbox:|file:|/mnt/|[A-Za-z]:[\\/])[^)]*\)")
-
-
-def strip_sandbox_links(text: str) -> str:
-    """Keep the label while removing a browser-inaccessible local link target."""
-    src = str(text or "")
-    if "](" not in src:
-        return src
-    return _SANDBOX_LINK_RE.sub(lambda match: (match.group(1) or "").strip(), src)
-
+from thomas.core.sandbox_links import strip_sandbox_links
 
 _SIMPLIFIED_REVIEW_HINT_TEXT = (
     "- Keep review feedback plain-language and concise.\n"

@@ -12,7 +12,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from thomas.core.session_scope import active_session_id
+from thomas.core.owner_wait import awaiting_owner
+from thomas.core.session_scope import active_chat_id
 from thomas.core.user_questions import UserQuestionBook, question_book
 from thomas.tools.base import Tool, ToolResult
 
@@ -48,6 +49,22 @@ class AskUserTool(Tool):
                 "type": "boolean",
                 "description": "Offer a free-text answer as well (or instead of options). Default false.",
             },
+            "heading": {
+                "type": "string",
+                "description": "Optional small heading above the question, 1-4 words (e.g. 'Before I publish').",
+            },
+            "fields": {
+                "type": "array",
+                "description": (
+                    "Optional facts to show on the card so the person can decide at a glance, e.g. "
+                    "[{label: 'File', value: 'report.pdf'}, {label: 'Size', value: '2 MB'}]. Up to 6."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {"label": {"type": "string"}, "value": {"type": "string"}},
+                    "required": ["label", "value"],
+                },
+            },
         },
         "required": ["question"],
         "additionalProperties": False,
@@ -77,15 +94,31 @@ class AskUserTool(Tool):
         if len(options) > 6:
             options = options[:6]
 
+        # A heading or fields make this a card (ask_user_panel.js renderCard):
+        # Thomas shows what he wants you to decide, not just asks. Options here
+        # are only label and description -- a model-made card can never carry a
+        # password option; those are built by the server for real approvals.
+        multi_select = bool(args.get("multi_select", False))
+        heading = str(args.get("heading") or "").strip()
+        raw_fields = args.get("fields") if isinstance(args.get("fields"), list) else []
+        fields = [
+            {"label": str(f.get("label") or "").strip(), "value": str(f.get("value") or "").strip()}
+            for f in raw_fields[:6]
+            if isinstance(f, dict) and str(f.get("label") or "").strip()
+        ]
+        as_card = bool(heading or fields) and not multi_select and not allow_free_text
         record = self._book.ask(
             question=question,
             options=options,
-            multi_select=bool(args.get("multi_select", False)),
+            multi_select=multi_select,
             allow_free_text=allow_free_text,
-            session_id=active_session_id(),  # bound by the runner; a model-supplied _session_id is ignored
+            session_id=active_chat_id(),  # bound by the runner; a model-supplied _session_id is ignored
+            kind="card" if as_card else "question",
+            details={"kicker": heading, "fields": fields} if as_card else None,
         )
         try:
-            answer = await self._book.wait(record.id, timeout_s=self._timeout_s)
+            with awaiting_owner():  # a worker waiting on your answer is not stuck
+                answer = await self._book.wait(record.id, timeout_s=self._timeout_s)
         except asyncio.TimeoutError:
             minutes = max(1, int(round(self._timeout_s / 60))) if self._timeout_s >= 60 else 0
             wait_text = f"{minutes} minutes" if minutes else f"{self._timeout_s:g} seconds"

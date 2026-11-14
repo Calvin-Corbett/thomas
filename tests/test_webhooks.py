@@ -1,4 +1,14 @@
 # tests/test_webhooks.py
+"""The webhook handlers, through the FastAPI router they were written for.
+
+A running server reaches the same handlers through ``thomas.server.routes.webhooks_aiohttp``, which the row
+``thomas.server.rows.webhooks`` registers. This file imports neither, and a check finds a test by following imports and
+dotted names, so both are spelled out here: without them a change to the row would never run these.
+
+``FakePersistence`` below has a ``create_goal`` the real engine lacks, so a delivery these tests see queued answers 500 on
+the real store. ``tests/test_turning_webhooks_off_touches_only_its_routes.py`` holds what the real store does.
+"""
+
 import hashlib
 import hmac
 import importlib

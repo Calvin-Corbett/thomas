@@ -405,6 +405,8 @@
       });
       if (entry.hidden === true) merged.hidden = true;
       if (entry.hidden === false) delete merged.hidden;
+      const words = String(entry.text || '').trim();
+      if (words) merged.text = words;
       const icon = String(entry.icon || '').trim();
       if (/^ph-[a-z0-9-]+$/.test(icon)) { merged.icon = icon; iconChecks.push({ entry, uiId, icon, previous: (layout.get(uiId) || {}).icon || '' }); }
       if (JSON.stringify(merged) === before) return;

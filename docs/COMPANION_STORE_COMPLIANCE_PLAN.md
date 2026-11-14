@@ -1,6 +1,6 @@
-# Companion development
-
-The companion is under development. Internal planning records are maintained privately.
+﻿# Companion Store Compliance Plan Pointer
 
 Canonical location:
-- `plans/README.md`
+- `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
+
+This file is a compatibility pointer to the canonical plan location.

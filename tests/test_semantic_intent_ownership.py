@@ -62,10 +62,6 @@ def _source_identifiers(relative_path: str) -> set[str]:
             },
         ),
         (
-            "thomas/server/routes/chat_aiohttp_streaming.py",
-            {"should_dispatch"},
-        ),
-        (
             "thomas/server/routes/chat_plan_mode.py",
             {"parse_steps_from_text"},
         ),

@@ -1,3 +1,19 @@
+"""Thomas reviews his own recent sessions and writes the friction report.
+
+The "automated Calvin": instead of the owner reading chats and telling us
+what hurt, Thomas reads his OWN recent conversations, the issue ledger, and
+task outcomes, then writes the prioritized report a product owner would —
+where users repeated themselves, where tasks failed or stalled, what to fix
+first. The report itself (`generate_self_review`) is a 15-30s synchronous LLM
+generation, so GET /api/self-review never runs it inline: it serves the last
+cached, stamped report (or an honest "generating"/"error" status) from an
+app-scoped TTL cache and kicks the real generation off in the background,
+single-flighted so concurrent callers never start a second one. A caller with
+an ordinary timeout used to see this as down (HTTP_000) instead of slow — see
+`.superpowers/sdd/2026-08-25-phase2-recon/recon.md` Section 4 #5. A successful
+generation still saves a copy to runtime/logs/self_review.md so improvement
+passes start from evidence.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +26,8 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.chat.session_slot import session_files
+from thomas.chat.session_store import SessionStore
 from thomas.server.issue_ledger import summarize as summarize_issues
 
 log = logging.getLogger(__name__)
@@ -38,11 +56,11 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def _recent_session_excerpts(store_dir: Path, cutoff: datetime) -> list[str]:
+def _recent_session_excerpts(store_dir: SessionStore | Path, cutoff: datetime) -> list[str]:
     """Bounded plain-text excerpts of recently-active sessions, newest first."""
     rows: list[tuple[float, Path]] = []
     try:
-        for path in store_dir.glob("chat_*.json"):
+        for path in session_files(store_dir):
             try:
                 mtime = path.stat().st_mtime
             except OSError:
@@ -149,8 +167,7 @@ async def generate_self_review(app: web.Application, *, hours: int = 24) -> dict
     from thomas.server.routes.chat_v2_keys import APP_SESSION_STORE
 
     store = app.get(APP_SESSION_STORE)
-    store_dir = getattr(store, "_store_dir", None)
-    excerpts = _recent_session_excerpts(Path(store_dir), cutoff) if store_dir else []
+    excerpts = _recent_session_excerpts(store, cutoff) if isinstance(store, SessionStore) else []
     issues = summarize_issues(hours=hours)
     tasks = _recent_task_outcomes(cutoff)
     feedback = _recent_feedback(_repo_root() / "runtime" / ".thomas" / "feedback.jsonl", cutoff)
@@ -170,9 +187,9 @@ async def generate_self_review(app: web.Application, *, hours: int = 24) -> dict
         + "\n\n== CONVERSATION EXCERPTS ==\n"
         + ("\n\n".join(excerpts) or "(no recent sessions)")
     )
-    from thomas.server.routes.chat_v2_announcements import _announce_llm
+    from thomas.server.chat_session_llm import announce_llm
 
-    llm = _announce_llm(app, "self-review")
+    llm = announce_llm(app, "self-review")
     if llm is None or not hasattr(llm, "chat"):
         return {"ok": False, "error": "no_llm"}
     try:
@@ -215,10 +232,30 @@ _REFRESH_TTL_SECONDS = 300.0
 APP_SELF_REVIEW_CACHE = web.AppKey("self_review_cache", dict)
 
 
+def new_self_review_cache() -> dict[str, Any]:
+    """An empty cache: one lock for the whole app and, for each ``hours`` window, the entry ``_entry_for`` makes."""
+    return {"lock": asyncio.Lock(), "entries": {}}
+
+
+async def end_self_review_work(cache: dict[str, Any]) -> None:
+    """Cancel every background refresh the cache holds and wait for each to end.
+
+    A refresh is an ``ensure_future`` that can sit up to 120 seconds on a model call, and nothing but its own end gives
+    it up, so a plugin that takes the route away has to do this.
+    """
+    running = [
+        task for entry in cache["entries"].values() if (task := entry.get("task")) is not None and not task.done()
+    ]
+    for task in running:
+        task.cancel()
+    if running:
+        await asyncio.gather(*running, return_exceptions=True)
+
+
 def _self_review_cache(app: web.Application) -> dict[str, Any]:
     """App-scoped so tests (fresh web.Application per test) never share state.
 
-    The live server registers this key eagerly in `app_core.create_app`,
+    The live server registers this key eagerly from the self_review row,
     before the app is handed to `AppRunner` (aiohttp freezes the Application
     at that point, and writing a new key into a frozen app is deprecated).
     The lazy init below is a fallback for callers -- chiefly this module's
@@ -227,7 +264,7 @@ def _self_review_cache(app: web.Application) -> dict[str, Any]:
     """
     cache = app.get(APP_SELF_REVIEW_CACHE)
     if not isinstance(cache, dict):
-        cache = {"lock": asyncio.Lock(), "entries": {}}
+        cache = new_self_review_cache()
         app[APP_SELF_REVIEW_CACHE] = cache
     return cache
 

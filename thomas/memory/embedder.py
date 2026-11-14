@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
-
-import numpy as np
+import os
+from typing import TYPE_CHECKING, Any
 
 from thomas.core.config import EmbedConfig
+
+if TYPE_CHECKING:
+    import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -170,14 +173,31 @@ class DenseEmbedder:
 # ---------------------------------------------------------------------------
 
 
+def _numpy() -> Any:
+    """numpy, imported the first time a dense vector is touched, with its math library on one thread.
+
+    Imported at the top of this module, numpy came into every Thomas process through ``thomas.server.app``
+    and its math library (OpenBLAS) set aside about 480 MB of commit for one thread per CPU, in processes
+    that never touch a dense vector (sentence-transformers is not installed, so they never do). Measured
+    2026-11-06: ``import thomas.server.app`` 544 MB private and 23 threads before, 62 MB and 8 threads with
+    one math thread; vectors this size also multiplied faster on one thread (0.031 s against 0.07 s).
+    A value you set yourself for OPENBLAS_NUM_THREADS wins.
+    """
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    import numpy
+
+    return numpy
+
+
 def dense_to_bytes(vec: np.ndarray) -> bytes:
     """Serialize a float32 numpy vector to bytes for SQLite BLOB storage."""
-    return vec.astype(np.float32).tobytes()
+    return vec.astype(_numpy().float32).tobytes()
 
 
 def bytes_to_dense(data: bytes) -> np.ndarray:
     """Deserialize bytes back to a float32 numpy vector."""
-    return np.frombuffer(data, dtype=np.float32)
+    np_ = _numpy()
+    return np_.frombuffer(data, dtype=np_.float32)
 
 
 def cosine_similarity_dense(query: np.ndarray, candidates: np.ndarray) -> np.ndarray:

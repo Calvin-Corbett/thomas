@@ -16,9 +16,11 @@
 // the notice actually appearing on the viewer surface.
 import fs from 'node:fs';
 import vm from 'node:vm';
+import path from 'node:path';
 
 const modulePath = process.argv[2];
 if (!modulePath) throw new Error('usage: node code_preview_network_notice.mjs <unified_code_results.js>');
+const artifactSource = fs.readFileSync(path.join(path.dirname(modulePath), 'unified_code_artifacts.js'), 'utf8');
 const moduleSource = fs.readFileSync(modulePath, 'utf8');
 
 const checks = {};
@@ -41,6 +43,7 @@ function boot(fileContent) {
     },
   };
   vm.createContext(context);
+  vm.runInContext(artifactSource, context);
   vm.runInContext(moduleSource, context);
   const api = context.window.ThomasCodeResults;
   api.configure({

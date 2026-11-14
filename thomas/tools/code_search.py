@@ -12,28 +12,23 @@ with a pure Python fallback for environments without rg.
 from __future__ import annotations
 
 import asyncio
-import fnmatch
-import os
 import re
 import shutil
 from pathlib import Path
 from typing import Any
 
+from thomas.core.file_access import path_is_inside
+from thomas.tools import code_search_scan as scan
+from thomas.tools import fs_scope
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.semantic_search import register_semantic_search_tool
 
-_SKIP_DIRS = {
-    ".git",
-    "node_modules",
-    "__pycache__",
-    ".venv",
-    "venv",
-    ".tox",
-    "dist",
-    "build",
-    ".mypy_cache",
-    ".pytest_cache",
-}
+# One skip list for every code.* scan, defined with the walk that uses it. It
+# gained ".thomas" when code.find_definition was measured spending 227.5 s
+# inside Thomas's own state directories -- see code_search_scan's docstring.
+_SKIP_DIRS = scan.SKIP_DIRS
+# The dotfiles worth seeing in code.project_structure, which hides the rest.
+_TREE_DOTFILES = frozenset({".gitignore", ".env.example", ".github"})
 
 _CODE_EXTS = {
     ".py",
@@ -71,6 +66,37 @@ _CODE_EXTS = {
     ".rst",
     ".txt",
 }
+
+
+def _inside_root(root: Path, rel: str) -> Path:
+    """``rel`` as a real path, or ValueError if that is not inside ``root`` or is closed to agent tools.
+
+    Compares folders, not characters: ``C:\\x\\work2`` starts with ``C:\\x\\work`` and is not inside it. ``root`` is the
+    tool's own, resolved once when it was built. ``filesystem._safe_path`` resolves its root again on every call, so a
+    root replaced by a link afterwards passes there, and it does not pass here. Naming a file outright gets past rg's
+    every filter, so the signing key is refused here, for the same reason the fs tools refuse it.
+    """
+    scope = fs_scope.scopes().scope(root)
+    try:
+        target = scope.resolve(rel)
+    except ValueError as exc:
+        raise ValueError("Path escapes sandbox") from exc
+    # The scope resolves its root again; the tool's own was pinned when it was built, and a path must be inside that.
+    if not path_is_inside(target, root):
+        raise ValueError("Path escapes sandbox")
+    blocked = scope.read_refusal(rel)
+    if blocked:
+        raise ValueError(blocked)
+    return target
+
+
+def _rg_target(pattern: str, path: Path) -> list[str]:
+    """The end of an rg command: what to look for and where, neither of which can be read as a flag.
+
+    A bare ``pattern`` is parsed like any other argument, so ``-Lemarker`` followed links, ``--file=x`` tested the
+    contents of ``x``, and ``--pre=x`` ran ``x`` on every file. Any other text a caller gives rg goes in ``--flag=value``.
+    """
+    return ["-e", pattern, "--", str(path)]
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +156,7 @@ class CodeSearchTool(Tool):
         pattern = args["pattern"]
         rel = args.get("path", ".")
         try:
-            search_path = (self._root / rel).resolve()
-            if not str(search_path).startswith(str(self._root)):
-                return ToolResult(ok=False, error="Path escapes sandbox")
+            search_path = _inside_root(self._root, rel)
         except Exception as e:
             return ToolResult(ok=False, error=str(e))
 
@@ -143,10 +167,12 @@ class CodeSearchTool(Tool):
         if ctx > 0:
             cmd += ["-C", str(ctx)]
         if args.get("glob"):
-            cmd += ["--glob", args["glob"]]
-        max_results = args.get("max_results", 50)
-        cmd += ["--max-count", str(max_results)]
-        cmd += [pattern, str(search_path)]
+            cmd.append(f"--glob={args['glob']}")
+        # After the caller's glob, because rg lets the last match win, and one that asks for a dotfile reads past the
+        # rule that skips them.
+        cmd += ["--glob=!**/thomas_rag_index/**", f"--glob=!**/{scan.KEY_NAME}"]
+        cmd.append(f"--max-count={args.get('max_results', 50)}")
+        cmd += _rg_target(pattern, search_path)
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -161,6 +187,9 @@ class CodeSearchTool(Tool):
         except FileNotFoundError:
             # rg disappeared since init
             self._has_rg = False
+            return await self._search_python(args)
+        except NotADirectoryError:
+            # Windows' answer when the working folder, the root, does not exist. rg itself is fine.
             return await self._search_python(args)
 
         stdout = stdout_b.decode("utf-8", errors="replace")
@@ -191,63 +220,33 @@ class CodeSearchTool(Tool):
             return ToolResult(ok=False, error=stderr_clean or py_result.error or "rg error")
 
     async def _search_python(self, args: dict[str, Any]) -> ToolResult:
-        pattern_str = args["pattern"]
         rel = args.get("path", ".")
-        file_glob = args.get("glob", "*")
-        context_n = args.get("context", 0)
-        max_results = args.get("max_results", 50)
         flags = 0 if args.get("case_sensitive") else re.IGNORECASE
 
         try:
-            base = (self._root / rel).resolve()
-            if not str(base).startswith(str(self._root)):
-                return ToolResult(ok=False, error="Path escapes sandbox")
-        except Exception as e:
+            base = _inside_root(self._root, rel)
+        except (OSError, ValueError, RuntimeError) as e:
             return ToolResult(ok=False, error=str(e))
 
         try:
-            regex = re.compile(pattern_str, flags)
+            regex = re.compile(args["pattern"], flags)
         except re.error as e:
             return ToolResult(ok=False, error=f"Invalid regex: {e}")
 
-        matches: list[str] = []
-        files_searched = 0
-
-        for dirpath, dirnames, filenames in os.walk(base):
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-            for fname in filenames:
-                if file_glob != "*" and not fnmatch.fnmatch(fname, file_glob):
-                    continue
-                fpath = Path(dirpath) / fname
-                files_searched += 1
-                try:
-                    lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
-                except OSError:
-                    continue
-
-                rel_path = fpath.relative_to(self._root)
-                for lineno, line in enumerate(lines, 1):
-                    if regex.search(line):
-                        if context_n > 0:
-                            start = max(0, lineno - 1 - context_n)
-                            end = min(len(lines), lineno + context_n)
-                            for i in range(start, end):
-                                prefix = ">" if i == lineno - 1 else " "
-                                matches.append(f"{rel_path}:{i + 1}{prefix} {lines[i]}")
-                            matches.append("--")
-                        else:
-                            matches.append(f"{rel_path}:{lineno}: {line.rstrip()}")
-                        if len(matches) >= max_results:
-                            break
-                if len(matches) >= max_results:
-                    break
-            if len(matches) >= max_results:
-                break
-
+        # In a worker thread: this walk runs on the event loop otherwise, and a
+        # Build child agent's tool call is a task on the server's loop.
+        matches, searched, note = await asyncio.to_thread(
+            scan.search_lines,
+            base,
+            self._root,
+            regex,
+            file_glob=args.get("glob", "*"),
+            context=args.get("context", 0),
+            max_results=args.get("max_results", 50),
+        )
         if not matches:
-            return ToolResult(ok=True, data=f"No matches found (searched {files_searched} files)")
-        header = f"Found matches (searched {files_searched} files):\n"
-        return ToolResult(ok=True, data=header + "\n".join(matches))
+            return ToolResult(ok=True, data=f"No matches found (searched {searched} files){note}")
+        return ToolResult(ok=True, data=f"Found matches (searched {searched} files):\n" + "\n".join(matches) + note)
 
 
 class FindDefinitionTool(Tool):
@@ -312,10 +311,8 @@ class FindDefinitionTool(Tool):
         rel = args.get("path", ".")
 
         try:
-            base = (self._root / rel).resolve()
-            if not str(base).startswith(str(self._root)):
-                return ToolResult(ok=False, error="Path escapes sandbox")
-        except Exception as e:
+            base = _inside_root(self._root, rel)
+        except (OSError, ValueError, RuntimeError) as e:
             return ToolResult(ok=False, error=str(e))
 
         # Build regex patterns
@@ -332,32 +329,22 @@ class FindDefinitionTool(Tool):
         # Filter by language extensions if specified
         exts = self._LANG_EXTS.get(lang, _CODE_EXTS)
 
-        results: list[str] = []
-        for dirpath, dirnames, filenames in os.walk(base):
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-            for fname in filenames:
-                if Path(fname).suffix not in exts:
-                    continue
-                fpath = Path(dirpath) / fname
-                try:
-                    lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
-                except OSError:
-                    continue
-                rel_path = fpath.relative_to(self._root)
-                for lineno, line in enumerate(lines, 1):
-                    if any(p.search(line) for p in patterns):
-                        start = max(0, lineno - 1)
-                        end = min(len(lines), lineno + 3)
-                        ctx = "\n".join(f"  {i + 1}: {lines[i]}" for i in range(start, end))
-                        results.append(f"{rel_path}:{lineno}\n{ctx}")
-                        if len(results) >= 20:
-                            break
-            if len(results) >= 20:
-                break
+        # Python definitions use an incremental per-project index. Other languages
+        # and ambiguous lookups retain the original bounded scan and its semantics.
+        if lang == "python" and base.is_dir() and args["symbol"].isidentifier():
+            from thomas.tools.code_definition_index import find_definitions
 
+            indexed = await asyncio.to_thread(find_definitions, self._root, base, args["symbol"])
+            if indexed is not None:
+                if not indexed:
+                    return ToolResult(ok=True, data=f"No definition found for '{args['symbol']}'")
+                return ToolResult(ok=True, data="\n\n".join(indexed))
+
+        # Scans still run off the event loop and keep their existing budget note.
+        results, note = await asyncio.to_thread(scan.find_symbol, base, self._root, patterns, exts)
         if not results:
-            return ToolResult(ok=True, data=f"No definition found for '{args['symbol']}'")
-        return ToolResult(ok=True, data="\n\n".join(results))
+            return ToolResult(ok=True, data=f"No definition found for '{args['symbol']}'{note}")
+        return ToolResult(ok=True, data="\n\n".join(results) + note)
 
 
 class FindReferencesTool(Tool):
@@ -396,10 +383,8 @@ class FindReferencesTool(Tool):
         max_results = args.get("max_results", 30)
 
         try:
-            base = (self._root / rel).resolve()
-            if not str(base).startswith(str(self._root)):
-                return ToolResult(ok=False, error="Path escapes sandbox")
-        except Exception as e:
+            base = _inside_root(self._root, rel)
+        except (OSError, ValueError, RuntimeError) as e:
             return ToolResult(ok=False, error=str(e))
 
         pattern = rf"\b{re.escape(symbol)}\b"
@@ -409,10 +394,8 @@ class FindReferencesTool(Tool):
                 "rg",
                 "--line-number",
                 "--with-filename",
-                "-m",
-                str(max_results),
-                pattern,
-                str(base),
+                f"--max-count={max_results}",
+                *_rg_target(pattern, base),
             ]
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -425,34 +408,21 @@ class FindReferencesTool(Tool):
                 if proc.returncode in (0, 1):
                     data = out.decode("utf-8", errors="replace").rstrip()
                     return ToolResult(ok=True, data=data or "No references found")
-            except (FileNotFoundError, asyncio.TimeoutError):
+            except (FileNotFoundError, NotADirectoryError, asyncio.TimeoutError):
                 pass  # fall through to Python
 
-        # Python fallback
-        compiled = re.compile(pattern)
-        results: list[str] = []
-        for dirpath, dirnames, filenames in os.walk(base):
-            dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-            for fname in filenames:
-                if Path(fname).suffix not in _CODE_EXTS:
-                    continue
-                fpath = Path(dirpath) / fname
-                try:
-                    lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
-                except OSError:
-                    continue
-                rel_path = fpath.relative_to(self._root)
-                for lineno, line in enumerate(lines, 1):
-                    if compiled.search(line):
-                        results.append(f"{rel_path}:{lineno}: {line.rstrip()}")
-                        if len(results) >= max_results:
-                            break
-            if len(results) >= max_results:
-                break
-
+        # Python fallback, in a worker thread for the same reason as the rest.
+        results, _searched, note = await asyncio.to_thread(
+            scan.search_lines,
+            base,
+            self._root,
+            re.compile(pattern),
+            exts=_CODE_EXTS,
+            max_results=max_results,
+        )
         if not results:
-            return ToolResult(ok=True, data=f"No references found for '{symbol}'")
-        return ToolResult(ok=True, data="\n".join(results))
+            return ToolResult(ok=True, data=f"No references found for '{symbol}'{note}")
+        return ToolResult(ok=True, data="\n".join(results) + note)
 
 
 class ProjectStructureTool(Tool):
@@ -489,18 +459,21 @@ class ProjectStructureTool(Tool):
         show_files = args.get("show_files", True)
 
         try:
-            base = (self._root / rel).resolve()
-            if not str(base).startswith(str(self._root)):
-                return ToolResult(ok=False, error="Path escapes sandbox")
+            base = _inside_root(self._root, rel)
         except Exception as e:
             return ToolResult(ok=False, error=str(e))
 
         if not base.is_dir():
             return ToolResult(ok=False, error=f"Not a directory: {rel}")
 
-        lines: list[str] = [base.name or "."]
-        self._walk_tree(base, "", 0, max_depth, show_files, lines)
-        return ToolResult(ok=True, data="\n".join(lines))
+        def _tree() -> list[str]:
+            lines: list[str] = [base.name or "."]
+            self._walk_tree(base, "", 0, max_depth, show_files, lines)
+            return lines
+
+        # iterdir per directory, four levels deep by default: disk work, and
+        # therefore not the event loop's.
+        return ToolResult(ok=True, data="\n".join(await asyncio.to_thread(_tree)))
 
     def _walk_tree(
         self,
@@ -513,29 +486,28 @@ class ProjectStructureTool(Tool):
     ) -> None:
         if depth >= max_depth:
             return
-        try:
-            entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
-        except PermissionError:
-            return
+        folders, files, links = scan.list_folder(path)
+
+        # (sorts last, name, what the tree shows, whether to go in). A link is named and never entered.
+        rows = [(False, name, f"{name}/", True) for name in folders]
+        rows += [(False, name, f"{name} (link, not followed)", False) for name in links]
+        if show_files:
+            rows += [(True, name, name, False) for name in files]
 
         # Filter skip dirs, keep important dotfiles
-        visible = [e for e in entries if e.name not in _SKIP_DIRS and not e.name.startswith(".")]
-        dotfiles = [e for e in entries if e.name in {".gitignore", ".env.example", ".github"}]
-        all_entries = sorted(set(visible + dotfiles), key=lambda p: (p.is_file(), p.name.lower()))
+        shown = [
+            row for row in rows if (row[1] not in _SKIP_DIRS and not row[1].startswith(".")) or row[1] in _TREE_DOTFILES
+        ]
+        shown.sort(key=lambda row: (row[0], row[1].lower()))
 
-        if not show_files:
-            all_entries = [e for e in all_entries if e.is_dir()]
-
-        for i, entry in enumerate(all_entries):
-            is_last = i == len(all_entries) - 1
+        for i, (_sorts_last, name, label, go_in) in enumerate(shown):
+            is_last = i == len(shown) - 1
             connector = "└── " if is_last else "├── "
             extension = "    " if is_last else "│   "
 
-            if entry.is_dir():
-                lines.append(f"{prefix}{connector}{entry.name}/")
-                self._walk_tree(entry, prefix + extension, depth + 1, max_depth, show_files, lines)
-            else:
-                lines.append(f"{prefix}{connector}{entry.name}")
+            lines.append(f"{prefix}{connector}{label}")
+            if go_in:
+                self._walk_tree(path / name, prefix + extension, depth + 1, max_depth, show_files, lines)
 
 
 # ---------------------------------------------------------------------------
@@ -551,4 +523,4 @@ def register_code_search_tools(registry: Any, sandbox_root: Path) -> None:
     registry.register(ProjectStructureTool(sandbox_root))
     # Semantic (concept) search over the RAG index — lives alongside the lexical
     # code.* tools so the agent can retrieve code by meaning, not just keywords.
-    register_semantic_search_tool(registry)
+    register_semantic_search_tool(registry, sandbox_root=sandbox_root, extensions=sorted(_CODE_EXTS))

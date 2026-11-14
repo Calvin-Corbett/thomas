@@ -6,16 +6,28 @@ import json
 import logging
 import os
 import shlex
-import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterable
-from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+from thomas.core.git_process import GitResult, run_git
+from thomas.core.pause import paused
 from thomas.core.workspace_sync_coordination import WorkspaceSyncCoordinationClient
+from thomas.core.workspace_sync_support import (
+    DEFAULT_EXCLUDE_GLOBS,
+    env_bool,
+    env_float,
+    env_int,
+    normalize_rel_path,
+    now_iso,
+    parse_extra_globs,
+    safe_file_age_s,
+    truncate,
+    validate_python_syntax,
+)
 
 log = logging.getLogger(__name__)
 
@@ -36,102 +48,14 @@ _DEFAULT_COORDINATION_RETRY_ENABLED = True
 _DEFAULT_COORDINATION_RETRY_BASE_SECONDS = 30.0
 _DEFAULT_COORDINATION_RETRY_MAX_SECONDS = 900.0
 
-_DEFAULT_EXCLUDE_GLOBS = (
-    "*.db",
-    "*.db-shm",
-    "*.db-wal",
-    "*.sqlite",
-    "*.sqlite3",
-    "*.log",
-    "*.tmp",
-    "*.temp",
-    "*.bak",
-    ".env",
-    ".env.*",
-    "*.pem",
-    "*.key",
-    "id_rsa",
-    "id_ed25519",
-    ".thomas/*",
-    "runtime/*",
-    "output/*",
-    "__pycache__/*",
-    ".pytest_cache/*",
-    ".mypy_cache/*",
-    ".ruff_cache/*",
-    "node_modules/*",
-    ".open-next/*",
-)
-
-
-def _env_float(name: str, default: float, *, min_value: float = 0.0, max_value: float = 86_400.0) -> float:
-    raw = str(os.environ.get(name, "") or "").strip()
-    if not raw:
-        return float(default)
-    try:
-        value = float(raw)
-    except Exception:
-        return float(default)
-    return float(max(min_value, min(max_value, value)))
-
-
-def _env_int(name: str, default: int, *, min_value: int = 1, max_value: int = 10_000) -> int:
-    raw = str(os.environ.get(name, "") or "").strip()
-    if not raw:
-        return int(default)
-    try:
-        value = int(raw)
-    except Exception:
-        return int(default)
-    return int(max(min_value, min(max_value, value)))
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    raw = str(os.environ.get(name, "") or "").strip().lower()
-    if not raw:
-        return bool(default)
-    if raw in {"1", "true", "yes", "on"}:
-        return True
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return bool(default)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _truncate(text: str, limit: int = 800) -> str:
-    value = str(text or "")
-    if len(value) <= limit:
-        return value
-    return value[: limit - 20] + "\n... (truncated)"
-
-
-def _normalize_rel_path(value: str) -> str:
-    text = str(value or "").replace("\\", "/").strip()
-    while text.startswith("./"):
-        text = text[2:]
-    while text.startswith("/"):
-        text = text[1:]
-    return text
-
-
-def _parse_extra_globs(raw: str) -> list[str]:
-    items: list[str] = []
-    for piece in str(raw or "").split(","):
-        val = _normalize_rel_path(piece).lower()
-        if not val:
-            continue
-        items.append(val)
-    return sorted(set(items))
-
-
-def _safe_file_age_s(path: Path) -> float:
-    try:
-        return max(0.0, time.time() - path.stat().st_mtime)
-    except Exception:
-        return 0.0
+# Bound for a local git command in a cycle: add, commit, config, a status read.
+# All of these are disk work on a warm repository and finish in well under a
+# second; sixty is the old number kept as headroom, not as an expectation.
+_GIT_TIMEOUT_S = 60.0
+# A push talks to a remote, so it gets its own, larger bound. It is still a
+# bound: before this, a push that stalled on an unreachable remote held the
+# engine thread until the network gave up.
+_GIT_PUSH_TIMEOUT_S = 180.0
 
 
 class WorkspaceSyncEngine:
@@ -172,14 +96,14 @@ class WorkspaceSyncEngine:
             _DEFAULT_MAX_FILES_PER_COMMIT if max_files_per_commit is None else max(1, int(max_files_per_commit))
         )
         self._stable_age_s = float(_DEFAULT_STABLE_AGE_S if stable_age_s is None else max(0.0, float(stable_age_s)))
-        self._auto_push = bool(_env_bool("THOMAS_WORKSPACE_SYNC_AUTO_PUSH", False) if auto_push is None else auto_push)
+        self._auto_push = bool(env_bool("THOMAS_WORKSPACE_SYNC_AUTO_PUSH", False) if auto_push is None else auto_push)
         self._coordination_enabled = bool(
-            _env_bool("THOMAS_WORKSPACE_SYNC_COORDINATION_ENABLED", True)
+            env_bool("THOMAS_WORKSPACE_SYNC_COORDINATION_ENABLED", True)
             if coordination_enabled is None
             else coordination_enabled
         )
         self._coordination_claim_ttl_s = int(
-            _env_int(
+            env_int(
                 "THOMAS_WORKSPACE_SYNC_COORDINATION_TTL",
                 _DEFAULT_COORDINATION_CLAIM_TTL_S,
                 min_value=30,
@@ -192,7 +116,7 @@ class WorkspaceSyncEngine:
             str(os.environ.get("THOMAS_WORKSPACE_SYNC_COORDINATION_NOTE") or "").strip() or _DEFAULT_COORDINATION_NOTE
         )
         self._coordination_timeout_s = float(
-            _env_float(
+            env_float(
                 "THOMAS_WORKSPACE_SYNC_COORDINATION_TIMEOUT_S",
                 _DEFAULT_COORDINATION_TIMEOUT_S,
                 min_value=5.0,
@@ -200,10 +124,10 @@ class WorkspaceSyncEngine:
             )
         )
         self._coordination_retry_enabled = bool(
-            _env_bool("THOMAS_WORKSPACE_SYNC_COORDINATION_RETRY_ENABLED", _DEFAULT_COORDINATION_RETRY_ENABLED)
+            env_bool("THOMAS_WORKSPACE_SYNC_COORDINATION_RETRY_ENABLED", _DEFAULT_COORDINATION_RETRY_ENABLED)
         )
         self._coordination_retry_base_s = float(
-            _env_float(
+            env_float(
                 "THOMAS_WORKSPACE_SYNC_COORDINATION_RETRY_BASE_SECONDS",
                 _DEFAULT_COORDINATION_RETRY_BASE_SECONDS,
                 min_value=5.0,
@@ -211,7 +135,7 @@ class WorkspaceSyncEngine:
             )
         )
         self._coordination_retry_max_s = float(
-            _env_float(
+            env_float(
                 "THOMAS_WORKSPACE_SYNC_COORDINATION_RETRY_MAX_SECONDS",
                 _DEFAULT_COORDINATION_RETRY_MAX_SECONDS,
                 min_value=self._coordination_retry_base_s,
@@ -236,13 +160,14 @@ class WorkspaceSyncEngine:
         self._notify_fn = notify_fn
         self._log_path = Path(log_path or (STATE_DIR / "workspace_sync_engine.jsonl"))
 
-        extra_globs = _parse_extra_globs(str(os.environ.get("THOMAS_WORKSPACE_SYNC_EXCLUDE_GLOBS") or ""))
-        explicit_globs = [_normalize_rel_path(v).lower() for v in list(exclude_globs or []) if str(v or "").strip()]
-        all_globs = list(_DEFAULT_EXCLUDE_GLOBS) + extra_globs + explicit_globs
-        self._exclude_globs = sorted(set(_normalize_rel_path(v).lower() for v in all_globs if str(v).strip()))
+        extra_globs = parse_extra_globs(str(os.environ.get("THOMAS_WORKSPACE_SYNC_EXCLUDE_GLOBS") or ""))
+        explicit_globs = [normalize_rel_path(v).lower() for v in list(exclude_globs or []) if str(v or "").strip()]
+        all_globs = list(DEFAULT_EXCLUDE_GLOBS) + extra_globs + explicit_globs
+        self._exclude_globs = sorted(set(normalize_rel_path(v).lower() for v in all_globs if str(v).strip()))
 
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._active_cycle = False
         self._lock = threading.Lock()
         self._mutation_lock = threading.Lock()
@@ -253,7 +178,7 @@ class WorkspaceSyncEngine:
         self._last_report: dict[str, Any] = {}
         self._last_error: str | None = None
         self._last_error_at: str | None = None
-        self._enabled = _env_bool("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", False)
+        self._enabled = env_bool("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", False)
 
     def start(self, *, notify_fn: Callable[[str], None] | None = None) -> None:
         if notify_fn is not None:
@@ -261,12 +186,14 @@ class WorkspaceSyncEngine:
         if self._running or not self._enabled:
             return
         self._running = True
+        self._stopping.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="thomas-workspace-sync")
         self._thread.start()
         log.info("WorkspaceSyncEngine started (repo=%s, auto_push=%s).", self._repo_root, self._auto_push)
 
     def stop(self) -> None:
         self._running = False
+        self._stopping.set()
 
     def record_user_message(self) -> None:
         self._last_user_ts = time.monotonic()
@@ -343,14 +270,15 @@ class WorkspaceSyncEngine:
                 self._active_cycle = False
 
     def _loop(self) -> None:
-        while self._running:
-            time.sleep(self._poll_interval_s)
+        while self._running and not self._stopping.wait(self._poll_interval_s):
             try:
                 self._tick()
             except Exception as exc:
                 log.warning("WorkspaceSyncEngine tick failed: %s", exc)
 
     def _tick(self) -> None:
+        if paused():
+            return
         if not self._enabled:
             return
         if not self.is_idle():
@@ -491,8 +419,8 @@ class WorkspaceSyncEngine:
                     committed=False,
                     skip_reason="git_add_failed",
                     details={
-                        "stderr": _truncate(add_result.stderr),
-                        "stdout": _truncate(add_result.stdout),
+                        "stderr": truncate(add_result.stderr),
+                        "stdout": truncate(add_result.stdout),
                         "coordination": coordination,
                     },
                     elapsed_ms=started,
@@ -525,8 +453,8 @@ class WorkspaceSyncEngine:
                     committed=False,
                     skip_reason="git_commit_failed",
                     details={
-                        "stderr": _truncate(commit_result.stderr),
-                        "stdout": _truncate(commit_result.stdout),
+                        "stderr": truncate(commit_result.stderr),
+                        "stdout": truncate(commit_result.stdout),
                         "coordination": coordination,
                     },
                     elapsed_ms=started,
@@ -580,7 +508,7 @@ class WorkspaceSyncEngine:
                 path_field = path_field.split(" -> ", 1)[1].strip()
             if path_field.startswith('"') and path_field.endswith('"') and len(path_field) >= 2:
                 path_field = path_field[1:-1].replace('\\"', '"')
-            rel = _normalize_rel_path(path_field)
+            rel = normalize_rel_path(path_field)
             if not rel:
                 continue
             if self._is_excluded(rel):
@@ -601,13 +529,13 @@ class WorkspaceSyncEngine:
                 out.append(rel)
                 continue
             full = (self._repo_root / rel).resolve()
-            age = _safe_file_age_s(full)
+            age = safe_file_age_s(full)
             if age >= self._stable_age_s:
                 out.append(rel)
         return out
 
     def _is_excluded(self, rel_path: str) -> bool:
-        normalized = _normalize_rel_path(rel_path).lower()
+        normalized = normalize_rel_path(rel_path).lower()
         if not normalized:
             return True
         for pat in self._exclude_globs:
@@ -616,32 +544,7 @@ class WorkspaceSyncEngine:
         return False
 
     def _validate_python_syntax(self, files: list[str]) -> dict[str, Any]:
-        py_files: list[str] = []
-        for rel in files:
-            if str(rel).lower().endswith(".py"):
-                py_files.append(rel)
-        if not py_files:
-            return {"ok": True, "checked": 0, "errors": []}
-        errors: list[dict[str, Any]] = []
-        for rel in py_files:
-            path = (self._repo_root / rel).resolve()
-            if not path.exists():
-                continue
-            cmd = [os.environ.get("PYTHON", os.sys.executable), "-m", "py_compile", str(path)]
-            try:
-                proc = subprocess.run(cmd, cwd=str(self._repo_root), capture_output=True, text=True, timeout=30.0)
-            except Exception as exc:
-                errors.append({"path": rel, "error": f"{type(exc).__name__}: {exc}"})
-                continue
-            if proc.returncode != 0:
-                errors.append(
-                    {
-                        "path": rel,
-                        "stdout": _truncate(str(proc.stdout or "")),
-                        "stderr": _truncate(str(proc.stderr or "")),
-                    }
-                )
-        return {"ok": not bool(errors), "checked": len(py_files), "errors": errors}
+        return validate_python_syntax(self._repo_root, files)
 
     def _ensure_author_identity(self) -> None:
         name = self._git_text("config", "--get", "user.name").strip()
@@ -695,7 +598,7 @@ class WorkspaceSyncEngine:
             return push
 
         push["attempted"] = True
-        proc = self._git("push")
+        proc = self._git("push", timeout=_GIT_PUSH_TIMEOUT_S)
         if proc.returncode == 0:
             push["ok"] = True
             push["reason"] = "pushed"
@@ -703,16 +606,16 @@ class WorkspaceSyncEngine:
 
         err = f"{proc.stdout}\n{proc.stderr}".lower()
         if "no upstream branch" in err and "origin" in remotes:
-            proc2 = self._git("push", "--set-upstream", "origin", branch)
+            proc2 = self._git("push", "--set-upstream", "origin", branch, timeout=_GIT_PUSH_TIMEOUT_S)
             if proc2.returncode == 0:
                 push["ok"] = True
                 push["reason"] = "pushed_set_upstream"
                 return push
-            push["stderr"] = _truncate(str(proc2.stderr or proc2.stdout or ""))
+            push["stderr"] = truncate(str(proc2.stderr or proc2.stdout or ""))
             push["reason"] = "push_failed"
             return push
 
-        push["stderr"] = _truncate(str(proc.stderr or proc.stdout or ""))
+        push["stderr"] = truncate(str(proc.stderr or proc.stdout or ""))
         push["reason"] = "push_failed"
         return push
 
@@ -777,7 +680,7 @@ class WorkspaceSyncEngine:
             "ok": True,
             "cycle": cycle_id,
             "reason": str(reason or "manual"),
-            "timestamp": _now_iso(),
+            "timestamp": now_iso(),
             "committed": bool(committed),
             "commit_sha": str(commit_sha or ""),
             "skip_reason": str(skip_reason or ""),
@@ -813,7 +716,7 @@ class WorkspaceSyncEngine:
             cycle_id = int(self._cycle_count) + 1
             self._cycle_count = cycle_id
             self._last_error = f"{type(exc).__name__}: {exc}"
-            self._last_error_at = _now_iso()
+            self._last_error_at = now_iso()
 
         report = {
             "ok": False,
@@ -823,7 +726,7 @@ class WorkspaceSyncEngine:
             "force": bool(force),
             "error_type": type(exc).__name__,
             "error": f"{type(exc).__name__}: {exc}",
-            "timestamp": _now_iso(),
+            "timestamp": now_iso(),
             "elapsed_ms": round((time.monotonic() - started) * 1000.0, 1),
             "committed": False,
             "skip_reason": "engine_exception",
@@ -843,18 +746,22 @@ class WorkspaceSyncEngine:
         self._last_error = None
         self._last_error_at = None
 
-    def _git(self, *args: str) -> subprocess.CompletedProcess[str]:
-        cmd = ["git", *[str(a) for a in args]]
-        return subprocess.run(
-            cmd,
-            cwd=str(self._repo_root),
-            capture_output=True,
-            text=True,
-            timeout=60.0,
-        )
+    def _git(self, *args: str, timeout: float = _GIT_TIMEOUT_S) -> GitResult:
+        """Run one git command under a bound that actually holds.
+
+        This used to be ``subprocess.run(["git", ...], timeout=60.0)``, which on
+        Windows bounds nothing when git is reached through the ``Git\\cmd``
+        launcher -- see ``thomas/core/git_process.py``. A push that hung on a
+        credential prompt held this engine's thread, and with it the activity
+        lease every mutation waits on. Timed-out read queries raise in
+        ``_git_text`` so the cycle stops instead of treating them as empty.
+        """
+        return run_git([str(a) for a in args], cwd=self._repo_root, timeout=timeout)
 
     def _git_text(self, *args: str) -> str:
         proc = self._git(*args)
+        if proc.timed_out or proc.spawn_failed:
+            raise OSError(f"could not inspect git {' '.join(args)}: {proc.message()}")
         if proc.returncode != 0:
             return ""
         return str(proc.stdout or "")

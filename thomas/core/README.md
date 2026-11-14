@@ -33,6 +33,9 @@ Actual execution
 | `event_schemas.py` | Event type definitions |
 | `events.py` | Event emission |
 | `boot_doctor.py` | Startup health check |
+| `boot_checks.py` | BootDoctor offline checks: `thomas.toml`, state folders, databases |
+| `boot_process.py` | BootDoctor ports, processes and child commands |
+| `boot_ai_summary.py` | The model-written paragraph of a BootDoctor report |
 | `engine_manager.py` | Manage specialist engines |
 | `scheduler.py` | Task scheduling |
 | `cost_tracker.py` | Token and API cost tracking |

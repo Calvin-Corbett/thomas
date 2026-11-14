@@ -23,7 +23,8 @@
   "api_namespace": "life-manager-foundation",
   "capabilities": [
     "life_manager.foundation",
-    "life_manager.bootstrap"
+    "life_manager.bootstrap",
+    "healthcheck"
   ],
   "tags": [
     "productivity",

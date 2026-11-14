@@ -6,8 +6,9 @@ bypasses the merge-debt ceiling. This command is the front door. Before creating
 a worktree it:
 
   1. Refreshes and DISPLAYS the ledger (so the human/agent sees what exists).
-  2. BLOCKS creation when DIRTY worktrees are at/above the configured ceiling
-     (``[worktree_governance] max_dirty_worktrees``, default 5).
+  2. BLOCKS creation when DIRTY worktrees nobody is working in (no changed file
+     and no commit within ``active_minutes``, default 30) are at/above the
+     configured ceiling (``[worktree_governance] max_dirty_worktrees``, default 5).
   3. REFUSES creation when an existing branch/worktree already matches the
      requested feature keyword (no duplicate efforts) unless ``--force`` with a
      ``--reason``.
@@ -130,19 +131,22 @@ def evaluate_creation(
     """Decide whether a new worktree may be created. Reads only — never creates.
 
     Blocking conditions:
-      * DIRTY worktrees >= ceiling.
+      * DIRTY worktrees nobody is working in >= ceiling.
       * keyword collision with an existing branch/worktree (unless --force+reason).
     """
     ledger = worktree_ledger.collect(root)
     decision = CreationDecision(name=name, requested_branch=branch, allowed=True, ledger=ledger)
 
     # ── Debt ceiling ──
+    # Only worktrees nobody is working in count. A busy agent's worktree is work in
+    # progress, and counting it capped how many agents could each have one.
     ceiling = ledger.config.max_dirty_worktrees
-    if ledger.dirty_count >= ceiling:
+    if ledger.debt_count >= ceiling:
         decision.allowed = False
         decision.blocked_reasons.append(
-            f"You have {ledger.dirty_count} unmerged (DIRTY) worktree(s), at/above the ceiling of "
-            f"{ceiling}. Consolidate before opening another. (run `thomas consolidate`)"
+            f"You have {ledger.debt_count} unmerged (DIRTY) worktree(s) nobody has touched in "
+            f"{ledger.config.active_minutes} minutes, at/above the ceiling of {ceiling}. "
+            "Consolidate before opening another. (run `thomas consolidate`)"
         )
 
     # ── Keyword collision ──

@@ -1,0 +1,4 @@
+### Changed
+
+- **The shimmering line is the step Thomas is on, at the very bottom of the chat.** You said it should be the controls that keep changing ("Read package.json", "Edited src/main.js", "Ran diff…"), not "Thomas is planning", and that it belongs at the bottom of the chat, not above the composer. While a run is live, the newest step shimmers in place as the last line of the feed, is replaced by the next one as it happens, and stays at the bottom as the feed grows; if you scrolled up to read, your place is left alone. Click it to show every step. The line above the composer now shows only the clock.
+- **The chat and the composer are the same width.** The composer box had a fixed 768px limit left in the page that held it to 700px while the chat took the full 860px column. The limit is lifted in Build, so both use the same width.

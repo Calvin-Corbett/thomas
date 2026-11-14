@@ -1,0 +1,3 @@
+### Fixed
+
+- **A file on this computer, outside the project, is no longer something a Thomas project must create or read.** The ChatGPT sign-in project's request named the live Codex login by its Windows path and said never to touch that `auth.json`. The completion gate did not read a `C:\...` path as a path, so the bare name `auth.json` became a file the team had to create in its copy ("`auth.json` exists and is non-empty when the work is done"). The run could not finish without writing a sign-in file. Written with forward slashes, the same path was read as a data file outside the project. A path with a drive letter is now left out of the checklist, and a later mention of its file name means that file.

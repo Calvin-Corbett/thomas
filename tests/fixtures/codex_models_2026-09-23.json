@@ -1,0 +1,89 @@
+{
+  "models": [
+    {
+      "slug": "gpt-6-astra",
+      "display_name": "GPT-6-Astra",
+      "description": "Frontier intelligence for the most demanding work.",
+      "priority": 1,
+      "visibility": "list",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-6-sol",
+      "display_name": "GPT-6-Sol",
+      "description": "Workhorse model for coding and everyday work.",
+      "priority": 2,
+      "visibility": "list",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-6-luna",
+      "display_name": "GPT-6-Luna",
+      "description": "Fast and affordable model for easier tasks.",
+      "priority": 3,
+      "visibility": "list",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-reserve",
+      "display_name": "GPT-Reserve",
+      "description": "Fast and affordable agentic coding model.",
+      "priority": 3,
+      "visibility": "hide",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-5.6-sol",
+      "display_name": "GPT-5.6-Sol",
+      "description": "Older coding model for complex work.",
+      "priority": 4,
+      "visibility": "list",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-5.6-terra",
+      "display_name": "GPT-5.6-Terra",
+      "description": "Older balanced model for straightforward work.",
+      "priority": 7,
+      "visibility": "list",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-5.6-luna",
+      "display_name": "GPT-5.6-Luna",
+      "description": "Older fast and efficient model.",
+      "priority": 8,
+      "visibility": "list",
+      "upgrade": null,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-5.5",
+      "display_name": "GPT-5.5",
+      "description": "Legacy coding model.",
+      "priority": 12,
+      "visibility": "list",
+      "upgrade": {
+        "model": "gpt-5.6-sol",
+        "migration_markdown": "GPT-5.5 retires on October 14, 2026. Switch to GPT-5.6 Sol to continue working in Codex.",
+        "retirement_at": "2026-10-14T19:00:00Z"
+      },
+      "context_window": 272000
+    },
+    {
+      "slug": "codex-auto-review",
+      "display_name": "Codex Auto Review",
+      "description": "Automatic approval review model for Codex.",
+      "priority": 43,
+      "visibility": "hide",
+      "upgrade": null,
+      "context_window": 272000
+    }
+  ]
+}

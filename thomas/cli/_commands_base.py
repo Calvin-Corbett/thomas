@@ -26,7 +26,9 @@ try:
 except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore[assignment]
 
+from thomas.agent.kernel_wiring import build_agent_loop
 from thomas.agent.loop import AgentLoop
+from thomas.cli.config_guard import load_config_or_exit
 from thomas.cli.done_footer import print_done_footer
 from thomas.cli.main_chatops import register_chatops_commands
 from thomas.cli.main_library_commands import register_library_commands
@@ -106,12 +108,12 @@ from thomas.core.autonomy import clamp_autonomy_level
 from thomas.core.config import (
     AppConfig,
     apply_runtime_data_env_defaults,
-    load_config,
     normalize_profile_name,
     resolve_thomas_data_dir,
 )
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
+from thomas.core.llm_slot import models
 from thomas.core.redaction import Redactor
 from thomas.server.tool_extensions import register_all_optional_tools
 from thomas.tools.code_search import register_code_search_tools
@@ -182,10 +184,10 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _build_tools(config: AppConfig) -> ToolRegistry:
-    """Register all available tools based on configuration."""
+def _build_tools(config: AppConfig, scope: Any = None) -> ToolRegistry:
+    """Register all available tools; ``scope`` (a files-slot Scope), when given, replaces the sandbox root."""
     registry = ToolRegistry()
-    sandbox = config.tools.sandbox_path
+    sandbox = config.tools.sandbox_path if scope is None else Path(scope.root).resolve()
     register_filesystem_tools(registry, sandbox, config.tools.max_file_size)
     if config.tools.allow_shell:
         register_shell_tools(
@@ -327,27 +329,20 @@ async def _run_chat(
         build_tools = _build_tools
     if build_memory is None:
         build_memory = _build_memory
-    if agent_cls is None:
-        agent_cls = AgentLoop
 
     active_profile = model_name or config.default_model
     model_config = config.get_model(active_profile)
-    llm = llm_cls(
-        model_config,
-        fallback_configs=config.failover_chain(active_profile),
-        failover_enabled=bool(config.failover.enabled and getattr(config.failover, "chat_auto_failover", False)),
-        failover_cooldown_s=config.failover.cooldown_seconds,
-        failover_on_auth_error=config.failover.fallback_on_auth_error,
-    )
+    llm = models().profile(config, active_profile, default=llm_cls)
     tools = build_tools(config)
     memory = build_memory(config)
-    agent = agent_cls(
+    agent = build_agent_loop(
         config,
         llm,
         tools,
         memory=memory,
         thread_id=f"cli:{uuid.uuid4().hex}",
         autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+        default=agent_cls or AgentLoop,
     )
 
     agent_errors: list[str] = []
@@ -506,7 +501,8 @@ def cli(
     _setup_logging(verbose)
     path = Path(config_path) if config_path else None
     ctx.ensure_object(dict)
-    ctx.obj["config"] = load_config(
+    load_config_or_exit(
+        ctx,
         path,
         data_dir=Path(data_dir_override).expanduser() if data_dir_override else None,
         profile=normalized_profile or None,

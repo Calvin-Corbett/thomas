@@ -36,9 +36,22 @@ import hmac
 import json
 import os
 import secrets
+import sys
 import time
 from hashlib import sha256
 from pathlib import Path
+
+# Run as `python scripts/runtime_protection_toggle.py`, sys.path[0] is scripts/
+# and the repo root is absent, so `scripts.breakglass_auth` -- and that module's
+# own `scripts.*` imports -- cannot resolve. The fallback chain below reported
+# "Run from the Thomas repo root" for that, which is what it already was.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+# Imported at module scope on purpose: `status` then exercises the same import
+# `off` depends on, so a broken chain fails on the cheapest, safest command.
+from scripts.forge.gates._runtime_guard import runtime_protection_disabled
 
 
 def _find_repo_root() -> Path:
@@ -101,14 +114,25 @@ def _mint_fresh_key(repo: Path) -> bytes:
 
 
 def _is_disabled(repo: Path) -> bool:
-    """Quick presence check (does NOT validate signature).
+    """Whether protection is really off -- the same question the gates ask.
 
-    This is intentionally lenient — used only by ``status`` and ``off``
-    to short-circuit redundant work.  The real signature validation
-    lives in ``thomas.tools.filesystem._is_runtime_protection_disabled``;
-    that is what actually gates agent writes.
+    This was a presence check described as "intentionally lenient". Leniency
+    here is not harmless: a flag that is expired, unsigned, or signed with
+    another key still counted as disabled, so `status` reported DISABLED while
+    every gate treated protection as ON, and `off` short-circuited with "already
+    DISABLED" and refused to mint a fresh flag -- leaving no way to restore the
+    override but deleting files by hand.
+
+    Presence-only trust is also B9's shape (praxis-unbypassable-2026-05-29),
+    where an unsigned planted file disabled every gate that honoured presence.
+    The gates were fixed then; this tool kept the old behaviour until 2026-09-09.
     """
-    return _flag_path(repo).exists()
+    return runtime_protection_disabled(repo)
+
+
+def _stale_flag_present(repo: Path) -> bool:
+    """A flag file exists on disk that the validator does not honour."""
+    return _flag_path(repo).exists() and not runtime_protection_disabled(repo)
 
 
 def _authenticate_windows() -> bool:
@@ -268,6 +292,12 @@ def cmd_status(repo: Path) -> int:
         return 1
     else:
         print("  Runtime protection: ENABLED")
+        if _stale_flag_present(repo):
+            # Saying nothing here is how a flag sat on disk for two days
+            # looking like an override while every gate ignored it.
+            print(f"  Note: {_flag_path(repo)} exists but is NOT honoured")
+            print("        (expired, unsigned, or signed for another repo/key).")
+            print("        Clear it with: python scripts/runtime_protection_toggle.py on")
         print("  Agent tools are blocked from writing to Thomas's runtime code.")
         return 0
 

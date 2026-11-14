@@ -11,6 +11,9 @@ from typing import Any
 from aiohttp import web
 
 from thomas.core.llm import LLMClient
+from thomas.core.llm_slot import models
+from thomas.marketplace.orchestrator.brain import OrchestratorBrain
+from thomas.models.ready_elsewhere import models_ready_elsewhere
 from thomas.server.routes.chat_v2_keys import APP_SESSION_LLM_CACHE, APP_VOICE_BRIDGE
 from thomas.tools.voice import VoiceBridge
 
@@ -263,8 +266,9 @@ async def _get_or_create_session_llm(
     from thomas.server.routes import chat_v2
 
     llm_type = getattr(chat_v2, "LLMClient", LLMClient)
-    llm = llm_type(
+    llm = models().open(
         model_cfg,
+        default=llm_type,
         fallback_configs=fallback_cfgs,
         failover_enabled=failover_enabled,
         failover_cooldown_s=failover_cooldown_s,
@@ -304,6 +308,27 @@ async def _cleanup_cached_session_llms(app: web.Application) -> None:
     cache.clear()
     for entry in entries:
         await _close_cached_llm_safely(entry.llm, reason="application cleanup")
+
+
+def build_orchestrator_brain(
+    *, config: Any, llm: Any, memory_engine: Any, registry: Any, runtime_policy: Any
+) -> OrchestratorBrain:
+    """The brain for one chat turn, with everything it may not fetch for itself.
+
+    ``ready_models`` is the model catalog's reader. When a turn dies on a usage
+    limit the reply has to name what you can use instead -- "there was no other
+    model I could choose" -- and only the catalog knows which connections
+    answered at the last check. The orchestrator is not allowed to import
+    thomas.models (thomas/_architecture.py), so the route hands the reader down.
+    """
+    return OrchestratorBrain(
+        config=config,
+        llm=llm,
+        memory_engine=memory_engine,
+        registry=registry,
+        runtime_policy=runtime_policy,
+        ready_models=models_ready_elsewhere,
+    )
 
 
 __all__ = [name for name in globals() if name.startswith("_") and not name.startswith("__")]

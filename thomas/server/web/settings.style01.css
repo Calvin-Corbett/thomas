@@ -875,3 +875,15 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Settings > Publish to GitHub */
+#publishHost .publish-checks { list-style: none; padding: 0; margin: 12px 0; }
+#publishHost .publish-check { padding: 4px 0; }
+#publishHost .publish-check.is-ok .publish-tick { color: #3ecf8e; font-weight: 700; }
+#publishHost .publish-check.is-bad { color: #ff6b6b; }
+#publishHost .publish-check.is-bad .publish-tick { font-weight: 700; }
+#publishHost .publish-note { margin: 12px 0; }
+#publishHost .publish-note[data-tone="bad"] { color: #ff6b6b; }
+#publishHost .publish-note[data-tone="warn"] { color: #f5a623; }
+#publishHost .publish-note[data-tone="ok"] { color: #3ecf8e; }
+#publishHost .publish-send { margin-right: 8px; }

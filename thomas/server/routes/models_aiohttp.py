@@ -12,20 +12,16 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas import __version__ as THOMAS_VERSION
 from thomas.core.config import AppConfig, load_config
 from thomas.models.discovery import discover_models_async, handshake_models_async
 from thomas.models.protocol import validate_model_profile_async
-from thomas.server.app_keys import APP_CONFIG, APP_RUNTIME_GUARD_STATE, APP_SECRETS
+from thomas.server.app_keys import APP_CONFIG, APP_MODEL_CATALOG, APP_SECRETS
 from thomas.server.secrets import SecretStore
 
 log = logging.getLogger(__name__)
 
 RequireAccessFn = Callable[[web.Request], None]
 ModelCfgFn = Callable[[str], Any]
-
-_RUNTIME_MODE_PROD_ENV = frozenset({"prod", "production", "release", "live"})
-_RUNTIME_MODE_PROD_BRANCH = frozenset({"prod", "production", "release", "stable"})
 
 
 def _appkey_identity(key: Any) -> str:
@@ -83,70 +79,6 @@ def _resolve_runtime_config(app: web.Application) -> AppConfig:
     return cfg
 
 
-def _runtime_guard_payload(app: web.Application) -> dict[str, Any]:
-    state = _resolve_app_value(app, APP_RUNTIME_GUARD_STATE, expected_type=dict, default={})
-    if not isinstance(state, dict) or not state:
-        return {
-            "enabled": False,
-            "is_latest_code": True,
-            "state": "unknown",
-            "checked_at_utc": "",
-            "reasons": [],
-            "alert_message": "",
-            "git_branch": "",
-            "pid": None,
-            "lock_pid": None,
-            "lock_port": None,
-        }
-
-    status = state.get("status") if isinstance(state.get("status"), dict) else {}
-    current = state.get("current") if isinstance(state.get("current"), dict) else {}
-    current_source = current.get("source") if isinstance(current.get("source"), dict) else {}
-    boot = state.get("boot") if isinstance(state.get("boot"), dict) else {}
-    boot_source = boot.get("source") if isinstance(boot.get("source"), dict) else {}
-    lock = current.get("lock") if isinstance(current.get("lock"), dict) else {}
-    return {
-        "enabled": bool(state.get("enabled", True)),
-        "is_latest_code": bool(status.get("is_latest_code", True)),
-        "state": str(status.get("state") or "unknown"),
-        "checked_at_utc": str(status.get("checked_at_utc") or ""),
-        "reasons": list(status.get("reasons") or []),
-        "alert_message": str(status.get("alert_message") or ""),
-        "git_branch": str(current_source.get("git_branch") or boot_source.get("git_branch") or ""),
-        "pid": current.get("pid"),
-        "lock_pid": lock.get("pid"),
-        "lock_port": lock.get("port"),
-    }
-
-
-def _runtime_mode_payload(app: web.Application) -> dict[str, str]:
-    runtime_guard = _runtime_guard_payload(app)
-    git_branch = str(runtime_guard.get("git_branch") or "").strip()
-    env_raw = str(os.environ.get("THOMAS_ENV") or os.environ.get("PYTHON_ENV") or os.environ.get("ENV") or "").strip()
-    env_norm = env_raw.lower()
-    branch_norm = git_branch.lower()
-
-    label = "DEV"
-    source = "default"
-    if env_norm in _RUNTIME_MODE_PROD_ENV:
-        label = "PROD"
-        source = "env"
-    elif branch_norm in _RUNTIME_MODE_PROD_BRANCH:
-        label = "PROD"
-        source = "git_branch"
-    elif env_norm:
-        source = "env"
-    elif branch_norm:
-        source = "git_branch"
-
-    return {
-        "label": label,
-        "source": source,
-        "env": env_raw,
-        "git_branch": git_branch,
-    }
-
-
 def _resolve_default_model(cfg: AppConfig) -> tuple[str, str]:
     try:
         from thomas.preferences.model_resolution import resolve_effective_model
@@ -200,12 +132,55 @@ def register_models_routes(
     require_api_access: RequireAccessFn,
     model_cfg_with_secrets: ModelCfgFn,
 ) -> None:
+    from thomas.models.catalog import catalog_view
+    from thomas.models.catalog_refresh import CatalogRefresher, autorefresh_enabled
+
+    async def _codex_token(profile: str) -> str:
+        from thomas.server.openai_codex_oauth import ensure_openai_codex_access_token
+
+        store = _resolve_app_value(app, APP_SECRETS, required=False)
+        return await ensure_openai_codex_access_token(profile, secret_store=store)
+
+    refresher = CatalogRefresher(
+        lambda: _resolve_runtime_config(app), cfg_with_secrets=model_cfg_with_secrets, codex_token=_codex_token
+    )
+    app[APP_MODEL_CATALOG] = refresher
+
+    def _runtime_api_key(profile: str, declared: Any) -> str:
+        """The API key the chat turn for *profile* will actually run with.
+
+        ``model_cfg_with_secrets`` is the one resolver the chat stream uses
+        (``chat_aiohttp_streaming.py``) and the catalog refresher above, so asking
+        it here is the only way this route can answer who serves a profile in the
+        same terms as the engine that serves it. Reading the secret store directly
+        instead answered for a key the turn may never receive.
+        """
+        try:
+            resolved = model_cfg_with_secrets(profile)
+        except (AttributeError, KeyError, OSError, TypeError, ValueError):
+            log.debug("could not resolve the runtime config for profile %s", profile, exc_info=True)
+            resolved = None
+        return str(getattr(declared if resolved is None else resolved, "api_key", "") or "")
+
+    async def _start_catalog(_app: web.Application) -> None:
+        if autorefresh_enabled():
+            refresher.start()
+
+    async def _stop_catalog(_app: web.Application) -> None:
+        await refresher.stop()
+
+    if not app.on_startup.frozen:
+        app.on_startup.append(_start_catalog)
+        app.on_cleanup.append(_stop_catalog)
+
     async def api_models(request: web.Request) -> web.Response:
         require_api_access(request)
         cfg: AppConfig = _resolve_runtime_config(request.app)
         resolved_default, _resolved_default_model_id = _resolve_default_model(cfg)
         secrets: SecretStore = _resolve_app_value(request.app, APP_SECRETS, required=True)
+        from thomas.core.claude_plan import claude_plan_ready
         from thomas.models.chat_capabilities import profile_chat_control_map
+        from thomas.models.sources import is_local_profile
 
         profiles = []
         for name, m in cfg.models.items():
@@ -233,6 +208,15 @@ def register_models_routes(
                 "context_window": m.context_window,
                 "max_tokens": m.max_tokens,
                 "has_api_key": has_key,
+                "keyless_ok": is_local_profile(provider_name, m),
+                # Your Claude plan serves this profile through the Claude CLI's own
+                # sign-in, so no key is needed and the picker may offer it. False
+                # once the turn would run with a key (Anthropic's API answers then)
+                # and false when the CLI is not installed, so nothing is offered
+                # that cannot run. Read from the runtime's own key rather than from
+                # the secret store, so this flag and the transport that honours it
+                # (llm_transport_pool.py) cannot label one profile two ways.
+                "claude_plan": claude_plan_ready(provider_name, _runtime_api_key(name, m)),
                 "chat_controls": profile_chat_control_map(m),
             }
             if m.reasoning_effort:
@@ -244,17 +228,9 @@ def register_models_routes(
             "preferences": _model_preferences_payload(),
         }
         if str(request.query.get("catalog", "")).strip().lower() in {"1", "true", "yes"}:
-            from thomas.models.catalog import get_model_catalog_async
-
-            refresh_raw = str(request.query.get("refresh", "")).strip().lower()
-            cached_raw = str(request.query.get("cached", "")).strip().lower()
-            if refresh_raw in {"1", "true", "yes"}:
-                catalog_refresh: bool | None = True
-            elif cached_raw in {"1", "true", "yes"}:
-                catalog_refresh = False
-            else:
-                catalog_refresh = None
-            payload["catalog"] = await get_model_catalog_async(cfg, refresh=catalog_refresh, timeout_s=1.5)
+            # GET never refreshes (a GET isn't covered by the mutating-route origin
+            # check): only POST /api/models/catalog/refresh asks the providers.
+            payload["catalog"] = catalog_view(await refresher.current())
         return web.json_response(
             payload,
             dumps=lambda x: json.dumps(x, ensure_ascii=False),
@@ -356,38 +332,21 @@ def register_models_routes(
         return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
     async def api_models_catalog(request: web.Request) -> web.Response:
-        """GET /api/models/catalog - return cached or refreshed model catalog."""
+        """GET /api/models/catalog - the live list; GET never refreshes (POST .../refresh does)."""
         require_api_access(request)
-        cfg: AppConfig = _resolve_runtime_config(request.app)
-        from thomas.models.catalog import get_model_catalog_async
+        payload = await refresher.current()
+        return web.json_response(catalog_view(payload), dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
-        refresh_raw = str(request.query.get("refresh", "")).strip().lower()
-        cached_raw = str(request.query.get("cached", "")).strip().lower()
-        if refresh_raw in {"1", "true", "yes"}:
-            refresh: bool | None = True
-        elif cached_raw in {"1", "true", "yes"}:
-            refresh = False
-        else:
-            refresh = None
-        payload = await get_model_catalog_async(cfg, refresh=refresh, timeout_s=1.5)
-        return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
-
-    async def api_version(request: web.Request) -> web.Response:
-        cfg: AppConfig = _resolve_runtime_config(request.app)
-        if not bool(getattr(getattr(cfg, "server", None), "allow_unauthenticated_version", True)):
-            require_api_access(request)
-        return web.json_response(
-            {
-                "version": THOMAS_VERSION,
-                "runtime_guard": _runtime_guard_payload(request.app),
-                "runtime_mode": _runtime_mode_payload(request.app),
-            }
-        )
+    async def api_models_catalog_refresh(request: web.Request) -> web.Response:
+        """POST /api/models/catalog/refresh - the picker's Check for new models button."""
+        require_api_access(request)
+        payload = await refresher.refresh()
+        return web.json_response(catalog_view(payload), dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
     app.router.add_get("/api/models", api_models)
     app.router.add_get("/api/models/catalog", api_models_catalog)
+    app.router.add_post("/api/models/catalog/refresh", api_models_catalog_refresh)
     app.router.add_get("/api/models/capabilities", api_models_capabilities)
     app.router.add_get("/api/models/{profile}/ids", api_profile_models)
     app.router.add_get("/api/models/{profile}/handshake", api_profile_handshake)
     app.router.add_get("/api/models/{profile}/validate", api_profile_validate)
-    app.router.add_get("/api/version", api_version)

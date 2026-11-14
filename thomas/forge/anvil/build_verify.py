@@ -10,10 +10,12 @@ fabricated: the pass/fail shown is the genuine returncode of a genuine subproces
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from thomas.agent.sandboxed_runners import argv_ladder
 from thomas.tools.web_preflight import (
     LocalAssetReferenceParser,
     artifact_preflight_failures,
@@ -28,14 +30,17 @@ from thomas.tools.web_preflight import (
 )
 
 from .bridge_config import emergency_stop_active
-from .bridge_prompts import compose_fix_prompt
+from .bridge_prompts import build_pass_clock_note, compose_fix_prompt
 from .forge_event_stream import FORGE_EVENT_KEY
+from .pass_endings import ASK, CONTINUE, ProgressWatch, workspace_fingerprint
+from .verify_routing import is_bytecode_artifact, node_test_argv, route_changed_files
 from .web_artifact_smoke import smoke_html_artifacts
 
 # The exit a pass returns when it reached its wall clock. It is a pass boundary,
 # not a verdict: the engine verifies whatever changed and continues, and only a
 # clock with nothing changed is a failure. (124 is what `timeout(1)` returns.)
 PASS_WALL_CLOCK_RC = 124
+RELOAD_YIELD_RC = 75
 
 # A small, self-contained verifier program: byte-compile each changed file and
 # import each changed package module. A syntax error (py_compile) or an import
@@ -136,12 +141,27 @@ def _importable_module_for(cwd: str | Path, path: str) -> str:
     return ".".join(segs)
 
 
+def _static_check_script(cwd: str | Path, cmd: list[str]) -> Path | None:
+    """The static check as a script file in *cwd*, so the sandbox can run it as one short command.
+
+    ``cmd`` is ``[python, "-c", source, files, modules, preflight]``. A multi-line ``-c`` program cannot be carried safely
+    through a one-line shell command, so the program goes in a file that sets ``sys.argv`` as ``-c`` would have. ``None``
+    when the file cannot be written; the check then runs here as before.
+    """
+    script = Path(cwd) / f".thomas_verify_{uuid.uuid4().hex[:12]}.py"
+    try:
+        script.write_text(f"import sys\nsys.argv = {['-c', *cmd[3:]]!r}\n{cmd[2]}", encoding="utf-8")
+    except OSError:
+        return None
+    return script
+
+
 def verify_python_changes(
     cwd: str | Path,
     changed_files: list[str],
     emit: Callable[[dict[str, Any]], None],
     *,
-    timeout: int = 120,
+    timeout: float | None = None,
     run_check: Any = None,
 ) -> tuple[bool, int, str]:
     """Run a REAL verification subprocess over the changed python files.
@@ -149,8 +169,8 @@ def verify_python_changes(
     Emits the check as a forge ``tool`` call and its result as a forge
     ``tool_result`` carrying the REAL exit code. Returns ``(ok, returncode, summary)``.
 
-    * changed test files -> run them with ``pytest`` (executes the tests).
-    * else -> byte-compile every changed ``.py`` and import the changed package
+    * changed Python test modules -> ``pytest``; node:test files -> ``node --test`` (verify_routing).
+    * every other file -> byte-compile each changed ``.py`` and import the changed package
       modules (executes them) in ONE subprocess with ONE real exit code.
 
     ``run_check(cmd, cwd, timeout) -> (rc, out)`` is injectable for tests.
@@ -163,47 +183,112 @@ def verify_python_changes(
     files = [str(f) for f in (changed_files or []) if (Path(cwd) / str(f)).is_file()]
     if not files:
         return False, 1, "changed paths could not be verified as files"
+    # Bytecode is what this check's own py_compile writes (``__pycache__``, in a project that does not ignore it), so
+    # the next pass saw it as changed and failed it as text that is not UTF-8: a failure this verifier invented.
+    files = [f for f in files if not is_bytecode_artifact(f)]
+    if not files:
+        return True, 0, "only Python bytecode changed; nothing to verify"
 
-    tests = [f for f in files if _is_test_file(f)]
-    if tests:
-        cmd = [sys.executable, "-m", "pytest", *tests, "-q"]
-        label = "pytest " + " ".join(tests)
-    else:
-        modules = [m for m in (_importable_module_for(cwd, f) for f in files) if m]
-        preflight_failures = _artifact_preflight_failures(cwd, files)
-        cmd = [
-            sys.executable,
-            "-c",
-            _VERIFY_SRC,
-            json.dumps(files),
-            json.dumps(modules),
-            json.dumps(preflight_failures),
-        ]
-        label = "static checks: syntax + parse + open (" + ", ".join(files) + ")"
-
-    emit({FORGE_EVENT_KEY: "tool", "name": "run", "text": label[:200]})
-    try:
-        if run_check is not None:
-            rc, out = run_check(cmd, str(cwd), timeout)
-        else:
-            proc = subprocess.run(  # noqa: S603 - cmd is python + repo-relative files we computed
-                cmd,
-                cwd=str(cwd),
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                encoding="utf-8",
-                errors="replace",
+    # Each file gets the check that fits what it is (verify_routing): Python tests to pytest, node:test files to
+    # `node --test`, everything else -- and a test file no allowed runner can run -- to the static checks. A file
+    # with no runner is reported UNCHECKED, never as a failure.
+    routing = route_changed_files(cwd, files)
+    checks: list[tuple[list[str], str]] = []
+    if routing.python_tests:
+        checks.append(
+            ([sys.executable, "-m", "pytest", *routing.python_tests, "-q"], "pytest " + " ".join(routing.python_tests))
+        )
+    if routing.node_tests:
+        checks.append((node_test_argv(routing.node_tests), "node --test " + " ".join(routing.node_tests)))
+    if routing.static:
+        modules = [m for m in (_importable_module_for(cwd, f) for f in routing.static) if m]
+        # Test files are loaded by their runner, not by a page: the web preflight's "nothing loads it" is not theirs.
+        tested = set(routing.python_tests) | set(routing.node_tests) | {path for path, _ in routing.unchecked_tests}
+        preflight_failures = _artifact_preflight_failures(cwd, [f for f in files if f not in tested])
+        checks.append(
+            (
+                [
+                    sys.executable,
+                    "-c",
+                    _VERIFY_SRC,
+                    json.dumps(routing.static),
+                    json.dumps(modules),
+                    json.dumps(preflight_failures),
+                ],
+                "static checks: syntax + parse + open (" + ", ".join(routing.static) + ")",
             )
-            rc, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError, TypeError) as exc:
-        emit({FORGE_EVENT_KEY: "tool_result", "text": f"verification could not run: {exc}", "is_error": True})
-        return False, 1, f"verification could not run: {exc}"
+        )
 
+    if timeout is None:
+        # The time a team's own test run gets (check.run). At 120 s, on a busy PC, test files a team had just passed
+        # timed out here three times in a row (7de85f, f01e9d, 2026-10-28) and went back for a fix pass.
+        from thomas.tools.check_run import DEFAULT_TIMEOUT_S
+
+        timeout = DEFAULT_TIMEOUT_S
+    rc, details = 0, []
+    for cmd, label in checks:
+        emit({FORGE_EVENT_KEY: "tool", "name": "run", "text": label[:200]})
+        try:
+            status, crc, out = "local", 0, ""
+            if run_check is not None:
+                crc, out = run_check(cmd, str(cwd), timeout)
+            else:
+                # The sandbox decides where the team's tests and the static check (which imports the agent's own
+                # modules) run, in any folder: caged, refused, or here when the cage is off. The cage writes only under
+                # the projects folder, so elsewhere a caged run fails with its own permission error, shown in the output.
+                static = len(cmd) > 2 and cmd[1] == "-c"
+                script = _static_check_script(cwd, cmd) if static else None
+                try:
+                    # allowed=True: a Build's own verification has no shell switch; tools.allow_shell gates the agent's
+                    # tool
+                    status, code, text = argv_ladder(
+                        cmd if script is None else [sys.executable, str(script)], str(cwd), timeout, allowed=True
+                    )
+                finally:
+                    if script is not None:
+                        script.unlink(missing_ok=True)
+                if status == "ran":
+                    crc, out = int(code or 0), text
+                elif status == "timeout":
+                    crc, out = 124, (text or "") + f"\ntimed out after {int(timeout)}s"
+                elif status == "not_run":
+                    emit(
+                        {
+                            FORGE_EVENT_KEY: "tool_result",
+                            "text": f"verification could not run: {text}",
+                            "is_error": True,
+                        }
+                    )
+                    return False, 1, f"verification could not run: {text}"
+            if status == "local" and run_check is None:
+                proc = subprocess.run(  # noqa: S603 - argv we computed from validated project-relative files
+                    cmd,
+                    cwd=str(cwd),
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                crc, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+        except (OSError, subprocess.SubprocessError, RuntimeError, ValueError, TypeError) as exc:
+            emit({FORGE_EVENT_KEY: "tool_result", "text": f"verification could not run: {exc}", "is_error": True})
+            return False, 1, f"verification could not run: {exc}"
+        body = str(out or "").strip()
+        part = f"exit {crc}" + (("\n" + body) if body else "")
+        emit({FORGE_EVENT_KEY: "tool_result", "text": part[:500], "is_error": crc != 0})
+        details.append(part if len(checks) == 1 else f"{label[:120]}: {part}")
+        if crc != 0 and rc == 0:
+            rc = crc
+    if routing.unchecked_tests:
+        note = "UNCHECKED (no allowed runner; not a failure): " + "; ".join(
+            f"{path} ({why})" for path, why in routing.unchecked_tests
+        )
+        emit({FORGE_EVENT_KEY: "meta", "text": note[:1000], "is_error": False})
+        details.append(note)
+    out = "\n".join(details)
     ok = rc == 0
-    body = str(out or "").strip()
-    detail = f"exit {rc}" + (("\n" + body) if body else "")
-    emit({FORGE_EVENT_KEY: "tool_result", "text": detail[:500], "is_error": not ok})
+    detail = out
     smoke_files = _browser_smoke_files(cwd, files) if ok else []
     if smoke_files:
         emit(
@@ -288,6 +373,10 @@ def _verify_and_iterate(
     verifier: Any = None,
     max_fix_iters: int = 2,
     contract: Callable[[], dict[str, Any] | None] | None = None,
+    timeout: int | None = None,
+    pass_ending: Callable[[], Any] | None = None,
+    first_ending: Any = None,
+    on_outcome: Callable[[str], None] | None = None,
 ) -> int:
     """Verify THIS run's changes; on failure, feed the failure back for bounded fixes.
 
@@ -304,6 +393,11 @@ def _verify_and_iterate(
     what makes a Build run until the task is done rather than until a pass ends:
     the Mario Kart build wrote one track, declared "Built. Open index.html", and
     the only thing the engine could still fail it on was the smoke test.
+
+    ``pass_ending()`` names how the last pass ended early (``pass_endings``), or
+    None. A pass that ended early is a decision, not the end of the Build: it is
+    continued (its changes verified first), stopped to ask you, or stopped, and
+    two passes in a row that end the same way and change nothing stop retrying.
     """
     from thomas.forge.anvil import forge_code_git
 
@@ -330,10 +424,40 @@ def _verify_and_iterate(
     ok, rc, summary = verify(cwd, changed, emit) if changed else (True, 0, "nothing changed; nothing to verify")
     iters = 0
     limit = max(0, int(max_fix_iters))
+    watch = ProgressWatch()
+    if first_ending is not None:
+        watch.stalled(first_ending, workspace_fingerprint(cwd, []), workspace_fingerprint(cwd, changed))
+
+    def stop_with(text: str, code: int) -> int:
+        emit({FORGE_EVENT_KEY: "error", "text": text})
+        if on_outcome is not None:
+            on_outcome(text)
+        return code or 1
+
+    def early_ending(frc: int, before: str) -> int | None:
+        """A pass that ended early: None to go on, or the exit code to stop on."""
+        ending = pass_ending() if pass_ending is not None else None
+        if ending is None:
+            return frc
+        after = workspace_fingerprint(cwd, forge_code_git.project_delta_since(cwd, snap_before))
+        if watch.stalled(ending, before, after):
+            return stop_with(
+                f"stopped: two passes in a row ended early because {ending.label}, and neither changed anything",
+                frc,
+            )
+        if ending.decision == ASK:
+            return stop_with(f"needs you: the pass stopped because {ending.label}: {ending.text[:300]}", frc)
+        if ending.decision != CONTINUE:
+            return stop_with(f"stopped: {ending.label}: {ending.text[:300]}", frc)
+        emit(
+            {FORGE_EVENT_KEY: "meta", "text": f"the pass ended early because {ending.label}; verifying and continuing"}
+        )
+        return None
 
     def guarded_pass(prompt: str, failing_rc: int) -> int | None:
         """One more agent pass. Returns an exit code to stop on, or None to go on."""
         nonlocal changed
+        before = workspace_fingerprint(cwd, forge_code_git.project_delta_since(cwd, snap_before))
         repair_snapshot = _snapshot_repair_files(cwd, changed)
         fix_error: Exception | None = None
         frc = 0
@@ -356,6 +480,9 @@ def _verify_and_iterate(
         if fix_error is not None:
             emit({FORGE_EVENT_KEY: "error", "text": f"fix pass could not run: {fix_error}"})
             return failing_rc or 1
+        if frc == RELOAD_YIELD_RC:
+            emit({FORGE_EVENT_KEY: "meta", "text": "verification paused for landed-code reload"})
+            return frc
         if frc == PASS_WALL_CLOCK_RC:
             emit(
                 {
@@ -365,7 +492,8 @@ def _verify_and_iterate(
             )
             return None
         if frc != 0:
-            return frc
+            return early_ending(frc, before)
+        watch.reset()
         return None
 
     while True:
@@ -378,7 +506,7 @@ def _verify_and_iterate(
                 return rc or 1
             iters += 1
             emit({FORGE_EVENT_KEY: "meta", "text": f"verification failed (exit {rc}); fix pass {iters}/{limit}"})
-            stop = guarded_pass(compose_fix_prompt(goal, summary), rc)
+            stop = guarded_pass(compose_fix_prompt(goal, summary, timeout=timeout), rc)
             if stop is not None:
                 return stop
             # project_delta_since here TOO. This is the re-check after a repair pass,
@@ -416,7 +544,7 @@ def _verify_and_iterate(
             return 1
         iters += 1
         emit({FORGE_EVENT_KEY: "meta", "text": f"acceptance contract not met ({names}); pass {iters}/{limit}"})
-        stop = guarded_pass(_contract_pass_prompt(goal, gaps), rc)
+        stop = guarded_pass(_contract_pass_prompt(goal, gaps, timeout=timeout), rc)
         if stop is not None:
             return stop
         changed = forge_code_git.project_delta_since(cwd, snap_before)
@@ -457,13 +585,15 @@ def _contract_gaps(acceptance: dict[str, Any] | None) -> list[tuple[str, str]]:
     return gaps
 
 
-def _contract_pass_prompt(goal: str, gaps: list[tuple[str, str]]) -> str:
-    """The next pass: the original goal plus exactly what the judge found missing."""
-    lines = [
-        f"Build task dispatched by Thomas-evolve (CONTINUE pass):\n\n{goal.strip()}\n",
-        "Your previous pass passed the engine's checks, but the task is not done. The acceptance",
-        "contract was checked against the workspace and these items are still unmet:",
-    ]
+def _contract_pass_prompt(goal: str, gaps: list[tuple[str, str]], *, timeout: int | None = None) -> str:
+    """The next pass: the original goal, the clock, and the unmet contract."""
+    lines = [f"Build task dispatched by Thomas-evolve (CONTINUE pass):\n\n{goal.strip()}\n"]
+    lines.extend(
+        [
+            "Your previous pass passed the engine's checks, but the task is not done. The acceptance",
+            "contract was checked against the workspace and these items are still unmet:",
+        ]
+    )
     lines.extend(f"- {text}" for _, text in gaps)
     lines.append(
         "\nKeep working on the existing files until every item above holds. Do not start over, "
@@ -472,4 +602,6 @@ def _contract_pass_prompt(goal: str, gaps: list[tuple[str, str]]) -> str:
         "the web.playtest tool is available to you, play it yourself before you finish and quote "
         "what the browser showed."
     )
+    if clock_note := build_pass_clock_note(timeout):
+        lines.append(f"\n## Build pass clock\n{clock_note}")
     return "\n".join(lines)

@@ -168,9 +168,7 @@ def test_a_prose_goal_still_reports_its_requirements_as_unverified() -> None:
     rubric = report["rubric_mapping"]
     assert rubric[0]["status"] == "met"  # the RUN completed; that part is true
     statuses = [entry["status"] for entry in rubric]
-    assert "unverified" in statuses, (
-        f"a prose goal reported no unverified requirement: {rubric}"
-    )
+    assert "unverified" in statuses, f"a prose goal reported no unverified requirement: {rubric}"
     unverified = next(entry for entry in rubric if entry["status"] == "unverified")
     # It must say WHY, not just carry the word.
     assert "not" in unverified["evidence"].lower()
@@ -304,6 +302,9 @@ def test_report_from_dispatch_result_reads_cli_result_shape() -> None:
 
 
 class _EmptyStdout:
+    async def read(self, _n: int = -1) -> bytes:
+        return await self.readline()
+
     async def readline(self) -> bytes:
         return b""
 
@@ -337,7 +338,9 @@ def test_completion_payload_and_persisted_turn_carry_the_report(tmp_path: Path, 
         )
         assert result["ok"] is True
         report = result["report"]
-        assert tuple(sorted(report)) == tuple(sorted(REPORT_SECTIONS))
+        assert tuple(sorted(report)) == tuple(sorted((*REPORT_SECTIONS, "verifier_receipts", "process_cleanup")))
+        assert report["process_cleanup"] == "no caged project process group"
+        assert isinstance(report["verifier_receipts"], list)
         # The rubric maps the run onto the goal the USER gave this conversation.
         # Carried in the evidence rather than the criterion since the first row
         # stopped restating the goal as something "met" -- the binding to this

@@ -1,0 +1,18 @@
+/* Build is opening another task: only the places that change shimmer. */
+@keyframes tc-code-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.tc-code-skeleton { display: grid; gap: 14px; width: min(var(--tc-code-col-ideal, 860px), 100%); margin: 36px auto 0; padding: 0 var(--tc-code-gutter, 24px); }
+.tc-code-skeleton i, .tc-code-opening [data-code-header-title], .tc-code-opening [data-code-header-project] {
+  background: linear-gradient(90deg, var(--c-surface-2, #171a26) 25%, var(--c-hover, #232739) 50%, var(--c-surface-2, #171a26) 75%);
+  background-size: 200% 100%; animation: tc-code-shimmer 1.4s linear infinite; }
+.tc-code-skeleton i { display: block; height: 15px; border-radius: 8px; }
+.tc-code-skeleton i:nth-child(1) { width: 38%; } .tc-code-skeleton i:nth-child(2) { width: 92%; } .tc-code-skeleton i:nth-child(3) { width: 84%; }
+.tc-code-skeleton i:nth-child(4) { width: 90%; } .tc-code-skeleton i:nth-child(5) { width: 54%; }
+.tc-code-opening [data-code-header-title], .tc-code-opening [data-code-header-project] { color: transparent; border-radius: 7px; }
+.tc-code-opening [data-ui-id="chat.composer"] { position: relative; pointer-events: none; }
+.tc-code-opening [data-ui-id="chat.composer"]::after { content: ""; position: absolute; inset: 0 var(--tc-code-gutter, 24px); border-radius: 18px;
+  background: linear-gradient(90deg, transparent 25%, color-mix(in srgb, var(--c-hover, #232739) 70%, transparent) 50%, transparent 75%);
+  background-size: 200% 100%; animation: tc-code-shimmer 1.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .tc-code-skeleton i, .tc-code-opening [data-code-header-title], .tc-code-opening [data-code-header-project], .tc-code-opening [data-ui-id="chat.composer"]::after { animation: none; } }
+
+.tc-code-earlier { display: block; margin: 8px auto 18px; padding: 8px 16px; border: 1px solid var(--c-border-2); border-radius: 999px; background: transparent; color: var(--c-dim); font: 560 12.5px/1 var(--font-sans); cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.tc-code-earlier:hover { background: var(--c-hover); color: var(--c-text); border-color: var(--c-accent-line); }

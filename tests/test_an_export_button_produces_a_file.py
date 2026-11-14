@@ -33,6 +33,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 DELIVERABLE = ROOT / "thomas" / "server" / "routes" / "deliverable_aiohttp.py"
 RESULTS_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
@@ -54,9 +56,7 @@ def _served_sandbox() -> str:
     """
 
     text = DELIVERABLE.read_text(encoding="utf-8")
-    without_comments = "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith("#")
-    )
+    without_comments = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     joined = re.sub(r'"\s*\n\s*"', "", without_comments)
     directives = [m.group(1) for m in re.finditer(r'"sandbox ([^";]*)', joined)]
     served = [d for d in directives if "allow-same-origin" in d]
@@ -76,7 +76,7 @@ def test_the_artifact_csp_permits_downloads() -> None:
 def test_the_viewer_stage_opts_in_to_downloads() -> None:
     """The CSP is a ceiling; the surface the owner clicks has to opt in too."""
 
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
     stage = re.search(r"tc-code-viewer-stage.{0,240}?sandbox=\"([^\"]*)\"", js, re.S)
     assert stage, "the viewer stage iframe is gone or no longer carries a sandbox attribute"
     assert "allow-downloads" in stage.group(1), (
@@ -93,14 +93,11 @@ def test_the_decorative_previews_cannot_start_downloads() -> None:
     download on load.
     """
 
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
     offenders = []
     for cls in ("tc-code-artifact-thumb", "tc-code-artifact-shot"):
         for m in re.finditer(re.escape(cls) + r".{0,240}?sandbox=\"([^\"]*)\"", js, re.S):
             if "allow-downloads" in m.group(1):
                 offenders.append(f"{cls}: {m.group(1)!r}")
 
-    assert not offenders, (
-        "a decorative, non-interactive preview can now start a download:\n  "
-        + "\n  ".join(offenders)
-    )
+    assert not offenders, "a decorative, non-interactive preview can now start a download:\n  " + "\n  ".join(offenders)

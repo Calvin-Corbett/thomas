@@ -6,7 +6,7 @@ the worker.py -> worker_pipeline.py/worker_dispatch.py precedent (commit
 7f1006d7). Two related status questions live here: whether a transcript shows a
 structured turn that answered without changing files
 (``_confirmed_conversation_reply``, mirrored deliberately in
-``dispatch_agent_loop``/``dispatch_claude_cli`` -- see its own docstring), and
+``dispatch_agent_loop``/``dispatch_claude_cli`` via a shared helper), and
 where a run's background recorder currently stands
 (``_recording_task``/``_recording_active``/``_run_replay_available``/
 ``_recording_status``/``_await_recording``). Self-contained -- nothing here
@@ -25,7 +25,7 @@ import asyncio
 import json
 from typing import Any
 
-from thomas.agent.loop_tool_protocol import is_inspection_tool
+from thomas.agent.tool_failures import ToolFailures
 
 
 def _confirmed_conversation_reply(transcript: str, *, require_final: bool = False) -> bool:
@@ -35,11 +35,8 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
     must read files to answer it, and disqualifying any tool use meant those
     runs were recorded as "no change made" with the answer buried underneath.
 
-    This mirrors the rule in dispatch_agent_loop and dispatch_claude_cli on
-    purpose: three separate places decide this same question, and if they
-    disagree the failure does not go away, it just moves to whichever one the
-    request happened to take. Relaxed only on positive evidence -- tool names
-    were present and every one of them was read-only.
+    The same tool-result verdict used by both dispatchers judges recovered
+    failures here; callers establish separately that no files changed.
 
     ``require_final`` narrows the evidence to ``final`` frames alone. The
     stream translator emits ``final`` only for a non-error CLI ``result``
@@ -49,10 +46,7 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
     """
 
     saw_reply = False
-    saw_tool = False
-    saw_named_tool = False
-    saw_mutating_tool = False
-    saw_failed_result = False
+    tool_verdict = ToolFailures()
     for raw in str(transcript or "").splitlines():
         try:
             event = json.loads(raw)
@@ -62,38 +56,11 @@ def _confirmed_conversation_reply(transcript: str, *, require_final: bool = Fals
             continue
         kind = str(event.get("fc") or "")
         if kind in {"tool", "tool_result"}:
-            saw_tool = True
-            if kind == "tool_result" and bool(event.get("is_error")):
-                saw_failed_result = True
-            # Only the tool event carries a name; tool_result does not.
-            name = str(event.get("name") or "").strip()
-            if name and name != "tool":
-                saw_named_tool = True
-                # The agent-loop translator stamps `access` ("read"/"write")
-                # onto tool events, classifying shell.exec by its COMMAND
-                # rather than its name. Trust the stamp when it is present:
-                # without it, an explain-only run whose shell ran `dir` was
-                # disqualified here and filed as a fabricated exit-1 failure
-                # even after dispatch_agent_loop learned better. Name-based
-                # classification stays as the fallback for older transcripts
-                # and the claude-CLI path, which does not stamp.
-                access = str(event.get("access") or "").strip()
-                if access == "write" or (access != "read" and not is_inspection_tool(name)):
-                    saw_mutating_tool = True
+            tool_verdict.observe(event)
         elif kind in {"final", "say"} and str(event.get("text") or "").strip():
             if kind == "final" or not require_final:
                 saw_reply = True
-    # Unnamed tool activity stays disqualifying -- nothing is known about what
-    # it did. A write-capable tool disqualifies only when a tool FAILURE was
-    # also seen: the caller has already established from git truth that nothing
-    # changed, so a clean write-capable run that answered is an answer, not a
-    # failed edit. Same contract as dispatch_agent_loop and dispatch_claude_cli
-    # (settled 2026-08-05 after an explain run was demoted for a dir listing).
-    if saw_tool and not saw_named_tool:
-        return False
-    if saw_mutating_tool and saw_failed_result:
-        return False
-    return saw_reply
+    return saw_reply and not tool_verdict.unresolved
 
 
 def _recording_task(recording: Any) -> Any:
@@ -107,7 +74,7 @@ def _recording_active(recording: Any) -> bool:
 
 def _run_replay_available(receipt: dict[str, Any], session: Any, running: bool, recording: Any) -> bool:
     state = receipt.get("state")
-    if state in {"completed", "persistence_failed"}:
+    if state in {"completed", "persistence_failed", "after_run_pending", "finished"}:
         return True
     if state not in {"launching", "running"}:
         return False

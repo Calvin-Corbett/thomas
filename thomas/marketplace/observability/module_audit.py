@@ -31,7 +31,6 @@ MAJOR_MODULES = (
     "memory",
     "notifications",
     "preferences",
-    "intake",
     "vision",
     "watcher",
     "tray_agent",

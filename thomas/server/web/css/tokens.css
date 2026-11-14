@@ -44,6 +44,10 @@
     --c-composer-bg: rgba(16, 19, 34, .86);
     --c-shadow: 0 18px 50px rgba(2, 4, 12, .55);
     --c-menu-bg: #15142b;
+    /* Prose a step brighter than --c-text (what you and Thomas say), and the
+       recessed ground a code block or live diff sits on. */
+    --c-strong: #f8f9ff;
+    --c-code-bg: #05070f;
 
     /* ── Semantic status (per theme; dark values mirror chat.html THEMES) ── */
     --c-danger: #ff9a9a;
@@ -79,20 +83,23 @@ html[data-thomas-theme="dark"], html[data-theme="dark"] {
     --font-label: "JetBrains Mono", ui-monospace, monospace; --r-card: 8px; --r-composer: 12px;
     --c-danger: #ff9a9a; --c-warn: #e2b25f; --c-success: #47d7ac;
     --c-scroll-track: rgba(13, 15, 18, .74); --c-scroll-thumb: rgba(173, 179, 194, .40);
+    --c-strong: #f7f8fa; --c-code-bg: #111316;
 }
 
 html[data-thomas-theme="light"], html[data-theme="light"] {
-    color-scheme: light; --c-bg: #fafbfc; --c-sidebar: #f3f5f8; --c-surface: #fff;
-    --c-surface-2: #f3f5f8; --c-hover: rgba(20, 30, 60, .05); --c-border: rgba(20, 30, 60, .10);
-    --c-border-2: rgba(20, 30, 60, .16); --c-text: #1c2330; --c-dim: rgba(28, 35, 48, .66);
-    --c-muted: rgba(28, 35, 48, .64); --c-accent: #2b62f3; --c-accent-ink: #fff;
+    /* A regular light: neutral greys, no blue cast (2026-11-10: "regular light, not this light and blue"). */
+    color-scheme: light; --c-bg: #ffffff; --c-sidebar: #f6f6f7; --c-surface: #fff;
+    --c-surface-2: #f1f1f3; --c-hover: rgba(0, 0, 0, .045); --c-border: rgba(0, 0, 0, .10);
+    --c-border-2: rgba(0, 0, 0, .16); --c-text: #1f2023; --c-dim: rgba(31, 32, 35, .68);
+    --c-muted: rgba(31, 32, 35, .64); --c-accent: #2b62f3; --c-accent-ink: #fff;
     --c-accent-soft: rgba(43, 98, 243, .10); --c-accent-line: rgba(43, 98, 243, .42);
-    --c-user-bg: #eaeef6; --c-user-text: #1c2330; --c-composer-bg: #fff;
-    --c-shadow: 0 14px 40px rgba(20, 30, 60, .12);
+    --c-user-bg: #f0f0f2; --c-user-text: #1f2023; --c-composer-bg: #fff;
+    --c-shadow: 0 14px 40px rgba(0, 0, 0, .12);
     --c-menu-bg: #fff; --font-head: "Manrope", system-ui, sans-serif;
     --font-label: "Manrope", system-ui, sans-serif; --r-card: 16px; --r-composer: 18px;
     --c-danger: #b3261e; --c-warn: #a15c00; --c-success: #197849;
-    --c-scroll-track: rgba(20, 30, 60, .07); --c-scroll-thumb: rgba(28, 35, 48, .32);
+    --c-scroll-track: rgba(0, 0, 0, .06); --c-scroll-thumb: rgba(31, 32, 35, .32);
+    --c-strong: #0e0f11; --c-code-bg: #f4f4f5;
 }
 
 html[data-thomas-theme="aurora"], html[data-theme="aurora"] {
@@ -108,6 +115,7 @@ html[data-thomas-theme="aurora"], html[data-theme="aurora"] {
     --font-label: "Manrope", system-ui, sans-serif; --r-card: 14px; --r-composer: 18px;
     --c-danger: #ff9a9a; --c-warn: #e2b25f; --c-success: #47d7ac;
     --c-scroll-track: rgba(6, 20, 22, .74); --c-scroll-thumb: rgba(160, 220, 205, .34);
+    --c-strong: #f3fbf8; --c-code-bg: #05100f;
 }
 
 html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
@@ -122,6 +130,78 @@ html[data-thomas-theme="sandstone"], html[data-theme="sandstone"] {
     --font-label: "Newsreader", Georgia, serif; --r-card: 12px; --r-composer: 14px;
     --c-danger: #a33a28; --c-warn: #8a4b12; --c-success: #40704a;
     --c-scroll-track: rgba(90, 62, 34, .10); --c-scroll-thumb: rgba(90, 62, 34, .34);
+    --c-strong: #1f1b15; --c-code-bg: #efe6d6;
+}
+
+/* ── Build look ───────────────────────────────────────────────────────
+   Build (Code mode) wears the Dark palette whatever theme you picked for
+   Chat (design handoff, screen 3a): the reading column, the agents and the
+   live diff were drawn against these values and only these.
+
+   `!important` because applyTheme (chat_theme_controls.js) writes the chosen
+   theme's tokens INLINE on #tc-shell, and only an important declaration
+   outranks an inline one. The `html:has()` half reaches what Build draws
+   outside the shell -- the sort and row menus and the tooltips are appended
+   to <body> -- and `:where()` keeps a browser without `:has()` from dropping
+   the shell half along with it. Neither selector starts with `:root` or names
+   a `data-thomas-theme`, so chat_themes.js never derives a palette from it.
+   The --fc-* diff colours live with the Forge code view (forge_code_shell.css),
+   which this page does not load; Build's work rows and live diff need them.
+   `data-bt-active-mode` is the browser shell's mark for "a Build tab is on
+   show" (browser_shell_docs.js), so the titlebar, nav row and bookmarks
+   around that tab are drawn in the same Dark as the tab itself. */
+/* Chat takes the same Dark (2026-11-10: asked whether Chat should take Build's flat dark look or keep the chosen theme,
+   you said "Flat like Build"). Work followed the same day ("Yes, Work too"). A chosen
+   theme still colours the workspaces. */
+/* The palette half: every page that is not Light, whatever theme name it carries, and the shell inside it (the
+   shell has the old theme written inline, which only an important declaration outranks). With Light chosen the
+   light theme's own tokens show. */
+/* Written with `data-theme` only, and inside :where(): chat_themes.js and the server read each theme's palette out
+   of this file by looking for `:root` at the start of a selector or the other attribute's name anywhere in one, and
+   this block must never be taken for a theme. Every page sets both attributes together. */
+:where(html:not([data-theme="light"]), html:not([data-theme="light"]) #tc-shell:not([data-theme="light"])) {
+    color-scheme: dark !important;
+    --c-bg: #16181c !important;
+    --c-sidebar: #101216 !important;
+    --c-surface: rgba(255, 255, 255, .035) !important;
+    --c-surface-2: rgba(255, 255, 255, .07) !important;
+    --c-hover: rgba(255, 255, 255, .055) !important;
+    --c-border: rgba(255, 255, 255, .09) !important;
+    --c-border-2: rgba(255, 255, 255, .15) !important;
+    --c-text: #e7e9ee !important;
+    --c-strong: #f7f8fa !important;
+    --c-dim: rgba(231, 233, 238, .64) !important;
+    --c-muted: rgba(231, 233, 238, .40) !important;
+    --c-accent: #6e9bff !important;
+    --c-accent-ink: #0b1020 !important;
+    --c-accent-soft: rgba(110, 155, 255, .14) !important;
+    --c-accent-line: rgba(110, 155, 255, .42) !important;
+    --c-user-bg: #2a2e36 !important;
+    --c-user-text: #f7f8fa !important;
+    --c-composer-bg: #1b1e23 !important;
+    --c-menu-bg: #22252b !important;
+    --c-code-bg: #111316 !important;
+    --c-shadow: 0 14px 40px rgba(0, 0, 0, .45) !important;
+    --composer-accent: transparent !important;
+    --c-danger: #ff9a9a !important;
+    --c-warn: #e2b25f !important;
+    --c-success: #47d7ac !important;
+    --c-scroll-track: rgba(13, 15, 18, .74) !important;
+    --c-scroll-thumb: rgba(173, 179, 194, .40) !important;
+    --fc-add-ink: #5fd38a !important;
+    --fc-add-tint: rgba(63, 185, 80, .14) !important;
+    --fc-del-ink: #f0867a !important;
+    --fc-del-tint: rgba(248, 81, 73, .13) !important;
+}
+/* The shape half holds in Dark and Light alike: plain system type, and the tighter corners. */
+:where(html, #tc-shell) {
+    --font-head: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    --font-label: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    --font-mono: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    --font-code: ui-monospace, "JetBrains Mono", "Cascadia Mono", Consolas, monospace !important;
+    --r-card: 8px !important;
+    --r-composer: 12px !important;
 }
 
 /* ── Legacy bridge ────────────────────────────────────────────────────

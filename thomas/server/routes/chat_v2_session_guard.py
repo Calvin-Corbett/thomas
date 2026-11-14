@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from typing import Any
 
 from aiohttp import web
@@ -64,6 +65,35 @@ async def session_turn_lock(app: web.Application, session_id: str) -> asyncio.Lo
         return lock
 
 
+async def _until_disconnect(
+    request: web.Request, run: Callable[[], Awaitable[web.StreamResponse]]
+) -> web.StreamResponse:
+    """Cancel only this foreground Chat request when its client disconnects.
+
+    aiohttp leaves handlers running on disconnect by default. In Chat that
+    wastes the ongoing generation and holds the session lock against a next
+    send, even when the user has already pressed Stop. Independent delegated
+    tasks are not children of this request and are deliberately left alone.
+    """
+    transport = getattr(request, "transport", None)
+    owner = asyncio.current_task()
+    if transport is None or owner is None:
+        return await run()
+
+    async def watch() -> None:
+        while not transport.is_closing():
+            await asyncio.sleep(0.05)
+        owner.cancel()
+
+    watcher = asyncio.create_task(watch(), name="chat-client-disconnect")
+    try:
+        return await run()
+    finally:
+        watcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await watcher
+
+
 def session_serialised(turn_handler: TurnHandler) -> TurnHandler:
     """Wrap ``turn_handler`` so turns for one session never overlap."""
 
@@ -86,6 +116,9 @@ def session_serialised(turn_handler: TurnHandler) -> TurnHandler:
         async with lock:
             return await turn_handler(request)
 
-    _guarded.__name__ = getattr(turn_handler, "__name__", "chat_turn")
-    _guarded.__doc__ = turn_handler.__doc__
-    return _guarded
+    async def _client_owned(request: web.Request) -> web.StreamResponse:
+        return await _until_disconnect(request, lambda: _guarded(request))
+
+    _client_owned.__name__ = getattr(turn_handler, "__name__", "chat_turn")
+    _client_owned.__doc__ = turn_handler.__doc__
+    return _client_owned

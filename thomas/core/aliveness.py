@@ -23,8 +23,10 @@ What it deliberately does not do yet:
   records what it *would* have run. The InitiativeEngine runs it in dry-run
   mode, so no goal is executed and no goal is closed.
 
-Off by default. ``THOMAS_ALIVENESS_ENABLED=1`` turns the loop on; without it
-nothing here starts, and the engine stays as honestly dark as it was.
+Off by default. The server runs the sweep as a plugin you switch on the Plugins page, and
+``THOMAS_ALIVENESS_ENABLED=1`` is where a Thomas with no saved choice begins (``thomas.server.aliveness_default``). The
+command line still starts it from that setting alone. Without either, nothing here starts, and the engine stays as
+honestly dark as it was.
 """
 
 from __future__ import annotations
@@ -40,11 +42,12 @@ from thomas.core.aliveness_drives import Drives
 from thomas.core.aliveness_gate import GateDecision, SpeakGate
 from thomas.core.aliveness_log import CandidateMessage, MuteLog
 from thomas.core.aliveness_permissions import NOTIFY, PermissionStore, level_name
+from thomas.core.aliveness_setting import ENABLE_ENV, is_enabled
 from thomas.core.aliveness_world import SENSOR_FAULTS, Change, WorldModel, default_sensors
+from thomas.core.pause import paused
 
 log = logging.getLogger(__name__)
 
-ENABLE_ENV = "THOMAS_ALIVENESS_ENABLED"
 INTERVAL_ENV = "THOMAS_ALIVENESS_INTERVAL_S"
 
 # The cycle band from design §3: cheap enough to run unattended, slow enough
@@ -53,15 +56,6 @@ DEFAULT_SWEEP_INTERVAL_S: float = 300.0
 
 # Maintenance (decay sweep, proposal harvest) is daily, not per tick.
 MAINTENANCE_EVERY_TICKS: int = 288  # 24h at the default 5-minute interval
-
-
-def _truthy(value: str | None) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def is_enabled() -> bool:
-    """Whether the aliveness loop may run at all. Off unless explicitly set."""
-    return _truthy(os.environ.get(ENABLE_ENV))
 
 
 def sweep_interval_s() -> float:
@@ -305,8 +299,9 @@ class AlivenessLoop:
 
     @property
     def running(self) -> bool:
+        """True while a sweep thread is alive and has not been told to stop."""
         thread = self._thread
-        return bool(thread and thread.is_alive())
+        return bool(thread and thread.is_alive() and not self._stop.is_set())
 
     @property
     def last_error(self) -> str | None:
@@ -325,22 +320,28 @@ class AlivenessLoop:
         if self.running:
             return
         every = float(interval_s) if interval_s else sweep_interval_s()
-        self._stop.clear()
+        # One flag for each run. A stop that gave up waiting leaves its thread finishing a long tick, and a flag shared
+        # with the next run would be cleared under it, so the old thread would carry on beside the new one.
+        stop = self._stop = threading.Event()
+        previous = self._thread
 
         def _run() -> None:
             # A sweep thread that dies quietly is the worst outcome here: the
             # loop would report itself stopped and nothing would notice it had
             # stopped being alive. The finally clause makes any exit loud.
             try:
-                while not self._stop.is_set():
+                if previous is not None:
+                    previous.join()  # its tick ends first: two ticks at once would share one world and one log
+                while not stop.is_set():
                     try:
-                        self.tick(idle_seconds=self._idle_seconds())
+                        if not paused():
+                            self.tick(idle_seconds=self._idle_seconds())
                     except SENSOR_FAULTS as exc:
                         self._last_error = f"{type(exc).__name__}: {exc}"
                         log.warning("aliveness sweep failed: %s", exc)
-                    self._stop.wait(every)
+                    stop.wait(every)
             finally:
-                if self._stop.is_set():
+                if stop.is_set():
                     log.info("AlivenessLoop: sweep stopped as requested")
                 else:
                     log.error(
@@ -355,13 +356,18 @@ class AlivenessLoop:
         self._thread.start()
         log.info("AlivenessLoop: sweeping every %.0fs (mute)", every)
 
-    def stop(self, timeout: float = 2.0) -> None:
-        """Stop sweeping. Safe to call when not running."""
+    def stop(self, timeout: float | None = 2.0) -> None:
+        """Stop sweeping. Safe to call when not running.
+
+        ``timeout=None`` waits for a tick that is under way, however long it takes. A stop that gives up leaves the thread
+        in place, so :meth:`start` knows it has to wait for it, and :attr:`running` reads False because it was told to stop.
+        """
         self._stop.set()
         thread = self._thread
         if thread and thread.is_alive():
             thread.join(timeout=timeout)
-        self._thread = None
+        if thread is not None and self._thread is thread and not thread.is_alive():
+            self._thread = None  # not if a start came while this waited: that thread is the new one
 
 
 class _RecordingSink:
@@ -394,6 +400,21 @@ def get_aliveness_loop() -> AlivenessLoop:
     if _loop is None:
         _loop = AlivenessLoop()
     return _loop
+
+
+def retire_aliveness_loop() -> None:
+    """Stop the process-level loop, wait for its last tick, and forget it so the next start builds a new one.
+
+    Nothing is built if no loop was ever made: a Thomas with this off has none, and making one writes the permission file.
+    A loop that was started again while this waited is left alone.
+    """
+    global _loop
+    loop = _loop
+    if loop is None:
+        return
+    loop.stop(timeout=None)
+    if not loop.running and _loop is loop:
+        _loop = None
 
 
 def reset_aliveness_loop() -> None:

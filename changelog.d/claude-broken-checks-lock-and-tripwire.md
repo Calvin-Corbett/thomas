@@ -1,0 +1,3 @@
+### Fixed
+
+- **Checks before your card no longer end "unavailable" for two reasons that had nothing to do with the change.** A git process stopped mid-write left a lock file in a copy, and every later check of that copy failed within a minute; a lock older than any git call may run, with no git process using the copy, is now cleared and the step tried again. And the test tripwire that guards your real data counted the check's own copy of dev as your data when a test ran git inside it, so the comparison with dev never finished; a copy's own git folder is now part of the copy for every command, while any other copy or data folder is still caught.

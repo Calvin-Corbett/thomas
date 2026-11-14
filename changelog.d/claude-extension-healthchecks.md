@@ -1,0 +1,9 @@
+### Added
+
+- **The four remaining extensions have healthchecks that check something.** Deleting the 528 generated packs exposed that extension certification had been green on padding: every one of them *declared* the required `healthcheck` capability while its `hooks.py` defined nothing but `before_tool`/`after_tool`, carrying the 95% bar without certifying anything. Measured on the real extensions the rate was 1 in 5. `desktop-operator`, `inkwell`, `life-manager` and `life-manager-foundation` now each implement one, and each verifies its own reality rather than returning a constant: the surface the manifest promises must exist on disk, and every local asset that surface references must be present — a surface whose scripts 404 is the failure a user actually meets. `desktop-operator` additionally imports `thomas.desktop_operator` (the import is half the check) and refuses when the bundle version has drifted from the module it drives. Certification is 5 of 5 on merit.
+
+- **A test that a declared capability is an implemented one, and that the check can fail.** The first half refuses any extension listing `healthcheck` without defining a working one — the exact defect the deleted packs embodied. The second half copies each extension, deletes its surface, and requires the healthcheck to notice; without it, four functions returning `{"ok": True}` unconditionally would have passed everything.
+
+### Fixed
+
+- **`paper-trading` reported healthy with its own app deleted.** It was the one extension whose healthcheck was genuine, and it still only checked the domain module was paper-locked — nothing about the surface the user opens. The red-condition test caught it reporting `ok: True` with `web/index.html` removed. It now verifies its surface as well as its paper lock. The lesson is the test's, not the extension's: a check nobody has ever watched fail is not yet known to work.

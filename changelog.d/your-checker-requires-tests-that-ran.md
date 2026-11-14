@@ -1,0 +1,3 @@
+### Fixed
+
+- **The window's checker passes a change only on tests that ran and cover it.** A run that saw no test, a change to code that only the always-run architecture test would exercise, a set of covering tests the 360-file cap cut, and a chosen test file that collected nothing are each answered "could not check" (tried again), never PASSED. Every checker run reads only the copy's own `pyproject.toml`, so a stray `tests/.pytest.ini` or `PYTEST.INI` can no longer empty a check. The answer now says how many tests it saw. A failure whose re-run never got a place, and a boot check that timed out or would not start, are "could not check" too, never a pass and never a failure that sends a good change back.

@@ -293,6 +293,7 @@ def test_release_bundle_still_contains_a_cold_install() -> None:
         "scripts/bootdoctor.ps1",
         "scripts/run-repl.ps1",
         "scripts/create_shortcut.py",
+        "scripts/startup_recovery_watch.ps1",
         "installer/ThomasSetup.iss",
         # the product itself
         "thomas/server/web/chat.html",

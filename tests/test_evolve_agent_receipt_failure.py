@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,7 @@ from typing import Any
 import pytest
 from aiohttp import web
 
-from tests.test_evolve_agent_routes import _new_repo
+from tests.evolve_agent_route_support import _drive, _new_repo
 from thomas.forge.anvil import forge_code_git, forge_code_store
 from thomas.server.routes import evolve_agent_receipts, evolve_agent_runtime
 
@@ -22,8 +23,8 @@ def _run_concurrent_receipt_mutations(
     entered, release, second_done = threading.Event(), threading.Event(), threading.Event()
     errors: list[BaseException] = []
 
-    def _stalled_read(path: Path) -> dict[str, dict[str, Any]]:
-        receipts = original_read(path)
+    def _stalled_read(path: Path, **kwargs: Any) -> dict[str, dict[str, Any]]:
+        receipts = original_read(path, **kwargs)
         if threading.current_thread().name == "receipt-first":
             entered.set()
             if not release.wait(5):
@@ -93,6 +94,9 @@ def test_final_receipt_write_failure_overrides_apparent_run_success(
     )
 
     class _EmptyStdout:
+        async def read(self, _n: int = -1) -> bytes:
+            return await self.readline()
+
         async def readline(self) -> bytes:
             return b""
 
@@ -182,7 +186,8 @@ def test_concurrent_receipt_writers_preserve_both_entries_and_use_unique_temps(
 
     assert evolve_agent_receipts._action_receipt(repo, "run", "request-a") == {"value": "a"}
     assert evolve_agent_receipts._action_receipt(repo, "revert", "request-b") == {"value": "b"}
-    assert len(temporary_paths) == len(set(temporary_paths)) == 2
+    # The first writer initializes a retryable source and the layout marker as well as its receipt.
+    assert len(temporary_paths) == len(set(temporary_paths)) == 4
     assert not any(Path(path).exists() for path in temporary_paths)
 
 
@@ -216,3 +221,23 @@ def test_corrupt_receipt_catalog_remains_fail_closed(tmp_path: Path, monkeypatch
         path.write_text(corrupt, encoding="utf-8")
         with pytest.raises(RuntimeError, match="unreadable|invalid entry"):
             evolve_agent_receipts._save_action_receipt(repo, "run", "request", {"value": "new"})
+
+
+def test_migrated_finished_request_cannot_launch_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = _new_repo(tmp_path)
+    monkeypatch.setenv("THOMAS_DATA_DIR", str(repo.parent / "thomas-test-data"))
+    path = evolve_agent_receipts._receipt_path(repo)
+    history = {evolve_agent_receipts._receipt_key("run", "old-0"): {"state": "completed", "run_id": "run-0"}}
+    path.write_text(json.dumps(history), encoding="utf-8")
+
+    async def body(client: Any) -> None:
+        response = await client.post(
+            "/api/evolve/agent/send",
+            json={"message": "must not start", "request_id": "old-0"},
+        )
+        assert response.status == 409
+        payload = await response.json()
+        assert payload["ok"] is False
+        assert payload["code"] == "idempotency_conflict"
+
+    _drive(repo, body)

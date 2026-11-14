@@ -8,6 +8,7 @@ from typing import Any
 from .chat_tool_policy_model import (
     _CHANNEL_PREFIXES,
     _CHANNEL_TOOLS,
+    _DELEGATION_TOOLS,
     _EXTERNAL_PREFIXES,
     _EXTERNAL_TOOLS,
     _LOCAL_PATH_ARGUMENTS,
@@ -35,7 +36,8 @@ def _is_write_tool(name: str) -> bool:
 
 def _is_classified_tool(name: str) -> bool:
     return bool(
-        name in _SAFE_READ_TOOLS
+        name in _DELEGATION_TOOLS
+        or name in _SAFE_READ_TOOLS
         or name.startswith(_SAFE_READ_PREFIXES)
         or name in _SHELL_TOOLS
         or _is_write_tool(name)

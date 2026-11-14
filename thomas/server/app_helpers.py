@@ -9,8 +9,10 @@ from typing import TYPE_CHECKING, Any
 
 from thomas.agent.runtime_skill_tools import register_runtime_skill_tools
 from thomas.core.config import AppConfig, load_config
+from thomas.core.kernel import late, seams
 from thomas.server.app_keys import APP_CONFIG
 from thomas.server.tool_extensions import register_all_optional_tools
+from thomas.server.tool_groups import register_tool_group
 from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
 from thomas.tools.filesystem import register_filesystem_tools
@@ -29,6 +31,21 @@ if TYPE_CHECKING:
 import logging
 
 log = logging.getLogger(__name__)
+
+
+def _read_self_projects():
+    # Import at call time: routes.self_project_routes also loads Build's start path.
+    from thomas.server.routes.self_project_routes import read_projects
+
+    return read_projects()
+
+
+def _read_unlanded():
+    # Import at call time: the ratchet's package belongs to its row, and Chat reads these records with that row off.
+    from thomas.server.ratchet.report import read_report
+
+    return read_report()
+
 
 try:
     from thomas.memory.autonomy import AutonomyMemoryEngine
@@ -126,9 +143,33 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
             allowed=True,
         )
     register_git_tools(registry, sandbox)
-    register_code_search_tools(registry, sandbox)
+    # Declared in tool_manifests/code-search.toml; the direct call is the fallback.
+    register_tool_group(
+        registry,
+        "code-search",
+        {"sandbox": sandbox},
+        fallback=lambda: register_code_search_tools(registry, sandbox),
+    )
+    from thomas.tools.repo_code_index import RepoIndexTool
+
+    registry.register(RepoIndexTool(sandbox))
     register_diff_tools(registry, sandbox)
     register_goal_tools(registry, Path(sandbox))  # standing goals the contract holds every turn to
+
+    # Thomas has been recording his own failures for months with no way to read
+    # them back. Without this he cannot be asked what is broken, let alone fix it.
+    from thomas.server import issue_ledger
+    from thomas.tools.self_issues import register_self_issue_tools
+
+    register_self_issue_tools(registry, issue_ledger.recent_issues)
+
+    # What is still unlanded, from the ratchet's records (thomas/server/ratchet): Chat reads them, never git.
+    from thomas.tools.self_unlanded import register_self_unlanded_tools
+
+    register_self_unlanded_tools(registry, _read_unlanded)
+    from thomas.tools.self_projects import register_self_projects_tools
+
+    register_self_projects_tools(registry, _read_self_projects)
     register_ssh_tools(registry)
 
     # Investigation tools -- registered only if investigation DB has cases
@@ -137,21 +178,6 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
 
         register_investigation_tools(registry)
     except (ImportError, ModuleNotFoundError, OSError):
-        pass
-
-    # Browser automation tools (Playwright) -- registered only if the
-    # ``playwright`` package is installed; otherwise the tools would only fail
-    # at call time. register_browser_tools() performs the find_spec gate.
-    try:
-        from thomas.tools.browser import register_browser_tools
-
-        register_browser_tools(registry)
-        # Sensitive-site pause on click/type, console + network tools (2026-09-05),
-        # layered on the registry so browser.py itself stays as it is.
-        from thomas.tools.browser_parity import install_browser_parity
-
-        install_browser_parity(registry)
-    except (ImportError, ModuleNotFoundError):
         pass
 
     # Web research is a core chat capability, not an optional domain module.
@@ -182,7 +208,31 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     # Register all optional domain module tools
     register_all_optional_tools(registry)
 
+    # What rows lend to runs built from now on. A built-in keeps its name; a row's tool of that name is left out.
+    from thomas.agent.kernel_wiring import contributed_tools
+
+    for lent in contributed_tools():
+        if registry.get(lent.name) is not None:
+            log.warning("A row lends %s, a name the tools already hold; the row's is left out", lent.name)
+            continue
+        registry.register(lent)
+
     return registry
+
+
+def add_tools_rows_lent_the_server(registry: ToolRegistry, shared: Any, sandbox: Any) -> None:
+    """Give a run's tools what rows lent the server's own set, which is where a running server's rows put them.
+
+    A row on a running server lends through its own kernel, and ``_build_tools`` reads the process one, so a run built
+    there never sees it. A tool that works in the run's folder, such as ``browser.open``, is rebound to that folder. The
+    loan stays the row's, so the copy refuses once the row stops.
+    """
+    from thomas.agent.kernel_wiring import LentTool
+
+    for lent in shared.list_tools() if shared is not None else []:
+        if isinstance(lent, LentTool) and registry.get(lent.name) is None:
+            rebind = getattr(lent.inner, "for_workspace", None)
+            registry.register(LentTool(rebind(sandbox), lent.lending) if callable(rebind) else lent)
 
 
 def _build_memory(config: AppConfig):
@@ -216,3 +266,6 @@ def _build_memory(config: AppConfig):
     except (OSError, RuntimeError, TypeError, ValueError) as e:
         log.warning("Memory engine failed to start: %s", e)
         return None
+
+
+late.provide(seams.TOOL_SET, lambda config: _build_tools(config))

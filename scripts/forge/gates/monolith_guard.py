@@ -181,6 +181,13 @@ def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> set[
         cwd=repo_root,
         capture_output=True,
         text=True,
+        # Git blobs are bytes and this repo has non-ASCII in real source. Without
+        # an explicit encoding Python decodes with the Windows ANSI codepage and
+        # raises on the first such byte; the failure lands as baseline 0, which
+        # reports a file's ENTIRE length as growth and looks like a violation
+        # rather than like a broken measurement.
+        encoding="utf-8",
+        errors="replace",
     )
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout or "").strip() or "unknown git diff failure"
@@ -199,6 +206,8 @@ def _git_staged_files(repo_root: Path) -> set[str]:
         cwd=repo_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout or "").strip() or "unknown git diff --cached failure"
@@ -231,6 +240,20 @@ def _git_tracked_files(repo_root: Path) -> set[str] | None:
 
 
 def _git_blob_line_count(repo_root: Path, *, ref: str, rel_path: str) -> int | None:
+    """Lines in this path's blob at ``ref``, or None if it is not there.
+
+    Decoded explicitly rather than through ``text=True``. Left to the platform
+    codec this read cp1252 on Windows, so one byte outside that set -- 0x9d in a
+    perfectly valid UTF-8 file -- raised inside subprocess's reader thread, the
+    exception never reached the caller, and returncode stayed 0. The function then
+    returned 0, meaning "the file had no lines at HEAD", and the guard reported the
+    whole file as growth. A wrong answer in the blocking direction, with a reason
+    that was not true: `baseline 0, growth 864` for a file that had 864 lines at
+    HEAD and had barely changed.
+
+    ``errors="replace"`` because this only ever counts newlines; a byte that no
+    codec can place still ends a line in the right spot.
+    """
     rel = _normalize_rel_path(rel_path)
     if not rel:
         return None
@@ -239,10 +262,15 @@ def _git_blob_line_count(repo_root: Path, *, ref: str, rel_path: str) -> int | N
         cwd=repo_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if proc.returncode != 0:
         return None
     text = proc.stdout
+    if text is None:
+        # Distinct from an empty blob, which is a real 0. Never guess a count.
+        return None
     if not text:
         return 0
     return len(text.splitlines())
@@ -254,6 +282,8 @@ def _git_ref_exists(repo_root: Path, ref: str) -> bool:
         cwd=repo_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return proc.returncode == 0
 
@@ -593,6 +623,22 @@ def run_guard(
     }
 
 
+def _soft_line_warnings(repo_root: Path, staged_only: bool, base_ref: str | None, head_ref: str) -> list[str]:
+    """Files this run touches that are over the real-code-line soft line (scripts/forge/code_size.py). Never fails."""
+    try:
+        from scripts.forge.code_size import warning_lines
+
+        if staged_only:
+            touched = _git_staged_files(repo_root)
+        elif base_ref:
+            touched = _git_changed_files(repo_root, base_ref=base_ref, head_ref=head_ref)
+        else:
+            touched = _git_tracked_files(repo_root) or set()
+        return warning_lines(repo_root, sorted(touched))
+    except (OSError, RuntimeError, ValueError) as exc:  # a warning must never decide the guard's verdict
+        return [f"Monolith soft line: could not be measured ({type(exc).__name__}: {exc})"]
+
+
 def main() -> int:
     if _runtime_protection_disabled():
         print("Monolith guard: PASS (runtime protection disabled by human)")
@@ -647,7 +693,9 @@ def main() -> int:
         head_ref=head_ref,
         staged_only=bool(args.staged_only),
     )
+    soft_warnings = _soft_line_warnings(repo_root, args.staged_only, base_ref, head_ref)
     if args.json:
+        result["soft_warnings"] = soft_warnings
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         if result["ok"]:
@@ -683,6 +731,9 @@ def main() -> int:
                     f"- {row.get('path')}: {row.get('lines')} lines "
                     f"(hard {hard}{max_part}{growth_part}) -> {row.get('reason')}"
                 )
+    if not args.json:
+        for line in soft_warnings:
+            print(line)
     return 0 if result["ok"] else 1
 
 

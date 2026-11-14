@@ -221,7 +221,9 @@ def test_run_console_reports_removed_private_marker_count(monkeypatch, capsys, t
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(mod, "_list_git_paths", lambda repo_root, *, include_untracked: ["public.py", "thomas/private.py"])
+    monkeypatch.setattr(
+        mod, "_list_git_paths", lambda repo_root, *, include_untracked: ["public.py", "thomas/private.py"]
+    )
     monkeypatch.setattr(mod, "_init_snapshot_repo", lambda snapshot_root, *, origin_url: None)
     monkeypatch.setattr(mod, "_current_origin", lambda repo_root: "")
     monkeypatch.setattr(mod, "_run_preflight", lambda snapshot_root, *, deep: {"ok": True})
@@ -246,9 +248,11 @@ def test_snapshot_does_not_reintroduce_stripped_directory_files(monkeypatch, tmp
     (repo / "docs" / "repo_hygiene_baseline.json").write_text(
         json.dumps({"publish_strip_prefixes": ["docs/internal/"]}), encoding="utf8"
     )
-    monkeypatch.setattr(mod, "_list_git_paths", lambda *a, **k: [
-        "docs/public.md", "docs/internal/notes.md", "docs/repo_hygiene_baseline.json"
-    ])
+    monkeypatch.setattr(
+        mod,
+        "_list_git_paths",
+        lambda *a, **k: ["docs/public.md", "docs/internal/notes.md", "docs/repo_hygiene_baseline.json"],
+    )
     monkeypatch.setattr(mod, "_current_origin", lambda *a: "")
     monkeypatch.setattr(mod, "_init_snapshot_repo", lambda *a, **k: None)
     monkeypatch.setattr(mod, "_run_preflight", lambda *a, **k: {"ok": True})

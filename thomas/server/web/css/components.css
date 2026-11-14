@@ -13,6 +13,7 @@
 @import url("./component_styles/workbench-tools.css?v=20260401-rename");
 @import url("./component_styles/marketplace-workspace.css?v=20260721-modern-chat");
 @import url("./component_styles/marketplace-channels.css?v=20260721-modern-chat");
+@import url("./component_styles/marketplace-kernel.css?v=20260923-live-kernel");
 /* 5 — Tool calls, palette & chat interactions */
 @import url("./component_styles/tool-calls-chat.css?v=20260401-rename");
 @import url("./component_styles/robot-portal-animations.css?v=20260401-rename");

@@ -50,7 +50,15 @@ def _runtime_protection_disabled() -> bool:
     return runtime_protection_disabled(ROOT)
 
 
-DEFAULT_STAGED_SCOPE_IGNORE: tuple[str, ...] = ("CHANGELOG.md", "pyproject.toml", "thomas/__init__.py")
+# The board message archive files, shared like the board itself. Matched case-sensitively and only as a
+# whole path (see _is_ignored_path): the fnmatch "?" form let messages-abcd-ef.txt and a .TXT name through.
+ARCHIVE_WAIVER = "plans/thomas/archive/messages-[0-9][0-9][0-9][0-9]-[0-1][0-9].txt"
+DEFAULT_STAGED_SCOPE_IGNORE: tuple[str, ...] = (
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "thomas/__init__.py",
+    ARCHIVE_WAIVER,
+)
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
 FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"
 SCOPE_SOURCE_CLAIM = "workboard_claim"
@@ -62,7 +70,12 @@ def _resolve_agent(explicit_agent: str | None) -> str | None:
 
 
 def _orphan_adoption_hints(workboard_path: Path, agent: str, paths: Sequence[str]) -> list[dict]:
-    """Return adoption hints for stale claims covering the requested paths."""
+    """Orphan claims (>48h stale) owned by others that cover ``paths``.
+
+    Purely informational — NEVER changes this gate's pass/fail. When another
+    agent stranded a claim on files you need, this surfaces the adoption path
+    so work doesn't stall (Calvin 2026-06-01). Any error -> [] (silent).
+    """
     try:
         from scripts.crew.workboard.claim_adopt import orphans_covering_paths
     except ImportError:  # pragma: no cover - import path varies by run context
@@ -130,25 +143,18 @@ def _claim_role(claim: claims_gate.Claim) -> str:
     return "worker" if parent else "solo"
 
 
-def _staged_files() -> list[str]:
-    try:
-        proc = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return []
-    if proc.returncode != 0:
-        return []
-    rows: list[str] = []
-    for raw in str(proc.stdout or "").splitlines():
-        item = _normalize_path(raw)
-        if item:
-            rows.append(item)
-    return sorted(set(rows))
+def _staged_files() -> list[str] | None:  # None: git cannot say, and the gate refuses; never read as nothing
+    from scripts.forge.gates import _commit_base  # the commit tool's base, not a HEAD a neighbour just moved
+
+    rows = _commit_base.staged_names(ROOT)
+    return None if rows is None else sorted({p for p in map(_normalize_path, rows) if p})
+
+
+def _landed_push() -> bool:
+    """A real pre-push run over a range that exists and holds a commit (_commit_base), with nothing staged."""
+    from scripts.forge.gates import _commit_base
+
+    return _staged_files() == [] and _commit_base.pre_push_range(ROOT) is not None
 
 
 def _split_patterns(values: Sequence[str]) -> list[str]:
@@ -199,6 +205,10 @@ def _is_ignored_path(rel_path: str, ignore_patterns: Sequence[str]) -> bool:
     for pattern in ignore_patterns:
         pat = _normalize_path(pattern)
         if not pat:
+            continue
+        if pat == ARCHIVE_WAIVER:
+            if fnmatch.fnmatchcase(path, pat):  # exact case, whole path, no nesting
+                return True
             continue
         if _scope_matches_path(pat, path):
             return True
@@ -267,6 +277,32 @@ def _fallback_conflicts(agent: str, claims: Sequence[claims_gate.Claim], scopes:
         key=str.lower,
     )
     return conflicts
+
+
+def _available_peer_count(actor: str) -> int | None:
+    """Peers that could staff a worker seat now (expired holds excluded), or None when presence is unreadable."""
+
+    try:
+        from thomas.core import agent_presence
+    except ImportError:
+        return None
+    try:
+        rows = agent_presence.collect_presence().get("agents") or []
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    peers = 0
+    for row in rows:
+        agent_id = str(row.get("agent_id") or "")
+        if not agent_id or agent_id.startswith("process:"):
+            continue
+        if actor and agent_id.casefold() == str(actor).casefold():
+            continue
+        if str(row.get("state") or "") not in {"active", "alive"}:
+            continue
+        if agent_presence._hold_expired(row):
+            continue
+        peers += 1
+    return peers
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -445,6 +481,10 @@ def run(argv: Sequence[str] | None = None) -> int:
     else:
         fallback_scopes = list(_fallback_scopes_from_env())
         fallback_reason = _fallback_reason_from_env()
+        if not fallback_scopes and _landed_push():  # the audited push fallback (push_claim.py) for a bare git push
+            from scripts.crew.brief.push_claim import PUSH_REASON, PUSH_SCOPE
+
+            fallback_scopes, fallback_reason = [PUSH_SCOPE], PUSH_REASON
         if not fallback_scopes:
             message = (
                 f"no active workboard claim found for '{agent}'. "
@@ -570,9 +610,13 @@ def run(argv: Sequence[str] | None = None) -> int:
             ready_count = len(ready_suggestions)
             min_ready = max(1, int(args.parent_min_ready_suggestions or 1))
             target_workers = max(1, int(args.parent_target_workers or 1))
+            # Never require fan-out to agents that do not exist: on 2026-09-09 the only live agent was told to
+            # produce two workers out of nothing and every one of its commits was refused.
+            available = _available_peer_count(agent)
             required_workers = 0
             if ready_count >= min_ready:
-                required_workers = min(target_workers, ready_count)
+                # Unreadable presence (None) keeps the full requirement: not knowing is not evidence that nobody is there.
+                required_workers = min(target_workers, ready_count, target_workers if available is None else available)
 
             parent_throughput.update(
                 {
@@ -622,6 +666,11 @@ def run(argv: Sequence[str] | None = None) -> int:
     unclaimed_staged_files: list[str] = []
     if args.enforce_staged_scope:
         staged_files = _staged_files()
+        if staged_files is None:
+            message = "git could not list the staged files, so the gate cannot judge them"
+            out = {"gate": "workboard_agent_claim", "ok": False, "error": message}
+            print(json.dumps(out) if args.json else f"Workboard agent claim gate: FAIL\n- {message}")
+            return 1
         for rel_path in staged_files:
             if _is_ignored_path(rel_path, staged_scope_ignore):
                 continue

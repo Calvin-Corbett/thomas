@@ -20,7 +20,6 @@ except ImportError:
 from aiohttp import web
 
 from thomas.core.config import AppConfig
-from thomas.desktop_operator.host_service import get_global_desktop_host_service
 from thomas.models.local_recommendations import (
     build_local_runtime_plan,
     detect_local_hardware_profile,
@@ -34,6 +33,7 @@ from thomas.preferences.store import (
     get_db_path,
 )
 from thomas.server.app_keys import APP_CONFIG, APP_SECRETS
+from thomas.server.desktop_gate import desktop_row_is_on
 from thomas.server.routes.setup_local_sync import (
     build_local_sync_payload,
     fetch_ollama_model_ids,
@@ -199,10 +199,15 @@ def register_setup_routes(
             )
 
         hardware = detect_local_hardware_profile()
-        try:
-            isolated_desktop = get_global_desktop_host_service().status().to_dict()
-        except Exception:
-            isolated_desktop = {"installation_state": "not_enabled"}
+        isolated_desktop = {"installation_state": "not_enabled"}
+        # The helper's code loads only while its row is on, so a server started with the row off never loads it here.
+        if desktop_row_is_on(request.app):
+            try:
+                from thomas.desktop_operator.host_service import get_global_desktop_host_service
+
+                isolated_desktop = get_global_desktop_host_service().status().to_dict()
+            except (ImportError, OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError):
+                log.warning("Isolated desktop posture unavailable for the setup check", exc_info=True)
         local_plan = build_local_runtime_plan(
             hardware=hardware,
             local_profile_exists=bool(local_profile_exists),

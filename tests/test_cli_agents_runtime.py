@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import thomas.cli.agents_runtime as mod
+from tests.sleep_support import skip_sleeps
 
 
 def _fake_config(tmp_path: Path) -> SimpleNamespace:
@@ -34,7 +35,7 @@ def test_start_payload_detached_records_gateway_state(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(mod, "_probe_gateway", _fake_probe_gateway)
     monkeypatch.setattr(mod, "_gateway_spawn", lambda **_kwargs: SimpleNamespace(pid=4242))
-    monkeypatch.setattr(mod.time, "sleep", lambda _seconds: None)
+    skip_sleeps(monkeypatch)
 
     payload = mod.start_payload(
         cfg,

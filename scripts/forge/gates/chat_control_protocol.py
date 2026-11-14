@@ -15,7 +15,6 @@ ROOT = Path(__file__).resolve().parents[3]
 CHAT_REQUEST_SETUP = ROOT / "thomas" / "server" / "routes" / "chat_request_setup.py"
 CHAT_V2 = ROOT / "thomas" / "server" / "routes" / "chat_v2.py"
 CHAT_AIOHTTP = ROOT / "thomas" / "server" / "routes" / "chat_aiohttp.py"
-CHAT_HANDLERS = ROOT / "thomas" / "server" / "routes" / "chat_aiohttp_handlers.py"
 CHAT_V2_UI_CONTROL = ROOT / "thomas" / "server" / "routes" / "chat_v2_ui_control.py"
 APP_CORE = ROOT / "thomas" / "server" / "app_core.py"
 APP_MIDDLEWARE_HANDLERS = ROOT / "thomas" / "server" / "app_middleware_handlers.py"
@@ -79,16 +78,6 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "_LEGACY_MODE_MIGRATIONS",
                 'payload.get("mode")',
                 'payload.get("message"',
-            ),
-        )
-    )
-    errors.extend(
-        _forbid_substrings(
-            CHAT_HANDLERS,
-            (
-                "resolve_ui_control_request",
-                "handle_ui_control_chat",
-                "control_req",
             ),
         )
     )

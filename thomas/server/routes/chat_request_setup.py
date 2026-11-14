@@ -15,6 +15,7 @@ from aiohttp import web
 
 from thomas.core.autonomy import clamp_autonomy_level, parse_autonomy_level
 from thomas.core.config import AppConfig
+from thomas.server import dial_elevation
 from thomas.server.app_keys import (
     APP_ENGINE_MANAGER,
     APP_SESSIONS,
@@ -312,8 +313,9 @@ async def setup_chat_request(
     explicit_autonomy_requested = "autonomy_level" in payload
     explicit_system_prompt_requested = "system_prompt" in payload
     if "autonomy_level" in payload:
+        # Full autonomy and Autopilot count only with a Hello approval.
         session.autonomy_level = clamp_autonomy_level(
-            payload.get("autonomy_level"),
+            dial_elevation.cap("autonomy", payload.get("autonomy_level")),
             default=getattr(session, "autonomy_level", 3),
         )
     elif runtime_prefs is not None and not is_web_request:

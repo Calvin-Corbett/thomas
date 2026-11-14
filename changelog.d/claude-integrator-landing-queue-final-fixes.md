@@ -1,0 +1,6 @@
+### Fixed
+
+- **"Already landed" now needs proof.** A dry run that timed out, or that the commit tool refused before it chose any path (session identity, claim, a gate), used to read as "nothing pending", so a change that never landed could be reported as landed. Now unproven means not landed: paths count only for a dry run that finished and passed or was refused with the commit tool's own nothing-to-stage blocker, and a landing that is recovered after its holder died is no longer matched to an old commit with the same words.
+- **`--include a.txt,b.txt` is the same as two `--include` flags.** The comma form was kept as one path, so the check for other pending files never saw `b.txt` and a later change to it could be dropped as already landed.
+- **One commit tool at a time.** A holder whose ticket was skipped while its own already-landed check ran no longer starts its commit tool anyway, and the check no longer runs the commit tool's dry run inside the slot.
+- **The briefing says what land.py takes** (`--message`, `--agent`, `--include`, `--allow-scope-fallback`, `--fallback-reason`, no `--dry-run`), that `--submit` returns once your ticket exists, and that hitting the attempt cap is not a reason to use commit.py.

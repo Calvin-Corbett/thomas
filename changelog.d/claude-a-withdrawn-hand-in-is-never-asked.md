@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Thomas change taken out of the queue to be checked can no longer reach your Windows prompt or land.** Each change is checked independently before its card, and one that has not been is moved out of the queue. The promoter had already picked one up a minute before it was moved; it kept going from what it had read, asked you twice, and a change its check had just found not safe landed. The promoter now looks for the change in the queue before every prompt and again before landing: when it is gone it stops, lands nothing, and leaves no card or verdict, so the change is taken up again from the start only when it is put back.

@@ -6,6 +6,7 @@ import ast
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -14,16 +15,21 @@ from pathlib import Path
 from typing import Any
 
 from thomas.agent.hook_events import HookEvent, bridge_guardrails_event, emit_hook
+from thomas.agent.loop_tool_batches import build_tool_result, execute_build_tool_batch
 from thomas.agent.loop_tool_paths import (
     _WRITE_TOOL_PATH_KEYS,
     _declares_a_path_parameter,
+    _optional_empty_path_keys,
     _sanitize_write_tool_path,
     fenced_patch_target,
+    loop_sandbox_root,
 )
 from thomas.agent.tool_failure_guard import ToolFailureGuard
-from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
+from thomas.core import step_log
+from thomas.core.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
 from thomas.core.file_access import is_file_access_refusal
+from thomas.core.session_scope import bind_session
 
 try:
     from thomas.agent.verification import format_verification_feedback, verify_after_tool
@@ -52,7 +58,6 @@ _WRITE_TOOL_KEYWORDS = (
     "fs.delete",
     "fs.rename",
 )
-
 _SELF_DEVELOPMENT_WRITE_TOOLS = {"diff.create", "fs.write_file", "fs.write_protected_file"}
 _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
     "fs.read",
@@ -63,16 +68,71 @@ _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES = (
     "git.status",
     "shell.exec",
 )
+# Exempt from the inspection-loop counter: one committed read, matched by parsing alone.
+# Round 1's regex allowed `<>` backtick `$()*?` and never required `<path>` to name a file,
+# so a directory listing (unlimited) and `a>file` / `--output=<file>` (writes) all matched.
+# Ruling AA (N1): three whole-string forms, a metacharacter-free `<path>`, and a dot in its
+# last segment. A dotted folder (changelog.d, .github) passes too; its read is at most a
+# one-level listing of that folder, accepted as a read (fix round 3).
+_GIT_REV_CHARS = r"[A-Za-z0-9_./~^@{}-]+"
+_GIT_COMMITTED_READ_FORMS = tuple(
+    re.compile(rf"^git {verb} ({_GIT_REV_CHARS}):(\S+)$", re.IGNORECASE)
+    for verb in ("show", "cat-file -p", "cat-file blob")
+)
+_GIT_PATH_FORBIDDEN_CHARS = frozenset("|&;<>`$()*?")
+
+
+def _is_git_committed_read(command: str) -> bool:
+    """True only for a bare `git show`/`cat-file` read of a dotted last segment (Ruling AA)."""
+    text = str(command or "").strip()
+    for pattern in _GIT_COMMITTED_READ_FORMS:
+        match = pattern.match(text)
+        if match is None:
+            continue
+        rev, path = match.group(1), match.group(2)
+        if rev.startswith("-") or "^{tree}" in rev:
+            return False
+        if any(ch in _GIT_PATH_FORBIDDEN_CHARS for ch in path) or path.endswith("/"):
+            return False
+        last_segment = path.rsplit("/", 1)[-1]
+        return "." in last_segment
+    return False
 
 
 # Tools that wait for the person (ask_user) are exempt from the per-tool
 # timeout: a 20-minute question must not be cut off by a 120-second budget
 # meant for shell commands.
-_WAITS_ON_THE_PERSON = frozenset({"ask_user"})
+_WAITS_ON_THE_PERSON = frozenset({"ask_user", "settings.request_change"})
 
 
 def _waits_on_the_person(name: str) -> bool:
     return str(name or "").strip().lower() in _WAITS_ON_THE_PERSON
+
+
+def _host_deadline(loop: Any, name: str) -> Any:
+    """The host-owned deadline for this tool: a loop time, or a callable giving it now (one a pause can move)."""
+    deadlines = getattr(loop, "_tool_deadlines", None)
+    if not isinstance(deadlines, dict) or not deadlines or _waits_on_the_person(name):
+        return None
+    return deadlines.get(getattr(loop.tools.get(name), "name", ""))
+
+
+def _tool_execution_timeout(loop: Any, name: str) -> float | None:
+    """Honor a host-owned tool deadline without changing other tools' budgets."""
+    deadline = _host_deadline(loop, name)
+    deadline = deadline() if callable(deadline) else deadline
+    if isinstance(deadline, (int, float)) and math.isfinite(deadline):
+        return max(0.0, deadline - asyncio.get_running_loop().time())
+    return None if _waits_on_the_person(name) else loop._tool_timeout_s
+
+
+def _bounded(loop: Any, name: str, awaitable: Any, timeout_s: float | None) -> Any:
+    """Await a tool under its bound. A host deadline that moves (a Build run's pause gives its time back) bounds
+    the wait itself through its ``bound``, re-read as the wait goes; any other bound is a fixed timeout."""
+    deadline = _host_deadline(loop, name)
+    if callable(getattr(deadline, "bound", None)):
+        return deadline.bound(awaitable)
+    return asyncio.wait_for(awaitable, timeout=float(timeout_s)) if timeout_s is not None else awaitable
 
 
 def _failure_guard(loop: Any) -> ToolFailureGuard:
@@ -105,16 +165,18 @@ def _self_development_write_guard_event(
     loop: Any,
     *,
     name: str,
+    args: dict[str, Any] | None = None,
     tc_id: str,
     iteration: int,
 ) -> AgentEvent | None:
-    """Block runaway inspection loops in live Thomas self-development runs.
+    """Block runaway inspection loops in Thomas self-development runs.
 
-    Normal coding tasks can inspect as much as their iteration budget allows. A
-    self-development background task, however, has a hard completion contract:
-    no changed live source/test/doc file means failure. After a small inspection
-    budget, return a tool error so the model sees the real constraint and uses
-    the write tool instead of burning the whole run on search/list/status calls.
+    A self-development background task has a hard completion contract: no
+    changed source/test/doc file means failure. After a small inspection
+    budget, return a tool error so the model uses the write tool instead of
+    burning the run on search/list/status calls. This job_type only ever
+    fires for a run in a green, so the refusal says "this self-fix run",
+    never "live repo" (item-12(b)).
     """
     if str(getattr(loop, "_current_job_type", "") or "").strip().lower() != "self_development":
         return None
@@ -125,6 +187,15 @@ def _self_development_write_guard_event(
     if name_lower in _SELF_DEVELOPMENT_WRITE_TOOLS:
         guard["write_seen"] = True
         return None
+    # Never a file read: refusing one made a worker write a 107-line module blind,
+    # as its 5-line docstring (exec-8ef69b69fb68, 2026-09-22). Reading the file is
+    # how an edit starts; the guard is for search and listing loops. A one-file
+    # `git show`/`cat-file` read is the same act through the shell (item-12(a); narrowed
+    # by Ruling AA to exclude any write, and any listing but one level of a dotted folder).
+    if name_lower == "fs.read_file":
+        return None
+    if name_lower == "shell.exec" and _is_git_committed_read((args or {}).get("command")):
+        return None
     if not any(name_lower.startswith(prefix) for prefix in _SELF_DEVELOPMENT_INSPECTION_TOOL_PREFIXES):
         return None
     count = int(guard.get("inspection_count", 0) or 0) + 1
@@ -133,9 +204,10 @@ def _self_development_write_guard_event(
     if count <= limit:
         return None
     msg = (
-        "Self-development write-first guard: this live repo task already used "
+        "Self-development write-first guard: this self-fix run already used "
         f"{count} inspection tools without a write. Stop inspecting. The next "
-        "substantive tool call must be fs.write_file or fs.write_protected_file "
+        "substantive tool call must be diff.create (to patch an existing file), "
+        "fs.write_file (only to create a new one), or fs.write_protected_file "
         "on a scoped source/test/doc file, or explicitly report the blocker."
     )
     return AgentEvent(
@@ -211,7 +283,7 @@ async def execute_tools(
         name = tc["name"]
         tc_id = tc["id"]
         raw_args = tc["arguments"]
-        sandbox_root = Path(loop.config.tools.sandbox_path).resolve()
+        sandbox_root = loop_sandbox_root(loop)
         benchmark_context, benchmark_error = get_benchmark_context(sandbox_root)
         benchmark_root = Path(str(benchmark_context.get("root") or "")).resolve() if benchmark_context else None
 
@@ -272,7 +344,7 @@ async def execute_tools(
 
         validated_path: str | None = None
         is_write_tool_call = _is_write_tool(name, file_audit_module)
-        guard_event = _self_development_write_guard_event(loop, name=name, tc_id=tc_id, iteration=iteration)
+        guard_event = _self_development_write_guard_event(loop, name=name, args=args, tc_id=tc_id, iteration=iteration)
         if guard_event is not None:
             await loop._audit_action(
                 kind="tool_action_rejected",
@@ -310,6 +382,7 @@ async def execute_tools(
             validated_path, path_error = _sanitize_write_tool_path(
                 args,
                 require_path=is_write_tool_call and _declares_a_path_parameter(getattr(loop, "tools", None), name),
+                optional_empty_path_keys=_optional_empty_path_keys(getattr(loop, "tools", None), name),
                 sandbox_root=sandbox_root,
                 benchmark_root=benchmark_root if is_write_tool_call else None,
                 # Absolute WRITE targets are judged by the file-access ladder
@@ -404,6 +477,7 @@ async def execute_tools(
             decision="STARTED",
             payload={"arguments": args},
         )
+        timeout_s = _tool_execution_timeout(loop, name)
         if loop._guarded_tool_runner is not None:
 
             async def _execute_guarded_tool() -> dict[str, Any]:
@@ -459,14 +533,7 @@ async def execute_tools(
                 )
 
             try:
-                guarded: Any
-                if loop._tool_timeout_s is not None and not _waits_on_the_person(name):
-                    guarded = await asyncio.wait_for(
-                        _execute_guarded_tool(),
-                        timeout=float(loop._tool_timeout_s),
-                    )
-                else:
-                    guarded = await _execute_guarded_tool()
+                guarded: Any = await _bounded(loop, name, _execute_guarded_tool(), timeout_s)
             except asyncio.TimeoutError:
                 duration = (time.monotonic() - start) * 1000
                 await loop._audit_action(
@@ -474,7 +541,7 @@ async def execute_tools(
                     tool_call_id=tc_id,
                     tool_name=name,
                     decision="TIMEOUT",
-                    reason=f"timeout_s={loop._tool_timeout_s}",
+                    reason=f"timeout_s={timeout_s}",
                     payload={"duration_ms": duration},
                 )
                 return AgentEvent(
@@ -482,8 +549,8 @@ async def execute_tools(
                     data={
                         "tool_id": tc_id,
                         "tool_name": name,
-                        "result": f"Tool timed out after {loop._tool_timeout_s}s",
-                        "result_text": f"Tool timed out after {loop._tool_timeout_s}s",
+                        "result": f"Tool timed out after {timeout_s}s",
+                        "result_text": f"Tool timed out after {timeout_s}s",
                         "ok": False,
                         "duration_ms": duration,
                     },
@@ -514,13 +581,7 @@ async def execute_tools(
                 result_text = str(guarded)
         else:
             try:
-                if loop._tool_timeout_s is not None and not _waits_on_the_person(name):
-                    result = await asyncio.wait_for(
-                        loop.tools.execute(name, args),
-                        timeout=float(loop._tool_timeout_s),
-                    )
-                else:
-                    result = await loop.tools.execute(name, args)
+                result = await _bounded(loop, name, loop.tools.execute(name, args), timeout_s)
             except asyncio.TimeoutError:
                 duration = (time.monotonic() - start) * 1000
                 await loop._audit_action(
@@ -528,7 +589,7 @@ async def execute_tools(
                     tool_call_id=tc_id,
                     tool_name=name,
                     decision="TIMEOUT",
-                    reason=f"timeout_s={loop._tool_timeout_s}",
+                    reason=f"timeout_s={timeout_s}",
                     payload={"duration_ms": duration},
                 )
                 return AgentEvent(
@@ -536,8 +597,8 @@ async def execute_tools(
                     data={
                         "tool_id": tc_id,
                         "tool_name": name,
-                        "result": f"Tool timed out after {loop._tool_timeout_s}s",
-                        "result_text": f"Tool timed out after {loop._tool_timeout_s}s",
+                        "result": f"Tool timed out after {timeout_s}s",
+                        "result_text": f"Tool timed out after {timeout_s}s",
                         "ok": False,
                         "duration_ms": duration,
                     },
@@ -679,15 +740,22 @@ async def execute_tools(
     if not tool_calls:
         return
 
-    max_parallel = loop._max_parallel_tools
-    if max_parallel is None:
-        max_parallel = max(1, len(tool_calls))
-    sem = asyncio.Semaphore(max(1, int(max_parallel)))
+    sem = asyncio.Semaphore(max(1, int(loop._max_parallel_tools or max(1, len(tool_calls)))))
 
     async def _run_one_limited(tc: dict[str, Any]) -> AgentEvent:
-        async with sem:
-            return await _run_one(tc)
+        # Bind each tool to its chat so ask_user cards reach the right page.
+        async with sem:  # every finished call is timed into the step log (2026-10-25)
+            with bind_session(getattr(loop, "_session_id", ""), run_id=loop._run_id, run_owner=loop):
+                return step_log.tool_finished(await _run_one(tc), run=str(getattr(loop, "_run_id", "") or ""))
 
+    if getattr(loop, "_build_read_parallel_only", False):
+
+        async def _run_one_build(tc: dict[str, Any]) -> AgentEvent:
+            return await build_tool_result(_run_one_limited, tc, loop, iteration)
+
+        async for event in execute_build_tool_batch(tool_calls, _run_one_build):
+            yield event
+        return
     tool_tasks = {asyncio.create_task(_run_one_limited(tc)): tc for tc in tool_calls}
     try:
         for done in asyncio.as_completed(tool_tasks):
@@ -726,11 +794,7 @@ async def execute_tools(
             if not t.done():
                 t.cancel()
         if tool_tasks:
-            done_fallback = await asyncio.gather(*tool_tasks, return_exceptions=True)
-            _ = done_fallback
+            await asyncio.gather(*tool_tasks, return_exceptions=True)
 
 
-__all__ = [
-    "execute_tools",
-    "parse_tool_args",
-]
+__all__ = ["execute_tools", "parse_tool_args"]

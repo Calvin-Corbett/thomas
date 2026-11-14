@@ -1,0 +1,3 @@
+### Fixed
+
+- **A self-fix that changes thousands of files can land.** You approved the junk sweep's card (3,283 files), and the promoter recorded "[WinError 206] The filename or extension is too long" instead of landing it. Before landing, it asks git whether the running copy holds uncommitted work in the changed files, and it put every path on one command line; Windows starts no program with a command line over 32,767 characters. The promoter now hands git the paths in batches that each fit, for that check, for finding work already in place, and for updating the running copy and putting it back.

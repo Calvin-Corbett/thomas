@@ -116,8 +116,21 @@ def artifact_root_path(root: str, *, repo_root: Path) -> Path:
     return base if base.is_absolute() else (repo_root / base).resolve()
 
 
+_UNSAFE_FOLDER_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def folder_name_for(task_id: str) -> str:
+    """The task's folder name: a task named ``fix: the x`` or ``a/b`` must not make a folder Windows refuses.
+
+    Unsafe characters become ``-`` and a trailing dot or space (also refused) is dropped. The task id itself is kept
+    as written everywhere else; only the folder name is made safe.
+    """
+    name = _UNSAFE_FOLDER_CHARS.sub("-", str(task_id).strip()).rstrip(". ")
+    return name or "task"
+
+
 def default_artifact_path(task_id: str, root: str, filename: str, *, repo_root: Path) -> str:
-    target = artifact_root_path(root, repo_root=repo_root) / str(task_id).strip() / filename
+    target = artifact_root_path(root, repo_root=repo_root) / folder_name_for(task_id) / filename
     return repo_relative_or_absolute(target, repo_root=repo_root)
 
 

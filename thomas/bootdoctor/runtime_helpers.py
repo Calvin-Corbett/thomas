@@ -209,7 +209,10 @@ class RestrictedTool(Tool):
         return await self._inner.execute(mutable)
 
 
-def build_restricted_tools(root: Path) -> tuple[ToolRegistry, BootDoctorPathPolicy]:
+def build_restricted_tools(root: Path, scope: Any = None) -> tuple[ToolRegistry, BootDoctorPathPolicy]:
+    """The BootDoctor tool set rooted at ``root``, or at a files-slot ``scope``'s root when one is given."""
+    if scope is not None:
+        root = Path(scope.root)
     base = ToolRegistry()
     register_filesystem_tools(base, root)
     register_code_search_tools(base, root)
@@ -314,9 +317,6 @@ def build_rescue_prompt(
     if traceback_targets:
         lines.extend(["", "Startup traceback points at:"])
         lines.extend([f"- {path}" for path in traceback_targets])
-        lines.append(
-            "If one of these is a monolith stub, inspect and edit the corresponding *_part*.py implementation file instead of the stub."
-        )
     if startup_log_paths:
         lines.extend(["", "Startup log files:"])
         lines.extend([f"- {path}" for path in startup_log_paths])
@@ -325,4 +325,4 @@ def build_rescue_prompt(
     if report_excerpt:
         lines.extend(["", "Current BootDoctor report excerpt:", report_excerpt])
     lines.extend(["", "After your repair batch, I will rerun startup checks automatically."])
-    return "`n".join(lines).strip()
+    return "\n".join(lines).strip()

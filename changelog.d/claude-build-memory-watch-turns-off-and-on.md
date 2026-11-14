@@ -1,0 +1,2 @@
+### Changed
+- **The Build memory watch can be turned off and on while Thomas runs, on the Plugins page in Settings.** It covers the sampler that watches how much memory Build runs use, `/api/machine/capacity` and `/api/metrics/steps`. Off stops the watching and answers 404 on both, and no page in Thomas asks for either. Build keeps the limit it already has and goes on holding new runs to it, and the step log goes on being written.

@@ -1,0 +1,3 @@
+### Fixed
+
+- **Files a Claude session edits are now held for that session too, not only files a landing writes.** Each time a session edits a file in this checkout, the file is held for that session until it commits it or the session ends, so another session's commit cannot carry its unfinished lines. If a second session edits a file the first still holds, it is told straight away who holds it and why, before either is refused at commit time. Either session can hand its lines to the other with `python -m scripts.crew.brief.inflight release --mine <file>`, so two sessions are never stuck waiting on each other.

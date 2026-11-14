@@ -1,0 +1,3 @@
+### Fixed
+
+- **A Build run is no longer held to the "Quality gate failed" message as if you had asked for it.** When a run's quality checks fail, it runs again with Thomas's own message as the prompt: "Quality gate failed. Continue working now and fix the required checks below", which names `python scripts/forge/gates/monolith_guard.py`. That pass kept its first pass's checklist only when there was one. When your message had nothing checkable, the pass read Thomas's message as the request. The whole-repository guard then became a command that had to exit 0, and it cannot while dev carries oversized files the project never touched, so the run could not finish. A remediation pass now never builds a checklist of its own.

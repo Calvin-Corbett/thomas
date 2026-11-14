@@ -31,7 +31,7 @@ import os
 import shutil
 import threading
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,7 @@ from thomas.core.rag_format import (
     format_result,
     maybe_render_from_disk,
 )
+from thomas.core.rag_index_status import index_status
 from thomas.core.rag_indexer import (
     DEFAULT_EXTENSIONS,
     DEFAULT_SKIP_DIRS,
@@ -95,7 +96,10 @@ class RagIndex:
         model_name: str = DEFAULT_MODEL_NAME,
         collection_name: str = DEFAULT_COLLECTION,
         update_debounce_s: float = DEFAULT_UPDATE_DEBOUNCE_S,
+        persistence_factory: Callable[[], Any] | None = None,
+        start_worker: bool = True,
     ) -> None:
+        self._persistence = persistence_factory or get_persistence
         self.persist_dir = Path(persist_dir)
         self.model_name = model_name
         self.collection_name = collection_name
@@ -132,8 +136,10 @@ class RagIndex:
         self._load_manifest()
         self._ensure_fts()
 
-        self._worker = threading.Thread(target=self._worker_loop, name="RagIndexWorker", daemon=True)
-        self._worker.start()
+        self._worker = None
+        if start_worker:
+            self._worker = threading.Thread(target=self._worker_loop, name="RagIndexWorker", daemon=True)
+            self._worker.start()
 
     # ----- API -----
 
@@ -149,7 +155,7 @@ class RagIndex:
         root = Path(root_dir).resolve()
         exts = _normalize_ext_list(extensions)
 
-        pe = get_persistence()
+        pe = self._persistence()
         pe.set_fact("rag.root_dir", str(root))
         pe.set_fact("rag.extensions", ",".join(exts))
         pe.set_fact("rag.build_requested_ts", _now_iso())
@@ -168,7 +174,7 @@ class RagIndex:
         """
         p = Path(filepath).resolve()
 
-        pe = get_persistence()
+        pe = self._persistence()
         exts_str = pe.get_fact("rag.extensions")
         exts = (
             [e.strip().lower() for e in str(exts_str).split(",") if e.strip()] if exts_str else list(DEFAULT_EXTENSIONS)
@@ -276,7 +282,7 @@ class RagIndex:
 
     def status(self) -> dict[str, Any]:
         """Return status dict with index statistics and pending operations."""
-        pe = get_persistence()
+        pe = self._persistence()
         root = pe.get_fact("rag.root_dir") or self._manifest.get("root_dir") or str(_default_repo_root())
         exts = pe.get_fact("rag.extensions") or ",".join(self._manifest.get("extensions") or DEFAULT_EXTENSIONS)
 
@@ -288,29 +294,7 @@ class RagIndex:
         except Exception:
             count = 0
 
-        with self._cv:
-            pending = len(self._pending_updates)
-            build_req = self._build_requested is not None
-            building = self._build_running
-
-        return {
-            "persist_dir": str(self.persist_dir),
-            "collection": self.collection_name,
-            "model": self.model_name,
-            "root_dir": str(root),
-            "extensions": str(exts),
-            "vector_count": count,
-            "manifest_files": int(len(self._manifest.get("files", {}))),
-            "fts_enabled": bool(self._fts_enabled),
-            "build_running": bool(building),
-            "build_requested": bool(build_req),
-            "pending_updates": int(pending),
-            "last_build_ts": pe.get_fact("rag.last_build_ts"),
-            "last_build_error": pe.get_fact("rag.last_build_error"),
-            "last_update": pe.get_fact("rag.last_update"),
-            "last_update_action": pe.get_fact("rag.last_update_action"),
-            "last_update_ts": pe.get_fact("rag.last_update_ts"),
-        }
+        return index_status(self, pe, root, exts, count)
 
     # -------------------------
     # Worker loop (background thread)
@@ -318,7 +302,7 @@ class RagIndex:
 
     def _worker_loop(self) -> None:
         """Main loop for background indexing worker."""
-        pe = get_persistence()
+        pe = self._persistence()
 
         while True:
             job_build: tuple[Path, list[str]] | None = None
@@ -423,7 +407,7 @@ class RagIndex:
         self._ensure_chroma(load_embedder=False)
         self._ensure_fts()
 
-        pe = get_persistence()
+        pe = self._persistence()
         root_str = pe.get_fact("rag.root_dir")
         exts_str = pe.get_fact("rag.extensions")
         root = Path(root_str).resolve() if root_str else _default_repo_root()
@@ -447,7 +431,7 @@ class RagIndex:
             self._manifest.setdefault("files", {})
             self._save_manifest()
 
-        pe = get_persistence()
+        pe = self._persistence()
         pe.set_fact("rag.build_files_done", "0")
         logger.info("RAG: build scanning %s", root)
 
@@ -518,7 +502,7 @@ class RagIndex:
 
     def _do_update_one(self, file_key: str, abspath: str) -> None:
         """Incremental update of a single file."""
-        pe = get_persistence()
+        pe = self._persistence()
         pe.set_fact("rag.last_update_ts", _now_iso())
 
         p = Path(abspath).resolve()
@@ -813,7 +797,7 @@ class RagIndex:
 
     def _get_root_dir(self) -> str:
         """Get root directory from persistence or manifest."""
-        pe = get_persistence()
+        pe = self._persistence()
         return pe.get_fact("rag.root_dir") or self._manifest.get("root_dir") or str(_default_repo_root())
 
 

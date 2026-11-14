@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from thomas.forge.anvil import forge_code_git, forge_code_manifest
+from thomas.tools import fs_scope
 
 _MAX_PREIMAGE_BYTES = 25 * 1024 * 1024
 _MAX_LAUNCH_DIRTY_BYTES = _MAX_PREIMAGE_BYTES * 2
@@ -44,15 +45,19 @@ def _manifest_path(catalog_root: str | Path, conversation_id: str, run_id: str) 
 
 def _safe_path(root: Path, relative: str) -> Path:
     normalized = str(relative or "").replace("\\", "/").lstrip("/")
-    # Resolve parents for confinement, but preserve the leaf symlink itself.
-    # Undo replaces a link; it must never write through it to its referent.
+    # The files slot decides what stays inside the root (looked up at call time).
+    # The leaf is deliberately not resolved: undo replaces a link, it must never
+    # follow one out of the root, so the scope resolves the parent and the leaf
+    # name is kept as written.
+    scope = fs_scope.scopes().scope(root)
     lexical = Path(os.path.abspath(root / normalized))
-    target = lexical.parent.resolve() / lexical.name
+    if lexical == Path(os.path.abspath(root)):
+        return scope.resolve(".")
     try:
-        target.relative_to(root.resolve())
-    except ValueError as exc:
+        parent = scope.resolve(str(lexical.parent))
+    except (ValueError, OSError) as exc:
         raise RedesignUndoError(f"Refusing a path outside the selected project: {relative}") from exc
-    return target
+    return parent / lexical.name
 
 
 def _file_state(path: Path) -> dict[str, Any]:

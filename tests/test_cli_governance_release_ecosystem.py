@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from thomas.cli.main import cli
@@ -70,8 +71,9 @@ def test_cli_security_audit_json_keeps_optional_tool_warning_on_stderr(tmp_path:
     json.loads(result.stdout)
 
 
-def test_cli_plugins_certify_and_update_json(tmp_path: Path) -> None:
+def test_cli_plugins_certify_and_update_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _write_min_config(tmp_path)
+    monkeypatch.setenv("THOMAS_MEMORY_ROOT", str(tmp_path / "runtime"))
     runtime_root = tmp_path / "runtime" / ".thomas" / "cli"
     runtime_root.mkdir(parents=True, exist_ok=True)
     (runtime_root / "plugins.json").write_text(

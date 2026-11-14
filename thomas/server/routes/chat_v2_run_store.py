@@ -40,7 +40,7 @@ class ChatV2RunRecorder:
             self.persistence_failed = True
             log.warning("Chat V2 run event persistence failed: %s", exc)
 
-    def finish(self, *, ok: bool, usage: dict[str, Any] | None = None) -> None:
+    def finish(self, *, ok: bool, usage: dict[str, Any] | None = None, error: str | None = None) -> None:
         if self.module is None or self.finished:
             return
         persistence_ok = not self.persistence_failed
@@ -54,7 +54,9 @@ class ChatV2RunRecorder:
             finally:
                 self.writer_closed = True
         final_ok = bool(ok and persistence_ok)
-        error = None if final_ok else (_PERSISTENCE_EVENT_ERROR if not persistence_ok else "chat turn failed")
+        error = (
+            None if final_ok else (_PERSISTENCE_EVENT_ERROR if not persistence_ok else (error or "chat turn failed"))
+        )
         try:
             self.module.finalize_run(
                 self.run_id,
@@ -88,17 +90,17 @@ class ChatV2RunLifecycle:
         self.launcher_task = task
         return task
 
-    def finish(self, *, ok: bool) -> None:
+    def finish(self, *, ok: bool, error: str | None = None) -> None:
         if self.finished:
             return
         self.finished = True
         if not ok and self.launcher_task is not None and not self.launcher_task.done():
             self.launcher_task.cancel()
-        self.recorder.finish(ok=ok, usage=self.usage())
+        self.recorder.finish(ok=ok, usage=self.usage(), **({"error": error} if error else {}))
 
     def _on_handler_done(self, task: asyncio.Task[Any]) -> None:
         if task.cancelled():
-            self.finish(ok=False)
+            self.finish(ok=False, error="chat turn cancelled")
 
 
 def start_chat_v2_run(

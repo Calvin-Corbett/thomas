@@ -8,6 +8,7 @@ stops cleanly when the server shuts down.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -128,3 +129,36 @@ def test_run_audit_once_returns_a_result_rather_than_raising(tmp_path) -> None:
     payload = run_audit_once(str(tmp_path))
     assert isinstance(payload, dict)
     assert "ok" in payload
+
+
+def test_the_sweep_starts_with_the_server_and_stops_with_its_plugin(monkeypatch: pytest.MonkeyPatch) -> None:
+    from thomas.core.kernel import Kernel, stop
+    from thomas.server import consolidation_maintenance as maintenance
+
+    async def scenario() -> None:
+        started = asyncio.Event()
+        cancelled = []
+
+        async def sweep(app):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.append(True)
+                raise
+
+        monkeypatch.setattr(maintenance, "consolidation_maintenance_loop", sweep)
+        kernel = Kernel()
+        kernel.root.set("web", SimpleNamespace(app=object()))
+        fork = kernel.mount(maintenance.plugin)
+        await asyncio.sleep(0)
+        assert not started.is_set()  # not before the server is up
+
+        kernel.mark_ready()
+        await started.wait()
+
+        await stop(fork)
+
+        assert cancelled == [True]
+
+    asyncio.run(scenario())

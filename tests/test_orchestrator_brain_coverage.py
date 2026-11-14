@@ -412,17 +412,31 @@ async def test_partial_timeout_keeps_streamed_text_history_status_and_attempt_tr
 
     assert len(captured) == 1
     result = captured[0]
+    # final_pass.py's run_final_pass gives a timed-out reasoning pass one
+    # more, restricted try; this fake specialist times out on that one too,
+    # so this pins the worst case -- even then, the raw provider timeout text
+    # must never reach the user (Requirement 1: "never end in a timeout
+    # message"), and two passes really did run (attempts == 2, bookkeeping).
     assert result.status == SpecialistStatus.TIMEOUT
-    assert result.attempts == 1
+    assert result.attempts == 2
     partial = "The first confirmed fact [proof](sandbox:/tmp/proof.txt)."
-    assert result.content == partial
+    # Exact, not startswith: this fake specialist repeats itself on the final
+    # pass too, and join_pass_texts must not silently drop or duplicate text
+    # beyond what actually happened -- the two passes' text, once each, joined
+    # by one blank line.
+    assert result.content == f"{partial}\n\n{partial}"
     visible = "".join(dispatcher.text_parts)
-    assert visible.startswith(partial)
-    assert "timed out before it could finish" in visible
-    assert "retried once" not in visible
+    failure_text = (
+        "I hit this turn's time limit before finishing (150-second limit). "
+        "I retried once, but it still failed. The text above was preserved. Please try again."
+    )
+    assert visible == f"{partial}\n\n{partial}\n\n{failure_text}"
+    assert "timed out before it could finish" not in visible
+    assert "the selected model" not in visible.lower()
+    assert "time limit" in visible.lower()
     assert "The text above was preserved" in visible
     assert updated.last_assistant_message() == visible
-    assert dispatcher.done_payloads[-1]["attempts"] == 1
+    assert dispatcher.done_payloads[-1]["attempts"] == 2
 
 
 def test_background_status_formatter_covers_active_failed_and_mixed_states() -> None:

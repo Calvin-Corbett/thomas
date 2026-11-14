@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "thomas-ai"
 # Release 0.19.0: security-reviewed local Chat, Code, and Work lifecycle checkpoint (2026-07-18).
-version = "0.19.37"
+version = "0.19.52"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}
@@ -59,6 +59,8 @@ server = [
     "pypdf>=6.0,<7",
     "python-docx>=1.0",
     "Pillow>=10.0",
+    # Thomas's own live listening (thomas/server/voice_ears.py). Apache-2.0; the model it runs is not in this repo.
+    "sherpa-onnx==1.13.6",
 ]
 mcp = ["mcp>=1.0"]
 telegram = ["python-telegram-bot>=21.0"]
@@ -106,7 +108,7 @@ exclude = [
 ]
 
 [tool.setuptools.package-data]
-"thomas" = ["server/web/*", "server/web/**/*", "autonomy/ui/*", "companion/policy_profiles/*.json"]
+"thomas" = ["server/web/*", "server/web/**/*", "server/tool_manifests/*.toml", "autonomy/ui/*", "companion/policy_profiles/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

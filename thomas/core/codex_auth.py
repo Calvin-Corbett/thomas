@@ -10,8 +10,39 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 AccessTokenResolver = Callable[[str | None], Awaitable[str]]
+RejectedTokenRecovery = Callable[[str | None, str], Awaitable[tuple[str | None, bool]]]
 
 _access_token_resolver: AccessTokenResolver | None = None
+_rejected_token_recovery: RejectedTokenRecovery | None = None
+_recovered_tokens: dict[tuple[str | None, str], str] = {}
+
+
+async def current_access_token(profile: str | None, configured_token: str) -> str:
+    """Replace a previously rejected embedded token with the store's current token."""
+    replacement = _recovered_tokens.get((profile, configured_token))
+    if replacement and _access_token_resolver is not None:
+        current = await resolve_access_token(profile)
+        if current != configured_token:
+            return current
+    return configured_token
+
+
+def register_rejected_token_recovery(recovery: RejectedTokenRecovery) -> None:
+    """Register server-side recovery without importing storage into core."""
+    global _rejected_token_recovery
+    _rejected_token_recovery = recovery
+
+
+async def recover_rejected_token(profile: str | None, rejected_token: str) -> tuple[str | None, bool]:
+    """Return a replacement and whether the live Codex login supplied or held the token."""
+    recovery = _rejected_token_recovery
+    if recovery is None:
+        return None, False
+    replacement, live_token_checked = await recovery(profile, rejected_token)
+    if replacement and replacement != rejected_token:
+        _recovered_tokens[(profile, rejected_token)] = replacement
+        return replacement, live_token_checked
+    return None, live_token_checked
 
 
 def register_access_token_resolver(resolver: AccessTokenResolver) -> None:

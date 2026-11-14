@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.server.app_middleware_helpers import inject_ask_user_panel, inject_settings_parity
+from thomas.server.app_middleware_helpers import (
+    _CHAT_MODULES,
+    inject_ask_user_panel,
+    inject_settings_parity,
+)
 
 PAGE = "<html><body><p>hi</p></body></html>"
 
@@ -50,7 +54,9 @@ def test_each_tag_is_stamped_from_its_own_file_and_changes_with_it(tmp_path: Pat
 
 def test_a_missing_module_file_falls_back_to_the_page_build_stamp(tmp_path: Path) -> None:
     html = inject_ask_user_panel(PAGE, web_dir=tmp_path)
-    assert html.count("__THOMAS_WEB_BUILD__") == 8
+    # One fallback stamp per injected module. Counted from the list rather than
+    # written as a literal, so adding a module does not fail this on arithmetic.
+    assert html.count("__THOMAS_WEB_BUILD__") == len(_CHAT_MODULES)
 
 
 def test_settings_parity_is_stamped_the_same_way(tmp_path: Path) -> None:

@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import json
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -132,11 +134,6 @@ def _added_lines_per_file(base: str | None = None, head: str | None = None) -> d
                     result[current_path].add(i)
     _HUNKS_CACHE[cache_key] = result
     return result
-
-
-def _added_line_ranges(rel_path: str, base: str | None = None, head: str | None = None) -> set[int]:
-    """Return line numbers that are genuinely new in ``rel_path``."""
-    return _added_lines_per_file(base, head).get(rel_path, set())
 
 
 _RENAME_CACHE: dict[tuple[str | None, str | None], set[str]] = {}
@@ -272,6 +269,85 @@ def _handler_satisfies_policy(handler: ast.ExceptHandler) -> bool:
     return all(checks.get(requirement, False) for requirement in requires)
 
 
+def _handler_signature(handler: ast.ExceptHandler) -> str:
+    """A fingerprint of a handler that survives being moved to another file.
+
+    Normalises the bound exception name, because an extraction routinely renames
+    it (`except Exception as e` -> `except Exception as exc`), and drops source
+    positions and comments, which a move always changes. What remains is the
+    caught type plus the body's structure - enough to recognise the same handler
+    in its new home, specific enough that two different handlers do not collide.
+    """
+    alias = handler.name
+
+    class _NormaliseAlias(ast.NodeTransformer):
+        def visit_Name(self, node: ast.Name) -> ast.AST:
+            if alias and node.id == alias:
+                return ast.copy_location(ast.Name(id="_exc", ctx=node.ctx), node)
+            return node
+
+    body = [_NormaliseAlias().visit(copy.deepcopy(stmt)) for stmt in handler.body]
+    caught = ast.dump(handler.type, include_attributes=False) if handler.type else "bare"
+    rendered = "|".join(ast.dump(stmt, include_attributes=False) for stmt in body)
+    return f"{caught}||{rendered}"
+
+
+def _broad_handlers_by_line(source: str) -> dict[int, str]:
+    """Line number -> signature, for the broad handlers in `source`."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+    return {
+        node.lineno: _handler_signature(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ExceptHandler) and _is_broad_except(node)
+    }
+
+
+def _broad_handler_signatures(source: str) -> Counter[str]:
+    """Signatures of every broad handler in `source`, counted."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return Counter()
+    return Counter(
+        _handler_signature(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ExceptHandler) and _is_broad_except(node)
+    )
+
+
+def _signatures_removed_elsewhere(python_files: list[str], *, base: str | None, head: str | None) -> Counter[str]:
+    """Broad handlers this commit DELETED from the other files it touched.
+
+    The ratchet forgives a pure rename (R100), but an EXTRACTION is not a rename
+    to git: a new module holding a subset of another file is an add, so the code
+    below flags every handler in it as newly introduced. Phase 0a of the Praxis
+    plan is nothing but extractions, and this blind spot has already distorted two
+    of them - it forced three `except Exception:` narrowings during the worker.py
+    split (CHANGELOG "the commit's own move-only description overstated it"), and
+    it made another agent leave `_from_iso` behind rather than narrow a handler it
+    had not reviewed. Both times the gate pushed a refactor toward a substantive
+    change nobody wanted, which is worse than the debt it was guarding.
+
+    Measured 2026-09-20: Thomas split its own loop_execution.py and moved the
+    skill-discovery and auto-compaction fallbacks into two new modules. Both were
+    reported as new; both stood verbatim at HEAD (`:224`, `:446`).
+
+    Counting, not set membership, is the point: if a handler exists twice after a
+    commit that deleted one copy, that is a duplication and only one is forgiven.
+    """
+    removed: Counter[str] = Counter()
+    for rel_path in python_files:
+        before = _content_at_rev(base, rel_path) if base else _git_show_head(rel_path)
+        if not before:
+            continue
+        after = (_content_at_rev(head, rel_path) if head else _staged_content(rel_path)) or ""
+        removed.update(_broad_handler_signatures(before) - _broad_handler_signatures(after))
+    return removed
+
+
 def _find_broad_handlers(source: str) -> list[int]:
     """Find line numbers of broad exception handlers that violate policy."""
     if not _require_specific_exceptions():
@@ -292,6 +368,28 @@ def _find_broad_handlers(source: str) -> list[int]:
     return violations
 
 
+def _new_without_added_lines(base_source: str | None, staged_source: str, staged_violations: set[int]) -> set[int]:
+    """Which handlers are new in a file whose change added no line: those the earlier version did not already hold.
+
+    A change that only deletes cannot write a handler, but it can stop one meeting the rule, by deleting its ``raise``
+    or its log line. Each handler that broke the rule before forgives one with the same signature now; any other is
+    new. An earlier version that is missing or cannot be parsed forgives nothing.
+    """
+    if base_source is None:
+        return set(staged_violations)
+    base_lines = set(_find_broad_handlers(base_source))
+    before = Counter(sig for line, sig in _broad_handlers_by_line(base_source).items() if line in base_lines)
+    by_line = _broad_handlers_by_line(staged_source)
+    new: set[int] = set()
+    for lineno in sorted(staged_violations):
+        signature = by_line.get(lineno)
+        if signature and before[signature] > 0:
+            before[signature] -= 1
+        else:
+            new.add(lineno)
+    return new
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default=None, help="Optional git base ref/SHA for diff-range mode.")
@@ -306,6 +404,11 @@ def run(argv: list[str] | None = None) -> int:
 
     all_violations: list[dict[str, object]] = []
     ratchet_enabled = _exception_ratchet()
+    # Budget of handlers this commit deleted elsewhere; an extracted handler spends
+    # one. Computed once, consumed across files, so a move is forgiven exactly once.
+    moved_budget = (
+        _signatures_removed_elsewhere(python_files, base=args.base, head=args.head) if ratchet_enabled else Counter()
+    )
 
     for rel_path in python_files:
         staged_source = _content_at_rev(args.head, rel_path) if args.base and args.head else _staged_content(rel_path)
@@ -325,14 +428,28 @@ def run(argv: list[str] | None = None) -> int:
             # Only flag handlers whose line numbers fall within added hunks.
             # This eliminates false positives from handlers that merely
             # shifted position due to code inserted above them.
-            added_lines = _added_line_ranges(rel_path, args.base, args.head)
+            added_lines = _added_lines_per_file(args.base, args.head).get(rel_path)
             if added_lines:
                 new_violations = {ln for ln in staged_violations if ln in added_lines}
+            elif added_lines is not None:
+                # In the diff with no added line: the change only deletes. Until 2026-11-09 this fell through to
+                # "flag all", so deleting anything from a file with an old handler was refused as writing one.
+                earlier = _content_at_rev(args.base, rel_path) if args.base else _git_show_head(rel_path)
+                new_violations = _new_without_added_lines(earlier, staged_source, staged_violations)
             else:
-                # No diff hunks available (new file or git issue) — flag all
+                # Not in the diff at all: the change could not be read, so flag all.
                 new_violations = staged_violations
         else:
             new_violations = staged_violations
+
+        if new_violations and moved_budget:
+            # Forgive handlers this commit moved here from a file it also emptied.
+            by_line = _broad_handlers_by_line(staged_source)
+            for lineno in sorted(new_violations):
+                signature = by_line.get(lineno)
+                if signature and moved_budget[signature] > 0:
+                    moved_budget[signature] -= 1
+                    new_violations.discard(lineno)
 
         for lineno in sorted(new_violations):
             all_violations.append({"path": rel_path, "line": lineno})

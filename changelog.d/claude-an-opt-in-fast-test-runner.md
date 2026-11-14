@@ -1,0 +1,3 @@
+### Added
+
+- **`scripts/fast_tests.py` is an opt-in runner for a selection of test files.** It turns more than five file targets into one directory run with an ignore hook (dropping `.html`/`.mjs` harness files unless named), names a bytecode cache folder after the HEAD tree plus the bytes of every changed file so it is never shared across trees, picks a worker count from CPUs and free memory (and runs serially when `pytest-xdist` is not installed for the test interpreter), writes a ledger line per run, and has a `--parity` mode that compares per-test outcomes with a serial run. Nothing calls it: it is not wired into the pre-commit gates, the hand-in check or CI.

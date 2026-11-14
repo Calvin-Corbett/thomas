@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from thomas.core.file_access import file_access_refusal_remedy
+from thomas.core.file_access import deterministic_refusal_remedy, file_access_refusal_remedy
 from thomas.server.chat_delegation_deliverable import _worker_answer_text
 
 
@@ -23,14 +23,32 @@ def result_with_policy_remedy(summary: object, policy_refusals: Sequence[str] | 
     without a remedy (the OS-system-dir one) adds nothing.
     """
     text = str(summary or "")
-    remedies: list[str] = []
+    setting_remedies: list[str] = []
+    runtime_remedies: list[str] = []
     for refusal in policy_refusals or []:
-        remedy = file_access_refusal_remedy(refusal)
-        if remedy and remedy not in remedies and remedy not in text:
-            remedies.append(remedy)
-    if not remedies:
+        # Two ladders refuse writes, in different vocabularies. This read only the
+        # file-access one until 2026-09-19, so a runtime-protection block reached the
+        # person as "the refactor stalled ... I can rerun it with a narrower scope" -
+        # advice that could not work, since scope was never the obstacle.
+        ladder = file_access_refusal_remedy(refusal)
+        target = setting_remedies if ladder else runtime_remedies
+        remedy = ladder or deterministic_refusal_remedy(refusal)
+        if remedy and remedy not in target and remedy not in text:
+            target.append(remedy)
+
+    notes: list[str] = []
+    if setting_remedies:
+        notes.append(
+            "A file write was refused by Thomas's file-access setting — a setting you control. "
+            + " ".join(setting_remedies)
+        )
+    if runtime_remedies:
+        # Deliberately NOT called a setting: this one is not a slider the person
+        # raises, and saying so would send them looking for a control that is not there.
+        notes.append(" ".join(runtime_remedies))
+    if not notes:
         return text
-    note = "A file write was refused by Thomas's file-access setting — a setting you control. " + " ".join(remedies)
+    note = "\n\n".join(notes)
     return f"{text}\n\n{note}" if text else note
 
 

@@ -11,7 +11,7 @@
   // updating on things". The live-event ring above already bounds memory.
   const MAX_VISIBLE_PROGRESS_EVENTS = 120;
   const MAX_PROGRESS_EVENT_CHARS = 420;
-  const NARRATIVE_EVENT_KINDS = new Set(['approval', 'disconnected', 'done', 'final', 'insight', 'planning', 'say', 'steering', 'stopped', 'stopping']);
+  const NARRATIVE_EVENT_KINDS = new Set(['approval', 'disconnected', 'reconnected', 'done', 'final', 'insight', 'planning', 'say', 'settings', 'steering', 'stopped', 'stopping']);
   const state = {
     conversations: [], activeId: '', conversation: null, liveEvents: [], changes: [], tree: [], treeLoaded: false, treePath: '', artifacts: [], filePreview: null,
     pendingApproval: null, pendingRequest: null, lastContext: {}, running: false, runStartedAt: 0, runStatus: 'ready', source: null,
@@ -27,7 +27,8 @@
     // "No code tasks yet." is only honest in the 'loaded' state -- ~197 real
     // tasks rendered under that claim while the first fetch was in flight.
     historyLoadState: 'pending',
-    runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 360, pendingUserText: '',
+    openingConversationId: '',
+    runId: '', eventCursor: 0, retryRequest: null, drawerOpen: false, drawerWidth: 460, pendingUserText: '',
   };
   let adapterActive = false;
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -46,7 +47,7 @@
   // one of the fourteen sentences the callers below pass in, because a server
   // error almost always carries *some* message. Opening a deleted task showed
   // "not found", twice, and never once said what had not been found; the author's
-  // "Could not open that Code task." was written, passed in, and dropped.
+  // "Could not open that Build task." was written, passed in, and dropped.
   function errorText(error, fallback) {
     const reason = error instanceof Error && typeof error.message === 'string'
       ? error.message.trim()
@@ -148,179 +149,92 @@
   // These are const bindings now, not hoisted declarations, so nothing above this
   // line may *call* them at load time. Nothing does: lines 1-132 only declare.
   const {
-    eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, refreshElapsed, eventHtml,
-    finalReplyEvent, progressEvents, failureSummary, turnHtml, replyHtml,
-    elapsedLabel, narrativeActivityHtml, technicalActivityHtml, transcriptEvents, flagExpectedProbe,
+    eventLabel, annotateTerminalEvent, eventType, isTechnicalEvent, eventHtml, finalReplyEvent, progressEvents,
+    failureSummary, turnHtml, replyHtml, replyBlockHtml, elapsedLabel, transcriptEvents, transcriptText, flagExpectedProbe,
     interleavedActivityHtml, emptyStateHtml, copyReplyText,
   } = window.ThomasCodeEvents.create({
     MAX_VISIBLE_PROGRESS_EVENTS, MAX_PROGRESS_EVENT_CHARS, NARRATIVE_EVENT_KINDS, state, esc,
     codeResults, surface, isInternalResultPath, safely, pushLiveEvent, render, send,
   });
-  function transcriptScroller(root) {
-    const transcript = root.querySelector('.tc-code-transcript');
-    const layout = root.querySelector('.tc-code-layout');
-    if (layout && transcript && layout.scrollHeight > layout.clientHeight && transcript.scrollHeight <= transcript.clientHeight) return layout;
-    return transcript;
-  }
+  const liveView = window.ThomasCodeLiveView.create({
+    state, surface, isActive: () => adapterActive, render, loadFile, esc, MAX_LIVE_EVENTS, MAX_VISIBLE_PROGRESS_EVENTS, annotateTerminalEvent, flagExpectedProbe, eventType, eventHtml, isTechnicalEvent, progressEvents, finalReplyEvent, interleavedActivityHtml
+  });
+  // Pause, resume, messages to the run's agents, answers to its questions, and
+  // the parts of the page that read them (the agents, the live cards, the
+  // composer's queue, the header and the sidebar rows) -- unified_code_controls.js.
+  if (!window.ThomasCodeControls) throw new Error('unified_code_controls.js must load before unified_code_mode.js');
+  const controlsFeature = window.ThomasCodeControls.create({
+    state, esc, host, render, safely, send, stopRun, steer, startNextQueued, pushLiveEvent,
+    recordError, changeAction, surface, codeProjects, isInternalResultPath, transcriptText, isActive: () => adapterActive,
+  });
+  function transcriptScroller(...args) { return liveView.transcriptScroller(...args); }
+  function scrollTranscriptToNewest(...args) { return liveView.scrollTranscriptToNewest(...args); }
+  function updateRunStatus(...args) { return liveView.updateRunStatus(...args); }
+  function refreshOpenPagePreview(...args) { return liveView.refreshOpenPagePreview(...args); }
+  function pushLiveEvent(...args) { return liveView.pushLiveEvent(...args); }
+  function trimLiveEventDom(...args) { return liveView.trimLiveEventDom(...args); }
+  function appendLiveEvent(...args) { return liveView.appendLiveEvent(...args); }
 
-  // Arrive at the newest turn, not the oldest.
-  //
-  // A Code transcript that overflows its surface opened at scrollTop 0, so the
-  // run report -- the newest thing on the page and the whole answer to "did it
-  // work" -- sat below the fold and had to be hunted for. Measured on a real
-  // conversation: 702px of unscrolled overflow with the verdict card at y=1419
-  // inside an 868px scroller, identically via the sidebar click and the deep
-  // link. Short transcripts were already right, because `margin-top:auto` pins
-  // them to the bottom, which is exactly why this only bit the long ones and
-  // went unnoticed.
-  //
-  // Runs twice on purpose. An artifact thumbnail hydrates asynchronously and
-  // grows the transcript underneath the first jump, which would otherwise leave
-  // the newest turn just short of the bottom -- the same amount wrong, quietly.
-  function scrollTranscriptToNewest() {
-    const jump = () => {
-      const root = surface();
-      const transcript = root && transcriptScroller(root);
-      if (transcript) transcript.scrollTop = transcript.scrollHeight;
-    };
-    jump();
-    // Guarded: this module is also loaded by a Node contract test that stubs a
-    // DOM but has no rAF, and an unguarded call took that test down with a
-    // ReferenceError.
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(jump);
-  }
+  const surfaceFeature = window.ThomasCodeSurface.create({
+    get CODE_ANVIL_SVG() { return CODE_ANVIL_SVG; },
+    get adapterActive() { return adapterActive; }, set adapterActive(value) { adapterActive = value; },
+    get approvePending() { return approvePending; },
+    get bindHistoryChoice() { return bindHistoryChoice; },
+    get changeAction() { return changeAction; },
+    get checkpointChanges() { return checkpointChanges; },
+    get codeProjects() { return codeProjects; },
+    get codeResults() { return codeResults; },
+    get controls() { return controlsFeature; },
+    get copyReplyText() { return copyReplyText; },
+    get emptyStateHtml() { return emptyStateHtml; },
+    get esc() { return esc; },
+    get eventLabel() { return eventLabel; },
+    get eventType() { return eventType; },
+    get failureSummary() { return failureSummary; },
+    get finalReplyEvent() { return finalReplyEvent; },
+    get historyAskHtml() { return historyAskHtml; },
+    get host() { return host; },
+    get interleavedActivityHtml() { return interleavedActivityHtml; },
+    get isInternalResultPath() { return isInternalResultPath; },
+    get loadFile() { return loadFile; },
+    get loadTree() { return loadTree; },
+    get progressEvents() { return progressEvents; },
+    get pushLiveEvent() { return pushLiveEvent; },
+    get replyHtml() { return replyHtml; },
+    get replyBlockHtml() { return replyBlockHtml; },
+    get safely() { return safely; },
+    get send() { return send; },
+    get state() { return state; },
+    get stopRun() { return stopRun; },
+    get surface() { return surface; },
+    get transcriptScroller() { return transcriptScroller; },
+    get turnHtml() { return turnHtml; },
+  });
 
-  function captureRenderState(root) {
-    const active = document.activeElement;
-    const steer = root.querySelector('#tc-code-steer');
-    const transcript = transcriptScroller(root);
-    return {
-      activeId: active && root.contains(active) ? active.id : '',
-      steerValue: steer ? steer.value : '',
-      steerStart: steer && typeof steer.selectionStart === 'number' ? steer.selectionStart : null,
-      steerEnd: steer && typeof steer.selectionEnd === 'number' ? steer.selectionEnd : null,
-      transcriptScroll: transcript ? transcript.scrollTop : 0,
-    };
-  }
-
-  function restoreRenderState(root, saved) {
-    const steer = root.querySelector('#tc-code-steer');
-    const transcript = transcriptScroller(root);
-    if (steer) steer.value = saved.steerValue;
-    if (transcript) transcript.scrollTop = saved.transcriptScroll;
-    const active = saved.activeId && root.querySelector(`#${saved.activeId}`);
-    if (active) {
-      active.focus();
-      if (typeof active.setSelectionRange === 'function' && saved.steerStart !== null) active.setSelectionRange(saved.steerStart, saved.steerEnd);
-    }
-  }
-
-  function updateRunStatus() {
-    if (!adapterActive) return;
-    const badge = surface()?.querySelector('.tc-mode-status'); if (!badge) return;
-    const labels = { ready: 'Ready', working: 'Working', stopping: 'Stopping', approval: 'Approval required', completed: 'Completed', noop: 'No changes made', stopped: 'Stopped', disconnected: 'Disconnected', failed: 'Needs attention' };
-    badge.className = `tc-mode-status is-${state.runStatus}`;
-    badge.textContent = labels[state.runStatus] || 'Ready';
-  }
-
-  // While a run is writing, re-read whatever page is being previewed so it
-  // updates in front of you. Throttled, and only for a rendered page that is
-  // already open -- this never opens a preview on its own.
-  let _previewRefreshAt = 0;
-  function refreshOpenPagePreview() {
-    const open = state.filePreview;
-    if (!open || state.filePreviewRendered === false) return;
-    if (!/\.x?html?$/i.test(String(open.path || ''))) return;
-    const now = Date.now();
-    if (now - _previewRefreshAt < 1500) return;
-    _previewRefreshAt = now;
-    void loadFile(open.path).catch(() => {});
-  }
-
-  function pushLiveEvent(event) {
-    annotateTerminalEvent(event, {
-      get name() { return state.terminalTool; },
-      set name(value) { state.terminalTool = value; },
-    });
-    // Same probe flag the durable transcript parse applies, so the live row and
-    // the reloaded row agree. "Has a tool_result come before this one" is read
-    // off the live ring; if the run's first tool_result has already scrolled out
-    // of the 120-event ring, a later one could in principle be misread as the
-    // first -- but by then hundreds of events have passed and the durable
-    // render, which parses the whole transcript, is the record that lasts.
-    flagExpectedProbe(event, state.liveEvents.some(item => eventType(item) === 'tool_result'));
-    if (state.running) refreshOpenPagePreview();
-    const previous = state.liveEvents[state.liveEvents.length - 1];
-    if (event.kind === 'say' && event.delta && previous && previous.kind === 'say' && previous.delta) {
-      previous.text = `${previous.text || ''}${event.text || ''}`;
-      return true;
-    }
-    state.liveEvents.push(event);
-    while (state.liveEvents.length > MAX_LIVE_EVENTS) state.liveEvents.shift();
-    return false;
-  }
-
-  function trimLiveEventDom(list) {
-    // Trim ONLY against the ring bound. This used to trim down to the count of
-    // narrative events, which was written for the old feed where the list held
-    // narrative rows only — with receipts streaming inline it deleted the run's
-    // history off the top while the reader watched (owner: "I can't see stuff
-    // 7 messages ago").
-    while (list.children.length > MAX_LIVE_EVENTS) list.firstElementChild.remove();
-  }
-
-  function appendLiveEvent(event, replaceLast) {
-    const list = surface()?.querySelector('#tc-code-live-events'); if (!list) { render(); return; }
-    const transcript = transcriptScroller(surface());
-    const nearBottom = !transcript || transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
-    if (state.liveEvents.length === MAX_LIVE_EVENTS) {
-      render();
-      return;
-    }
-    if (eventType(event) === 'final') {
-      render();
-      return;
-    }
-    // Every event — narrative AND technical (tool/terminal) — streams inline in
-    // arrival order into the single live feed, so the run reads action-by-action
-    // in the chat instead of hiding tool work behind a collapsed block.
-    const progressCount = state.liveEvents.filter(item => ['insight', 'planning', 'say'].includes(eventType(item))).length;
-    if (progressCount > MAX_VISIBLE_PROGRESS_EVENTS) {
-      render();
-      const nextTranscript = transcriptScroller(surface());
-      if (nearBottom && nextTranscript) nextTranscript.scrollTop = nextTranscript.scrollHeight;
-      return;
-    }
-    if (replaceLast && list.lastElementChild) {
-      // A merged say-delta replaces the say it merged into. If the last child
-      // is a receipt cluster instead (a tool ran mid-sentence), the cheap swap
-      // would clobber the cluster — rebuild instead.
-      if (list.lastElementChild.classList.contains('tc-code-receipts')) { render(); return; }
-      list.lastElementChild.outerHTML = eventHtml(state.liveEvents[state.liveEvents.length - 1], false);
-    } else if (isTechnicalEvent(event)) {
-      // The incremental path must build the SAME structure the full render
-      // builds: receipts live inside a railed cluster under the last thing
-      // Thomas said, and the rail breaks when he talks. Without this, every
-      // streamed receipt landed bare (no rail) until the next full render
-      // rebuilt the thread (owner: "the line on the left isn't there").
-      let cluster = list.lastElementChild;
-      if (!cluster || !cluster.classList.contains('tc-code-receipts')) {
-        list.insertAdjacentHTML('beforeend', '<div class="tc-code-receipts"></div>');
-        cluster = list.lastElementChild;
-      }
-      cluster.insertAdjacentHTML('beforeend', eventHtml(event, false));
-    } else {
-      list.insertAdjacentHTML('beforeend', eventHtml(event, false));
-    }
-    trimLiveEventDom(list);
-    if (nearBottom && transcript) transcript.scrollTop = transcript.scrollHeight;
-  }
-
-  function closeSource() {
-    const source = state.source;
-    state.source = null;
-    if (source) source.close();
-  }
+  const run_streamFeature = window.ThomasCodeRunStream.create({
+    get adoptStartedConversation() { return adoptStartedConversation; },
+    get appendLiveEvent() { return appendLiveEvent; },
+    get clearContextState() { return clearContextState; },
+    get codeProjects() { return codeProjects; },
+    get codeResults() { return codeResults; },
+    get controls() { return controlsFeature; },
+    get errorText() { return errorText; },
+    get host() { return host; },
+    get lifecycle() { return lifecycle; },
+    get loadConversation() { return loadConversation; },
+    get maybeAutoPlaytest() { return maybeAutoPlaytest; },
+    get pushLiveEvent() { return pushLiveEvent; },
+    get refresh() { return refresh; },
+    get render() { return render; },
+    get safely() { return safely; },
+    get scrollTranscriptToNewest() { return scrollTranscriptToNewest; },
+    get send() { return send; },
+    get state() { return state; },
+    get terminalRunStatus() { return terminalRunStatus; },
+    get updateRunStatus() { return updateRunStatus; },
+    get waitForRestartReady() { return waitForRestartReady; },
+  });
+  function closeSource(...args) { return run_streamFeature.closeSource(...args); }
 
   function replacePendingApproval(data, request) {
     const retry = { ...request };
@@ -332,6 +246,7 @@
   }
 
   function adoptStartedConversation(conversationId, projectRoot, runId) {
+    state.openingConversationId = '';
     if (state.activeId !== conversationId) {
       state.contextEpoch += 1;
       state.conversation = null;
@@ -347,285 +262,8 @@
     state.projectRoot = projectRoot || state.projectRoot;
     lifecycle().adoptRunIdentity(state, runId);
   }
-
-  async function acceptStartedRun(data) {
-    adoptStartedConversation(data.conversation_id, data.project_root, data.run_id);
-    lifecycle().registerRunProof(state, data.conversation_id, data.run_id);
-    state.retryRequest = null;
-    state.pendingApproval = null;
-    state.pendingRequest = null;
-    if (data.run_state === 'completed' || data.run_state === 'persistence_failed') {
-      // The same predicate the streaming `done` frame uses -- see
-      // `terminalRunStatus`. This line used to spell the decision a second time
-      // and read `data.outcome`, which is why a replayed conversational answer
-      // landed on the badge as the raw word 'conversation'.
-      state.runStatus = terminalRunStatus(data);
-      const epoch = state.contextEpoch;
-      const runId = state.runId;
-      const proof = state.runProof ? { ...state.runProof } : null;
-      const results = await Promise.allSettled([loadConversation(data.conversation_id, { internal: true, epoch, deferRender: true }), refresh({ throwOnError: true })]);
-      const loaded = results[0].status === 'fulfilled' && results[0].value === true;
-      const durable = data.persistence_confirmed === true && loaded && state.contextEpoch === epoch && state.runId === runId && lifecycle().runIsDurable(state.conversation, proof);
-      if (durable) {
-        state.liveEvents = [];
-        state.artifacts = [];
-        state.runProof = null;
-      } else {
-        state.runStatus = 'failed';
-        pushLiveEvent({ type: 'error', text: 'Thomas finished, but the durable Code reply could not be confirmed. Live evidence was preserved.' });
-      }
-      results.filter(result => result.status === 'rejected').forEach(result => pushLiveEvent({ type: 'error', text: errorText(result.reason, 'The Code result could not be refreshed.') }));
-      finishBusy(); render();
-      // The replayed already-finished run has the same below-the-fold problem
-      // finishRun documents: its durable turn just landed in a conversation the
-      // reader is looking at, so land the viewport on it too.
-      if (durable) scrollTranscriptToNewest();
-      // Thomas tests his own work before handing it over: a durable build that
-      // produced a playable page gets auto-playtested, and the verdict +
-      // recommendations land in the chat. Only for a real build (files
-      // changed) so an explain/answer run is never tested.
-      if (durable) void safely(() => maybeAutoPlaytest(), 'Could not start the automatic playtest.');
-      return durable;
-    }
-    openStream();
-    await refresh();
-    return true;
-  }
-
-  function render() {
-    if (!adapterActive) return;
-    const root = surface(); if (!root) return;
-    const savedRenderState = captureRenderState(root);
-    const statusLabels = { ready: 'Ready', working: 'Working', stopping: 'Stopping', approval: 'Approval required', completed: 'Completed', noop: 'No changes made', stopped: 'Stopped', disconnected: 'Disconnected', failed: 'Needs attention' };
-    const turns = state.conversation && Array.isArray(state.conversation.turns) ? state.conversation.turns : [];
-    const liveFinalEvent = finalReplyEvent(state.liveEvents);
-    const liveActivityEvents = progressEvents(state.liveEvents, liveFinalEvent);
-    // Codex-style: stream EVERY action inline in arrival order as it happens —
-    // tool runs and terminal commands ("Used Read", "Ran terminal command") land
-    // right next to the narrative updates instead of being hidden in a collapsed
-    // "Show details" block. (Owner: "he doesn't output stuff in the chat, he
-    // outputs it in the activity thing on the side.")
-    const liveNarrative = interleavedActivityHtml(liveActivityEvents, false);
-    const liveErrors = state.liveEvents.filter(event => eventType(event) === 'error');
-    // The live half of the never-suppress rule (the durable half lives in
-    // turnHtml): a failed run that nevertheless produced a final answer used to
-    // show only the answer here -- the `? :` made the two mutually exclusive --
-    // so the failure was invisible until the durable render replaced this, and
-    // when that render was the OLD one it dropped the answer instead. Both
-    // render now: the answer first, the failure note alongside. The note joins
-    // the answer only once the run has actually landed as failed; a recovered
-    // mid-run error next to a successful final would be an alarm about a
-    // problem the run already solved.
-    const liveAnswer = liveFinalEvent ? `<div class="tc-code-reply">${replyHtml(eventLabel(liveFinalEvent))}</div>` : '';
-    // Named for what it tests -- the RUN's landed status, not any one event's
-    // failure. Per-event failure flags must route through eventFailed() (the
-    // guard in test_a_failure_row_does_not_show_a_success_tick.py pins that);
-    // this is the other axis.
-    const liveRunLandedBad = state.runStatus === 'failed' || state.runStatus === 'disconnected';
-    const liveFailureNote = liveErrors.length && (!liveFinalEvent || liveRunLandedBad)
-      ? `<div class="tc-code-reply is-error">${esc(failureSummary({ ok: false }, liveErrors))}</div>` : '';
-    const liveReply = liveAnswer + liveFailureNote;
-    const liveTechnical = '';
-    // Hoisted so the empty state below is decided by the SAME condition that
-    // decides whether a live turn is drawn. Two expressions meaning "a run is on
-    // screen" is how they drift apart and both render at once -- which is
-    // precisely the bug this fixes.
-    const hasLiveTurn = Boolean(state.running || state.liveEvents.length);
-    // The page you SEND from never showed you your own message. `turns` comes
-    // from `state.conversation`, which is only refreshed from the server, so
-    // between pressing Enter and the run finishing the words you just typed were
-    // nowhere on screen. Measured on a live run at 1920:
-    // `.tc-code-turn.is-user` count was 0 while the live turn was already
-    // streaming, and the same conversation opened in a second tab showed the
-    // message fine -- so it was never missing data, only a missing render.
-    //
-    // Suppressed as soon as the server's copy arrives, decided at RENDER time
-    // rather than cleared on a lifecycle event. A clear that fires at the wrong
-    // moment leaves either no bubble or two identical ones; this cannot do
-    // either, because the pending copy is simply not drawn once `turns` has it.
-    // Compared on trimmed text, which is what the server round-trips.
-    const pendingUser = String(state.pendingUserText || '').trim();
-    const serverHasPending = Boolean(
-      pendingUser
-      && turns.some(turn => turn && turn.role === 'user' && String(turn.text || '').trim() === pendingUser),
-    );
-    const pendingUserTurn = pendingUser && !serverHasPending
-      ? turnHtml({ role: 'user', text: pendingUser })
-      : '';
-    const liveTurn = hasLiveTurn
-      // `is-live` only while the run actually is. The class drives
-      // `.tc-code-turn.is-live … small::after { content: ' · working' }`, and it
-      // was set for as long as a live turn existed at all -- which outlives the
-      // run. After Stop the header read "Thomas · Code · working" directly above
-      // its own note saying "Stopped — you interrupted this run." Measured:
-      // status "Stopped", turn still carrying is-live, suffix still " · working".
-      //
-      // `state.running` is the same condition the steer form already uses to hide
-      // itself on stop, so the two now agree instead of disagreeing.
-      ? `<article class="tc-code-turn is-agent${state.running ? ' is-live' : ''}" data-code-live-turn><div class="tc-code-message-head"><span class="tc-code-avatar is-anvil" aria-hidden="true">${window.ThomasIcons ? window.ThomasIcons.face('build', 15) : CODE_ANVIL_SVG}</span><strong>Thomas</strong><small>Code</small>${state.running && state.runStartedAt ? '<small class="tc-code-head-elapsed" data-code-elapsed-top>0s</small>' : ''}</div><div class="tc-code-turn-body"><div id="tc-code-live-events" aria-live="polite">${liveNarrative}</div><div id="tc-code-live-technical">${liveTechnical}</div>${liveReply}</div></article>`
-      : '<div id="tc-code-live-events" hidden></div><div id="tc-code-live-technical" hidden></div>';
-    const visibleChanges = state.changes.filter(change => !isInternalResultPath(change.file));
-    const changeRows = visibleChanges.map(change => `<article class="tc-code-change"><header><strong>${esc(change.file)}</strong><span><button data-code-keep="${esc(change.file)}">Keep</button><button data-code-revert="${esc(change.file)}">Revert</button></span></header><details><summary>View ${change.untracked ? 'new file' : 'diff'}</summary><pre>${esc(change.diff || (change.untracked ? 'New file' : 'No textual diff'))}</pre></details></article>`).join('');
-    const treeRows = state.tree.slice(0, 120).map(row => row.kind === 'directory' ? `<li class="is-dir"><button data-code-tree-dir="${esc(row.path)}"><i class="ph ph-caret-right"></i>${esc(row.name)}</button></li>` : row.kind === 'file' ? `<li><button data-code-tree-file="${esc(row.path)}"><i class="ph ph-file-code"></i><span>${esc(row.name || row.path || '')}</span></button></li>` : `<li><i class="ph ph-file"></i>${esc(row.name || row.path || '')}</li>`).join('');
-    const artifacts = [];
-    const artifactKeys = new Set();
-    turns.flatMap(turn => turn.artifacts || []).concat(state.artifacts).filter(artifact => !isInternalResultPath(artifact.file)).forEach(artifact => {
-      const key = `${artifact.file || ''}\u0000${artifact.kind || ''}`;
-      if (!artifactKeys.has(key)) { artifactKeys.add(key); artifacts.push(artifact); }
-    });
-    const artifactRows = artifacts.map(codeResults().artifactHtml).join('');
-    // The drawer's "Outputs" section holds two different kinds of thing: the
-    // deliverable (preview + artifact rows) and the changed files you can Keep
-    // or Revert. The deliverable is almost always ALSO a changed file, so its
-    // name renders twice under one heading. Measured on the three-file kanban
-    // run, reading down the single "Outputs" column:
-    //     index.html   (artifact, with preview)
-    //     app.js       (change row, Keep/Revert)
-    //     index.html   (change row, Keep/Revert)   <- the same name again
-    //     styles.css   (change row, Keep/Revert)
-    // Scanning it, the repeat reads as a rendering fault rather than as "the
-    // thing you made" and "a file you may revert".
-    //
-    // Labelled rather than de-duplicated: dropping the second row would take
-    // away the only Revert control for the deliverable, which is the one file
-    // you are most likely to want to undo.
-    //
-    // Only when something precedes it -- with no preview and no artifacts there
-    // is a single group, and a second heading straight under "Outputs" would
-    // separate nothing. `.tc-code-section-title` has symmetric 8px margins, so
-    // it sits correctly mid-section with no CSS change.
-    // Defined AFTER `preview` further down, not here: `preview` is a `const`
-    // declared later in this function, so reading it at this point is a
-    // temporal-dead-zone ReferenceError that takes out the whole of Code mode.
-    const hasResults = Boolean(state.pendingApproval || visibleChanges.length || artifacts.length || state.filePreview);
-    // Watch it build. A generated page is far more useful rendered than as
-    // source, and during a run this refreshes, so you see the thing take shape
-    // instead of reading a diff and hoping. Sandboxed WITHOUT allow-same-origin:
-    // srcdoc inherits this page's origin, and a generated app must never be
-    // able to reach into Thomas. Scripts run, so games and animations work;
-    // localStorage does not, which a small number of generated apps rely on.
-    const previewIsPage = state.filePreview && /\.x?html?$/i.test(String(state.filePreview.path || ''));
-    const previewBody = (previewIsPage && state.filePreviewRendered !== false)
-      // A miniature of the page, not a crop of its top-left corner.
-      //
-      // This rendered the document at 1:1 into the drawer's ~247px column, so a
-      // layout built for ~1200px arrived as a keyhole: "Sort by amount" cut to
-      // "Sort by", the table header reading "DATE DESCRIPTION AM…", about a
-      // fifth of the page visible and every edge sliced mid-word. It reads as a
-      // broken render rather than a preview.
-      //
-      // Exactly the mistake the artifact thumbnail had and had already fixed --
-      // a different element, so the fix never reached here. Same fixed box and
-      // same fixed scale, deliberately not percentages: the drawer is resizable
-      // (280-520px) and a proportional preview would drift with it instead of
-      // being the same picture every time. 1280x1600 at 0.19375 lands on
-      // 248x310, which is the thumbnail's scale over twice its height, because
-      // this one was opened on purpose.
-      ? `<div class="tc-code-file-shot"><iframe title="Preview of ${esc(state.filePreview.path)}" sandbox="allow-scripts" srcdoc="${esc(String(state.filePreview.content || ''))}" tabindex="-1" scrolling="no"></iframe></div>`
-      : (state.filePreview ? `<pre>${esc(state.filePreview.content)}</pre>` : '');
-    const previewToggle = previewIsPage
-      ? `<button data-code-preview-toggle style="margin-right:6px;">${state.filePreviewRendered === false ? 'Show page' : 'Show code'}</button>`
-      : '';
-    const preview = state.filePreview ? `<section class="tc-code-file-preview"><header><strong>${esc(state.filePreview.path)}</strong>${previewToggle}<button data-code-file-close aria-label="Close file preview"><i class="ph ph-x"></i></button></header>${previewBody}</section>` : '';
-    const approval = state.pendingApproval ? `<section class="tc-code-approval" role="alert" data-ui-id="code.approval" data-ui-label="Approval required" data-ui-policy="protected"><strong>Approval required</strong><p>${esc(state.pendingApproval.summary)}</p><div><button data-code-approve ${state.approvalBusy ? 'disabled' : ''}>${state.approvalBusy ? 'Approving...' : 'Approve once'}</button><button data-code-approval-cancel ${state.approvalBusy ? 'disabled' : ''}>Cancel</button></div></section>` : '';
-    // Separates the two groups the "Outputs" heading covers -- see the note
-    // beside `artifactRows` above for the measurement. Declared here rather than
-    // there because `preview` is a `const` on the line above this one.
-    const changesTitle = (preview || artifactRows) && changeRows
-      ? '<div class="tc-code-section-title">Changed files</div>' : '';
-    // The history question -- raised by newConversation's 409 branch, asked and
-    // answered in the projects module beside it.
-    const historyAsk = historyAskHtml();
-    const projectLabel = state.projectRoot ? codeProjects().projectDisplayLabel() : 'Choose a project';
-    // An empty file list has three different causes and used to name only one:
-    // it always read "Choose a project beside Tools to browse its files."
-    //
-    // Measured on a new task: for 45 seconds -- the whole run -- the drawer
-    // header said "Code task 2026-07-30 1018" while the list directly beneath it
-    // told you to choose a project. The header has always used `state.projectRoot`
-    // for exactly this decision; the list simply did not ask.
-    //
-    // `treeLoaded` separates the other two, which no existing field could: a
-    // fetch that has not returned yet is not the same as a folder with nothing
-    // in it, and saying "no files" while still loading would be the same kind of
-    // guess in a new coat.
-    const filesEmptyMessage = !state.projectRoot
-      ? 'Choose a project beside Tools to browse its files.'
-      : (state.treeLoaded ? 'This folder has no files yet.' : 'Loading files…');
-    // `is-viewer-open` lets the layout make room for the viewer.
-    //
-    // The artifact card promises "Click to open it beside the chat" and the
-    // viewer's own stylesheet comment says "beside the conversation", but it is
-    // `position: absolute`, so it never moved anything: measured at 1920 wide,
-    // the transcript stayed 768px at x=716 while the viewer covered x=1160
-    // onward -- 324px of the conversation underneath it, clipping 300px off
-    // every line of Thomas's reply mid-word.
-    //
-    // Not applied when the viewer is full-bleed: it covers the surface
-    // deliberately then, and reserving room behind it would only squeeze a
-    // layout nobody can see.
-    const viewerOpen = Boolean(state.viewer && state.viewer.file);
-    const viewerFull = Boolean(state.viewer && state.viewer.full);
-    codeResults().publishColumnState(viewerOpen && !viewerFull);
-    root.innerHTML = `<div class="tc-code-panel${state.drawerOpen ? ' is-drawer-open' : ''}${viewerOpen && !viewerFull ? ' is-viewer-open' : ''}">
-      <header class="tc-code-context" data-ui-id="code.context" data-ui-label="Code activity bar" data-ui-policy="move"><button data-code-results-jump type="button" aria-expanded="${state.drawerOpen ? 'true' : 'false'}"><i class="ph ph-sidebar-simple"></i> Activity <small>${statusLabels[state.runStatus] || 'Ready'}</small>${state.running && state.runStartedAt ? '<small class="tc-code-head-elapsed" data-code-elapsed-top>0s</small>' : ''}${hasResults ? '<span class="tc-code-activity-count" aria-hidden="true"></span>' : ''}</button></header>
-      <button class="tc-code-jump-badge" data-code-jump-bottom type="button" hidden><i class="ph ph-arrow-down" aria-hidden="true"></i> Scroll to the bottom</button>
-      <div class="tc-code-layout">
-        <section class="tc-code-transcript" aria-label="Code conversation" data-ui-id="code.transcript" data-ui-label="Code conversation" data-ui-policy="move resize" data-ui-constraints="minWidth=320;minHeight=200">${historyAsk}<div id="tc-code-turns">${turns.map(turnHtml).join('') || (hasLiveTurn || pendingUserTurn ? '' : emptyStateHtml())}</div>${pendingUserTurn}${liveTurn}${codeResults().playtestChatCardHtml()}</section>
-        <aside class="tc-code-actions" aria-label="Code activity" aria-hidden="${state.drawerOpen ? 'false' : 'true'}"${state.drawerOpen ? '' : ' inert'} data-ui-id="code.activity" data-ui-label="Code activity drawer" data-ui-policy="move resize" data-ui-constraints="minWidth=280;minHeight=240;maxWidth=520"><section class="tc-code-rail-section" data-ui-id="code.outputs" data-ui-label="Outputs" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-section-title">Outputs</div>${approval}${preview}${artifactRows}${changesTitle}${changeRows || (!preview && !artifactRows ? '<p class="tc-code-rail-empty">Previews, changed files, and proof will appear here without interrupting the conversation.</p>' : '')}${changeRows && !state.running ? `<button id="tc-code-checkpoint" class="tc-code-checkpoint" data-ui-id="code.action.checkpoint" data-ui-label="Checkpoint changes" data-ui-policy="protected" title="Commit these changes on a thomas-code/ branch">Checkpoint — commit these changes</button>` : ''}</section><section class="tc-code-rail-section tc-code-tree" data-ui-id="code.files" data-ui-label="Project files" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=120"><div class="tc-code-tree-head"><div class="tc-code-section-title">Files · ${esc(state.treePath || '/')}</div>${state.treePath ? '<button id="tc-code-tree-up">Up</button>' : ''}</div><ul>${treeRows || `<li class="tc-code-muted">${esc(filesEmptyMessage)}</li>`}</ul></section><form id="tc-code-steer-form" class="tc-code-steer" ${state.running ? '' : 'hidden'} data-ui-id="code.steer" data-ui-label="Steer Thomas" data-ui-policy="move resize" data-ui-constraints="minWidth=240;minHeight=80"><label for="tc-code-steer">Steer Thomas</label><input id="tc-code-steer" name="message" required placeholder="Change direction…" ${state.steeringBusy ? 'disabled' : ''}><button ${state.steeringBusy ? 'disabled' : ''}>${state.steeringBusy ? 'Confirming…' : 'Apply'}</button><button type="button" id="tc-code-stop" data-ui-id="code.action.stop" data-ui-label="Stop this run" data-ui-policy="protected" title="Stop this run" ${state.steeringBusy ? 'disabled' : ''}>Stop</button></form></aside>
-      </div>${codeResults().viewerHtml()}</div>`;
-    const activityDrawer = root.querySelector('.tc-code-actions');
-    codeResults().bindViewer(root, render);
-    activityDrawer?.insertAdjacentHTML('afterbegin', `<div class="tc-code-drawer-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize activity drawer" aria-valuemin="280" aria-valuemax="520" aria-valuenow="${state.drawerWidth}"></div><header class="tc-code-drawer-head"><div><strong>Activity</strong><small>${esc(projectLabel)}</small></div><button data-code-drawer-close type="button" aria-label="Close activity"><i class="ph ph-x"></i></button></header>`);
-    root.querySelector('[data-code-results-jump]')?.addEventListener('click', () => { state.drawerOpen = !state.drawerOpen; render(); });
-    root.querySelector('[data-code-drawer-close]')?.addEventListener('click', () => { state.drawerOpen = false; render(); });
-    codeResults().bindDrawerResize(root);
-    root.querySelector('#tc-code-tree-up')?.addEventListener('click', () => { const parts = state.treePath.split('/'); parts.pop(); void safely(() => loadTree(parts.join('/')), 'Could not open that folder.'); });
-    root.querySelectorAll('[data-code-tree-dir]').forEach(button => button.addEventListener('click', () => { void safely(() => loadTree(button.dataset.codeTreeDir), 'Could not open that folder.'); }));
-    root.querySelectorAll('[data-code-tree-file]').forEach(button => button.addEventListener('click', () => { void safely(() => loadFile(button.dataset.codeTreeFile), 'Could not preview that file.'); }));
-    root.querySelector('[data-code-file-close]')?.addEventListener('click', () => { state.filePreview = null; render(); });
-    root.querySelector('[data-code-preview-toggle]')?.addEventListener('click', () => { state.filePreviewRendered = state.filePreviewRendered === false; render(); });
-    codeResults().bindArtifactActions(root);
-    root.querySelector('[data-code-approve]')?.addEventListener('click', () => { void safely(approvePending, 'Approval could not be completed.'); });
-    root.querySelector('[data-code-approval-cancel]')?.addEventListener('click', () => { state.pendingApproval = null; state.pendingRequest = null; state.runStatus = 'stopped'; pushLiveEvent({ type: 'stopped', text: 'Approval cancelled. No Code action was run.' }); render(); });
-    bindHistoryChoice(root);
-    // A starter loads the composer and hands the cursor over. It deliberately
-    // does NOT send: the text is a suggestion to edit, and a click that quietly
-    // spends a model call on a prompt nobody read is the worse surprise.
-    root.querySelectorAll('[data-code-starter]').forEach(card => card.addEventListener('click', () => {
-      const input = document.getElementById('tc-input');
-      if (!input) return;
-      input.value = card.dataset.codeStarter || '';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.focus();
-      try { input.setSelectionRange(input.value.length, input.value.length); } catch (error) { /* not a text input */ }
-    }));
-    // Playtest recommendation buttons: a click starts a real fix run with the
-    // exact instruction Thomas recommended; "or tell Thomas…" focuses the
-    // composer. Either way the verdict card is cleared once acted on.
-    root.querySelectorAll('[data-code-playtest-rec]').forEach(button => button.addEventListener('click', () => {
-      const prompt = button.dataset.codePlaytestRec || '';
-      state.playtestResult = null;
-      render();
-      if (prompt) void safely(() => send(prompt, state.lastContext || {}), 'Could not start the fix.');
-    }));
-    root.querySelector('[data-code-playtest-type]')?.addEventListener('click', () => {
-      state.playtestResult = null;
-      render();
-      document.getElementById('tc-input')?.focus();
-    });
-    root.querySelector('#tc-code-steer-form')?.addEventListener('submit', event => { event.preventDefault(); void safely(() => steer(new FormData(event.currentTarget).get('message')), 'Could not steer the Code task.'); });
-    root.querySelector('#tc-code-stop')?.addEventListener('click', () => { void safely(() => stopRun(), 'Could not stop the Code run.'); });
-    root.querySelector('#tc-code-checkpoint')?.addEventListener('click', () => { void safely(() => checkpointChanges(), 'Could not checkpoint the changes.'); });
-    root.querySelectorAll('[data-code-copy-reply]').forEach(button => button.addEventListener('click', () => {
-      const reply = button.closest('.tc-code-turn')?.querySelector('.tc-code-reply')?.textContent || '';
-      void copyReplyText(reply, button);
-    }));
-    root.querySelectorAll('[data-code-keep]').forEach(button => button.addEventListener('click', () => { void safely(() => changeAction('keep', button.dataset.codeKeep), 'Could not keep that change.'); }));
-    root.querySelectorAll('[data-code-revert]').forEach(button => button.addEventListener('click', () => { void safely(() => changeAction('revert', button.dataset.codeRevert), 'Could not revert that change.'); }));
-    restoreRenderState(root, savedRenderState);
-    codeProjects().updateProjectButton();
-  }
+  function acceptStartedRun(...args) { return run_streamFeature.acceptStartedRun(...args); }
+  function render(...args) { return surfaceFeature.render(...args); }
 
   // An error body is rarely JSON. aiohttp answers an unregistered route with the
   // plain text "404: Not Found", and `response.json()` on that throws
@@ -644,7 +282,7 @@
     } catch (parseError) {
       const detail = body.trim().slice(0, 120) || '(empty response)';
       if (response.status === 404) {
-        throw new Error(`${what} is not available on this server (404). Thomas answered "${detail}" instead of data -- the Code API did not register. Restarting the server reloads its routes.`);
+        throw new Error(`${what} is not available on this server (404). Thomas answered "${detail}" instead of data -- the Build API did not register. Restarting the server reloads its routes.`);
       }
       throw new Error(`${what} answered ${response.status} with something that is not data: "${detail}"`);
     }
@@ -652,9 +290,9 @@
 
   async function refresh(options) {
     try {
-      const response = await fetch('/api/evolve/agent/conversations');
-      const data = await readJson(response, 'Code history');
-      if (!response.ok || !Array.isArray(data.conversations)) throw new Error(data.error || `Code history could not be refreshed (${response.status})`);
+      const response = await fetch('/api/evolve/agent/conversations?slim=1');
+      const data = await readJson(response, 'Build history');
+      if (!response.ok || !Array.isArray(data.conversations)) throw new Error(data.error || `Build history could not be refreshed (${response.status})`);
       state.conversations = data.conversations;
       state.historyLoadState = 'loaded';
       host().renderHistory && host().renderHistory();
@@ -666,7 +304,7 @@
       if (state.historyLoadState !== 'loaded') state.historyLoadState = 'error';
       host().renderHistory && host().renderHistory();
       if (options && options.throwOnError) throw error;
-      recordError(error, 'Code history could not be refreshed.');
+      recordError(error, 'Build history could not be refreshed.');
       return false;
     }
   }
@@ -682,34 +320,11 @@
     const emptyMessage = state.historyLoadState === 'loaded'
       ? (term ? 'No matching code tasks.' : 'No code tasks yet.')
       : state.historyLoadState === 'error'
-        ? 'Code tasks could not be loaded.'
+        ? 'Build tasks could not be loaded.'
         : 'Loading code tasks…';
-    root.innerHTML = rows.length ? '' : `<div class="tc-mode-empty">${emptyMessage}</div>`;
-    const history = window.ThomasSidebarHistory;
-    rows.forEach(row => {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'tc-mode-history-row';
-      const title = row.title || 'Untitled task';
-      // Last TOUCHED, not last opened: the moment the task last did something.
-      // These arrive as ISO strings, so Number() would quietly yield NaN and
-      // every row would sort as epoch zero.
-      const stamp = Date.parse(row.updated_at || row.updatedAt || '') || 0;
-      const created = Date.parse(row.created_at || '') || stamp;
-      const active = row.id === state.activeId;
-      button.dataset.historyId = String(row.id || '');
-      button.dataset.historyTitle = title;
-      button.dataset.historyTime = String(stamp);
-      button.dataset.historyCreated = String(created);
-      button.dataset.historyMode = 'code';
-      // Per-task activity. The Code tab showed A run was live; the list never
-      // said WHICH task it belonged to.
-      button.innerHTML = history
-        ? history.rowHtml({ title, time: stamp, running: active && state.running })
-        : `<span>${esc(title)}</span>`;
-      if (active) button.classList.add('is-active');
-      // Rows stay clickable while a run is live — switching parks the run.
-      button.addEventListener('click', () => { void safely(() => loadConversation(row.id), 'Could not open that Code task.'); }); root.appendChild(button);
-    });
-    if (history) history.decorate(root);
+    // The rows keep their elements while what they show is unchanged (unified_code_history_rows.js), so opening a
+    // task changes two rows instead of rebuilding the whole list.
+    window.ThomasCodeHistoryRows.render(root, rows, { state, controls: controlsFeature, history: window.ThomasSidebarHistory, esc, emptyMessage, term, open: id => { void safely(() => loadConversation(id), 'Could not open that Build task.'); } });
   }
 
   async function loadConversation(id, options) {
@@ -718,23 +333,40 @@
     const epoch = internal ? Number(options.epoch) : state.contextEpoch + 1;
     if (!internal) state.contextEpoch = epoch;
     if (internal && (id !== state.activeId || epoch !== state.contextEpoch)) return false;
-    const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(id)}`);
-    const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.error || `Code task could not be loaded (${response.status})`);
+    if (!internal) {
+      state.openingConversationId = id;
+      // Only what changes shimmers; the screen is drawn once, when the task's content is here (unified_code_loading.js).
+      if (!(window.ThomasCodeLoading && window.ThomasCodeLoading.show())) render();
+    }
+    let data;
+    try {
+      const response = await fetch(`/api/evolve/agent/conversations/${encodeURIComponent(id)}`);
+      data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.error || `Build task could not be loaded (${response.status})`);
+    } catch (error) {
+      if (!internal && epoch === state.contextEpoch) {
+        state.openingConversationId = '';
+        render();
+      }
+      throw error;
+    }
     if (epoch !== state.contextEpoch) return false;
     if (!internal) clearContextState();
+    state.openingConversationId = '';
     state.activeId = id;
     state.conversation = data.conversation;
     state.projectRoot = data.conversation.project_root || state.projectRoot;
-    // Repaint the chip HERE, not at the render() below. Everything it needs is
-    // already known; the render is behind the changes and file-tree fetches,
-    // which on a large project take seconds. Sampling the chip 900ms after a
-    // click caught 4 of 36 conversations still showing the pre-load repaint
-    // from clearContextState -- "A new folder for this task" over a task whose
-    // folder was already resolved and sitting in state.
+    // Show the resolved task and folder before filesystem discovery finishes.
     codeProjects().updateProjectButton();
     const token = lifecycle().contextToken(state);
-    await Promise.all([loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true })]);
     if (!(options && options.deferRender)) render();
+    if (!internal) scrollTranscriptToNewest();
+    await Promise.all([
+      loadChanges({ token, deferRender: true }), loadTree('', { token, deferRender: true }),
+      internal ? Promise.resolve() : reattachRunFor(id),
+    ]);
+    if (!lifecycle().contextMatches(state, token)) return false;
+    // The changes and the file tree live in the drawer and the viewer; with both closed only the top bar needs them.
+    if (!(options && options.deferRender)) { if (state.drawerOpen || (state.viewer && state.viewer.file)) render(); else window.ThomasCodeHeader && window.ThomasCodeHeader.paint(); }
     // Only on a real open. `internal` reloads run underneath a live run, and
     // yanking the scroller then would fight someone reading back through it.
     if (!internal) scrollTranscriptToNewest();
@@ -745,7 +377,6 @@
       .catch(() => {});
     host().renderHistory && host().renderHistory();
     if (!internal) {
-      await reattachRunFor(id);
       // A task queued for THIS conversation while it was parked starts now.
       if (!state.running) startNextQueued();
     }
@@ -753,25 +384,26 @@
   }
 
   async function send(message, context, options) {
-    if (state.approvalBusy) throw new Error('A Code approval is in progress. Resolve it before starting another task.');
+    if (state.approvalBusy) throw new Error('A Build approval is in progress. Resolve it before starting another task.');
+    // While Thomas is asking you something, what you TYPE is your answer (a Fix
+    // it or playtest click is not); an answer that failed stays in the composer.
+    const answered = options && options.typed ? await controlsFeature.answerTyped(message) : false;
+    if (answered) return answered === true;
     // Codex-parity queue: sending while THIS conversation's run is going
     // queues the task and auto-starts it when the current run's result is
     // durable. Only the TARGET conversation being busy queues. A send with no
-    // conversation on screen is not waiting on anything -- parallel runs are
-    // supported, so it starts immediately below as its own new conversation
-    // (runRequest sends no conversation_id for activeId:'' and the server
-    // creates one). Queueing it was the misdelivery: the entry carried cid:''
+    // conversation on screen starts below as its own new conversation (the
+    // server creates one). Queueing it was the misdelivery: the entry carried cid:''
     // and startNextQueued fired it into whichever conversation was ACTIVE
-    // when the live run finished -- measured 2026-08-05 (w2-code-network +
-    // w2-code-tiny): a countdown task sent while the Bitcoin run was live
-    // appended to the Bitcoin conversation, ran in its project root, and
+    // when the live run finished -- measured 2026-08-05: a countdown task sent
+    // while the Bitcoin run was live appended to that conversation and
     // OVERWROTE the finished Bitcoin deliverable with a countdown page.
     if ((state.running || state.finishing) && state.activeId) {
       state.queuedSends = state.queuedSends || [];
       // Stamp the conversation at ENQUEUE time — with parallel runs the user
-      // may switch away, and a queued task must fire into ITS conversation.
-      state.queuedSends.push({ message: String(message || ''), context: context || state.lastContext || {}, cid: state.activeId });
-      pushLiveEvent({ type: 'planning', text: `Queued (${state.queuedSends.length} waiting): ${String(message || '').slice(0, 80)}` });
+      // may switch away, and a queued task must fire into ITS conversation. It
+      // waits above the composer with Steer and ✕ (the id is theirs to name).
+      state.queuedSends.push({ id: `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, message: String(message || ''), context: context || state.lastContext || {}, cid: state.activeId, at: Date.now() });
       render();
       return true;
     }
@@ -779,25 +411,36 @@
     // Echoed by the transcript until the server's copy of this turn arrives.
     // Not set for a steer: `preserveProgress` means the run is continuing and the
     // steering text belongs in the activity feed, not as a new message bubble.
-    if (!(options && options.preserveProgress)) state.pendingUserText = String(message || '');
+    if (!(options && options.preserveProgress)) { state.pendingUserText = String(message || ''); window.ThomasAttachmentStrip?.stage(state, message, context); }
     state.running = true;
     state.runStatus = 'working';
     if (!(options && options.preserveProgress) || !state.runStartedAt) state.runStartedAt = Date.now();
     state.terminalTool = '';
     host().setBusy && host().setBusy(true);
+    // A new run starts with an empty feed: its head says "working" and the status
+    // line above the composer "Thomas is starting" until the first frame lands.
     if (options && options.preserveProgress) pushLiveEvent({ type: 'planning', text: 'Thomas is restarting with your steering update…' });
-    else state.liveEvents = [{ type: 'planning', text: 'Thomas is preparing the Code run…' }];
+    else state.liveEvents = [];
     if (!(options && options.preserveProgress)) state.artifacts = [];
     render();
     let requestBody = null;
     try {
       requestBody = lifecycle().runRequest(state, message, state.lastContext);
-      const response = await fetch('/api/evolve/agent/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) });
-      const data = await response.json();
+      const epoch = state.contextEpoch;
+      const { response, data, stopped } = await lifecycle().postRun(requestBody, { notice: text => pushLiveEvent({ type: 'planning', text }), alive: () => state.running && state.contextEpoch === epoch });
+      if (stopped) return false;
+      if (response.status === 409 && data.code === 'execution_settings_blocked') {
+        state.retryRequest = null; state.runStatus = 'blocked'; state.runStartedAt = 0;
+        state.liveEvents = [{ type: 'settings', text: data.error }];
+        finishBusy(); render(); return false;
+      }
       if (response.status === 409 && data.code === 'approval_required') {
         replacePendingApproval(data, requestBody); finishBusy(); render(); return false;
       }
-      if (!response.ok || !data.ok) throw new Error(data.error || `Code request failed (${response.status})`);
+      if (response.status === 409 && data.code === 'project_is_thomas_source' && window.ThomasSelfEdit?.startFromChat) {
+        finishBusy(); state.runStatus = ''; await window.ThomasSelfEdit.startFromChat(message); return true;
+      }
+      if (!response.ok || !data.ok) throw new Error(data.error || `Build request failed (${response.status})`);
       if (
         !requestBody.conversation_id && requestBody.project_root && !requestBody.project_choice && data.project_root
         && codeProjects().projectNameKey(data.project_root) !== codeProjects().projectNameKey(requestBody.project_root)
@@ -814,185 +457,22 @@
       return await acceptStartedRun(data);
     } catch (error) {
       if (requestBody) state.retryRequest = requestBody;
-      pushLiveEvent({ type: 'error', text: errorText(error, 'Code request failed.') });
+      pushLiveEvent({ type: 'error', text: errorText(error, 'Build request failed.') });
       state.runStatus = 'failed';
       finishBusy();
       render();
       return false;
     }
   }
-
-  function openStream() {
-    const previous = state.source; state.source = null; if (previous) previous.close();
-    const source = new EventSource(lifecycle().streamUrl(state)); state.source = source;
-    source.onmessage = event => {
-      if (state.source !== source) return;
-      let payload; try { payload = JSON.parse(event.data); } catch (error) { payload = { type: 'text', text: event.data }; }
-      if (!lifecycle().acceptEvent(state, payload)) return;
-      if (payload.type === 'done' && payload.noop === true && !payload.text) payload.text = 'The process exited cleanly but made no file changes, so this Code task is not complete.';
-      const replaced = pushLiveEvent(payload); appendLiveEvent(payload, replaced);
-      if (payload.type === 'done') {
-        const stopWasPending = state.runStatus === 'stopping';
-        state.artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
-        // A finished run may have written files the current preview origin was
-        // not told about, so stop deriving URLs from it and ask again.
-        state.previewBase = null;
-        state.artifactDocs = {};
-        state.source = null;
-        source.close();
-        if (stopWasPending) {
-          state.runStatus = 'stopped';
-          // Plain words for a deliberate click. This said "Stop confirmed
-          // (process exit 1)." -- an exit code leaked into a sentence about a
-          // clean user stop, and exit 1 reads as an error. The durable render
-          // of the stopped turn is already honest; the live confirmation now
-          // matches its register.
-          const confirmation = { type: 'stopped', text: 'Stopped — Thomas is wrapping up the record.' };
-          pushLiveEvent(confirmation);
-          appendLiveEvent(confirmation, false);
-        } else {
-          state.runStatus = terminalRunStatus(payload);
-        }
-        updateRunStatus();
-        if (state.steeringBusy) {
-          finishBusy();
-          return;
-        }
-        void safely(finishRun, 'The finished Code task could not be refreshed.');
-      }
-    };
-    source.onerror = () => { void handleStreamError(source); };
-  }
-
-  async function handleStreamError(source) {
-    if (state.source !== source || !state.running) return false;
-    const runId = state.runId;
-    const epoch = state.contextEpoch;
-    state.source = null;
-    source.close();
-    let status;
-    try {
-      const response = await fetch('/api/evolve/agent/status');
-      status = await response.json();
-      if (!response.ok || !status.ok) throw new Error(status.error || 'Code status check failed.');
-    } catch (error) {
-      if (state.source || state.runId !== runId || state.contextEpoch !== epoch) return false;
-      state.runStatus = 'disconnected';
-      pushLiveEvent({ type: 'error', text: `${errorText(error, 'Code status could not be verified.')} Thomas remains locked as running while live updates reconnect.` });
-      render();
-      openStream();
-      return false;
-    }
-    if (state.source || state.runId !== runId || state.contextEpoch !== epoch || (status.run_id && status.run_id !== runId)) return false;
-    if (status.running === true || status.recording === true) {
-      state.runStatus = status.running === true ? 'working' : 'stopping';
-      const text = status.running === true
-        ? 'Live updates were interrupted, but Thomas is still running. Reconnecting without releasing the task.'
-        : 'The process stopped and Thomas is still recording the result. Reconnecting until the durable result is ready.';
-      pushLiveEvent({ type: 'disconnected', text });
-      render();
-      openStream();
-      return true;
-    }
-    if (state.steeringBusy) {
-      finishBusy();
-      return true;
-    }
-    state.runStatus = 'disconnected';
-    pushLiveEvent({ type: 'disconnected', text: 'The stream ended and the backend reports no active or recording Code task.' });
-    updateRunStatus();
-    await finishRun();
-    return true;
-  }
-
-  function finishBusy() { state.running = false; host().setBusy && host().setBusy(false); codeProjects().updateProjectButton(); }
-
-  async function finishRun() {
-    if (state.finishing) return state.finishing;
-    const runId = state.runId;
-    // Set by the durable branch below, read after the final render: the scroll
-    // has to run against the DOM that render() just painted, and only when this
-    // run's own result landed (a superseded finisher must not yank the view).
-    let landedDurably = false;
-    state.finishing = (async () => {
-      const id = state.activeId;
-      const epoch = state.contextEpoch;
-      const proof = state.runProof ? { ...state.runProof } : null;
-      const results = await Promise.allSettled([id ? loadConversation(id, { internal: true, epoch, deferRender: true }) : Promise.resolve(false), refresh({ throwOnError: true })]);
-      const sameRun = state.contextEpoch === epoch && state.runId === runId;
-      const durable = results[0].status === 'fulfilled' && results[0].value === true && sameRun && lifecycle().runIsDurable(state.conversation, proof);
-      if (durable) {
-        landedDurably = true;
-        state.liveEvents = [];
-        state.artifacts = [];
-        state.runProof = null;
-        // Put the thing Thomas just made in front of the person who asked for
-        // it. Finishing a build and leaving the result to be discovered is how
-        // "where is it" and "what's the full directory name" became the two
-        // messages after a successful game build.
-        void codeResults().presentNewestResult();
-      } else if (sameRun && results[0].status === 'fulfilled' && results[0].value === true) {
-        state.runStatus = 'disconnected';
-        pushLiveEvent({ type: 'error', text: 'Thomas stopped, but the just-finished Code turn is not yet present in durable history. Live evidence was preserved.' });
-      }
-      results.filter(result => result.status === 'rejected').forEach(result => pushLiveEvent({ type: 'error', text: errorText(result.reason, 'The Code result could not be refreshed.') }));
-    })();
-    try { await state.finishing; } finally {
-      const sameRun = state.runId === runId;
-      state.finishing = null;
-      if (sameRun) {
-        finishBusy();
-        render();
-        // A follow-up run's answer appends BELOW the turn the reader is parked
-        // at, and scrollTranscriptToNewest only ran on conversation OPEN -- so
-        // the durable result of a run watched in an open conversation landed
-        // below the fold, invisible until a manual scroll. The loadConversation
-        // above is `internal`, which deliberately never scrolls (it also runs
-        // under live reloads where yanking the view would fight a reader); the
-        // moment a run's own durable result lands is the one internal reload
-        // where arriving at the newest turn is the point.
-        if (landedDurably) scrollTranscriptToNewest();
-      }
-    }
-    // Codex-parity task queue: a message sent while a run was going starts
-    // automatically the moment this run's result is durable.
-    startNextQueued();
-  }
-  function startNextQueued() {
-    if (!state.queuedSends || !state.queuedSends.length) return;
-    // Never drain while something is live: send() would re-queue the entry,
-    // and a drain-then-requeue is where a cid can be rewritten to whatever
-    // conversation happens to be active at that moment.
-    if (state.running || state.finishing) return;
-    // Drain ONLY tasks queued for exactly the ACTIVE conversation; tasks for a
-    // parked conversation wait until the user returns to it (misdelivery
-    // guard). `entry.cid` must match, never merely be absent: the absent-cid
-    // shortcut is what fired the countdown task into the live Bitcoin
-    // conversation and overwrote its deliverable (w2-code-tiny, 2026-08-05).
-    const index = state.queuedSends.findIndex(entry => Boolean(entry.cid) && entry.cid === state.activeId);
-    if (index >= 0) {
-      const queued = state.queuedSends.splice(index, 1)[0];
-      pushLiveEvent({ type: 'planning', text: `Starting your queued task: ${queued.message.slice(0, 80)}` });
-      render();
-      void safely(() => send(queued.message, queued.context), 'The queued Code task failed to start.');
-      return;
-    }
-    // An entry with no conversation stamp can no longer be created (see the
-    // queue branch in send), but one that somehow exists must become its own
-    // NEW conversation -- adopting whichever conversation is on screen is
-    // exactly the overwrite this queue shipped once already.
-    const orphanIndex = state.queuedSends.findIndex(entry => !entry.cid);
-    if (orphanIndex < 0) return;
-    const orphan = state.queuedSends.splice(orphanIndex, 1)[0];
-    state.contextEpoch += 1;
-    clearContextState();
-    pushLiveEvent({ type: 'planning', text: `Starting your queued task as its own conversation: ${orphan.message.slice(0, 80)}` });
-    render();
-    void safely(() => send(orphan.message, orphan.context), 'The queued Code task failed to start.');
-  }
+  function openStream(...args) { return run_streamFeature.openStream(...args); }
+  function handleStreamError(...args) { return run_streamFeature.handleStreamError(...args); }
+  function finishBusy(...args) { return run_streamFeature.finishBusy(...args); }
+  function finishRun(...args) { return run_streamFeature.finishRun(...args); }
+  function startNextQueued(...args) { return run_streamFeature.startNextQueued(...args); }
+  function steer(...args) { return run_streamFeature.steer(...args); }
   async function changeAction(action, file, approvalId, options) {
     const token = lifecycle().contextToken(state);
-    if (!token.id) throw new Error('Open a Code conversation before changing files.');
+    if (!token.id) throw new Error('Open a Build conversation before changing files.');
     const body = lifecycle().changeRequest(action, file, token.id, approvalId, options && options.requestId);
     const response = await fetch(`/api/evolve/agent/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await response.json();
@@ -1055,7 +535,7 @@
           finishBusy();
           return false;
         }
-        if (!response.ok || !started.ok) throw new Error(started.error || 'Approved Code task could not start.');
+        if (!response.ok || !started.ok) throw new Error(started.error || 'Approved Build task could not start.');
         await acceptStartedRun(started);
       }
       state.pendingApproval = null;
@@ -1073,18 +553,16 @@
       render();
     }
   }
-  async function waitForRestartReady() {
-    // Per-conversation status: with parallel runs, the GLOBAL running flag may
-    // be true forever (another project's run) — only THIS conversation matters.
-    const statusUrl = state.activeId
-      ? `/api/evolve/agent/status?conversation_id=${encodeURIComponent(state.activeId)}`
-      : '/api/evolve/agent/status';
+  async function waitForRestartReady(runId = state.runId) {
+    // Per-run status: another task may be running while this one stops.
+    const statusUrl = `/api/evolve/agent/status?run_id=${encodeURIComponent(runId)}`;
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const response = await fetch(statusUrl);
       const status = await response.json().catch(() => null);
       // status.ok describes the LAST RUN's outcome, not endpoint health — a
       // steering-stopped run always reports ok:false (killed, returncode 1),
-      // which must not abort the restart. Only an HTTP failure is fatal here.
+      // which must not abort the restart. A missing slot is also no longer active.
+      if (response.status === 404 && status?.code === 'run_not_found' && status.run_id === runId) return true;
       if (!response.ok || !status) throw new Error((status && status.error) || 'Steering status check failed.');
       if (status.running === false && status.recording !== true) return true;
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1096,7 +574,7 @@
   //
   // The ONE stop routine. There used to be two -- this one behind the drawer's
   // Stop button, and a second `stop()` behind the mode adapter -- with different
-  // wording ("Code task stopped (process exit N)" vs the sentence below) and
+  // wording ("Build task stopped (process exit N)" vs the sentence below) and
   // different behavior (the adapter one ran finishRun, this one refreshed
   // nothing). Which stop a user got depended on which button they happened to
   // press. Both entry points now land here; the honest wording and the refresh
@@ -1117,7 +595,7 @@
       updateRunStatus();
       await waitForRestartReady();
       closeSource();
-      pushLiveEvent({ type: 'stopped', text: 'Stopped — you interrupted this run. Anything already changed is in Outputs with Keep/Revert.' });
+      pushLiveEvent({ type: 'stopped', text: state.conversation?.self_edit ? 'Stopped — private changes were retained for review. Your running version was not changed.' : 'Stopped — you interrupted this run. Anything already changed is in Outputs with Keep/Revert.' });
       state.runStatus = 'stopped';
       finishBusy();
       // The sentence above points at Outputs, and Outputs used to be stale: a
@@ -1129,6 +607,10 @@
       // succeeded and must not be reported as one that failed.
       const token = lifecycle().contextToken(state);
       if (token.id) {
+        if (state.conversation?.self_edit) {
+          await loadConversation(token.id, { internal: true, epoch: token.epoch, deferRender: true })
+            .catch(error => recordError(error, 'The retained self-edit result could not be refreshed.'));
+        }
         await loadChanges({ token, deferRender: true })
           .catch(error => recordError(error, 'The changed files could not be refreshed after the stop.'));
         await loadTree(state.treePath || '', { token, deferRender: true })
@@ -1141,26 +623,10 @@
       render();
     }
   }
-  async function steer(message) {
-    const text = String(message || '').trim(); if (!text || !state.running || state.steeringBusy) return false;
-    state.steeringBusy = true;
-    render();
-    try {
-      const response = await fetch('/api/evolve/agent/steer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, run_id: state.runId }) });
-      const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.error || 'Steering failed.');
-      pushLiveEvent({ type: 'steering', text: `Steering requested: ${text}` });
-      await waitForRestartReady();
-      closeSource();
-      pushLiveEvent({ type: 'steering', text: 'Previous run stopped. Restarting with the steering update.' });
-      finishBusy();
-      return await send(`Steering update: ${text}`, state.lastContext, { preserveProgress: true });
-    } finally {
-      state.steeringBusy = false;
-      render();
-    }
-  }
-
-  if (window.setInterval) window.setInterval(refreshElapsed, 1000);
+  // The run's clock lives in the status line above the composer (its own 1 s
+  // paint, unified_code_live_view.js); this one keeps the agents' times, the
+  // live diff and the message poll current.
+  if (window.setInterval) window.setInterval(() => controlsFeature.tick(), 1000);
   // Jump-to-latest: the button shows whenever the transcript is scrolled away
   // from the newest content, and one click returns there (owner, 2026-08-10:
   // "there is no scroll-to-bottom so I have to drag the scroll thing").
@@ -1198,30 +664,59 @@
       shell.style.removeProperty('--tc-code-drawer-width');
     }
     codeProjects().updateProjectButton();
+    controlsFeature.leave();
   }
 
   modes().registerAdapter('code', {
-    enter: async () => { adapterActive = true; codeProjects().updateProjectButton(); render(); void codeProjects().loadProjectNames(); await refresh(); await adoptOrphanRun(); },
+    enter: () => { adapterActive = true; codeProjects().updateProjectButton(); render(); void codeProjects().loadProjectNames(); void safely(adoptOrphanRun, 'Could not reconnect to the active Build run.'); },
     leave,
     refresh,
     renderHistory,
-    newConversation: (projectRoot, projectLabel) =>
-      safely(() => newConversation(projectRoot, projectLabel), 'Could not create the Code task.'),
+    newConversation: (projectRoot, projectLabel, options) =>
+      safely(() => newConversation(projectRoot, projectLabel, options), 'Could not create the Build task.'),
     pickProject: () => safely(pickProject, 'Could not choose the project folder.'),
-    send: (message, context) => safely(() => send(message, context), 'The Code task failed unexpectedly.'),
+    send: (message, context) => safely(() => send(message, context, { typed: true }), 'The Build task failed unexpectedly.'),
     // The same routine as the drawer's Stop button -- see stopRun. Two stop
     // functions is how the two controls came to speak and behave differently.
-    stop: () => { void safely(() => stopRun(), 'Could not stop the Code task.'); },
+    stop: () => { void safely(() => stopRun(), 'Could not stop the Build task.'); },
     isBusy: () => state.running || Boolean(state.finishing),
   });
 
   // Redesign hands a change off to Code by opening the thread it just created.
   // Exposed here because this module owns Code conversations; the alternative
   // was a full page reload through the ?forge_code= deep link.
+  const conversationOpens = new Map();
+  let latestConversationOpen = '';
   window.ThomasCodeMode = {
-    openConversation: async (cid) => {
-      await modes().setMode('code');
-      return safely(() => loadConversation(cid), 'Could not open that Code task.');
+    conversationId: () => state.activeId || '',
+    // The composer's primary button (chat_message_view.js / chat_shell_bindings.js).
+    runControls: () => controlsFeature.runControls(),
+    primaryAction: () => controlsFeature.primaryAction(),
+    stopRun: () => controlsFeature.stopLive(),  // Escape in an empty composer; false when nothing is live
+    openConversation: async (cid, options) => {
+      const navigation = window.ThomasWorkspaceNavigation;
+      if (!(options && options.withinTab) && navigation) {
+        return navigation.openCode(cid);
+      }
+      const id = String(cid);
+      // Share only the same pending selection. Revisiting A after B needs a
+      // new owner, even while the first A response is still on the wire.
+      const pending = conversationOpens.get(id);
+      if (pending && latestConversationOpen === id && pending.epoch === state.contextEpoch) return pending.promise;
+      latestConversationOpen = id;
+      const owner = { epoch: state.contextEpoch, promise: null };
+      const opening = (async () => {
+        await modes().setMode('code');
+        const loading = loadConversation(id);
+        owner.epoch = state.contextEpoch;
+        const loaded = await safely(() => loading, 'Could not open that Build task.');
+        if (loaded === false || loaded === null) throw new Error('Could not open that Build task.');
+        return document;
+      })();
+      owner.promise = opening;
+      conversationOpens.set(id, owner);
+      try { return await opening; }
+      finally { if (conversationOpens.get(id) === owner) conversationOpens.delete(id); }
     },
   };
 
@@ -1256,10 +751,8 @@
       history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
     } catch (_error) { /* a stale URL is survivable; failing to open is not */ }
 
-    void (async () => {
-      await modes().setMode('code');
-      await safely(() => loadConversation(cid), 'Could not open that Code task.');
-    })();
+    void safely(() => window.ThomasCodeMode.openConversation(cid, { withinTab: true }),
+      'Could not open that Build task.');
   }
 
   // This file is a classic script in <head>-order, so it runs before chat.html's

@@ -1,0 +1,4 @@
+### Fixed
+
+- **Your project list no longer takes tens of minutes to appear after a restart.** Once long-running teams stayed listed, the list had to read their whole records, and it did so at about 2 MB a second: it walked every character of a long message one at a time after keeping the first 256. It now checks the rest of a long message in one step (47 MB a second on a 27 MB record, from 2), and a record that has not changed since the last scan is taken from memory instead of being read again on every refresh.
+- **A long transcript no longer stops the restart pass from reading a team.** When a long string in a record crossed the point where the file is read in pieces (every 64 KiB), the reader took the next ordinary character for the end of the string and refused the record with "control character in string". A team with a long transcript was therefore reported unreadable and not carried on after a restart. The string now simply continues into the next piece.

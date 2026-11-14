@@ -49,6 +49,7 @@ try:
         _sync_task_specialists,
         dispatch_idle_agents_once,  # noqa: F401  # re-exported for workboard/worker.py
     )
+    from scripts.crew.tasks.monitor import parse_only as _parse_only
     from scripts.crew.tasks.plans import _sync_task_plans
     from scripts.crew.tasks.reactivate import (
         _auto_start_task_for_agent,
@@ -87,6 +88,7 @@ except ImportError:  # pragma: no cover
         _sync_task_specialists,
         dispatch_idle_agents_once,  # noqa: F401  # re-exported for workboard/worker.py
     )
+    from crew.tasks.monitor import parse_only as _parse_only  # type: ignore
     from crew.tasks.plans import _sync_task_plans
     from crew.tasks.reactivate import (
         _auto_start_task_for_agent,
@@ -198,6 +200,22 @@ def run(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=DEFAULT_MONITOR_CYCLES,
         help="Monitor cycle count (0 means run continuously; default: 1).",
+    )
+    parser.add_argument(
+        "--skip-plan-sync",
+        action="store_true",
+        help=(
+            "With --monitor: do not sync task plans at start, so a missing plan file cannot stop the "
+            "sweep loop (default: off, the plan sync runs). Bootstrap starts the monitor this way."
+        ),
+    )
+    parser.add_argument(
+        "--only",
+        default=None,
+        help=(
+            "With --monitor --apply: comma-separated claim ids (agent ids) the monitor may reap. "
+            "Without it --apply reaps nothing and reports what it would take."
+        ),
     )
     parser.add_argument(
         "--interval-seconds",
@@ -334,14 +352,17 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if args.monitor:
         now_seed = now if str(args.now).strip() else None
-        ok_plan_sync, plan_sync_details = _sync_task_plans(
-            workboard_path=workboard_path,
-            plan_root=str(args.plan_root),
-            problem_root=str(args.problem_root),
-            require_claims_to_have_active_task=False,
-            apply=bool(args.apply),
-            now=now,
-        )
+        if args.skip_plan_sync:
+            ok_plan_sync, plan_sync_details = True, {"skipped": "--skip-plan-sync"}
+        else:
+            ok_plan_sync, plan_sync_details = _sync_task_plans(
+                workboard_path=workboard_path,
+                plan_root=str(args.plan_root),
+                problem_root=str(args.problem_root),
+                require_claims_to_have_active_task=False,
+                apply=bool(args.apply),
+                now=now,
+            )
         if not ok_plan_sync:
             payload = {
                 "action": "monitor",
@@ -373,6 +394,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             interval_seconds=float(args.interval_seconds),
             now_seed=now_seed,
             apply=bool(args.apply),
+            only=_parse_only(args.only),
         )
         payload = {
             "action": "monitor",
@@ -391,7 +413,9 @@ def run(argv: Sequence[str] | None = None) -> int:
                 f"auto-start: {payload.get('run_auto_start')}; "
                 f"idle dispatch: {payload.get('run_idle_dispatch')}"
             )
-            if ok_plan_sync:
+            if args.skip_plan_sync:
+                print("- plan sync: skipped (--skip-plan-sync)")
+            elif ok_plan_sync:
                 print(
                     "- plan sync: "
                     f"tracked={payload.get('plan_sync', {}).get('tracked_task_count', 0)}; "

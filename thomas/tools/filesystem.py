@@ -2,17 +2,43 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
-import hmac
-import json
 import logging
 import os
-from hashlib import sha256
-from pathlib import Path, PurePosixPath
+import threading
+import time
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 from thomas.core.file_access import WORKSPACE, authorize_write, clamp_file_access_level
 from thomas.tools.base import Tool, ToolResult
+from thomas.tools.fs_scope import (  # noqa: F401 - moved; shell.py imports them from here
+    _is_read_protected_path,
+    _safe_path,
+)
+from thomas.tools.runtime_protection_flag import (  # noqa: F401 - re-exported; tests and gates import these from here
+    _GREEN_EVOLVE_RUNTIME_WRITES_ENV,
+    _MAX_DISABLE_HOURS,
+    _RUNTIME_FLAG_REL,
+    _RUNTIME_FLAG_VERSION,
+    _RUNTIME_KEY_REL,
+    _green_evolve_runtime_writes_enabled,
+    _is_runtime_protection_disabled,
+    _load_runtime_protection_key,
+    _runtime_signing_payload,
+    _within_disable_window,
+)
+from thomas.tools.runtime_protection_paths import (  # noqa: F401 - re-exported; tests and gates import these from here
+    _FILESYSTEM_ONLY_PROTECTED_PREFIXES,
+    _HARDCODED_PROTECTED_DIRS,
+    _HARDCODED_PROTECTED_FILES,
+    _is_protected_runtime_path,
+    _maybe_apply_native_auth_override,
+    _runtime_protection_roots,
+    anchor_runtime_protection,
+)
 
 log = logging.getLogger(__name__)
 
@@ -21,413 +47,172 @@ log = logging.getLogger(__name__)
 # worker write into the project tree.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# ---------------------------------------------------------------------------
-# Hardcoded protected directories — the last line of defence.
-# Even if agent_safety.toml is corrupted or unreadable, these stay active.
-# Every directory listed here (relative to sandbox root) is read-only for
-# agent-spawned tools.  The list is deliberately minimal: only Thomas's own
-# runtime, enforcement scripts, and top-level policy files.
-# ---------------------------------------------------------------------------
-_HARDCODED_PROTECTED_DIRS: tuple[str, ...] = (
-    "thomas/tools",
-    "thomas/agent",
-    "thomas/core",
-    "thomas/server",
-    "scripts",
-    "evolve_supervisor",
-    "evolve_corpus",
-)
 
-# Protected file paths (relative to sandbox root, forward-slash).
-# Two categories:
-#  - Top-level policy files an agent must not modify.
-#  - The runtime-protection toggle flag + its signing key.  These live
-#    inside the otherwise-writable runtime/ tree, but they are the
-#    *bypass mechanism* — if an agent could write them via fs.write_file
-#    they could disable all runtime protection.  See PR runtime-protection-
-#    fix-2026-05-27 for the historical bug this closes.
-_HARDCODED_PROTECTED_FILES: tuple[str, ...] = (
-    "agent_safety.toml",
-    "AGENTS.md",
-    "GUARDRAILS.md",
-    ".pre-commit-config.yaml",
-    "pyproject.toml",
-    "thomas.toml",
-    "thomas.prod.toml",
-    "runtime/.runtime_protection_disabled",
-    "runtime/.runtime_protection_key",
-    "runtime/.breakglass_window",
-    "runtime/.breakglass_window_key",
-)
-
-# ---------------------------------------------------------------------------
-# Runtime-protection toggle flag — signed-content validation.
-#
-# The flag file is created by ``scripts/runtime_protection_toggle.py`` after
-# a successful Windows credential prompt.  The toggle script writes a JSON
-# document signed with HMAC-SHA256 using a per-install key that lives in
-# ``runtime/.runtime_protection_key`` (also a protected file).  Validation
-# is fail-closed: any parse, IO, or signature error means the flag is
-# treated as absent and runtime protection stays on.
-#
-# This is defense-in-depth on top of the path protection above.  Path
-# protection alone blocks ``fs.write_file`` / ``diff.create`` /
-# ``diff.apply_patch`` from writing either file.  Signature validation
-# additionally rejects forged flags that might slip through some other
-# future write path (e.g. an enabled ``shell.exec``).
-# ---------------------------------------------------------------------------
-_RUNTIME_FLAG_REL = "runtime/.runtime_protection_disabled"
-_RUNTIME_KEY_REL = "runtime/.runtime_protection_key"
-_RUNTIME_FLAG_VERSION = 1
-_GREEN_EVOLVE_RUNTIME_WRITES_ENV = "THOMAS_EVOLVE_GREEN_RUNTIME_WRITES"
+# ── Tree walks: never on the server's event loop, never unbounded ──
+# Measured 2026-09-23: fs.search was async but never awaited. It walked the chat's
+# sandbox -- the repo, runtime/ and .thomas/ included -- on the server's event loop,
+# and one search that found nothing held that loop for 543 s over 259,348 files.
+# Every background worker reports through that loop, so while it was held they all
+# looked silent and their watchdog failed them. Walks now run in a worker thread,
+# skip the directories below, and stop at a file and a time budget, saying so.
+_WALK_MAX_FILES = 20_000
+_WALK_MAX_SECONDS = 20.0
+# Never walked into, at any depth: version control, dependencies, caches, Thomas's state.
+_WALK_SKIP_DIRS = frozenset({".git", ".thomas", "node_modules", ".venv", "venv", ".tox", "__pycache__"})
+# Skipped only directly under the sandbox root, where Thomas keeps its data. Deeper
+# down the name is ordinary source (this repo has thomas/server/web/js/runtime/).
+_WALK_ROOT_SKIP_DIRS = frozenset({"runtime"})
 
 
-def _runtime_signing_payload(version: int, issued_at: str, issued_by: str, repo: str) -> bytes:
-    """Canonical byte string signed by the toggle script.  Order matters."""
-    return f"{int(version)}|{issued_at}|{issued_by}|{repo}".encode()
+class _WalkBudget:
+    """How much of a tree one tool call may look at before it stops and says why."""
+
+    def __init__(self, max_files: int | None = None, max_seconds: float | None = None) -> None:
+        self.max_files = max(1, int(_WALK_MAX_FILES if max_files is None else max_files))
+        self.max_seconds = max(0.0, float(_WALK_MAX_SECONDS if max_seconds is None else max_seconds))
+        self._deadline = time.monotonic() + self.max_seconds
+        self.files = 0
+        self.stopped = ""  # why the walk stopped early; empty while it has not
+        self.cancelled = threading.Event()  # set when the awaiting call is cancelled
+
+    def spend(self, files: int = 0) -> bool:
+        """Count *files* more; False once any budget has run out."""
+        if not self.stopped:
+            self.files += files
+            if self.cancelled.is_set():
+                self.stopped = "the call was cancelled"
+            elif self.files > self.max_files:
+                self.stopped = f"it reached its {self.max_files:,}-file budget"
+            elif time.monotonic() >= self._deadline:
+                self.stopped = f"it reached its {self.max_seconds:g}-second time budget"
+        return not self.stopped
+
+    def note(self) -> str:
+        """The line that tells the model its results are partial, so it can narrow the call."""
+        if not self.stopped:
+            return ""
+        return f"\nStopped early: {self.stopped}. These results are partial; narrow the path or the glob."
 
 
-def _load_runtime_protection_key(sandbox_root: Path) -> bytes | None:
-    key_file = sandbox_root / _RUNTIME_KEY_REL
-    try:
-        raw = key_file.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    if not raw:
-        return None
-    try:
-        key = bytes.fromhex(raw)
-    except ValueError:
-        return None
-    return key or None
+def _walk_skipped(sandbox_root: Path, path: Path) -> bool:
+    return path.name in _WALK_SKIP_DIRS or (path.name in _WALK_ROOT_SKIP_DIRS and path.parent == sandbox_root)
 
 
-def _is_runtime_protection_disabled(sandbox_root: Path) -> bool:
-    """Return True iff a *validly signed* disable-flag is present.
+def _walk(
+    sandbox_root: Path, base: Path, budget: _WalkBudget, *, count_entries: bool = False
+) -> Iterator[tuple[Path, list[str], list[str]]]:
+    """``os.walk`` from *base*, pruned of skipped dirs, ending when *budget* runs out.
 
-    The flag is signed by ``scripts/runtime_protection_toggle.py`` after a
-    successful Windows credential prompt.  This function never prompts —
-    it only verifies the signature against the per-install HMAC key.
-
-    Fail-closed: any IO error, parse error, missing key, missing/invalid
-    signature, or sandbox-root mismatch returns False (protection stays on).
+    *base* itself is walked even when its name is one that is skipped: it was asked for.
     """
-    resolved_root = sandbox_root.resolve()
-    flag_file = resolved_root / _RUNTIME_FLAG_REL
-    if not flag_file.is_file():
-        return False
+    for dirpath, dirnames, filenames in os.walk(base):
+        here = Path(dirpath)
+        dirnames[:] = [d for d in dirnames if not _walk_skipped(sandbox_root, here / d)]
+        if not budget.spend(len(dirnames) + len(filenames) if count_entries else 0):
+            return
+        yield here, dirnames, filenames
 
+
+async def _off_loop(budget: _WalkBudget, walk: Callable[..., Any], *args: Any) -> Any:
+    """Run *walk* in a worker thread; if the caller is cancelled, tell the walk to stop."""
     try:
-        raw = flag_file.read_text(encoding="utf-8")
-    except OSError as exc:
-        log.warning("runtime-protection flag unreadable; treating as absent: %s", exc)
-        return False
-
-    try:
-        doc = json.loads(raw)
-    except (json.JSONDecodeError, ValueError) as exc:
-        log.warning("runtime-protection flag is not valid JSON; ignoring: %s", exc)
-        return False
-    if not isinstance(doc, dict):
-        log.warning("runtime-protection flag root is not an object; ignoring")
-        return False
-
-    try:
-        version = int(doc.get("version", 0))
-    except (TypeError, ValueError):
-        version = 0
-    if version != _RUNTIME_FLAG_VERSION:
-        log.warning("runtime-protection flag version %r unsupported; ignoring", doc.get("version"))
-        return False
-
-    issued_at = str(doc.get("issued_at") or "")
-    issued_by = str(doc.get("issued_by") or "")
-    repo = str(doc.get("repo") or "")
-    signature_hex = str(doc.get("signature") or "")
-    if not issued_at or not issued_by or not repo or not signature_hex:
-        log.warning("runtime-protection flag missing required fields; ignoring")
-        return False
-
-    expected_repo = str(resolved_root)
-    # Compare resolved paths case-insensitively on Windows.
-    if os.name == "nt":
-        if repo.lower() != expected_repo.lower():
-            log.warning(
-                "runtime-protection flag repo mismatch (flag=%r, sandbox=%r); ignoring",
-                repo,
-                expected_repo,
-            )
-            return False
-    elif repo != expected_repo:
-        log.warning(
-            "runtime-protection flag repo mismatch (flag=%r, sandbox=%r); ignoring",
-            repo,
-            expected_repo,
-        )
-        return False
-
-    key = _load_runtime_protection_key(resolved_root)
-    if key is None:
-        log.warning("runtime-protection signing key missing/invalid; ignoring flag")
-        return False
-
-    try:
-        signature = bytes.fromhex(signature_hex)
-    except ValueError:
-        log.warning("runtime-protection flag signature is not hex; ignoring")
-        return False
-
-    expected = hmac.new(
-        key,
-        _runtime_signing_payload(version, issued_at, issued_by, repo),
-        sha256,
-    ).digest()
-    if not hmac.compare_digest(expected, signature):
-        log.warning("runtime-protection flag signature mismatch; ignoring")
-        return False
-
-    return True
+        return await asyncio.to_thread(walk, *args)
+    except asyncio.CancelledError:
+        budget.cancelled.set()
+        raise
 
 
-def _green_evolve_runtime_writes_enabled(sandbox_root: Path) -> bool:
-    raw = str(os.environ.get(_GREEN_EVOLVE_RUNTIME_WRITES_ENV) or "").strip().lower()
-    if raw not in {"1", "true", "yes", "on"}:
-        return False
-    try:
-        root = sandbox_root.resolve()
-    except OSError:
-        return False
-    return root.name == "green" and root.parent.name == "doppelganger" and root.parent.parent.name == "runtime"
+# One read_text() of a large file is a single call: the time budget cannot interrupt it,
+# and decoding holds the GIL, so the server loop stalls anyway (a 116 MB build cache in
+# this repo measured 0.4 s). Files are read this many characters at a time instead.
+_SEARCH_CHUNK_CHARS = 1 << 20
+_LINE_BREAKS = frozenset("\n\r\x0b\x0c\x1c\x1d\x1e\x85  ")  # what str.splitlines() splits on
 
 
-def _is_protected_runtime_path(
-    sandbox_root: Path,
-    target: Path,
-    *,
-    allow_native_auth_override: bool = False,
-    action_description: str = "",
-) -> str | None:
-    """Check if *target* falls inside a protected runtime directory or matches
-    a protected file.
+def _file_line_batches(path: Path, budget: _WalkBudget) -> Iterator[list[str]]:
+    """Read splitlines in chunks, checking the budget between chunks.
 
-    Returns a human-readable reason string if the path is protected, or
-    ``None`` if the write is allowed.
+    Text mode normalizes CRLF/CR; partial lines wait for the next chunk."""
+    if path.stat().st_size <= _SEARCH_CHUNK_CHARS:
+        yield path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        carry = ""
+        while chunk := handle.read(_SEARCH_CHUNK_CHARS):
+            text = carry + chunk
+            lines = text.splitlines()
+            carry = "" if text[-1] in _LINE_BREAKS else lines.pop()
+            yield lines
+            if not budget.spend():
+                return
+        if carry:
+            yield [carry]
 
-    The check is intentionally independent of any config file so that an agent
-    cannot neutralise it by editing ``agent_safety.toml`` — that file is
-    itself inside the protected set.
 
-    Two bypass mechanisms (both require physical human presence at the OS):
-
-    1. *Persistent* — a human runs ``python scripts/runtime_protection_toggle.py off``
-       which requires Windows credential authentication and creates a flag
-       file that disables runtime protection until toggled back on.
-
-    2. *Per-operation* — set ``allow_native_auth_override=True`` to make this
-       call attempt a one-shot native OS auth prompt (Win Hello / Touch ID /
-       polkit) when the path would otherwise be refused. If the prompt is
-       approved, this single call returns ``None`` (the operation is allowed).
-       If denied/cancelled/unavailable, the refusal reason is returned as
-       before.  This is the architecture extension landed in
-       gate-architecture-2026-05-26 (see docs/SAFETY_ARCHITECTURE.md).
-       Existing callers that don't pass the kwarg get unchanged behavior.
-
-    The two *runtime-protection control files* (the disable flag and the HMAC
-    key) are **absolutely protected**: the persistent-disable bypass does NOT
-    apply to them.  Otherwise an active disable state could be used to
-    overwrite the key with attacker-controlled bytes and persist a bypass
-    across the next toggle cycle (security hardening review).
-    The product owner can still write them via the per-operation native-auth override.
-    """
-    try:
-        rel = target.resolve().relative_to(sandbox_root.resolve())
-    except ValueError:
-        # Outside sandbox entirely — _safe_path already handles this.
-        return None
-
-    # Normalise to forward-slash for consistent matching on all platforms.
-    rel_posix = PurePosixPath(rel)
-    rel_posix_str = str(rel_posix)
-
-    # ── Always-protected: runtime-protection control files ────────────────
-    # These must never be bypassed by the disable flag itself.  The product owner can
-    # still reach them through the per-operation native-auth override below.
-    if rel_posix_str in {_RUNTIME_FLAG_REL, _RUNTIME_KEY_REL}:
-        reason = (
-            f"BLOCKED: '{rel_posix_str}' is a runtime-protection control file. "
-            "Only scripts/runtime_protection_toggle.py (Windows-auth required) "
-            "may write here, regardless of the persistent disable flag."
-        )
-        return _maybe_apply_native_auth_override(
-            reason=reason,
-            rel_posix=rel_posix,
-            allow_native_auth_override=allow_native_auth_override,
-            action_description=action_description,
-        )
-
-    # Allow bypass when a human has explicitly disabled protection
-    # (control files above are exempt from this bypass).
-    if _is_runtime_protection_disabled(sandbox_root):
-        return None
-
-    reason: str | None = None
-    green_evolve_writes = _green_evolve_runtime_writes_enabled(sandbox_root)
-
-    # Check protected directories (any file *inside* these).
-    for pdir in _HARDCODED_PROTECTED_DIRS:
-        protected = PurePosixPath(pdir)
-        try:
-            rel_posix.relative_to(protected)
-            if green_evolve_writes and str(protected).startswith("thomas/"):
-                return None
-            reason = (
-                f"BLOCKED: '{rel_posix}' is inside protected runtime "
-                f"directory '{pdir}/'. Agent-spawned tools cannot modify "
-                f"Thomas's own runtime code."
-            )
-            break
-        except ValueError:
+def _search_tree(
+    sandbox_root: Path, base: Path, regex: Any, file_glob: str, max_results: int, budget: _WalkBudget
+) -> tuple[list[str], int]:
+    """Search a file or tree in a worker thread, within budget."""
+    matches: list[str] = []
+    files_searched = 0
+    paths = (
+        (base,)
+        if base.is_file()
+        else (here / name for here, _dirs, names in _walk(sandbox_root, base, budget) for name in names)
+    )
+    for fpath in paths:
+        if not budget.spend(1):
+            return matches, files_searched
+        if not fnmatch.fnmatch(fpath.name, file_glob) or _is_read_protected_path(sandbox_root, fpath):
             continue
-
-    if reason is None:
-        # Check individual protected files at the repo root.
-        for pfile in _HARDCODED_PROTECTED_FILES:
-            if rel_posix == PurePosixPath(pfile):
-                reason = f"BLOCKED: '{rel_posix}' is a protected policy file. Agent-spawned tools cannot modify it."
-                break
-
-    if reason is None:
-        return None
-
-    return _maybe_apply_native_auth_override(
-        reason=reason,
-        rel_posix=rel_posix,
-        allow_native_auth_override=allow_native_auth_override,
-        action_description=action_description,
-    )
+        first_lineno = 1
+        try:
+            for batch_index, lines in enumerate(_file_line_batches(fpath, budget)):
+                if batch_index == 0:
+                    files_searched += 1
+                for lineno, line in enumerate(lines, first_lineno):
+                    if regex.search(line):
+                        matches.append(f"{fpath.relative_to(sandbox_root)}:{lineno}: {line.rstrip()}")
+                        if len(matches) >= max_results:
+                            return matches, files_searched
+                first_lineno += len(lines)
+        except (OSError, UnicodeDecodeError):
+            continue
+    return matches, files_searched
 
 
-def _maybe_apply_native_auth_override(
-    *,
-    reason: str,
-    rel_posix: PurePosixPath,
-    allow_native_auth_override: bool,
-    action_description: str,
-) -> str | None:
-    """Per-operation native-auth gate: if approved, return None (allow)."""
-    if not allow_native_auth_override:
-        return reason
-
-    # Import lazily so filesystem.py doesn't drag GUI/credential-dialog
-    # dependencies into every import path.
-    try:
-        from thomas.tools.native_auth import request_native_authorization
-    except (ImportError, OSError, RuntimeError) as exc:
-        log.warning(
-            "Protected path '%s': native-auth module unavailable (%s); honoring refusal",
-            rel_posix,
-            exc,
-        )
-        return reason
-
-    action_text = action_description or f"Modify protected runtime path: {rel_posix}"
-    auth_reason = (
-        "An agent-spawned tool is attempting to modify a protected Thomas "
-        "runtime path. Approve only if you initiated this operation.\n\n"
-        f"{reason}"
-    )
-
-    try:
-        approved = request_native_authorization(action_text, auth_reason)
-    except (OSError, RuntimeError) as exc:
-        log.warning(
-            "Protected path '%s': native-auth raised (%s); honoring refusal",
-            rel_posix,
-            exc,
-        )
-        return reason
-
-    if approved:
-        log.warning(
-            "Protected path '%s' APPROVED via native OS auth override (%s)",
-            rel_posix,
-            action_text,
-        )
-        return None
-
-    log.info(
-        "Protected path '%s' REFUSED — native OS auth not granted",
-        rel_posix,
-    )
-    return reason
+def _glob_within_budget(sandbox_root: Path, base: Path, pattern: str, budget: _WalkBudget) -> Iterator[Path]:
+    """``base.glob(pattern)``, except that a ``**`` walk skips what ``_walk`` skips and
+    stops with the budget. A pattern without ``**`` reads one directory level per
+    component, so it is left to pathlib unchanged."""
+    parts = pattern.replace("\\", "/").split("/")
+    if "**" not in parts:
+        yield from base.glob(pattern)
+        return
+    cut = parts.index("**")
+    head, tail = "/".join(parts[:cut]), "/".join(parts[cut + 1 :])
+    starts = [base] if not head else [p for p in base.glob(head) if p.is_dir() and not _walk_skipped(sandbox_root, p)]
+    seen: set[Path] = set()
+    for start in starts:
+        for here, _dirnames, _filenames in _walk(sandbox_root, start, budget, count_entries=True):
+            found = [here] if not tail.strip("/") else _glob_within_budget(sandbox_root, here, tail, budget)
+            for p in found:
+                if p not in seen and (p == start or not _walk_skipped(sandbox_root, p)):
+                    seen.add(p)
+                    yield p
 
 
-def _runtime_protection_roots(sandbox_root: Path, project_root: Path) -> list[Path]:
-    """Roots whose contents are Thomas's OWN protected runtime code.
-
-    Protection guards Thomas's runtime (``thomas/``, ``scripts/``,
-    ``evolve_supervisor/``, ``evolve_corpus/``, policy files),
-    which live under the real *project root* — so that is always a protection root.
-    A standalone deliverable workspace (e.g. ``~/.thomas/workspaces/<id>/``) is NOT:
-    a background worker building a deliverable must stay free to create its own
-    ``scripts/`` or ``thomas/`` subfolder there. Checking the workspace sandbox root
-    against the hardcoded dir *names* falsely blocked such a write and hung the task.
-    The sandbox root is included only when it IS, or sits inside, the project tree
-    (a worker actually operating in the repo)."""
-    roots = [project_root.resolve()]
-    try:
-        sr = sandbox_root.resolve()
-    except OSError:
-        return roots
-    if sr != roots[0] and roots[0] in sr.parents:
-        roots.append(sr)
-    return roots
-
-
-def _is_read_protected_path(sandbox_root: Path, target: Path) -> str | None:
-    """Return a refusal reason if *target* must not be readable by agent tools.
-
-    Currently scoped to the HMAC signing key.  The disable-flag file is
-    metadata only (timestamp + user + signature) and is harmless to read —
-    forging it requires the key.  Protecting the key's read path is
-    defense-in-depth alongside the write-side path protection (security
-    hardening review).
-    """
-    try:
-        rel = target.resolve().relative_to(sandbox_root.resolve())
-    except ValueError:
-        return None
-    rel_posix_str = str(PurePosixPath(rel))
-    if rel_posix_str == _RUNTIME_KEY_REL:
-        return (
-            f"BLOCKED: '{rel_posix_str}' is the runtime-protection signing key. "
-            "Agent tools cannot read it; doing so would let an attacker mint "
-            "valid disable flags."
-        )
-    return None
-
-
-def _safe_path(root: Path, rel: str) -> Path:
-    """Resolve path and ensure it doesn't escape the sandbox root.
-
-    Uses os.path.commonpath for case-insensitive comparison on Windows,
-    which handles case differences (C:\\Users vs c:\\users) and prevents
-    symlink/junction escapes.
-    """
-    resolved_root = root.resolve()
-    p = (resolved_root / rel).resolve()
-    try:
-        common = Path(os.path.commonpath([str(resolved_root), str(p)]))
-        # On Windows, paths are case-insensitive
-        if os.name == "nt":
-            if common.resolve() != resolved_root:
-                raise ValueError(f"Path escapes sandbox: {rel}")
-        else:
-            if common != resolved_root:
-                raise ValueError(f"Path escapes sandbox: {rel}")
-    except ValueError:
-        raise ValueError(f"Path escapes sandbox: {rel}") from None
-    return p
+def _list_entries(sandbox_root: Path, base: Path, pattern: str, max_results: int, budget: _WalkBudget) -> list[str]:
+    """fs.list_dir's listing, in a worker thread."""
+    entries: list[str] = []
+    for p in sorted(_glob_within_budget(sandbox_root, base, pattern, budget)):
+        if len(entries) >= max_results:
+            entries.append(f"... (truncated at {max_results} results)")
+            break
+        rel_path = p.relative_to(sandbox_root)
+        suffix = "/" if p.is_dir() else ""
+        entries.append(f"{rel_path}{suffix}")
+    return entries
 
 
 class ReadFileTool(Tool):
@@ -503,10 +288,35 @@ class ReadFileTool(Tool):
         return ToolResult(ok=True, data=text)
 
 
+# A write that removes more than this fraction of an existing file (>= the
+# size floor) is refused as a likely rewrite-from-memory truncation, by
+# whichever of the line or character fraction is larger (WriteFileTool.
+# _truncation_refusal; self-fix evidence, 2026-09-24; Ruling X, M1/M2).
+_TRUNCATION_GUARD_FRACTION = 0.4
+_TRUNCATION_GUARD_MIN_LINES = 20
+_TRUNCATION_GUARD_MIN_CHARS = 2000
+
+
+def _char_count_with_trailing_newline(text: str) -> int:
+    """len(text), normalised to count as if *text* ends in exactly one line
+    break (N4: a file missing its final newline has one fewer separator than
+    the same content would with one, which shifted an exactly-40% edit's
+    character share to 40.03% and refused it; a file that already ends in
+    one is counted unchanged)."""
+    return len(text) if text.endswith(("\n", "\r")) else len(text) + 1
+
+
 class WriteFileTool(Tool):
     name = "fs.write_file"
     category = "filesystem"
-    description = "Write content to a file. Creates parent directories if needed."
+    description = (
+        "Write content to a file. Creates parent directories if needed. On an "
+        "EXISTING file of at least 20 lines or 2,000 characters, a write that "
+        "removes more than 40% of its lines OR characters is refused -- that "
+        "pattern is a rewrite-from-memory truncation, not an edit. Use "
+        "diff.create to change part of a file; pass replace_whole_file: true "
+        "to mean a full replacement."
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -517,6 +327,14 @@ class WriteFileTool(Tool):
             "content": {
                 "type": "string",
                 "description": "The text content to write",
+            },
+            "replace_whole_file": {
+                "type": "boolean",
+                "description": (
+                    "Set true to intentionally replace an existing file's entire "
+                    "content, bypassing the truncation guard. Not needed when "
+                    "creating a new file."
+                ),
             },
         },
         "required": ["path", "content"],
@@ -579,11 +397,77 @@ class WriteFileTool(Tool):
             log.warning("Runtime protection triggered: %s", blocked)
             return ToolResult(ok=False, error=blocked)
 
+        if not bool(args.get("replace_whole_file")):
+            refusal = self._truncation_refusal(path, args["content"])
+            if refusal is not None:
+                log.warning("Write refused as a likely truncation: %s", refusal)
+                return ToolResult(ok=False, error=refusal)
+
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args["content"], encoding="utf-8")
         # Report the resolved absolute path so the model can answer
         # "where did you save it?" instead of guessing with pwd/ls.
         return ToolResult(ok=True, data=f"Wrote {len(args['content'])} chars to {path}")
+
+    @staticmethod
+    def _truncation_refusal(path: Path, new_content: str) -> str | None:
+        """A refusal string if this write would gut an existing file, else None.
+
+        Below the size floor (M1), measured on the file's own text, nothing is
+        checked; above it, removal is judged by whichever of the line or
+        character fraction is larger (M2), both character counts taken as if
+        each text ended in exactly one line break (N4). The refusal reports
+        the texts' own counts.
+        """
+        if not path.exists() or not path.is_file():
+            return None
+        try:
+            existing_text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        new_text = str(new_content)
+        existing_lines, new_lines = len(existing_text.splitlines()), len(new_text.splitlines())
+        if existing_lines < _TRUNCATION_GUARD_MIN_LINES and len(existing_text) < _TRUNCATION_GUARD_MIN_CHARS:
+            return None
+        existing_chars = _char_count_with_trailing_newline(existing_text)
+        new_chars = _char_count_with_trailing_newline(new_text)
+        line_frac = max(0.0, existing_lines - new_lines) / existing_lines if existing_lines else 0.0
+        char_frac = max(0.0, existing_chars - new_chars) / existing_chars if existing_chars else 0.0
+        removed_frac = max(line_frac, char_frac)
+        if removed_frac <= _TRUNCATION_GUARD_FRACTION:
+            return None
+        pct = int(removed_frac * 100)
+        return (
+            f"Refused: this write would remove about {pct}% of an existing file's content "
+            f"({existing_lines} -> {new_lines} lines, {len(existing_text)} -> {len(new_text)} chars). That "
+            "is what a rewrite-from-memory truncation looks like, not an intended edit. Use "
+            "diff.create to change part of a file instead of rewriting the whole thing. If a "
+            "full replacement is really what you mean, pass replace_whole_file: true."
+        )
+
+
+def _record_self_change(rel: str, before: str | None, after: str, why: str, repo_root: Path) -> None:
+    """File a change to Thomas's own code so the owner can undo or accept it.
+
+    Owner direction 2026-09-22: a self-fix is "obviously retractable", with a
+    card at the end of the reply carrying Undo and Accept. Never fatal: failing
+    to note a change must not fail the write the owner already approved.
+    """
+    try:
+        from thomas.core.self_change_ledger import record
+        from thomas.core.session_scope import active_chat_id
+
+        record(path=str(rel), before=before, after=after, why=why, chat=active_chat_id(), repo_root=repo_root)
+    except (OSError, ValueError, TypeError, ImportError):
+        log.warning("self-change ledger did not record '%s'", rel, exc_info=True)
+
+
+def _card_path(path: Path, project_root: Path) -> str:
+    """The path as the card shows it: relative to the project, forward slashes."""
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
 
 
 class WriteProtectedFileTool(Tool):
@@ -657,6 +541,30 @@ class WriteProtectedFileTool(Tool):
         except ValueError as e:
             return ToolResult(ok=False, error=str(e))
 
+        # Read what is there now, before asking: the card shows the real diff, and
+        # the same bytes let this change be taken back. If they cannot be read as
+        # text, nothing is recorded -- an entry claiming "there was nothing here"
+        # would make Undo delete the file.
+        existed = path.exists()
+        try:
+            before: str | None = path.read_text(encoding="utf-8") if existed else None
+            recordable = True
+        except (OSError, UnicodeDecodeError):
+            before, recordable = None, False
+        content = str(args["content"])
+
+        # The approval card is built from these exact bytes, worded by the pinned
+        # catalogue, never by the model: its `reason` is shown on the chat card as
+        # Thomas's words and never reaches the Windows dialog.
+        from thomas.tools import trusted_card
+
+        card = trusted_card.protected_write_card(
+            _card_path(path, self._project_root),
+            before,
+            content,
+            why=reason,
+            existed=existed and before is None,
+        )
         action_description = f"Write protected runtime path: {rel} — {reason}"
         # Anchor protection to the real project root, not the (possibly workspace)
         # sandbox: a deliverable worker writing <workspace>/scripts/... must not be
@@ -668,6 +576,7 @@ class WriteProtectedFileTool(Tool):
                 path,
                 allow_native_auth_override=True,
                 action_description=action_description,
+                card=card,
             )
             if blocked:
                 break
@@ -675,8 +584,15 @@ class WriteProtectedFileTool(Tool):
             log.warning("Runtime protection refused (even with OS auth override): %s", blocked)
             return ToolResult(ok=False, error=blocked)
 
+        # What you approved was a hash of these bytes. Anything else is not written.
+        if trusted_card.load_catalogue().content_hash(content) != card.content_hash:
+            log.error("fs.write_protected_file: content does not match the approved card for '%s'", rel)
+            return ToolResult(ok=False, error="Refused: the content to write is not the content that was approved.")
+
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(args["content"], encoding="utf-8")
+        path.write_text(content, encoding="utf-8")
+        if recordable:
+            _record_self_change(rel, before, content, reason, self._project_root or self._root)
         log.warning(
             "fs.write_protected_file: wrote %d chars to '%s' (reason=%r)",
             len(args["content"]),
@@ -713,8 +629,10 @@ class ListDirTool(Tool):
         },
     }
 
-    def __init__(self, sandbox_root: Path):
+    def __init__(self, sandbox_root: Path, *, max_files: int | None = None, max_seconds: float | None = None):
         self._root = sandbox_root.resolve()
+        self._max_files = max_files
+        self._max_seconds = max_seconds
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args.get("path", ".")
@@ -731,21 +649,17 @@ class ListDirTool(Tool):
         if not base.is_dir():
             return ToolResult(ok=False, error=f"Not a directory: {rel}")
 
-        entries: list[str] = []
+        budget = _WalkBudget(self._max_files, self._max_seconds)
         try:
-            for p in sorted(base.glob(pattern)):
-                if len(entries) >= max_results:
-                    entries.append(f"... (truncated at {max_results} results)")
-                    break
-                rel_path = p.relative_to(self._root)
-                suffix = "/" if p.is_dir() else ""
-                entries.append(f"{rel_path}{suffix}")
+            entries = await _off_loop(budget, _list_entries, self._root, base, pattern, max_results, budget)
         except (OSError, ValueError) as e:
             return ToolResult(ok=False, error=f"Glob error: {e}")
 
         if not entries:
-            return ToolResult(ok=True, data="(empty directory)")
-        return ToolResult(ok=True, data="\n".join(entries))
+            return ToolResult(
+                ok=True, data=("(nothing found)" if budget.stopped else "(empty directory)") + budget.note()
+            )
+        return ToolResult(ok=True, data="\n".join(entries) + budget.note())
 
 
 class SearchFilesTool(Tool):
@@ -764,7 +678,7 @@ class SearchFilesTool(Tool):
             },
             "path": {
                 "type": "string",
-                "description": "Directory to search in (default: project root)",
+                "description": "File or directory to search in (default: project root)",
             },
             "glob": {
                 "type": "string",
@@ -778,8 +692,10 @@ class SearchFilesTool(Tool):
         "required": ["pattern"],
     }
 
-    def __init__(self, sandbox_root: Path):
+    def __init__(self, sandbox_root: Path, *, max_files: int | None = None, max_seconds: float | None = None):
         self._root = sandbox_root.resolve()
+        self._max_files = max_files
+        self._max_seconds = max_seconds
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         import re
@@ -794,52 +710,25 @@ class SearchFilesTool(Tool):
         except ValueError as e:
             return ToolResult(ok=False, error=str(e))
 
+        if not base.exists():
+            return ToolResult(ok=False, error=f"Path not found: {rel}")
         try:
             regex = re.compile(pattern_str, re.IGNORECASE)
         except re.error as e:
             return ToolResult(ok=False, error=f"Invalid regex: {e}")
 
-        matches: list[str] = []
-        files_searched = 0
-        _skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox"}
+        budget = _WalkBudget(self._max_files, self._max_seconds)
+        matches, files_searched = await _off_loop(
+            budget, _search_tree, self._root, base, regex, file_glob, max_results, budget
+        )
 
-        for dirpath, dirnames, filenames in os.walk(base):
-            # Skip common non-content directories
-            dirnames[:] = [d for d in dirnames if d not in _skip_dirs]
-
-            for fname in filenames:
-                if not fnmatch.fnmatch(fname, file_glob):
-                    continue
-                fpath = Path(dirpath) / fname
-                # Never search the contents of read-protected files
-                # (would leak the HMAC key).
-                if _is_read_protected_path(self._root, fpath):
-                    continue
-                files_searched += 1
-
-                try:
-                    text = fpath.read_text(encoding="utf-8", errors="replace")
-                except (OSError, UnicodeDecodeError):
-                    continue
-
-                for lineno, line in enumerate(text.splitlines(), 1):
-                    if regex.search(line):
-                        rel_path = fpath.relative_to(self._root)
-                        matches.append(f"{rel_path}:{lineno}: {line.rstrip()}")
-                        if len(matches) >= max_results:
-                            break
-                if len(matches) >= max_results:
-                    break
-            if len(matches) >= max_results:
-                break
-
+        if not files_searched:
+            message = f"No files searched: path {rel!r}, glob {file_glob!r}; no matching files read"
+            return ToolResult(ok=True, data=message + budget.note())
         if not matches:
-            return ToolResult(
-                ok=True,
-                data=f"No matches found (searched {files_searched} files)",
-            )
+            return ToolResult(ok=True, data=f"No matches found (searched {files_searched} files){budget.note()}")
         header = f"Found {len(matches)} matches (searched {files_searched} files):\n"
-        return ToolResult(ok=True, data=header + "\n".join(matches))
+        return ToolResult(ok=True, data=header + "\n".join(matches) + budget.note())
 
 
 def register_filesystem_tools(

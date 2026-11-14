@@ -217,10 +217,7 @@ def main() -> int:
     # that silently covered less than it claimed is how drift gets through.
     have_blocklist = LOCAL_BLOCKLIST_PATH.is_file()
     if not have_blocklist:
-        print(
-            "Public repo leak guard: local blocklist absent -- "
-            "path rules enforced, substring rules NOT loaded."
-        )
+        print("Public repo leak guard: local blocklist absent -- path rules enforced, substring rules NOT loaded.")
         if args.require_blocklist:
             print("FAIL: --require-blocklist was set and no blocklist is present.")
             return 1

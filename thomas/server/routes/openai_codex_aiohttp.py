@@ -13,7 +13,8 @@ from aiohttp import web
 
 from thomas.core.codex_provider import OPENAI_CODEX_BASE_URL, OPENAI_CODEX_PROVIDER
 from thomas.core.config import AppConfig
-from thomas.server.app_keys import APP_CONFIG, APP_SECRETS
+from thomas.models.catalog import catalog_view
+from thomas.server.app_keys import APP_CONFIG, APP_MODEL_CATALOG, APP_SECRETS
 from thomas.server.openai_codex_oauth import (
     OPENAI_CODEX_REDIRECT_URI,
     OAuthStart,
@@ -278,7 +279,12 @@ def register_openai_codex_routes(
         require_api_access(request)
         profile = _profile_from_request(request)
         config: AppConfig = request.app[APP_CONFIG]
-        return web.json_response({"profile": profile, "models": _configured_codex_models(config, profile)})
+        refresher = request.app.get(APP_MODEL_CATALOG)
+        # current() answers the raw catalog payload (Task 4's build_model_catalog_async
+        # shape); is_new only exists on a row catalog_view() has annotated, so the
+        # picker never saw a New tag until this was applied here.
+        catalog = catalog_view(await refresher.current()) if refresher is not None else None
+        return web.json_response({"profile": profile, "models": _configured_codex_models(config, profile, catalog)})
 
     async def on_cleanup(app_: web.Application) -> None:
         await _CALLBACK_SERVER.cleanup()

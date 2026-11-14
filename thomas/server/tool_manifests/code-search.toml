@@ -1,0 +1,23 @@
+# A built-in tool group, described as data. thomas/server/tool_groups.py reads
+# this and registers the group; the hard-coded call in app_helpers._build_tools
+# stays as the fallback and must produce exactly the same tools.
+id = "tools.code-search"
+version = "1"
+layer = "L3"
+
+[group]
+# "module:function", called as function(registry, *needs). Only thomas.tools.* modules, and only register_* functions.
+register = "thomas.tools.code_search:register_code_search_tools"
+# Host values handed to the function, in order.
+needs = ["sandbox"]
+
+[provides]
+# The exact tool names the group must register. A different set is refused
+# and the fallback registers the group instead.
+tools = [
+    "code.search",
+    "code.find_definition",
+    "code.find_references",
+    "code.project_structure",
+    "code.semantic_search",
+]

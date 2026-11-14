@@ -1,3 +1,10 @@
+"""The ChatGPT sign-in: the token store, the refresh, and the six routes in ``thomas.server.routes.openai_codex_aiohttp``.
+
+``thomas.server.rows.openai_codex`` registers those routes, and no test imports a row. Naming it here is how a change to it
+runs this file, and ``tests/test_turning_openai_codex_off_touches_only_its_routes.py`` holds the row itself. One test below
+starts a sign-in, which opens a listener on a fixed port of this machine.
+"""
+
 import base64
 import json
 import os
@@ -493,18 +500,27 @@ def test_chat_shell_scopes_oauth_status_and_login_to_selected_profile() -> None:
     # profile, or a multi-profile setup reads/creates tokens for the wrong
     # account.
     #
-    # There are still exactly two status call sites, but c4a6cf07 moved one of
-    # them -- the ChatGPT-connect overlay, with the login POST -- verbatim into
-    # js/chat_connect_prompt.js, a factory that takes the page's selected
-    # profile as `opts.getProfile`. So the same two call sites are now checked
-    # one per file, and the wiring between them is checked too: a factory handed
-    # anything other than `state.profile` would scope both requests to the wrong
-    # account while each file still read correctly on its own.
+    # There are still exactly two status call sites, but each has since moved
+    # out of the shell. c4a6cf07 moved the ChatGPT-connect overlay, with the
+    # login POST, verbatim into js/chat_connect_prompt.js, a factory that takes
+    # the page's selected profile as `opts.getProfile`. 5314827b (2026-09-20)
+    # moved the model menu's account line into js/chat_model_accounts.js, a
+    # factory that reads the page's `state` through `deps.state`. So the two
+    # call sites are checked one per file, and the wiring from the shell to each
+    # factory is checked too: a factory handed anything other than the shell's
+    # `state` / `state.profile` would scope both requests to the wrong account
+    # while each file still read correctly on its own.
     web = Path(__file__).parents[1] / "thomas/server/web"
     shell = (web / "chat.html").read_text(encoding="utf-8")
     prompt = (web / "js/chat_connect_prompt.js").read_text(encoding="utf-8")
+    accounts = (web / "js/chat_model_accounts.js").read_text(encoding="utf-8")
 
-    assert shell.count("'/api/openai-codex/status?profile=' + encodeURIComponent(state.profile)") == 1
+    assert accounts.count("'/api/openai-codex/status?profile=' + encodeURIComponent(deps.state.profile)") == 1
+    assert (
+        "get state() { return state; }"
+        in shell.split("window.ThomasChatModelAccounts.create({", 1)[1].split("});", 1)[0]
+    )
+    assert 'src="/static/js/chat_model_accounts.js' in shell, "an unloaded module scopes nothing"
     assert prompt.count("'/api/openai-codex/status?profile=' + encodeURIComponent(opts.getProfile())") == 1
     assert "body: JSON.stringify({ profile: opts.getProfile() || 'openai_codex', timeout_s: 300 })" in prompt
     assert "window.ThomasChatConnectPrompt.create({ getProfile: () => state.profile" in shell

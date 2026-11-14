@@ -28,6 +28,7 @@ from aiohttp import web
 log = logging.getLogger(__name__)
 
 APP_EVOLVE_TASK = "evolve_loop_task"
+_APPROVE_KEY_PREFIX = "evolve_approve_"
 _REPO_MARKERS = ("pyproject.toml", "thomas", ".git")
 _JSON_BODY_ERRORS = (json.JSONDecodeError, UnicodeDecodeError)
 
@@ -221,7 +222,7 @@ def build_evolve_loop_handlers(
         if body.get("profile"):
             args += ["--profile", str(body["profile"])]
         # Re-derives + promotes -> heavy; run detached and let status polling reflect it.
-        app[f"evolve_approve_{approval_id}"] = await _spawn_evolve_cli(_root(), args)
+        app[f"{_APPROVE_KEY_PREFIX}{approval_id}"] = await _spawn_evolve_cli(_root(), args)
         return web.json_response({"ok": True, "queued": True, "approval_id": approval_id})
 
     async def reject(request: web.Request) -> web.Response:
@@ -249,14 +250,39 @@ def register_evolve_loop_routes(
     *,
     require_api_access: Callable[[web.Request], None],
     root_resolver: Callable[[], Path] = _default_repo_root,
+    routes_on: Any = None,
 ) -> None:
-    """Register the evolve-loop dashboard API onto the aiohttp app."""
+    """Register the evolve-loop dashboard API. The handlers keep ``app``; the routes go on ``routes_on`` when given."""
+    table = (app if routes_on is None else routes_on).router
     handlers = build_evolve_loop_handlers(app, require_api_access=require_api_access, root_resolver=root_resolver)
-    app.router.add_get("/api/evolve/loop/status", handlers["status"])
-    app.router.add_get("/api/evolve/loop/plan", handlers["plan"])
-    app.router.add_get("/api/evolve/orchestration/status", handlers["orchestration_status"])
-    app.router.add_get("/api/evolve/orchestration/plan", handlers["orchestration_plan"])
-    app.router.add_post("/api/evolve/loop/start", handlers["start"])
-    app.router.add_post("/api/evolve/loop/pause", handlers["pause"])
-    app.router.add_post("/api/evolve/loop/approve/{approval_id}", handlers["approve"])
-    app.router.add_post("/api/evolve/loop/reject/{approval_id}", handlers["reject"])
+    table.add_get("/api/evolve/loop/status", handlers["status"])
+    table.add_get("/api/evolve/loop/plan", handlers["plan"])
+    table.add_get("/api/evolve/orchestration/status", handlers["orchestration_status"])
+    table.add_get("/api/evolve/orchestration/plan", handlers["orchestration_plan"])
+    table.add_post("/api/evolve/loop/start", handlers["start"])
+    table.add_post("/api/evolve/loop/pause", handlers["pause"])
+    table.add_post("/api/evolve/loop/approve/{approval_id}", handlers["approve"])
+    table.add_post("/api/evolve/loop/reject/{approval_id}", handlers["reject"])
+
+
+async def end_loop_processes(app: web.Application, *, grace: float = 5.0) -> None:
+    """Stop the Thomas evolve processes this server started and still has running: the loop and each approval.
+
+    They are children of this server and nothing else ends them. ``reject`` starts one it does not keep, so it is not
+    here. A process already over is left alone. ``terminate`` is a hard stop on Windows; elsewhere one that ignores it
+    is killed after ``grace`` seconds, which only bounds the wait for a stopped process to be reaped.
+    """
+    keys = [key for key in list(app) if key == APP_EVOLVE_TASK or str(key).startswith(_APPROVE_KEY_PREFIX)]
+    for key in keys:
+        proc = app.get(key)
+        if not _task_running(proc) or not hasattr(proc, "terminate"):
+            continue
+        try:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=grace)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+        except ProcessLookupError:
+            continue

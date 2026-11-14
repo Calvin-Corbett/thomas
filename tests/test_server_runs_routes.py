@@ -1,4 +1,8 @@
-"""Tests for thomas.server.routes.runs (time-travel debugger API)."""
+"""Tests for thomas.server.routes.runs (time-travel debugger API).
+
+These routes reach the server through the row thomas.server.rows.runs, named here so that a change to that row runs
+this file: a check finds tests by following imports and dotted names, and no test imports a row.
+"""
 
 import io
 import json

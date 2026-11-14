@@ -48,6 +48,7 @@ function attachBrowserChrome() {
     "/static/js/browser_shell_web.js",
     "/static/js/browser_shell_docs_policy.js",
     "/static/js/browser_shell_docs.js",
+    "/static/js/browser_shell_tearoff.js",
     "/static/js/browser_shell.js",
   ];
   (function loadNext(i) {
@@ -72,6 +73,14 @@ const tabEventHandlers = new Set();
 ipcRenderer.on("bt:tab-event", (_e, evt) => {
   tabEventHandlers.forEach(fn => { try { fn(evt); } catch (_) { } });
 });
+const adoptHandlers = new Set();
+ipcRenderer.on("bt:adopt", (_e, spec) => {
+  adoptHandlers.forEach(fn => { try { fn(spec); } catch (_) { } });
+});
+const stripHoverHandlers = new Set();
+ipcRenderer.on("bt:strip-hover", (_e, on) => {
+  stripHoverHandlers.forEach(fn => { try { fn(Boolean(on)); } catch (_) { } });
+});
 const restoreHandlers = new Set();
 ipcRenderer.on("bt:restore", (_e, urls) => {
   restoreHandlers.forEach(fn => { try { fn(urls); } catch (_) { } });
@@ -95,6 +104,17 @@ contextBridge.exposeInMainWorld("thomasDesktop", {
 
   // window chrome (frameless window; our titlebar is the real one)
   windowControl: action => ipcRenderer.invoke("bt:window-control", { action }),
+  newWindow: () => ipcRenderer.invoke("bt:window-control", { action: "new" }),
+  // Moving the window by its title bar: the page says when the pointer goes
+  // down, moves and comes up; the app reads the pointer and moves the window.
+  // x/y are the pointer's screen position and are only used by a test run.
+  dragWindow: (phase, x, y) => ipcRenderer.invoke("bt:window-drag", { phase, x, y }),
+  // A tab leaving its strip: "detach" opens a window under the pointer that
+  // carries the tab, "move" keeps that window under the pointer, "end" lets it
+  // go (joining another window if the pointer is over its tab strip).
+  dragTab: (phase, spec, x, y) => ipcRenderer.invoke("bt:tab-drag", { phase, spec, x, y }),
+  onAdopt: fn => { adoptHandlers.add(fn); },
+  onStripHover: fn => { stripHoverHandlers.add(fn); },
   // Native menus: an HTML dropdown is invisible under a live web view.
   popupMenu: (items, x, y) => ipcRenderer.invoke("bt:popup-menu", { items, x, y }),
   // ...and for the dropdowns the shell already owns, the view steps aside.

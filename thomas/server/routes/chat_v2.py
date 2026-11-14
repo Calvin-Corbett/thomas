@@ -16,6 +16,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.agent.kernel_wiring import resolve_tools_for_turn
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
@@ -23,21 +24,19 @@ from thomas.core.action_receipt import ActionReceipt
 from thomas.core.autonomy import DEFAULT_AUTONOMY_LEVEL
 from thomas.core.file_access import READ_ONLY, parse_file_access_level
 from thomas.core.llm import LLMClient
-from thomas.marketplace.orchestrator.brain import OrchestratorBrain
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
+from thomas.server.chat_attachment_context import attachment_turn_cleanup, documents_for_chat
+from thomas.server.chat_attachment_store import AttachmentError
 from thomas.server.chat_budget_ledger import ChatBudgetError, ChatBudgetExceeded
-from thomas.server.chat_delegation import (
-    apply_task_update,
-    build_active_task_digest,
-    session_active_delegations,
-    start_background_delegation,
-)
+from thomas.server.chat_delegation import apply_task_update
 from thomas.server.chat_inline_actions import ChatInlineOperator
 from thomas.server.chat_runtime_policy import (
     ChatRuntimePolicyError,
     PolicyToolRegistryView,
     resolve_chat_runtime_policy,
 )
+from thomas.server.chat_self_project import remember_chat_port, start_background_delegation
+from thomas.server.dial_elevation import cap_payload
 from thomas.server.model_runtime_receipt import model_runtime_receipt
 from thomas.server.routes.chat_page_context import prompt_with_page_context
 from thomas.server.routes.chat_prompt_attachments import (
@@ -110,15 +109,15 @@ from thomas.server.routes.chat_v2_support import (
     _resolve_privacy_controls,
     _uploaded_audio_format,
     _voice_bridge_for_request,
+    build_orchestrator_brain,
 )
+from thomas.server.routes.chat_v2_turn_inputs import gather_turn_inputs
 from thomas.server.routes.chat_v2_ui_control import _chat_stream_headers
 from thomas.server.routes.chat_v2_usage import UsageReceiptDispatcher
 from thomas.server.routes.chat_v2_work_context import (
     WorkContextError,
     resolve_work_private_context,
 )
-from thomas.server.work_connector_runtime import request_work_tools
-from thomas.server.work_onboarding_state import validate_work_onboarding_state
 from thomas.server.workspace_specialist_runtime import handle_workspace_chat_v2, workspace_chat_route_context
 from thomas.tools.voice import VoiceBridge as VoiceBridge
 
@@ -161,9 +160,11 @@ def register_chat_v2_routes(
     )
 
 
+@attachment_turn_cleanup
 async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     try:
-        payload = await request.json()
+        # Raised dials count only with a Hello approval; see dial_elevation.
+        payload = cap_payload(await request.json())
     except Exception:
         return web.json_response({"error": "Invalid JSON"}, status=400)
 
@@ -178,7 +179,6 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     images = payload.get("images") or []
 
     prompt = prompt_with_page_context(prompt, payload.get("page_context"))
-    prompt = prompt_with_documents(prompt, docs)
     image_data, prompt = images_for_request(prompt, images)
 
     sid = str(payload.get("session_id") or payload.get("sessionId") or secrets.token_urlsafe(18))
@@ -243,6 +243,14 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         return web.json_response({"error": str(exc)}, status=403)
     except ValueError as exc:
         return web.json_response({"error": str(exc)}, status=400)
+
+    try:
+        docs = await documents_for_chat(docs, sid, temporary=temporary)
+    except AttachmentError as exc:
+        return web.json_response({"error": str(exc)}, status=422)
+    prompt = prompt_with_documents(prompt, docs)
+    from thomas.server.work_onboarding_state import validate_work_onboarding_state
+    from thomas.work.lanes.onboarding_bridge import onboarding_brief
 
     requested_mode = str(payload.get("mode") or runtime_policy.mode or "auto").strip().lower()
     mode = _LEGACY_MODE_MIGRATIONS.get(requested_mode, requested_mode)
@@ -323,7 +331,7 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
     project_receipt: dict[str, Any] = {}
     if project_id:
         try:
-            from thomas.server.routes.local_projects_aiohttp import build_project_chat_context
+            from thomas.server.routes.local_project_workspace import build_project_chat_context
 
             project_context, project_receipt = await build_project_chat_context(
                 request.app,
@@ -354,10 +362,9 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         for specialist in registry.all_specialists:
             specialist.llm = llm
 
-    request_tools = request.app.get(APP_TOOLS) if APP_TOOLS is not None else None
     request_tools = _request_tools_for_chat_surface(
         request.app,
-        request_tools,
+        resolve_tools_for_turn(request.app[APP_TOOLS]) if APP_TOOLS in request.app else None,
         surface_mode=surface_mode,
         context_id=context_id,
         private_context=private_context,
@@ -377,7 +384,7 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
             if hasattr(specialist, "tools"):
                 specialist.tools = request_tools
 
-    brain = OrchestratorBrain(
+    brain = build_orchestrator_brain(
         config=app_config,
         llm=llm,
         memory_engine=app_memory,
@@ -421,6 +428,11 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         user_text=raw_prompt,
         temporary=temporary,
     )
+
+    # The turn's blocking reads happen here, off the loop and before the stream
+    # is opened -- chat_v2_turn_inputs explains why both halves of that matter.
+    can_build = turn_autonomy_level >= 3 and not temporary and not work_onboarding
+    turn_inputs = await gather_turn_inputs(sid, prompt, can_build=can_build, app=request.app)
 
     response = web.StreamResponse(
         status=200,
@@ -493,10 +505,9 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         )
     is_first_message = conversation.length == 0
     recent_messages = conversation.get_context_window(max_tokens=8_000)
-    current_active_tasks = session_active_delegations(sid)
     # Natural-language routing stops here. Thomas sees the complete turn and
     # decides whether to call the structured dispatcher capability.
-    visible_prompt = prompt
+    visible_prompt = prompt + turn_inputs.project_catalog
     if project_context:
         visible_prompt = (
             visible_prompt.rstrip()
@@ -545,9 +556,39 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         surface: str = "task",
         specialist: str = "reasoning",
         workspace: str = "isolated",
+        kind: str = "other",
+        deliverable_format: str = "",
+        needs_build: bool = False,
+        project: dict[str, Any] | None = None,
+        acceptance: list[dict[str, Any]] | None = None,
     ) -> None:
         """Organic dispatch: the model calls this to hand work to the task manager.
-        Routing fields are structured MODEL choices, never inferred from prose."""
+        Routing fields are structured MODEL choices, never inferred from prose.
+
+        The task manager accepts exactly what is forwarded below. Passing it output_format/required_tools (added
+        here 2026-09-09 without the matching parameters) made every hand-off raise TypeError; see
+        tests/test_chat_hands_off_with_arguments_the_task_manager_accepts.py."""
+        # Q2: Thomas's own source (workspace="project") becomes a Thomas project, in chat_self_project.
+        remember_chat_port(request)
+        if needs_build and workspace != "project":
+            from thomas.server.praxis.intake import build_choice, submit_build_task
+            from thomas.server.praxis.launch import local_port
+
+            await submit_build_task(
+                request.app,
+                session_id=sid,
+                title=title,
+                instructions=instructions,
+                emit_event=_emit_background_event,
+                port=local_port(request),
+                acceptance=acceptance,
+                kind=kind,
+                surface=surface,
+                deliverable_format=deliverable_format,
+                project=project,
+                choice=build_choice(payload),
+            )
+            return
         await start_background_delegation(
             request.app,
             session_id=sid,
@@ -604,18 +645,32 @@ async def _handle_chat_v2_turn(request: web.Request) -> web.StreamResponse:
         explicit_selection = str(work_onboarding_state.get("selected_workflow_id") or "")
         if state["selected_workflow_id"] != explicit_selection:
             raise ValueError("selected_workflow_id may change only through the browser's explicit workflow controls")
-        await dispatcher.emit({"type": "work_onboarding_state", "state": state})
-        return {"ok": True, "state": state}
+        # Computed once and sent to both readers. The model gets it in the tool
+        # receipt so the open requirement is restated every turn rather than
+        # remembered; the browser gets the same object so the rail it draws and
+        # the gates that enforce cannot disagree.
+        lane_brief = onboarding_brief(work_onboarding_state, state)
+        await dispatcher.emit({"type": "work_onboarding_state", "state": state, "lane": lane_brief})
+        return {"ok": True, "state": state, "lane": lane_brief}
 
     work_onboarding_update_cb = _work_onboarding_update if work_onboarding else None
 
     try:
-        active_tasks = session_active_delegations(sid)
-        active_task_digest = build_active_task_digest(sid) if active_tasks else ""
+        active_tasks = turn_inputs.delegations
+        active_task_digest = turn_inputs.turn_digest
 
         async def _run_brain_turn() -> ConversationManager:
             set_budget_scope = getattr(llm, "set_budget_scope", None)
             previous_budget_scope = set_budget_scope(foreground_budget_scope) if callable(set_budget_scope) else None
+            # Codex sticky routing was scoped to one user turn here, by
+            # begin_codex_turn/end_codex_turn. Neither ever existed in
+            # thomas.core.llm_streaming: the half of that change defining them was
+            # still uncommitted when 74de225a swept these call sites in from the
+            # shared index, so importing this module raised ImportError and both
+            # /api/chat and /api/v2/chat answered 503 with chat reported degraded.
+            # Removed rather than reimplemented: guessing at the sticky-routing
+            # semantics of somebody else's feature would be worse than its absence,
+            # and codex can land that change whole.
             try:
                 turn_conversation = conversation
                 if not temporary:

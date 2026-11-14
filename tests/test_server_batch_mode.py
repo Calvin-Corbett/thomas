@@ -67,9 +67,9 @@ class TestServerBatchMode(AioHTTPTestCase):
     async def test_batch_payload_migrates_to_max_without_provider_batch_runtime(self):
         _FakeBrain.calls = []
         with (
-            patch("thomas.server.routes.chat_v2.OrchestratorBrain", _FakeBrain),
+            patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _FakeBrain),
             patch("thomas.server.routes.chat_v2.start_background_delegation", _no_background_delegation),
-            patch("thomas.server.app.OpenAICompatBatchClient", _ForbiddenBatchClient),
+            patch("thomas.server.chat_batch_mode.OpenAICompatBatchClient", _ForbiddenBatchClient),
         ):
             resp = await self.client.post(
                 "/api/chat",

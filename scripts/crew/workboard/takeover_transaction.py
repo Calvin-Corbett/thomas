@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from scripts.crew.workboard.board_io import file_lock
 from scripts.crew.workboard.claim_utils import (
     _agent_key,
     _find_claim_section,
@@ -148,7 +149,7 @@ def record_takeover_decision(
     )
 
 
-def execute_takeover_transaction(
+def _execute_takeover_transaction_unlocked(
     *,
     workboard_path: Path,
     original_text: str,
@@ -324,3 +325,30 @@ def execute_takeover_transaction(
         _rolled_back, rollback_message = rollback(successor_text, final_sha, f"commit audit failed: {exc}")
         return False, f"takeover commit audit failed: {exc}; {rollback_message}"
     return True, "takeover transaction committed"
+
+
+def execute_takeover_transaction(**kwargs: object) -> tuple[bool, str]:
+    """Run the whole takeover under ONE hold of the shared board lock.
+
+    Each individual write already locked itself, but the transaction did not: it
+    captured the board, wrote an intermediate state, checked barriers, and on any
+    failure restored the text it had captured. Between those steps another agent
+    could deliver a message -- and the restore then wrote a board that predated
+    it, so the message vanished with no error and no ack.
+
+    Measured 2026-09-09 on the live board: sha 3642ddeb (1609 lines) -> 727b3493
+    (1611 lines, a message arrived) -> 3642ddeb, byte-identical to the earlier
+    state. Two coordination messages were lost that way within two minutes of
+    being delivered, and a codex agent independently reported "Workboard
+    restoration lost acknowledged recovery instructions".
+
+    The rollback did guard itself -- it refuses unless the board still matches
+    what the transaction wrote -- but that check and the restore are two separate
+    operations, so the guard only narrows the window instead of closing it.
+    Holding the lock across the whole transaction closes it: no other writer can
+    interleave, so the state the rollback restores is still the state it verified.
+
+    board_io's lock is reentrant, so the inner writes still take it as before.
+    """
+    with file_lock():
+        return _execute_takeover_transaction_unlocked(**kwargs)  # type: ignore[arg-type]

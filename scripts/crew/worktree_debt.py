@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Sprawl detector — the merge-debt alarm.
 
-Returns a non-zero exit and prints a clear warning when DIRTY worktrees exceed
-the configured ceiling, lists the offenders, and recommends ``thomas consolidate``
+Returns a non-zero exit and prints a clear warning when DIRTY worktrees nobody is
+working in reach the configured ceiling, lists the offenders, and recommends ``thomas consolidate``
 (a future consolidation command — referenced here, not implemented).
 
 Default-safe: with no worktrees beyond the main checkout this is a quiet no-op
@@ -53,6 +53,10 @@ class DebtReport:
     dirty: list[dict[str, object]] = field(default_factory=list)
     stale: list[dict[str, object]] = field(default_factory=list)
     summary: str = ""
+    # Dirty worktrees nobody has touched in ``active_minutes``: only these count
+    # toward the ceiling. ``dirty`` still lists every dirty worktree, each marked.
+    debt_count: int = 0
+    active_minutes: int = worktree_ledger.DEFAULT_ACTIVE_MINUTES
 
 
 def assess_debt(root: Path | None = None) -> DebtReport:
@@ -66,6 +70,7 @@ def assess_debt(root: Path | None = None) -> DebtReport:
             "uncommitted": row.uncommitted_count,
             "days_since_last_commit": row.days_since_last_commit,
             "purpose": row.purpose,
+            "active": row.active,
         }
 
     return DebtReport(
@@ -75,23 +80,34 @@ def assess_debt(root: Path | None = None) -> DebtReport:
         dirty=[_entry(row) for row in ledger.dirty_worktrees],
         stale=[_entry(row) for row in ledger.stale_worktrees],
         summary=worktree_ledger.summary_line(ledger),
+        debt_count=ledger.debt_count,
+        active_minutes=ledger.config.active_minutes,
     )
 
 
 def render_report(report: DebtReport) -> str:
     lines: list[str] = []
+    idle = [entry for entry in report.dirty if not entry.get("active")]
+    in_use = len(report.dirty) - len(idle)
     if report.over_ceiling:
-        lines.append(f"⚠ MERGE DEBT: {report.dirty_count} DIRTY worktree(s) at/above the ceiling of {report.ceiling}.")
-        for entry in report.dirty:
+        lines.append(
+            f"⚠ MERGE DEBT: {report.debt_count} DIRTY worktree(s) nobody has touched in "
+            f"{report.active_minutes} minutes, at/above the ceiling of {report.ceiling}."
+        )
+        for entry in idle:
             age = entry.get("days_since_last_commit")
             age_text = "unknown" if age is None else f"{age}d"
             lines.append(
                 f"  - {entry['branch']}: {entry['uncommitted']} uncommitted, last commit {age_text} "
                 f"({entry['purpose']})"
             )
+        if in_use:
+            lines.append(f"  ({in_use} more dirty worktree(s) in active use are not counted.)")
         lines.append(CONSOLIDATE_HINT)
     else:
-        lines.append(f"✓ worktree debt OK: {report.dirty_count} dirty / ceiling {report.ceiling}.")
+        lines.append(f"✓ worktree debt OK: {report.debt_count} idle dirty / ceiling {report.ceiling}.")
+        if in_use:
+            lines.append(f"  note: {in_use} dirty worktree(s) in active use, not counted.")
         if report.stale:
             lines.append(f"  note: {len(report.stale)} stale worktree(s) — consider retiring them.")
     return "\n".join(lines)

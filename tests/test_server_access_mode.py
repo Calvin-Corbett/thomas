@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import tempfile
@@ -17,6 +18,7 @@ from thomas.server.app_middleware_security import (
     cors_origin_for_request,
     resource_policy_for_request,
 )
+from thomas.server.runtime_plugins import APP_RUNTIME_PLUGINS
 
 
 class _ArtifactAssetRequest:
@@ -135,7 +137,17 @@ class TestSandboxedArtifactAssetAccess(unittest.TestCase):
         )
 
 
+async def _until_every_row_has_started(app) -> None:
+    """The workspace row joins its routes once its database is open, which a server does not wait for."""
+    while any(row["state"] == "loading" for row in app[APP_RUNTIME_PLUGINS].report()["rows"]):
+        await asyncio.sleep(0.02)
+
+
 class TestServerAccessModeLocal(AioHTTPTestCase):
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        await _until_every_row_has_started(self.app)
+
     async def get_application(self):
         cfg = AppConfig(
             models={"local": ModelConfig(name="local", model="dummy")},
@@ -288,6 +300,10 @@ class TestServerAccessModeLocal(AioHTTPTestCase):
 
 
 class TestServerAccessModeRemote(AioHTTPTestCase):
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        await _until_every_row_has_started(self.app)
+
     async def get_application(self):
         cfg = AppConfig(
             models={"local": ModelConfig(name="local", model="dummy")},

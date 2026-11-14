@@ -1,0 +1,3 @@
+### Added
+
+- **The Build speed scoreboard now says what one landed change cost, today and over the last 7 days: hours of Thomas's runs, checks and second looks, prompt tokens, the share served from the provider's cache, and the machine's average CPU and memory, with the free disk beside them.** You asked that every efficiency gain "should always be tracked" and that "thomas should track it all". The number the 2x goal is judged by (18.4 hours and 72M prompt tokens per landed change on 2026-11-06) was until now worked out by hand from the step log. Every run counts, the ones that never landed too, since they are part of what a landing cost.

@@ -12,6 +12,7 @@ Two of these encode bugs found by driving a real browser, not by reading code:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,10 +87,26 @@ def test_a_protected_region_is_refused_at_pick_with_edit_modes_wording() -> None
     assert "policy: String(node.dataset.uiPolicy || (owner ? owner.dataset.uiPolicy : '') || '')" in target
     assert "/\\b(protected|no-edit)\\b/.test(String(descriptor.policy || ''))" in select
     assert "is protected`" in select
-    assert "const stockSource = /^thomas\\/server\\/web\\//" in select
-    assert "&& !stockSource" in select
     # Refused BEFORE the pick lands, so no model call and no local restyle ever happens.
     assert select.index("is protected`") < select.index("state.picks.push({ descriptor, element })")
+
+
+def test_a_protected_control_that_names_its_own_source_is_refused_too() -> None:
+    """The picker has no exemption: a control marked "protected source-edit" is refused like any other.
+
+    The shell menu items carry that policy and name their stock source, so Edit Mode can point at them, but
+    Redesign refuses them at the pick, before any model call, with the same wording.
+    """
+    select = _read("ui_redesign_select.js")
+    menu = _read("shell_context_menu.js")
+    refusal = select[select.index("function toggle(") : select.index("state.picks.push({ descriptor, element })")]
+
+    assert "node.dataset.uiPolicy = 'protected source-edit'" in menu
+    assert "node.dataset.redesignSource = source" in menu
+    assert "/\\b(protected|no-edit)\\b/.test(String(descriptor.policy || ''))" in refusal
+    assert "is protected`" in refusal
+    assert "source-edit" not in refusal and "redesignSource" not in refusal, "an exemption for named sources crept in"
+    assert re.search(r"\b(protected|no-edit)\b", "protected source-edit"), "the refusal pattern no longer matches it"
 
 
 def test_browser_refresh_is_pointable_when_redesign_will_edit_its_stock_source() -> None:
@@ -184,12 +201,12 @@ def test_redesign_mode_looks_like_build_mode() -> None:
 
 
 def test_thomas_can_arm_redesign_mode_through_a_structured_capability() -> None:
-    html = (WEB / "chat.html").read_text(encoding="utf-8", errors="replace")
+    stream = (WEB / "js" / "chat_stream_actions.js").read_text(encoding="utf-8", errors="replace")
 
     # Natural-language UI control was removed on purpose; the shell must act on
     # the tool NAME from the stream, never on anything Thomas says in prose.
-    assert "evt.name === 'ui.redesign'" in html
-    assert "window.ThomasRedesign.start()" in html
+    assert "evt.name === 'ui.redesign'" in stream
+    assert "window.ThomasRedesign.start()" in stream
 
 
 def test_the_selector_reports_rather_than_guesses() -> None:

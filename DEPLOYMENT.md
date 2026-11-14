@@ -8,23 +8,35 @@
 # Clone and install
 git clone https://github.com/Calvin-Corbett/thomas.git
 cd thomas
-bash install.sh
 
-# Or on Windows:
-powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+# macOS / Linux: installs Thomas with the web server dependencies. It asks whether to
+# create .venv (the default answer is yes); THOMAS_NO_VENV=1 skips the question and the .venv.
+bash install.sh
+source .venv/bin/activate   # skip this line if you declined the .venv
+
+# Windows: run-ui.cmd installs what it needs and starts the UI in one step.
+# For the install alone, run setup.cmd (or scripts/setup.ps1), then use .venv\Scripts\activate.
 
 # Run the UI
-python -m thomas.server
+python -m thomas serve
 # Open http://127.0.0.1:8899
 ```
 
-### Production (Docker)
+`install.sh` only installs; it offers to start the UI when it finishes. The server dependencies
+are the `server` extra in `pyproject.toml`, so a bare `pip install .` is not enough to run
+`thomas serve`. Use `pip install ".[server,repl]"`.
+
+### Docker
 
 ```bash
 docker compose up -d
 ```
 
-This builds and runs Thomas in production mode with locked-down defaults.
+This builds the image in production mode (`THOMAS_ENV=production`, which forces the overrides in
+the table below) and runs it. The compose file sets `THOMAS_CONFIG` to the development
+`thomas.toml` it mounts, so every other setting is a permissive development default. For the
+locked-down template, run the image built by the Dockerfile without that override: it bakes in
+`thomas.prod.toml` (see "Docker Builds").
 
 ---
 
@@ -56,11 +68,11 @@ Production mode enforces safety overrides that cannot be weakened by the config 
 
 ```bash
 docker build -t thomas:latest .
-# or
-docker compose up -d
 ```
 
-Uses `requirements-lock.txt` for reproducible installs and `thomas.prod.toml` for configuration.
+Uses `requirements-lock.txt` for reproducible installs and bakes in `thomas.prod.toml` as the
+configuration. `docker compose up -d` builds the same image but overrides `THOMAS_CONFIG` with
+the development `thomas.toml` (see "Docker" above).
 
 ### Development
 

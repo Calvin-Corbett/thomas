@@ -32,11 +32,11 @@ def generate_agent_docs_command(dry_run: bool) -> None:
         lines = [
             f"# thomas/{name}",
             "",
-            f"**{desc}** | tier: {tier}",
+            f"**{desc}** | tier: {tier} | health: {health}",
             f"Allowed imports: {deps}",
         ]
-        # Size exemptions and health stay in _architecture.py for local
-        # tooling (`thomas doctor`); they are not published per-module.
+        if debt:
+            lines.append(f"Known debt: {debt}")
 
         if tier == "ext":
             lines.append("Rule: extensions cannot import other extensions.")

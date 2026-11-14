@@ -1,0 +1,3 @@
+### Added
+
+- The Thomas project list now shows recorded durations for building, checks, second look, and repair rounds for each listed project. Stages without both recorded endpoints show "not recorded" rather than an estimated duration. Completed approval-card prompt intervals are recorded for future cards, including retries and shared cards, and kept in their final verdicts; past or incomplete prompts remain "not recorded". A one-line "Slowest today" summary compares the total recorded time in each stage for projects started today. Chat-started projects match approval-card prompt records against their Chat session ID, so their measured wait contributes to both the project row and today's slowest stage.

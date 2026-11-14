@@ -26,6 +26,7 @@ from urllib.parse import quote
 from aiohttp import web
 
 from thomas.core import task_bot_runtime
+from thomas.core.event_loop_offload import off_loop
 from thomas.server.app_keys import APP_DELIVERABLE_PREVIEW_SERVICE
 from thomas.tools.web_preflight import first_unresolved_root_link
 
@@ -112,12 +113,16 @@ def _inject_storage_shim(html: str) -> str:
     return _HEAD_SHIM + html
 
 
-def deliverable_url(execution_id: str) -> str:
-    """Public URL for the workspace entry, or "" if there's nothing playable."""
-    entry = deliverable_entry(execution_id)
-    if not entry:
+def deliverable_url(execution_id: str, *, entry: str | None = None) -> str:
+    """Public URL for the workspace entry, or "" if there's nothing playable.
+
+    ``entry`` is the already-resolved entry, for the same reason
+    :func:`deliverable_kind` takes one: resolving it walks the workspace.
+    """
+    name = deliverable_entry(execution_id) if entry is None else entry
+    if not name:
         return ""
-    return f"/deliverable/{_safe_id(execution_id)}/{entry}"
+    return f"/deliverable/{_safe_id(execution_id)}/{name}"
 
 
 def _is_loopback(request: web.Request) -> bool:
@@ -577,7 +582,21 @@ class DeliverablePreviewService:
         response.headers["X-Content-Type-Options"] = "nosniff"
 
 
-async def handle_deliverable(request: web.Request) -> web.StreamResponse:
+async def _entry_for_request(execution_id: str, tail: str) -> str:
+    """The file this request is for, resolved off the event loop when it must be.
+
+    A request that names its own file needs no resolution at all. One that does
+    not costs a full ``rglob`` of the workspace -- thousands of stat calls for a
+    generated app that installed packages next to its output -- and this is a
+    request handler on the server's single loop, so that walk used to be silence
+    for every other tab and card while it ran.
+    """
+    if tail:
+        return tail
+    return str(await off_loop("deliverable.entry", deliverable_entry, execution_id) or "")
+
+
+async def handle_deliverable(request: web.Request, *, entry: str | None = None) -> web.StreamResponse:
     # Worker output is untrusted generated content; only ever serve it to the local UI.
     if not _is_loopback(request):
         raise web.HTTPForbidden(text="Deliverables are served on loopback only.")
@@ -585,7 +604,12 @@ async def handle_deliverable(request: web.Request) -> web.StreamResponse:
     wd = _workspace_dir(execution_id)
     if wd is None:
         raise web.HTTPNotFound(text="No deliverable for this task.")
-    tail = request.match_info.get("tail", "") or (deliverable_entry(execution_id) or "")
+    # ``entry`` is passed by the registered handler, which resolved it once for
+    # this request and shares it with the preview check; a direct caller resolves
+    # it here instead.
+    if entry is None:
+        entry = await _entry_for_request(execution_id, str(request.match_info.get("tail", "")))
+    tail = entry
     if not tail:
         raise web.HTTPNotFound(text="No playable file in this deliverable.")
     target = (wd / tail).resolve()
@@ -594,6 +618,16 @@ async def handle_deliverable(request: web.Request) -> web.StreamResponse:
         raise web.HTTPNotFound(text="File not found in deliverable.")
     query = getattr(request, "query", {})
     download = str(query.get("download") or "").strip().lower() in {"1", "true", "yes"}
+    if download:
+        # Recheck at download time: a previously offered file may have been replaced.
+        try:
+            allowed = not (
+                _is_noise_path(Path(tail)) or _is_noise_path(target.relative_to(wd)) or target.stat().st_nlink > 1
+            )
+        except (OSError, ValueError):
+            allowed = False
+        if not allowed:
+            raise web.HTTPNotFound(text="File not found in deliverable.")
     # Worker output is UNTRUSTED and served same-origin with the chat UI. Force it into
     # a sandbox (opaque origin) at the RESPONSE layer so it can never reach the host
     # app's DOM/cookies/localStorage regardless of how a client frames it (preview
@@ -651,15 +685,14 @@ def register_deliverable_routes(
     preview_service = DeliverablePreviewService()
     app[APP_DELIVERABLE_PREVIEW_SERVICE] = preview_service
 
-    async def _preview_redirect(request: web.Request) -> web.HTTPFound | None:
+    async def _preview_redirect(request: web.Request, tail: str) -> web.HTTPFound | None:
         query = getattr(request, "query", {})
         if str(query.get("download") or "").strip().lower() in {"1", "true", "yes"}:
             return None
         execution_id = str(request.match_info.get("execution_id", "") or "")
         wd = _workspace_dir(execution_id)
-        if wd is None:
+        if wd is None or not tail:
             return None
-        tail = str(request.match_info.get("tail", "") or (deliverable_entry(execution_id) or ""))
         target = (wd / tail).resolve()
         if (
             target.suffix.lower() not in {".html", ".htm"}
@@ -682,10 +715,16 @@ def register_deliverable_routes(
 
     async def guarded_deliverable(request: web.Request) -> web.StreamResponse:
         require_api_access(request)
-        redirect = await _preview_redirect(request)
+        # Resolved once and shared: the preview check and the handler want the
+        # same file, and each resolution is a walk of the whole workspace.
+        entry = await _entry_for_request(
+            str(request.match_info.get("execution_id", "") or ""),
+            str(request.match_info.get("tail", "") or ""),
+        )
+        redirect = await _preview_redirect(request, entry)
         if redirect is not None:
             raise redirect
-        return await handle_deliverable(request)
+        return await handle_deliverable(request, entry=entry)
 
     app.router.add_get("/deliverable/{execution_id}", guarded_deliverable)
     app.router.add_get("/deliverable/{execution_id}/{tail:.*}", guarded_deliverable)

@@ -16,7 +16,10 @@ served the hits so callers know whether a true concept match was possible.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from thomas.tools.base import Tool, ToolResult
@@ -69,18 +72,32 @@ class SemanticSearchTool(Tool):
         "required": ["query"],
     }
 
-    def __init__(self, index: SemanticIndex | None = None) -> None:
+    def __init__(
+        self,
+        index: SemanticIndex | None = None,
+        *,
+        sandbox_root: Path | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
         # ``index`` may be injected for tests; production resolves the singleton
         # lazily on first execute so importing this module stays cheap.
         self._index = index
+        self._root = Path(sandbox_root).resolve() if sandbox_root is not None else None
+        self._extensions = extensions
+        self._index_lock = threading.Lock()
 
     def _get_index(self) -> SemanticIndex:
-        if self._index is not None:
-            return self._index
-        from thomas.core.rag_index import get_rag_index
+        with self._index_lock:
+            if self._index is None:
+                if self._root is not None:
+                    from thomas.core.rag_project_index import ProjectRagIndex
 
-        self._index = get_rag_index()
-        return self._index
+                    self._index = ProjectRagIndex(self._root, extensions=self._extensions)
+                else:
+                    from thomas.core.rag_index import get_rag_index
+
+                    self._index = get_rag_index()
+            return self._index
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         query = str(args.get("query", "")).strip()
@@ -97,8 +114,8 @@ class SemanticSearchTool(Tool):
         ext_str = str(ext).strip() if ext not in (None, "") else None
 
         try:
-            index = self._get_index()
-        except (RuntimeError, OSError, ImportError) as e:
+            index = await asyncio.to_thread(self._get_index)
+        except (RuntimeError, OSError, ImportError, ValueError) as e:
             logger.warning("code.semantic_search: index unavailable: %s", e)
             return ToolResult(
                 ok=False,
@@ -108,12 +125,12 @@ class SemanticSearchTool(Tool):
             )
 
         try:
-            hits = index.search(query, k=k_int, filter_ext=ext_str)
+            hits = await asyncio.to_thread(index.search, query, k=k_int, filter_ext=ext_str)
         except (RuntimeError, OSError, ValueError) as e:
             logger.warning("code.semantic_search: query failed: %s", e)
             return ToolResult(ok=False, error=f"Semantic search failed: {e}")
 
-        backend = self._detect_backend(index)
+        backend = await asyncio.to_thread(self._detect_backend, index)
 
         results: list[dict[str, Any]] = []
         for hit in hits:
@@ -156,12 +173,18 @@ class SemanticSearchTool(Tool):
         return "unknown"
 
 
-def register_semantic_search_tool(registry: Any, index: SemanticIndex | None = None) -> SemanticSearchTool:
+def register_semantic_search_tool(
+    registry: Any,
+    index: SemanticIndex | None = None,
+    *,
+    sandbox_root: Path | None = None,
+    extensions: list[str] | None = None,
+) -> SemanticSearchTool:
     """Register the ``code.semantic_search`` tool into a tool registry.
 
     Called from ``register_code_search_tools`` so the tool is present in every
     live toolset (CLI, server, agent loop, forge, bootdoctor).
     """
-    tool = SemanticSearchTool(index=index)
+    tool = SemanticSearchTool(index=index, sandbox_root=sandbox_root, extensions=extensions)
     registry.register(tool)
     return tool

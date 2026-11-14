@@ -53,7 +53,14 @@ def test_write_protected_file_allowed_with_auth(sandbox: Path, monkeypatch: pyte
     )
     assert result.ok is True
     assert (sandbox / target).read_text() == "x = 1\n"
-    assert "the product owner-approved emergency fix" in captured["action"]
+    # This used to assert the opposite: that the model's reason appears on the
+    # owner's own Windows prompt. A reason reading "owner-approved" on the one
+    # dialog the owner trusts is the attack, not the feature (2026-09-22). The
+    # dialog is worded by the pinned catalogue and shows the pairing code.
+    prompt = captured["action"] + captured["reason"]
+    assert "owner-approved" not in prompt and "emergency fix" not in prompt
+    assert target in captured["action"]
+    assert "Pairing code" in captured["reason"]
     assert "thomas/tools/evil.py" in captured["action"]
 
 

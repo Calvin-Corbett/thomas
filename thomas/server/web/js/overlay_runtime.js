@@ -138,9 +138,13 @@
   /* ---------- shell repaint ---------- */
   function shellTokens(view) {
     const shell = document.getElementById("tc-shell");
-    const theme = (shell && shell.dataset.theme) || "nebula";
+    const theme = (shell && shell.dataset.theme) || document.documentElement.dataset.theme || "nebula";
     const tokens = (view && view.tokens) || {};
-    return Object.assign({}, tokens["*"] || {}, tokens[theme] || {});
+    // A theme you made starts from a stock one, and a colour you changed on that stock theme is part of it too.
+    const parent = String((((view && view.themes) || {})[theme] || {}).derives_from || "");
+    // A colour saved under a name that now opens as this look (Dark was also "dark" and "aurora", Light "sandstone").
+    const older = theme === "nebula" ? ["aurora", "dark"] : theme === "light" ? ["sandstone"] : [];
+    return Object.assign({}, tokens["*"] || {}, ...older.map((name) => tokens[name] || {}), tokens[parent] || {}, tokens[theme] || {});
   }
   // The shell's inline font vars are chat.html's own; the runtime remembers
   // the value it found before its first write and puts it back when the
@@ -148,17 +152,22 @@
   const shellOriginal = {};
   function repaintShellFonts(view) {
     const shell = document.getElementById("tc-shell");
-    if (!shell || !view) return;
+    if (!view) return;
+    // A page with no shell (Settings, a workspace) still pins what you saved on its root: tokens.css holds every
+    // page that is not Light to the one Dark, and only an inline important value shows through it.
+    if (!shell) { pinShellTokens(view); return; }
     const tokens = view.present ? shellTokens(view) : {};
     ["--font-sans", "--font-serif", "--font-mono"].forEach((key) => {
       if (tokens[key]) {
-        if (!(key in shellOriginal)) shellOriginal[key] = shell.style.getPropertyValue(key);
+        // A pin may have written the token already (pinShellTokens); the value to give back is the one before it.
+        if (!(key in shellOriginal)) shellOriginal[key] = key in beforePin ? beforePin[key] : shell.style.getPropertyValue(key);
         shell.style.setProperty(key, tokens[key]);
       } else if (key in shellOriginal) {
         if (shellOriginal[key]) shell.style.setProperty(key, shellOriginal[key]); else shell.style.removeProperty(key);
         delete shellOriginal[key];
       }
     });
+    pinShellTokens(view);
   }
   // When the theme this document shows was cleared from the overlay, fall
   // back the way a fresh tab would: the overlay's default theme, else nebula.
@@ -194,6 +203,35 @@
       if (value) shell.style.setProperty(key, value);
     });
     if (window.ThomasWorkspaceShell) window.ThomasWorkspaceShell.applyTheme(name, { vars: theme.vars, persist: false });
+    pinShellTokens(state.view);
+  }
+  // A token you changed in Redesign outranks the Build look, which tokens.css
+  // pins on the shell with !important so Build reads Dark whatever theme Chat
+  // wears; only an inline important value beats that. A token the overlay no
+  // longer carries keeps its plain inline value and loses the pin.
+  const pinnedTokens = new Set();
+  const beforePin = {};  // the inline value a token had before its first pin, for repaintShellFonts to give back
+  function pinShellTokens(view) {
+    const root = document.documentElement;
+    const shell = document.getElementById("tc-shell") || root;  // no shell: the root is the only place to pin
+    if (!shell || !shell.style || typeof shell.style.getPropertyValue !== "function") return;
+    const tokens = view && view.present ? shellTokens(view) : {};
+    pinnedTokens.forEach((key) => {
+      if (tokens[key]) return;
+      const value = shell.style.getPropertyValue(key);
+      if (value) shell.style.setProperty(key, value); else shell.style.removeProperty(key);
+      if (value) root.style.setProperty(key, value); else root.style.removeProperty(key);
+      pinnedTokens.delete(key);
+      delete beforePin[key];
+    });
+    Object.entries(tokens).forEach(([key, value]) => {
+      if (!value) return;
+      if (!pinnedTokens.has(key)) beforePin[key] = shell.style.getPropertyValue(key);
+      shell.style.setProperty(key, value, "important");
+      // The page root too: tokens.css pins the same Dark there, for the menus and tooltips drawn outside the shell.
+      root.style.setProperty(key, value, "important");
+      pinnedTokens.add(key);
+    });
   }
 
   /* ---------- adopt a (newer) overlay ---------- */
@@ -286,6 +324,7 @@
   window.ThomasOverlay = {
     get view() { return state.view; },
     adopt, applyIdentity, record, refresh,
+    pinTokens() { pinShellTokens(state.view); },
     notes() { return (state.view && state.view.notes) || []; },
   };
 }());

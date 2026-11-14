@@ -1,6 +1,7 @@
 """An incident may end in a practice or an owned risk -- never a shrug.
 
-Pins the closure gate's contract (scripts/forge/gates/problem_closure_gate.py):
+Pins the closure gate's contract (spec: docs/superpowers/plans/2026-08-25-
+forging-loop.md, Task 2; scripts/forge/gates/problem_closure_gate.py):
 
   * a Task Problems entry or a PROBLEM.md header reaching `status=resolved`
     requires exactly one `closure:` line in that PROBLEM.md;
@@ -263,7 +264,7 @@ def test_a_recognized_but_malformed_closure_form_fails_naming_the_defect(tmp_pat
 # ---------------------------------------------------------------------------
 
 
-def _seed_risk(repo: Path, risk_id: str, *, expires_on: str, owner: str = "test-user") -> None:
+def _seed_risk(repo: Path, risk_id: str, *, expires_on: str, owner: str = "calvin") -> None:
     path = repo / "docs" / "ops" / "accepted_risks.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -300,14 +301,14 @@ def test_an_expired_accepted_risk_fails_with_the_reopen_instruction_naming_owner
         new_status="resolved",
         new_closures=["accepted-risk:expired-risk-1"],
     )
-    _seed_risk(repo, "expired-risk-1", expires_on=expired_on, owner="test-user")
+    _seed_risk(repo, "expired-risk-1", expires_on=expired_on, owner="calvin")
 
     result = gate.run_check(repo)
 
     assert not result["ok"]
     detail = result["violations"][0]["detail"]
     assert "EXPIRED" in detail
-    assert "test-user" in detail
+    assert "calvin" in detail
     assert expired_on in detail
     assert "re-opens" in detail
 

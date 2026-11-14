@@ -29,13 +29,11 @@ from pathlib import Path
 from typing import Any
 
 from thomas.server.overlay.style_whitelist import clean_style
-from thomas.server.routes.work_dashboard_runtime import (
-    _build_llm,
-    _extract_json,
-    validate_dashboard_spec,
-)
+from thomas.server.routes.work_dashboard_runtime import validate_dashboard_spec
+from thomas.server.routes.work_llm_helpers import _build_llm, _extract_json
 
 log = logging.getLogger(__name__)
+
 
 _MAX_TARGETS = 24
 _MAX_INSTRUCTION = 2000
@@ -460,42 +458,6 @@ def _plan_theme(raw: Any, active_theme: str, in_effect: dict[str, str]) -> dict[
 
 
 FENCE_BRIEF_LIMIT = 40
-_CLAIM_LINE_RE = re.compile(r"^\s*-\s*agent=(?P<agent>[^;]+);(?P<rest>.*)$")
-_CLAIM_SCOPE_RE = re.compile(r"(?:^|;)\s*scope=(?P<scope>[^;]*)")
-
-
-def board_fenced_paths(workboard_text: str, *, exempt_agents: set[str]) -> list[str]:
-    """Every scope entry another agent claims on the workboard, sorted, deduplicated.
-
-    Only lines in the "## Agent Claims" section count; an agent in
-    ``exempt_agents`` (the server's own environment decides who) is not fenced.
-    A self-edit run gets this list as ``protected_paths`` so the write tools,
-    not the prose, keep it out of other agents' files.
-    """
-
-    fenced: set[str] = set()
-    in_claims = False
-    for raw in str(workboard_text or "").splitlines():
-        line = raw.rstrip()
-        if line.startswith("## "):
-            in_claims = line.strip().lower() == "## agent claims"
-            continue
-        if not in_claims:
-            continue
-        match = _CLAIM_LINE_RE.match(line)
-        if not match:
-            continue
-        agent = match.group("agent").strip()
-        if agent in exempt_agents:
-            continue
-        scope = _CLAIM_SCOPE_RE.search(match.group("rest"))
-        if not scope:
-            continue
-        for entry in scope.group("scope").split(","):
-            entry = entry.strip().replace("\\", "/")
-            if entry and entry != "unknown":
-                fenced.add(entry)
-    return sorted(fenced)
 
 
 def code_thread_prompt(

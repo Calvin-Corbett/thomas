@@ -9,6 +9,9 @@ include install.cmd
 recursive-include thomas *.py *.html *.css *.js *.json *.svg *.png *.ico *.txt
 recursive-include skills *
 
+# The list of rows a server loads. With no list, no row loads
+recursive-include thomas/server/rows *.toml
+
 # Exclude personal/dev data that should NEVER be distributed
 prune runtime
 prune .thomas

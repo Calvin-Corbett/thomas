@@ -5,17 +5,19 @@ anchored annotations that open agent conversations and create source diffs" --
 against a hermetic runtime: a dict-backed file seam, an injected clock/id factory,
 and a temp-dir JSON store. No network, no real repo files touched.
 
-The route module is registered onto a bare ``web.Application`` (the orchestrator
-wires it into the real app separately), so these tests exercise the endpoints
-exactly as the browser panel calls them.
+The route module is registered onto a bare ``web.Application`` (``thomas.server.rows.workspace``
+wires it into the real server), so these tests exercise the endpoints
+exactly as the browser panel calls them. This file does not import that row, so it is named here.
 """
 
 from __future__ import annotations
 
 import itertools
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
@@ -27,6 +29,8 @@ from thomas.server.routes.source_annotation_routes import (
     set_source_annotation_runtime,
 )
 from thomas.tools.source_annotations import AnnotationStore, apply_unified_diff
+
+REMOTE_TOKEN = "test-token"
 
 SAMPLE = "\n".join(
     [
@@ -328,6 +332,89 @@ class SourceAnnotationRoutesTest(AioHTTPTestCase):
         diff_body = await diff_resp.json()
         self.assertEqual(diff_body["annotation"]["conversation_ref"], ref)
         self.assertEqual(apply_unified_diff(SAMPLE, diff_body["diff"]).count("prefix = greeting"), 1)
+
+
+def _hermetic_runtime(tmpdir: str, files: _FakeFiles) -> SourceAnnotationRuntime:
+    store = AnnotationStore(Path(tmpdir) / "annotations.json", reader=files.read)
+    return SourceAnnotationRuntime(store=store, normalize=files.normalize, reader=files.read)
+
+
+class SourceAnnotationGuardTest(AioHTTPTestCase):
+    """The access guard runs first in every handler, reads included."""
+
+    async def get_application(self) -> web.Application:
+        self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmpdir.cleanup)
+        self.addCleanup(reset_source_annotation_runtime)
+        set_source_annotation_runtime(_hermetic_runtime(self._tmpdir.name, _FakeFiles({"demo.py": SAMPLE})))
+        self.guard_calls = 0
+
+        def deny(request: web.Request) -> None:
+            self.guard_calls += 1
+            raise web.HTTPUnauthorized(text="missing api token")
+
+        app = web.Application()
+        register_source_annotation_routes(app, None, require_api_access=deny)
+        return app
+
+    async def test_every_route_is_refused_when_the_guard_denies(self):
+        calls = [
+            ("GET", "/api/source-annotations", None),
+            ("GET", "/api/source-annotations/source?file=demo.py", None),
+            ("POST", "/api/source-annotations", {"file": "demo.py", "line_start": 1, "line_end": 1, "body": "x"}),
+            ("POST", "/api/source-annotations/ann1/conversation", {}),
+            ("POST", "/api/source-annotations/ann1/diff", {}),
+        ]
+        for method, path, payload in calls:
+            with self.subTest(method=method, path=path):
+                resp = await self.client.request(method, path, json=payload)
+                self.assertEqual(resp.status, 401)
+        self.assertEqual(self.guard_calls, len(calls))
+
+    async def test_guard_runs_before_the_body_is_read(self):
+        resp = await self.client.post(
+            "/api/source-annotations",
+            data="{not json",
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(resp.status, 401)
+
+
+class SourceAnnotationRemoteModeTest(AioHTTPTestCase):
+    """On the real app in remote mode, both reads need the api token."""
+
+    async def get_application(self) -> web.Application:
+        from thomas.core.config import AppConfig, ModelConfig, ServerConfig
+        from thomas.server.app import create_app
+
+        self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmpdir.cleanup)
+        self.addCleanup(reset_source_annotation_runtime)
+        home = self._tmpdir.name
+        env = {"HOME": home, "USERPROFILE": home, "THOMAS_DATA_DIR": home, "THOMAS_MEMORY_ROOT": home}
+        patcher = patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        set_source_annotation_runtime(_hermetic_runtime(home, _FakeFiles({"demo.py": SAMPLE})))
+        cfg = AppConfig(
+            models={"local": ModelConfig(name="local", model="dummy")},
+            default_model="local",
+            server=ServerConfig(access_mode="remote", api_token=REMOTE_TOKEN),
+        )
+        return create_app(cfg)
+
+    async def _assert_read_needs_token(self, path: str) -> None:
+        no_auth = await self.client.get(path)
+        self.assertEqual(no_auth.status, 401, await no_auth.text())
+        with_auth = await self.client.get(path, headers={"Authorization": f"Bearer {REMOTE_TOKEN}"})
+        self.assertEqual(with_auth.status, 200, await with_auth.text())
+        self.assertTrue((await with_auth.json())["ok"])
+
+    async def test_remote_mode_list_requires_token(self):
+        await self._assert_read_needs_token("/api/source-annotations")
+
+    async def test_remote_mode_source_read_requires_token(self):
+        await self._assert_read_needs_token("/api/source-annotations/source?file=demo.py")
 
 
 if __name__ == "__main__":

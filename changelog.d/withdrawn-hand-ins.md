@@ -1,0 +1,3 @@
+### Fixed
+- The self-project list and Chat's self-fix status now distinguish a hand-in moved to `withdrawn/` without a verdict from one still awaiting your Windows sign-in card. Withdrawn hand-ins say you were never asked; existing landed, declined and genuinely pending hand-ins retain their verdict or waiting state.
+- Chat removes a mirrored approval card when its submission is withdrawn, and its project card and follow-up context stop claiming that the Windows sign-in is waiting. The ratchet records a withdrawn submission as reported rather than awaiting a card; its ledger and read-only report no longer say it is waiting while the hand-in is withdrawn.

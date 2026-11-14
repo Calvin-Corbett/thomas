@@ -40,19 +40,21 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.web_fixtures.code_sources import code_function_body, read_code_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_JS = ROOT / "thomas" / "server" / "web" / "js" / "unified_code_results.js"
 
 # Every frame that renders a generated deliverable, and what it is for.
 DELIVERABLE_FRAMES = {
     "tc-code-viewer-stage": "the panel the owner actually uses the app in",
-    "tc-code-artifact-thumb": "the transcript thumbnail",
+    "tc-live-frame": "the transcript's live preview (the redesign replaced the thumbnail)",
     "tc-code-artifact-shot": "the drawer preview",
 }
 
 
 def _sandbox_for(marker: str) -> str | None:
-    js = RESULTS_JS.read_text(encoding="utf-8")
+    js = read_code_sources(RESULTS_JS.parent)
     # Comments are skipped: this fix is documented directly above itself and the
     # documentation names the tokens, so a scan that reads its own comment would
     # pass with the attribute deleted.
@@ -74,8 +76,7 @@ def test_every_surface_that_shows_a_deliverable_can_load_its_files() -> None:
         "a surface that renders a generated deliverable cannot load the "
         "deliverable's own styles.css / game.js: without allow-same-origin the "
         "document has an opaque origin and default-src 'self' matches nothing, "
-        "so it renders as unstyled markup over a dead canvas:\n  "
-        + "\n  ".join(missing)
+        "so it renders as unstyled markup over a dead canvas:\n  " + "\n  ".join(missing)
     )
 
 
@@ -89,11 +90,9 @@ def test_the_stage_still_carries_the_other_tokens() -> None:
 
     sandbox = _sandbox_for("tc-code-viewer-stage")
     assert sandbox, "the viewer stage iframe has no sandbox attribute"
-    for token in ("allow-scripts", "allow-forms", "allow-modals",
-                  "allow-pointer-lock", "allow-downloads"):
+    for token in ("allow-scripts", "allow-forms", "allow-modals", "allow-pointer-lock", "allow-downloads"):
         assert token in sandbox, (
-            f"the viewer stage lost {token!r}, which was added for a measured "
-            f"defect. Got: {sandbox!r}"
+            f"the viewer stage lost {token!r}, which was added for a measured defect. Got: {sandbox!r}"
         )
 
 
@@ -107,8 +106,12 @@ def test_the_stage_is_not_granted_top_navigation() -> None:
     """
 
     sandbox = _sandbox_for("tc-code-viewer-stage") or ""
-    for token in ("allow-top-navigation", "allow-popups-to-escape-sandbox",
-                  "allow-modals-to-escape", "allow-presentation"):
+    for token in (
+        "allow-top-navigation",
+        "allow-popups-to-escape-sandbox",
+        "allow-modals-to-escape",
+        "allow-presentation",
+    ):
         assert token not in sandbox, (
             f"the viewer stage was granted {token!r}; no generated deliverable "
             f"needs it and it widens the sandbox past containment. Got: {sandbox!r}"

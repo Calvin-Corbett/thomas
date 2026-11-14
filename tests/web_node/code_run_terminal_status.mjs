@@ -30,7 +30,7 @@ function control(id = '') {
   }
   return controls.get(id);
 }
-const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500 };
+const transcript = { scrollTop: 0, scrollHeight: 0, clientHeight: 500, insertAdjacentHTML() {} };
 const liveChildren = [];
 const liveList = {
   get children() { return liveChildren; },
@@ -52,6 +52,7 @@ const resizeHandle = {
 // than infer them from state.
 const badge = { className: '', textContent: '' };
 const root = {
+  get ownerDocument() { return globalThis.document; },
   _html: '',
   get innerHTML() { return this._html; },
   set innerHTML(value) { this._html = value; },
@@ -157,7 +158,7 @@ function routes(cid, sendBody) {
     if (url.endsWith(`/conversations/${cid}`)) return response(finishedConversation(cid));
     if (url.includes('/changes?')) return response({ changed: [] });
     if (url.includes('/tree')) return response({ ok: true, entries: [], path: '' });
-    if (url.endsWith('/conversations')) return response({ conversations: [] });
+    if (url.split('?')[0].endsWith('/conversations')) return response({ conversations: [] });
     if (url === '/api/issues') return response({ ok: true });
     throw new Error(`unexpected fetch ${url}`);
   };

@@ -114,7 +114,7 @@ class TestUserTurnSurvivesAnUnfinishedTurn(AioHTTPTestCase):
         sid = "sess-durability-pending"
         prompt = "change tuesday to 9"
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _BlockingBrain):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _BlockingBrain):
             resp = await self.client.post(
                 "/api/v2/chat",
                 json={"session_id": sid, "profile": "local", "message": prompt},
@@ -166,7 +166,7 @@ class TestUserTurnSurvivesAnUnfinishedTurn(AioHTTPTestCase):
         sid = "sess-durability-boom"
         prompt = "summarize the quarterly report"
 
-        with patch("thomas.server.routes.chat_v2.OrchestratorBrain", _PartialThenBoomBrain):
+        with patch("thomas.server.routes.chat_v2_support.OrchestratorBrain", _PartialThenBoomBrain):
             resp = await self.client.post(
                 "/api/v2/chat",
                 json={"session_id": sid, "profile": "local", "message": prompt},

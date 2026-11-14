@@ -32,7 +32,9 @@ from scripts.crew.workboard.claim_utils import (
     agent_presence,
     claims_gate,
 )
+from scripts.crew.workboard.coordination_root import coordination_root
 from scripts.crew.workboard.message_queries import evaluate_takeover_authorization
+from scripts.forge.gates.workboard_claims import SHARED_INFRASTRUCTURE as _GATE_SHARED_INFRASTRUCTURE
 from thomas.core.agent_presence_sessions import evaluate_inactive_takeover_holder
 
 TAKEOVER_REASON_MIN_LEN = 12
@@ -46,6 +48,16 @@ def _takeover_repo_root(workboard_path: Path) -> Path:
     if resolved.name.casefold() == "workboard.md" and resolved.parent.name.casefold() == "thomas":
         return resolved.parents[2]
     return resolved.parent
+
+
+def _binding_root(workboard_path: Path) -> Path:
+    """Where an actor's own session binding is checked: the coordination root of the board's checkout.
+
+    bootstrap_claim.py binds a session there and claim.py, commit.py and the message tool check it there (the
+    primary checkout, for a linked worktree). The holder evidence an automatic takeover reads -- folder leases,
+    processes, the holder's own session record -- is still read from the board's checkout.
+    """
+    return coordination_root(_takeover_repo_root(workboard_path))
 
 
 def _takeover_pid_alive(pid: int) -> bool:
@@ -105,7 +117,7 @@ def evaluate_takeover_eligibility(
         authorization_id=authorization_id,
         audit_path=_resolve_audit_log(CLAIM_OVERRIDE_AUDIT_LOG, "CLAIM_OVERRIDE_AUDIT_LOG"),
         workboard_path=workboard_path,
-        repo_root=_takeover_repo_root(workboard_path),
+        repo_root=_binding_root(workboard_path),
         board_sha=board_sha,
         taker=taker,
         holders=holders,
@@ -155,6 +167,29 @@ def validate_takeover_reason(reason: str) -> str:
     return text
 
 
+#: Files every agent must write and every gate must read. They cannot also be
+#: exclusively owned: while one agent held the workboard in its claim scope on
+#: 2026-09-09, every other agent was blocked from committing at all -- because
+#: acking a message or registering a claim means writing this file, and a gate
+#: only sees that write once it is staged, which needs the file in your scope.
+#:
+#: They stay legal IN a scope, so an agent can still stage its own board edits.
+#: They are simply never a reason to refuse someone else's claim.
+#:
+#: RE-EXPORTED, NOT REDECLARED. This module and workboard_claims each used to
+#: declare their own copy, and the two were only equal by coincidence: the gate
+#: refuses a claim, this module answers "who else holds this path", and a path
+#: added to one but not the other deadlocks through whichever half was missed,
+#: with nothing to say so. That is the same one-rule-two-registrations shape
+#: that let the inbox gate run advisory in one registration and blocking in
+#: another on this same day. One object now, so the two cannot drift.
+SHARED_INFRASTRUCTURE = _GATE_SHARED_INFRASTRUCTURE
+
+
+def _is_shared_infrastructure(token: str) -> bool:
+    return _normalize_scope_token(token) in {_normalize_scope_token(p) for p in SHARED_INFRASTRUCTURE}
+
+
 def foreign_scope_conflicts(
     lines: Sequence[str],
     *,
@@ -183,7 +218,15 @@ def foreign_scope_conflicts(
             if token
         ]
         hits = sorted(
-            {f"{mine} vs {theirs}" for mine in wanted for theirs in held if claims_gate._scope_overlaps(mine, theirs)}
+            {
+                f"{mine} vs {theirs}"
+                for mine in wanted
+                for theirs in held
+                # Shared infrastructure is never a collision, in either direction.
+                if not _is_shared_infrastructure(mine)
+                and not _is_shared_infrastructure(theirs)
+                and claims_gate._scope_overlaps(mine, theirs)
+            }
         )
         if hits:
             conflicts[entry] = hits
@@ -236,7 +279,7 @@ def record_takeover_authorization(
     require_clear_p0(workboard_path, bound_agent=authorized_by)
     if agent_identity is None:
         raise RuntimeError("takeover authorization requires the bound identity backend")
-    binding = agent_identity.require_bound_identity(authorized_by, repo_root=_takeover_repo_root(workboard_path))
+    binding = agent_identity.require_bound_identity(authorized_by, repo_root=_binding_root(workboard_path))
     authority_key = str(authority or "").strip().casefold()
     allowed = (
         (authority_key == "holder" and _agent_key(binding.agent_id) == _agent_key(holder))
@@ -272,6 +315,19 @@ def record_takeover_authorization(
     return _append_durable_event(event)
 
 
+def require_takeover_actor(agent: str, *, workboard_path: Path) -> Any:
+    """The live session binding a takeover's audit line names as the taker.
+
+    Raises ValueError (no session, or one that is stale, closed or someone
+    else's) or RuntimeError (no identity backend). claim() asks before it
+    writes the board: asked only by the audit, after the write, an unbound
+    taker had already moved the claim when it was refused.
+    """
+    if agent_identity is None:
+        raise RuntimeError("takeover audit requires the bound identity backend")
+    return agent_identity.require_bound_identity(agent, repo_root=_binding_root(workboard_path))
+
+
 def append_takeover_audit(
     *,
     agent: str,
@@ -286,15 +342,16 @@ def append_takeover_audit(
     evidence: dict[str, object] | None = None,
     rollback_reason: str = "",
     workboard_path: Path,
+    actor_binding: Any = None,
 ) -> dict[str, object]:
     """Record who was holding this scope when it changed hands.
 
     Without this the board shows only the new owner and the handover leaves no
-    trace at all.
+    trace at all. ``actor_binding`` is the binding require_takeover_actor
+    returned before the board was written; the line then names exactly that
+    session, and cannot fail on a binding that was valid a moment earlier.
     """
-    if agent_identity is None:
-        raise RuntimeError("takeover audit requires the bound identity backend")
-    binding = agent_identity.require_bound_identity(agent, repo_root=_takeover_repo_root(workboard_path))
+    binding = actor_binding or require_takeover_actor(agent, workboard_path=workboard_path)
     actor = {"agent": binding.agent_id, "session_id": binding.session_id, "pid": binding.pid}
     event = {
         "event_id": str(uuid.uuid4()),

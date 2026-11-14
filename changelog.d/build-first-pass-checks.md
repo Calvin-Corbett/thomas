@@ -1,0 +1,2 @@
+### Changed
+- The Thomas Code Build prompt now asks for first-pass checks of impacted and new tests, architecture, Ruff lint and formatting, file size, and applicability to the current dev tip before hand-in. It asks for a baseline comparison on failures, red/green proof for new regression tests, and an explicit unverified note when a check cannot run. The dispatch prompt test skips unrelated repository-index retrieval so it does not start a background worker against your runtime state.

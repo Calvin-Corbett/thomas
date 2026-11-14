@@ -22,6 +22,9 @@ import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from thomas.core.event_loop_offload import off_loop
+from thomas.core.pause import paused
+
 log = logging.getLogger(__name__)
 
 INTERVAL_ENV = "THOMAS_CONSOLIDATION_AUDIT_INTERVAL_S"
@@ -126,13 +129,35 @@ async def consolidation_maintenance_loop(
     cycles = 0
     while max_cycles is None or cycles < max_cycles:
         try:
-            do_audit()
+            # A sweep is 27 git calls over 16 local branches -- measured 2.42 s
+            # of continuous blocking, on the server's only thread. The audit is
+            # synchronous by design (it is also a CLI path), so the loop is
+            # where it has to be handed to a worker thread.
+            if not paused():
+                await off_loop("consolidation.audit", do_audit)
+        except asyncio.CancelledError:
+            # First, so shutdown reads as shutdown. It would propagate from the
+            # clause below regardless -- CancelledError is a BaseException -- but
+            # a reader should not have to know that to see that it does.
+            raise
         except _SWEEP_FAULTS as exc:  # belt and braces around an injected fn
             log.warning("consolidation maintenance cycle failed: %s", exc)
-        except asyncio.CancelledError:
-            raise
         cycles += 1
         if max_cycles is not None and cycles >= max_cycles:
             break
         await sleep(interval_s if interval_s is not None else audit_interval_s())
     return cycles
+
+
+class _ConsolidationPlugin:
+    """The sweep as a plugin. Stopping cancels the wait, and a sweep already in a worker thread runs to its end."""
+
+    name = "consolidation"
+    inject = ("web",)
+
+    def apply(self, ctx: Any, config: Any) -> None:
+        app = ctx["web"].app
+        ctx.on_ready(lambda: ctx.task(lambda: consolidation_maintenance_loop(app), name="sweep"))
+
+
+plugin = _ConsolidationPlugin()
